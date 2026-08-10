@@ -1,0 +1,25 @@
+# 依赖
+node_modules/
+
+# 构建产物
+web/dist/
+server/bin/
+
+# 本地数据库
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+
+# 环境变量
+.env
+.env.local
+*.local
+
+# 编辑器与系统
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# 日志
+*.log
