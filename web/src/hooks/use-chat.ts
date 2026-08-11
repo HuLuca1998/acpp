@@ -8,6 +8,7 @@ import {
 import type {
   Message,
   PendingElicitation,
+  PlanEntry,
   Session,
   SessionCaps,
   StreamEvent,
@@ -21,6 +22,13 @@ export interface LiveToolCall {
   status: string
   rawInput?: unknown
   rawOutput?: unknown
+}
+
+/** 一次已自动放行的权限请求（当前轮内展示用）。 */
+export interface GrantedPermission {
+  id: string
+  title: string
+  kind: string
 }
 
 export interface ChatState {
@@ -42,6 +50,10 @@ export interface ChatState {
   caps: SessionCaps | null
   /** agent 正在等用户作答的交互式提问。 */
   elicitation: PendingElicitation | null
+  /** agent 的任务计划，每次 plan 事件整体替换；跨轮保留展示最终状态。 */
+  plan: PlanEntry[] | null
+  /** 当前轮内被自动放行的权限请求。 */
+  permissions: GrantedPermission[]
 }
 
 const INITIAL: ChatState = {
@@ -57,6 +69,8 @@ const INITIAL: ChatState = {
   stopReason: null,
   caps: null,
   elicitation: null,
+  plan: null,
+  permissions: [],
 }
 
 /** 把 elicitation 事件解析成结构化提问。 */
@@ -137,6 +151,29 @@ export function useChat(sessionId: number) {
             caps: { ...prev.caps, configOptions: ev.configOptions },
           }
 
+        case "plan": {
+          // 计划整体替换；保留到下一轮开始，让用户能回看最终完成状态。
+          const entries = Array.isArray(ev.rawInput)
+            ? (ev.rawInput as PlanEntry[])
+            : null
+          if (!entries) return prev
+          return { ...prev, busy: true, plan: entries }
+        }
+
+        case "permission":
+          return {
+            ...prev,
+            busy: true,
+            permissions: [
+              ...prev.permissions,
+              {
+                id: ev.toolCallId || String(ev.seq),
+                title: ev.title ?? "",
+                kind: ev.toolKind ?? "",
+              },
+            ],
+          }
+
         case "elicitation":
           return {
             ...prev,
@@ -161,6 +198,7 @@ export function useChat(sessionId: number) {
 
         case "turn_done":
           // 本轮内容已经作为消息落库，清掉流式态避免重复渲染。
+          // plan 留着展示最终状态，下一轮的 plan 事件会整体替换它。
           return {
             ...prev,
             busy: false,
@@ -168,6 +206,7 @@ export function useChat(sessionId: number) {
             streamingThought: "",
             liveTools: [],
             elicitation: null,
+            permissions: [],
           }
 
         case "error":

@@ -5,8 +5,12 @@ import { useParams } from "react-router"
 import { useChat, type LiveToolCall } from "@/hooks/use-chat"
 import type { Message, PendingElicitation, SessionCaps } from "@/types/acp"
 import { cn } from "@/lib/utils"
-import { MarkdownContent } from "@/components/markdown"
-import { ToolCallBlock, type ToolCallPayload } from "@/components/tool-call"
+import { formatDateTime } from "@/lib/format"
+import { CopyButton } from "@/components/chat/copy-button"
+import { MarkdownContent } from "@/components/chat/markdown"
+import { PlanCard } from "@/components/chat/plan-card"
+import { ThoughtBlock } from "@/components/chat/thought-block"
+import { ToolCallBlock, type ToolCallPayload } from "@/components/chat/tool-call"
 import {
   answerFor,
   parseElicitationSchema,
@@ -19,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -47,8 +52,10 @@ import {
   ArrowUpIcon,
   BrainIcon,
   ChevronRightIcon,
+  CircleAlertIcon,
   CircleHelpIcon,
   MessagesSquareIcon,
+  ShieldCheckIcon,
   ShieldIcon,
   SparklesIcon,
   SquareIcon,
@@ -116,11 +123,14 @@ export function SessionChat() {
   }
 
   const liveActivityCount =
-    (chat.streamingThought ? 1 : 0) + chat.liveTools.length
+    (chat.streamingThought ? 1 : 0) +
+    chat.liveTools.length +
+    chat.permissions.length
   const hasContent =
     chat.messages.length > 0 ||
     chat.streamingText !== "" ||
-    liveActivityCount > 0
+    liveActivityCount > 0 ||
+    (chat.plan?.length ?? 0) > 0
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -157,15 +167,6 @@ export function SessionChat() {
           </Alert>
         ) : null}
 
-        {chat.stopReason ? (
-          <Alert className="mt-2">
-            <AlertDescription>
-              {t(`chat.stopReason.${chat.stopReason}` as never, {
-                defaultValue: chat.stopReason,
-              })}
-            </AlertDescription>
-          </Alert>
-        ) : null}
       </div>
 
       {/* 消息流：底部 padding 给悬浮输入让位。 */}
@@ -179,6 +180,23 @@ export function SessionChat() {
               <EmptyTitle>{t("chat.empty")}</EmptyTitle>
               <EmptyDescription>{t("chat.emptyHint")}</EmptyDescription>
             </EmptyHeader>
+            {/* 建议芯片：给第一句一个起点，点击即发送。 */}
+            <EmptyContent>
+              <div className="flex flex-wrap justify-center gap-2">
+                {(["intro", "changes", "help"] as const).map((key) => (
+                  <Button
+                    key={key}
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    disabled={chat.busy}
+                    onClick={() => void chat.send(t(`chat.suggestions.${key}`))}
+                  >
+                    {t(`chat.suggestions.${key}`)}
+                  </Button>
+                ))}
+              </div>
+            </EmptyContent>
           </Empty>
         ) : (
           <MessageScrollerProvider>
@@ -205,6 +223,13 @@ export function SessionChat() {
                     )
                   )}
 
+                  {/* 任务计划：随 plan 事件实时更新，轮次结束保留最终状态。 */}
+                  {chat.plan && chat.plan.length > 0 ? (
+                    <MessageScrollerItem scrollAnchor={false}>
+                      <PlanCard entries={chat.plan} />
+                    </MessageScrollerItem>
+                  ) : null}
+
                   {liveActivityCount > 0 ? (
                     <MessageScrollerItem scrollAnchor={false}>
                       <ActivitySection
@@ -216,11 +241,31 @@ export function SessionChat() {
                             <MarkerIcon>
                               <BrainIcon />
                             </MarkerIcon>
-                            <MarkerContent className="whitespace-pre-wrap">
-                              {chat.streamingThought}
+                            <MarkerContent>
+                              <span className="text-shimmer">
+                                {t("chat.thinking")}
+                              </span>
+                              {/* 只看思考的"最新进展"：截尾 + 行数钳制，不淹没界面。 */}
+                              <div className="mt-1 line-clamp-3 whitespace-pre-wrap">
+                                {chat.streamingThought.slice(-600)}
+                              </div>
                             </MarkerContent>
                           </Marker>
                         ) : null}
+                        {chat.permissions.map((perm) => (
+                          <Marker key={perm.id}>
+                            <MarkerIcon>
+                              <ShieldCheckIcon />
+                            </MarkerIcon>
+                            <MarkerContent>
+                              {perm.title
+                                ? t("chat.permissionGrantedTitle", {
+                                    title: perm.title,
+                                  })
+                                : t("chat.permissionGranted")}
+                            </MarkerContent>
+                          </Marker>
+                        ))}
                         {chat.liveTools.map((tool) => (
                           <LiveToolMarker key={tool.id} tool={tool} />
                         ))}
@@ -267,6 +312,22 @@ export function SessionChat() {
                       </Marker>
                     </MessageScrollerItem>
                   ) : null}
+
+                  {/* 非正常结束原因内联在消息流末尾，紧跟被截断的回答。 */}
+                  {chat.stopReason ? (
+                    <MessageScrollerItem scrollAnchor={false}>
+                      <Marker>
+                        <MarkerIcon>
+                          <CircleAlertIcon className="text-warning" />
+                        </MarkerIcon>
+                        <MarkerContent>
+                          {t(`chat.stopReason.${chat.stopReason}` as never, {
+                            defaultValue: chat.stopReason,
+                          })}
+                        </MarkerContent>
+                      </Marker>
+                    </MessageScrollerItem>
+                  ) : null}
                 </MessageScrollerContent>
               </MessageScrollerViewport>
               <MessageScrollerButton className="data-[direction=end]:bottom-40" />
@@ -291,6 +352,11 @@ export function SessionChat() {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault()
                   submit()
+                }
+                // Esc 中止当前轮：等价于点中止按钮，手不用离开键盘。
+                if (e.key === "Escape" && chat.busy) {
+                  e.preventDefault()
+                  void chat.cancel()
                 }
               }}
             />
@@ -709,14 +775,16 @@ function LiveToolMarker({ tool }: { tool: LiveToolCall }) {
 /** activity 块内的单条过程消息。 */
 function ActivityMessage({ message }: { message: Message }) {
   if (message.kind === "thought") {
+    return <ThoughtBlock content={message.content} />
+  }
+
+  if (message.kind === "permission_request") {
     return (
       <Marker>
         <MarkerIcon>
-          <BrainIcon />
+          <ShieldCheckIcon />
         </MarkerIcon>
-        <MarkerContent className="whitespace-pre-wrap">
-          {message.content}
-        </MarkerContent>
+        <MarkerContent>{message.content}</MarkerContent>
       </Marker>
     )
   }
@@ -731,8 +799,12 @@ function ActivityMessage({ message }: { message: Message }) {
   )
 }
 
-/** 正文消息：用户消息用主色气泡靠右，agent 输出通栏渲染 markdown。 */
+/** 正文消息：用户消息用主色气泡靠右，agent 输出通栏渲染 markdown。
+ *  两者 hover 都浮现复制操作，悬停可见完整时间。 */
 function ChatMessage({ message }: { message: Message }) {
+  const { i18n } = useTranslation()
+  const timestamp = formatDateTime(message.createdAt, i18n.language)
+
   if (message.kind === "elicitation") {
     return <ElicitationAnsweredCard message={message} />
   }
@@ -741,17 +813,34 @@ function ChatMessage({ message }: { message: Message }) {
     return (
       <MessageRow align="end">
         <MessageContent>
-          <Bubble variant="default" align="end">
-            <BubbleContent className="whitespace-pre-wrap">
-              {message.content}
-            </BubbleContent>
-          </Bubble>
+          <div
+            className="group/msg flex items-center justify-end gap-1.5"
+            title={timestamp}
+          >
+            <CopyButton
+              text={message.content}
+              className="opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-visible:opacity-100"
+            />
+            <Bubble variant="default" align="end">
+              <BubbleContent className="whitespace-pre-wrap">
+                {message.content}
+              </BubbleContent>
+            </Bubble>
+          </div>
         </MessageContent>
       </MessageRow>
     )
   }
 
-  return <MarkdownContent>{message.content}</MarkdownContent>
+  return (
+    <div className="group/msg" title={timestamp}>
+      <MarkdownContent>{message.content}</MarkdownContent>
+      {/* 操作行占位固定高度，浮现时不推挤下方内容。 */}
+      <div className="mt-1 flex h-6 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
+        <CopyButton text={message.content} />
+      </div>
+    </div>
+  )
 }
 
 /** 已完成的交互式提问：每题显示全部选项，标出用户的选择，可随时回看。 */

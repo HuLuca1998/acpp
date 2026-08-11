@@ -68,6 +68,13 @@ export interface Session {
   updatedAt: string
 }
 
+/** agent 计划里的一项，来自 session/update 的 plan entries。 */
+export interface PlanEntry {
+  content: string
+  priority?: string
+  status?: "pending" | "in_progress" | "completed" | string
+}
+
 /** SSE 推来的事件类型。 */
 export type StreamEventKind =
   | "user_message"

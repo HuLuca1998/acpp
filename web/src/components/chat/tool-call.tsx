@@ -4,7 +4,29 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
-import { ChevronRightIcon, FileDiffIcon, TerminalIcon, WrenchIcon } from "lucide-react"
+import {
+  BrainIcon,
+  ChevronRightIcon,
+  FileDiffIcon,
+  FileTextIcon,
+  GlobeIcon,
+  SearchIcon,
+  TerminalIcon,
+  Trash2Icon,
+  WrenchIcon,
+  type LucideIcon,
+} from "lucide-react"
+
+/** ACP 工具类型 → 图标：一眼分辨读文件/改代码/跑命令，不用点开细看。 */
+const KIND_ICONS: Record<string, LucideIcon> = {
+  read: FileTextIcon,
+  edit: FileDiffIcon,
+  delete: Trash2Icon,
+  search: SearchIcon,
+  execute: TerminalIcon,
+  think: BrainIcon,
+  fetch: GlobeIcon,
+}
 
 /** tool_call 消息 payload 的已知形状（codex-acp 实测）。 */
 export interface ToolCallPayload {
@@ -224,10 +246,11 @@ export function ToolCallBlock({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const expandable = hasDetail(payload)
+  const Icon = KIND_ICONS[payload?.kind ?? ""] ?? WrenchIcon
 
   const header = (
     <>
-      <WrenchIcon className="size-4 shrink-0" />
+      <Icon className="size-4 shrink-0" />
       <span className="min-w-0 truncate">{title || t("chat.toolCall")}</span>
       {status ? (
         <Badge

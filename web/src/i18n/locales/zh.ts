@@ -144,6 +144,16 @@ export default {
     thought: "思考过程",
     toolCall: "工具调用",
     activity: "思考与工具调用",
+    copy: "复制",
+    copied: "已复制",
+    plan: "任务计划",
+    expand: "展开",
+    collapse: "收起",
+    suggestions: {
+      intro: "介绍一下这个项目的结构和用途",
+      changes: "查看 git 状态，总结未提交的变更",
+      help: "你能帮我做什么？",
+    },
     /** agent 能力项的本地化：按 modeId / 配置 value 映射，未知值回退 agent 原文。 */
     caps: {
       value: {
@@ -169,6 +179,7 @@ export default {
       failed: "失败",
     },
     permissionGranted: "已自动放行权限请求",
+    permissionGrantedTitle: "已自动放行：{{title}}",
     elicitation: {
       title: "Agent 请求你的输入",
       otherLabel: "其他",

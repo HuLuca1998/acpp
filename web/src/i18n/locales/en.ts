@@ -151,6 +151,16 @@ export default {
     thought: "Thinking",
     toolCall: "Tool call",
     activity: "Thinking & tool calls",
+    copy: "Copy",
+    copied: "Copied",
+    plan: "Plan",
+    expand: "Show more",
+    collapse: "Show less",
+    suggestions: {
+      intro: "Walk me through this project's structure and purpose",
+      changes: "Check git status and summarize uncommitted changes",
+      help: "What can you help me with?",
+    },
     /** Localized labels for agent capability values, falling back to agent-provided names. */
     caps: {
       value: {
@@ -176,6 +186,7 @@ export default {
       failed: "Failed",
     },
     permissionGranted: "Permission request auto-approved",
+    permissionGrantedTitle: "Auto-approved: {{title}}",
     elicitation: {
       title: "The agent needs your input",
       otherLabel: "Other",

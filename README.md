@@ -35,7 +35,8 @@ acpp/
 │   │   │   ├── ui/             # shadcn 组件（生成为起点，可直改；升级走 --diff 合并）
 │   │   │   ├── app-sidebar.tsx # 侧边栏导航
 │   │   │   ├── language-switcher.tsx
-│   │   │   └── ...             # 状态点、工具调用块、markdown、切换器等
+│   │   │   ├── chat/           # 聊天专用：markdown/工具调用/计划卡/思考块/复制
+│   │   │   └── ...             # 状态点、后端状态、新建会话弹窗、切换器等
 │   │   ├── lib/api.ts          # 后端 API 客户端
 │   │   ├── types/acp.ts        # 领域类型，与 server/internal/model 对齐
 │   │   └── index.css           # Tailwind v4 主题变量

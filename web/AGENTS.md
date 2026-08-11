@@ -16,7 +16,7 @@
 
 依赖方向：`routes → components → ui`；`hooks / lib / types` 被上层引用，不反向 import 组件。路径别名统一 `@/`。
 
-反平铺举例：聊天相关组件 `tool-call.tsx`、`markdown.tsx` 再加第三个时，应建 `components/chat/` 并把三者移入。`components/` 目前的平铺是历史包袱——新文件按新规则放，旧文件顺路触碰时迁移。
+反平铺示范：聊天专用组件已收拢进 `components/chat/`（markdown / tool-call / plan-card / thought-block / copy-button），新的聊天组件继续放这里。`components/` 其余平铺是历史包袱——新文件按新规则放，旧文件顺路触碰时迁移。
 
 ## 2. 命名
 
@@ -68,7 +68,7 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
   1. 升级组件必须 `npx shadcn add <c> --diff` 对比后**手动合并**，禁止盲目 `--overwrite` 冲掉本地打磨；
   2. 定制的**优先级**依然是：语义 token（改一处全局生效）→ `index.css` 视觉深度层（`[data-slot="…"]` 一次覆盖所有实例）→ 直改单个 ui/ 组件（只影响该组件）→ 外层包装（新增语义时）。能在上游解决的不下沉。
 - **专用组件优先于裸标签**：空态用 `Empty`，加载用 `Skeleton`（形状贴近真实内容），提示条用 `Alert`，危险确认用 `AlertDialog`（**禁用原生 `window.confirm`**），toast 用 `sonner`，分隔用 `Separator`，标签用 `Badge`。表单用 `FieldGroup`/`Field`，按钮内图标用 `data-icon="inline-start|end"`。
-- **聊天界面**只用 chat 原语：`MessageScroller`（滚动/跟随/回到底部）、`Message`、`Bubble`、`Marker`，不手写滚动容器与气泡 div。
+- **聊天界面**只用 chat 原语：`MessageScroller`（滚动/跟随/回到底部）、`Message`、`Bubble`、`Marker`，不手写滚动容器与气泡 div。消息种类的专用渲染集中在 `components/chat/`：markdown 正文（代码块带语言标签 + 复制）、工具调用（按 ACP kind 换图标，diff/终端视图）、任务计划 `PlanCard`、思考折叠 `ThoughtBlock`、复制按钮。新消息种类先在这里建组件，不在页面里内联。
 - **图标**：只用 `lucide-react`，默认 `size-4`，与文字并排对齐基线；纯图标按钮必须有 `aria-label`。
 - **类名合并**一律 `cn()`；布局用 `flex gap-*`，不用 `space-x/y-*`；等宽高用 `size-*`。
 
