@@ -167,14 +167,38 @@ type PromptParams struct {
 	Prompt    []ContentBlock `json:"prompt"`
 }
 
+// ContentBlock 是 prompt 的一个内容块。text 之外，两端 promptCapabilities
+// 都声明支持 image（base64）与 embeddedContext（resource 内嵌文件内容）。
 type ContentBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
+	// image 块：base64 数据与 MIME 类型。
+	Data     string `json:"data,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+	// resource 块：内嵌的文件内容（embeddedContext）。
+	Resource *EmbeddedResource `json:"resource,omitempty"`
+}
+
+// EmbeddedResource 是嵌进 prompt 的文件内容。
+type EmbeddedResource struct {
+	URI      string `json:"uri"`
+	Text     string `json:"text"`
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 // TextBlock 构造一个纯文本内容块。
 func TextBlock(text string) ContentBlock {
 	return ContentBlock{Type: "text", Text: text}
+}
+
+// ImageBlock 构造一个图片内容块。
+func ImageBlock(data, mimeType string) ContentBlock {
+	return ContentBlock{Type: "image", Data: data, MimeType: mimeType}
+}
+
+// ResourceBlock 构造一个内嵌文件内容块（@ 引用）。
+func ResourceBlock(uri, text string) ContentBlock {
+	return ContentBlock{Type: "resource", Resource: &EmbeddedResource{URI: uri, Text: text}}
 }
 
 // Text 从 Content 里取出文本，同时接受单个内容块和内容块数组两种形状。
@@ -231,6 +255,19 @@ type Usage struct {
 
 type CancelParams struct {
 	SessionID string `json:"sessionId"`
+}
+
+// ---- session/delete（删除 agent 侧的会话历史）----
+
+type DeleteSessionParams struct {
+	SessionID string `json:"sessionId"`
+}
+
+// ---- _session/steering（turn 进行中插话，注入当前轮）----
+
+type SteeringParams struct {
+	SessionID string         `json:"sessionId"`
+	Prompt    []ContentBlock `json:"prompt"`
 }
 
 // ---- session/update 通知 ----
@@ -293,6 +330,16 @@ type SessionUpdate struct {
 
 	// config_option_update：配置项变化，带全量新配置。
 	ConfigOptions []ConfigOption `json:"configOptions,omitempty"`
+
+	// available_commands_update：可用斜杠命令清单，带全量。
+	AvailableCommands []Command `json:"availableCommands,omitempty"`
+}
+
+// Command 是 agent 暴露的一条斜杠命令。发送时就是普通文本（"/plan …"），
+// 两端 runtime 都认；codex 的 _meta.commandAction 等私有扩展不解析。
+type Command struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // EffectiveModeID 归一化 current_mode_update 的两种字段名。

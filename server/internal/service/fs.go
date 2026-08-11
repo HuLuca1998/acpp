@@ -24,17 +24,19 @@ type DirEntry struct {
 	Path string `json:"path"`
 }
 
-// DirListing 是一次目录浏览的结果。
+// DirListing 是一次目录浏览的结果。Files 只在 withFiles 时带上
+//（@ 文件引用的选择器要它，工作目录选择器不要）。
 type DirListing struct {
 	Path   string     `json:"path"`
 	Parent string     `json:"parent,omitempty"`
 	Dirs   []DirEntry `json:"dirs"`
+	Files  []DirEntry `json:"files,omitempty"`
 }
 
-// ListDirs 列出指定目录的子目录，供前端的工作目录选择器导航。
-// 浏览器拿不到本地文件夹的绝对路径（File System Access API 只给 handle），
-// 目录选择只能由后端代劳。path 为空从家目录开始；隐藏目录不列。
-func ListDirs(path string) (*DirListing, error) {
+// ListDirs 列出指定目录的子目录（withFiles 时连同文件），供前端的
+// 目录/文件选择器导航。浏览器拿不到本地路径（File System Access API
+// 只给 handle），选择只能由后端代劳。path 为空从家目录开始；隐藏项不列。
+func ListDirs(path string, withFiles bool) (*DirListing, error) {
 	if path == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -57,16 +59,22 @@ func ListDirs(path string) (*DirListing, error) {
 		listing.Parent = parent
 	}
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		listing.Dirs = append(listing.Dirs, DirEntry{
-			Name: e.Name(),
-			Path: filepath.Join(path, e.Name()),
-		})
+		entry := DirEntry{Name: e.Name(), Path: filepath.Join(path, e.Name())}
+		if e.IsDir() {
+			listing.Dirs = append(listing.Dirs, entry)
+		} else if withFiles {
+			listing.Files = append(listing.Files, entry)
+		}
 	}
-	sort.Slice(listing.Dirs, func(i, j int) bool {
-		return strings.ToLower(listing.Dirs[i].Name) < strings.ToLower(listing.Dirs[j].Name)
-	})
+	byName := func(list []DirEntry) func(i, j int) bool {
+		return func(i, j int) bool {
+			return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
+		}
+	}
+	sort.Slice(listing.Dirs, byName(listing.Dirs))
+	sort.Slice(listing.Files, byName(listing.Files))
 	return listing, nil
 }

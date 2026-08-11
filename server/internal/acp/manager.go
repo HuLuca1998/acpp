@@ -35,6 +35,8 @@ const (
 	EventSettings EventKind = "settings"
 	// EventUsage 是上下文用量快照（usage_update 通知）。
 	EventUsage EventKind = "usage"
+	// EventCommands 是可用斜杠命令清单（全量替换）。
+	EventCommands EventKind = "commands"
 	// EventElicitation 表示 agent 在等用户作答；Done 在作答/超时后发出，
 	// 界面收到后应收起提问卡片。
 	EventElicitation     EventKind = "elicitation"
@@ -60,6 +62,7 @@ type Event struct {
 	Settings      *Settings       `json:"settings,omitempty"`
 	Used          int64           `json:"used,omitempty"`
 	Size          int64           `json:"size,omitempty"`
+	Commands      []Command       `json:"commands,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`
 	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
 	// Title/RawInput/Content 只有 claude 带，前端按空值收敛。
@@ -94,6 +97,9 @@ type Session struct {
 
 	// caps 是 session/new 返回的能力快照，set_* 成功与 agent 主动通知时更新。
 	caps Caps
+	// commands 是斜杠命令清单快照——通知只在会话建立后推一次，
+	// 不存下来的话页面刷新就丢了。
+	commands []Command
 
 	// elicitations 是挂起的交互式提问：agent 阻塞在 elicitation/create 上，
 	// 等 ResolveElicitation 把用户作答塞进对应 chan。
@@ -401,6 +407,17 @@ func (s *Session) setConfigOption(ctx context.Context, configID, value string) e
 	return nil
 }
 
+// Commands 返回会话的斜杠命令清单快照。
+func (m *Manager) Commands(key string) []Command {
+	sess, ok := m.Get(key)
+	if !ok {
+		return nil
+	}
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	return append([]Command(nil), sess.commands...)
+}
+
 // Settings 返回会话设置的统一视图。
 func (m *Manager) Settings(key string) (Settings, error) {
 	sess, ok := m.Get(key)
@@ -460,7 +477,7 @@ func (m *Manager) Get(key string) (*Session, bool) {
 // Prompt 发一轮对话，阻塞到整轮结束。turn 期间的内容通过 OnEvent 实时推出去。
 //
 // ACP 会话自带上下文，所以第二轮起只需要发用户这一句，不要重复系统提示。
-func (m *Manager) Prompt(ctx context.Context, key, text string) (PromptResult, error) {
+func (m *Manager) Prompt(ctx context.Context, key string, blocks []ContentBlock) (PromptResult, error) {
 	sess, ok := m.Get(key)
 	if !ok {
 		return PromptResult{}, ErrNoSession
@@ -486,11 +503,7 @@ func (m *Manager) Prompt(ctx context.Context, key, text string) (PromptResult, e
 		sess.mu.Unlock()
 	}()
 
-	var result PromptResult
-	err := sess.conn.Call(turnCtx, "session/prompt", PromptParams{
-		SessionID: sess.acpSessionID,
-		Prompt:    []ContentBlock{TextBlock(text)},
-	}, &result)
+	result, err := sess.promptCall(turnCtx, blocks)
 	if err != nil {
 		// 超时后只 reject 是不够的：agent 还在后台跑、还在烧钱、还可能继续改文件。
 		if errors.Is(turnCtx.Err(), context.DeadlineExceeded) {
@@ -502,6 +515,52 @@ func (m *Manager) Prompt(ctx context.Context, key, text string) (PromptResult, e
 
 	sess.emit(Event{Kind: EventTurnEnd, StopReason: result.StopReason, Usage: result.Usage})
 	return result, nil
+}
+
+// promptCall 是裸的 session/prompt 往返，不做 turn 排他——
+// Prompt 与 claude 的插话（promptQueueing 排队）共用。
+func (s *Session) promptCall(ctx context.Context, blocks []ContentBlock) (PromptResult, error) {
+	var result PromptResult
+	err := s.conn.Call(ctx, "session/prompt", PromptParams{
+		SessionID: s.acpSessionID,
+		Prompt:    blocks,
+	}, &result)
+	return result, err
+}
+
+// steeringCall 把消息注入正在跑的 turn（_session/steering）。
+func (s *Session) steeringCall(ctx context.Context, blocks []ContentBlock) error {
+	var result json.RawMessage
+	err := s.conn.Call(ctx, "_session/steering", SteeringParams{
+		SessionID: s.acpSessionID,
+		Prompt:    blocks,
+	}, &result)
+	if err != nil {
+		return fmt.Errorf("_session/steering: %w", err)
+	}
+	return nil
+}
+
+// Interject 在 turn 进行中插入一条用户消息，翻译交给 adapter。
+// followUp=true 表示这条消息产生了自己独立的一轮（结果已含在返回值里，
+// 并已发出 turn_end 事件）；false 表示内容并入当前轮、由当前轮统一收尾。
+func (m *Manager) Interject(ctx context.Context, key string, blocks []ContentBlock) (PromptResult, bool, error) {
+	sess, ok := m.Get(key)
+	if !ok {
+		return PromptResult{}, false, ErrNoSession
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, promptTimeout)
+	defer cancel()
+
+	result, followUp, err := sess.adapter.Interject(ctx, sess, blocks)
+	if err != nil {
+		return PromptResult{}, false, err
+	}
+	if followUp {
+		sess.emit(Event{Kind: EventTurnEnd, StopReason: result.StopReason, Usage: result.Usage})
+	}
+	return result, followUp, nil
 }
 
 // Cancel 中止会话上正在跑的 turn。
@@ -523,6 +582,66 @@ func (m *Manager) cancelTurn(sess *Session) {
 		cancel()
 	}
 }
+
+// DeleteRemote 删除 agent 侧的会话历史（session/delete，两端都支持）。
+// 会话开着时直接调；没开着时拉一个临时进程完成——删除是低频操作，
+// 几秒的 spawn 可以接受。本地记录与转录的删除不归这里管。
+func (m *Manager) DeleteRemote(ctx context.Context, key string, rt Runtime, acpSessionID string) error {
+	if acpSessionID == "" {
+		return nil
+	}
+
+	if sess, ok := m.Get(key); ok {
+		var res json.RawMessage
+		if err := sess.conn.Call(ctx, "session/delete", DeleteSessionParams{SessionID: acpSessionID}, &res); err != nil {
+			return fmt.Errorf("session/delete: %w", err)
+		}
+		return nil
+	}
+
+	conn, err := Spawn(ctx, rt, noopHandler{}, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	var init InitializeResult
+	err = conn.Call(ctx, "initialize", InitializeParams{
+		ProtocolVersion:    ProtocolVersion,
+		ClientCapabilities: ClientCapabilities{},
+	}, &init)
+	if err != nil {
+		return fmt.Errorf("initialize: %w", err)
+	}
+
+	var res json.RawMessage
+	if err := conn.Call(ctx, "session/delete", DeleteSessionParams{SessionID: acpSessionID}, &res); err != nil {
+		return fmt.Errorf("session/delete: %w", err)
+	}
+	return nil
+}
+
+// noopHandler 供一次性管理连接（远端删除等）使用：不接工作负载，
+// 反向调用一律以取消/拒绝应答。
+type noopHandler struct{}
+
+func (noopHandler) RequestPermission(context.Context, RequestPermissionParams) (RequestPermissionResult, error) {
+	return RequestPermissionResult{Outcome: PermissionOutcome{Outcome: "cancelled"}}, nil
+}
+
+func (noopHandler) Elicitation(context.Context, ElicitationParams) (ElicitationResult, error) {
+	return ElicitationResult{Action: "cancel"}, nil
+}
+
+func (noopHandler) ReadTextFile(context.Context, ReadTextFileParams) (ReadTextFileResult, error) {
+	return ReadTextFileResult{}, errors.New("acp: fs is not available on this connection")
+}
+
+func (noopHandler) WriteTextFile(context.Context, WriteTextFileParams) error {
+	return errors.New("acp: fs is not available on this connection")
+}
+
+func (noopHandler) OnUpdate(SessionNotification) {}
 
 // Close 关掉一条会话并回收子进程。
 func (m *Manager) Close(key string) error {
@@ -629,7 +748,11 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 		// 只在 session/load 重放历史时出现，这里不重放，忽略。
 
 	case UpdateAvailableCommands:
-		// 当前界面不展示斜杠命令，明确丢弃。
+		// 全量替换，供输入框做 "/" 补全；发送时就是普通文本，两端都认。
+		h.session.mu.Lock()
+		h.session.commands = u.AvailableCommands
+		h.session.mu.Unlock()
+		h.session.emit(Event{Kind: EventCommands, Commands: u.AvailableCommands})
 
 	case UpdateSessionInfo:
 		// claude 带自动标题（与本项目「首条消息简写」策略重复）、codex 带

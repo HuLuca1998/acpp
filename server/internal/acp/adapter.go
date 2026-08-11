@@ -135,6 +135,12 @@ type Adapter interface {
 	// PlanReview 识别「计划完成」权限请求并翻译成统一视图；
 	// 不是这类请求（或该 runtime 没有此交互）时返回 nil。
 	PlanReview(p RequestPermissionParams) *PlanReview
+
+	// Interject 在 turn 进行中插入一条用户消息。两端通道不同：
+	// claude 靠 promptQueueing 排队为独立一轮（followUp=true，阻塞到该轮
+	// 结束）；codex 靠 _session/steering 注入当前轮（followUp=false，
+	// 由当前轮统一收尾）。不支持的 runtime 返回 ErrUnsupported。
+	Interject(ctx context.Context, s *Session, blocks []ContentBlock) (PromptResult, bool, error)
 }
 
 // ---- adapter 共用的取数工具 ----

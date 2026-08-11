@@ -68,6 +68,15 @@ func (claudeAdapter) SetFast(ctx context.Context, s *Session, on bool) error {
 	return s.setConfigOption(ctx, "fast", onOff(on))
 }
 
+// Interject 靠 claude 的 promptQueueing：turn 进行中再发一个 session/prompt
+// 会排队成独立的一轮（实测第二轮内容在第一轮 end_turn 后开始，响应带自己
+// 的 stopReason/usage）。不用 _session/steering——它注入后被抢占轮提前
+// end_turn，插话产生的内容没有任何轮次边界与结束信号，客户端没法收尾。
+func (claudeAdapter) Interject(ctx context.Context, s *Session, blocks []ContentBlock) (PromptResult, bool, error) {
+	result, err := s.promptCall(ctx, blocks)
+	return result, true, err
+}
+
 // PlanReview 识别 ExitPlanMode：kind=switch_mode 的权限请求，rawInput.plan
 // 是 markdown 计划全文（实测形状见 docs/adr-001）。选项 optionId 是 claude
 // 的模式名，翻译进统一三档；词汇表外的档（auto）丢弃；reject 类选项

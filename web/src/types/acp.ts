@@ -86,6 +86,8 @@ export interface Session {
   /** 当前是否有活着的 agent 子进程。 */
   running: boolean
   settings?: SessionSettings
+  /** 活会话的斜杠命令清单，open 后可用。 */
+  commands?: SlashCommand[]
   /** 工作目录当前的 git 分支（detached 时是短 hash），非 git 目录为空。 */
   gitBranch?: string
   createdAt: string
@@ -97,6 +99,12 @@ export interface PlanEntry {
   content: string
   priority?: string
   status?: "pending" | "in_progress" | "completed" | string
+}
+
+/** agent 暴露的一条斜杠命令；发送时就是普通文本（"/plan …"）。 */
+export interface SlashCommand {
+  name: string
+  description?: string
 }
 
 /** 权限请求的一个选项，agent 提供。 */
@@ -134,7 +142,7 @@ export interface PendingPermission {
   planReview?: PlanReview
 }
 
-/** 目录浏览器的一项与一次列取结果。 */
+/** 目录浏览器的一项与一次列取结果。files 只在文件选择模式下返回。 */
 export interface DirEntry {
   name: string
   path: string
@@ -144,6 +152,20 @@ export interface DirListing {
   path: string
   parent?: string
   dirs: DirEntry[]
+  files?: DirEntry[]
+}
+
+/** 随消息上传的一张图片（base64，无 data: 前缀）。 */
+export interface ImageAttachment {
+  data: string
+  mimeType: string
+}
+
+/** 发一轮的入参：文本 + 可选图片 + 可选 @ 引用文件路径。 */
+export interface SendInput {
+  content: string
+  images?: ImageAttachment[]
+  files?: string[]
 }
 
 /** SSE 推来的事件类型。 */
@@ -157,6 +179,7 @@ export type StreamEventKind =
   | "plan"
   | "settings"
   | "usage"
+  | "commands"
   | "elicitation"
   | "elicitation_done"
   | "turn_end"
@@ -183,6 +206,8 @@ export interface StreamEvent {
   /** usage 事件：上下文用量（按占比展示）。 */
   used?: number
   size?: number
+  /** commands 事件：可用斜杠命令全量清单。 */
+  commands?: SlashCommand[]
   /** turn_end 事件：本轮 token 计量。 */
   usage?: TurnUsage
   /** permission 事件：ID 用于回传裁决，options 是 agent 给的选项。 */

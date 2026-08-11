@@ -1,21 +1,27 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
 
 import { useChat, type LiveToolCall } from "@/hooks/use-chat"
+import { useDraftSession } from "@/hooks/use-draft-session"
 import type {
   AccessLevel,
   EffortLevel,
+  ImageAttachment,
   Message,
   PendingElicitation,
   SessionSettings,
   SettingsPatch,
 } from "@/types/acp"
+import { fileToImageAttachment } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/format"
+import { AttachmentTray } from "@/components/chat/attachment-tray"
 import { Composer } from "@/components/chat/composer"
 import { ComposerStatus } from "@/components/chat/composer-status"
 import { CopyButton } from "@/components/chat/copy-button"
+import { DirPicker } from "@/components/dir-picker"
+import { DraftControls } from "@/components/chat/draft-controls"
 import { PermissionCard } from "@/components/chat/permission-card"
 import { PlanReviewCard } from "@/components/chat/plan-review-card"
 import { MarkdownContent } from "@/components/chat/markdown"
@@ -60,10 +66,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  AtSignIcon,
   BrainIcon,
   ChevronRightIcon,
   CircleAlertIcon,
   CircleHelpIcon,
+  FileIcon,
+  ImageIcon,
   ListTodoIcon,
   MessagesSquareIcon,
   ShieldCheckIcon,
@@ -111,16 +120,55 @@ function groupMessages(messages: Message[]): Block[] {
 export function SessionChat() {
   const { t } = useTranslation()
   const params = useParams()
-  const sessionId = Number(params.id)
+  // /sessions/new 没有 :id —— 草稿态：会话未创建，首条消息落地才建。
+  const isNew = params.id === undefined
+  const sessionId = isNew ? 0 : Number(params.id)
 
   const chat = useChat(sessionId)
+  const newSession = useDraftSession(isNew, t("sessions.form.defaultModel"))
   const [draft, setDraft] = useState("")
+
+  // 待发送附件：图片（粘贴/选择）与 @ 引用的文件路径。
+  const [images, setImages] = useState<ImageAttachment[]>([])
+  const [files, setFiles] = useState<string[]>([])
+  const [filePickerOpen, setFilePickerOpen] = useState(false)
+  const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  // 草稿态显示待选工作目录（空则 agent 默认，再兜底 ~/acpp）。
+  const draftCwd =
+    newSession.cwd.trim() ||
+    newSession.selectedAgent?.cwd ||
+    t("sessions.form.cwdPlaceholder")
+
+  async function addImages(picked: File[]) {
+    const attachments = await Promise.all(picked.map(fileToImageAttachment))
+    setImages((prev) => [...prev, ...attachments])
+  }
 
   function submit() {
     const content = draft.trim()
-    if (!content || chat.busy) return
+    if (!content && images.length === 0 && files.length === 0) return
+    const input = { content, images, files }
+    if (isNew) {
+      if (!newSession.selected || newSession.creating) return
+      void newSession.start(input)
+      return
+    }
+    // busy 时也允许发送：后端会把消息插进正在跑的轮（steering / 排队）。
     setDraft("")
-    void chat.send(content)
+    setImages([])
+    setFiles([])
+    void chat.send(input)
+  }
+
+  /** 空态建议芯片：草稿态直接开会话，老会话正常发。 */
+  function sendSuggestion(text: string) {
+    if (isNew) {
+      void newSession.start({ content: text })
+    } else {
+      void chat.send({ content: text })
+    }
   }
 
   if (chat.loading) {
@@ -167,35 +215,37 @@ export function SessionChat() {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* 顶部信息条：连接状态 + 会话信息，保持轻量。 */}
+      {/* 顶部信息条：连接状态 + 会话信息，保持轻量；草稿态没有会话可显示。 */}
       <div className="mx-auto w-full max-w-3xl px-4 pt-3 lg:px-6">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            aria-label={
-              chat.connected ? t("chat.connected") : t("chat.disconnected")
-            }
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              chat.connected ? "bg-success" : "bg-destructive",
-              chat.connected &&
-                chat.busy &&
-                "animate-breathe motion-reduce:animate-none"
-            )}
-          />
-          {chat.session ? (
-            <>
-              <span className="shrink-0 font-medium text-foreground">
-                {chat.session.title}
-              </span>
-              <span className="shrink-0">{chat.session.agentName}</span>
-            </>
-          ) : null}
-        </div>
+        {!isNew ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span
+              aria-label={
+                chat.connected ? t("chat.connected") : t("chat.disconnected")
+              }
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                chat.connected ? "bg-success" : "bg-destructive",
+                chat.connected &&
+                  chat.busy &&
+                  "animate-breathe motion-reduce:animate-none"
+              )}
+            />
+            {chat.session ? (
+              <>
+                <span className="shrink-0 font-medium text-foreground">
+                  {chat.session.title}
+                </span>
+                <span className="shrink-0">{chat.session.agentName}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
 
-        {chat.error ? (
+        {chat.error || newSession.error ? (
           <Alert variant="destructive" className="mt-2">
             <AlertTitle>{t("errors.openFailed")}</AlertTitle>
-            <AlertDescription>{chat.error}</AlertDescription>
+            <AlertDescription>{chat.error ?? newSession.error}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -221,8 +271,12 @@ export function SessionChat() {
                     variant="outline"
                     size="sm"
                     className="rounded-full"
-                    disabled={chat.busy}
-                    onClick={() => void chat.send(t(`chat.suggestions.${key}`))}
+                    disabled={
+                      isNew
+                        ? newSession.creating || !newSession.selected
+                        : chat.busy
+                    }
+                    onClick={() => sendSuggestion(t(`chat.suggestions.${key}`))}
                   >
                     {t(`chat.suggestions.${key}`)}
                   </Button>
@@ -404,23 +458,95 @@ export function SessionChat() {
         value={draft}
         onChange={setDraft}
         onSubmit={submit}
-        onCancel={() => void chat.cancel()}
+        onCancel={isNew ? undefined : () => void chat.cancel()}
         busy={chat.busy}
+        pending={newSession.creating}
+        disabled={isNew && (newSession.agents === null || !newSession.selected)}
         placeholder={t("chat.placeholder")}
+        commands={chat.commands}
+        attachments={
+          <AttachmentTray
+            images={images}
+            files={files}
+            onRemoveImage={(i) =>
+              setImages((prev) => prev.filter((_, idx) => idx !== i))
+            }
+            onRemoveFile={(i) =>
+              setFiles((prev) => prev.filter((_, idx) => idx !== i))
+            }
+          />
+        }
+        onPasteImages={(picked) => void addImages(picked)}
         footer={
           <ComposerStatus
-            cwd={chat.session?.cwd}
-            gitBranch={chat.session?.gitBranch}
-            usage={chat.contextUsage}
+            cwd={isNew ? draftCwd : chat.session?.cwd}
+            gitBranch={isNew ? undefined : chat.session?.gitBranch}
+            usage={isNew ? null : chat.contextUsage}
+            onPickCwd={isNew ? () => setCwdPickerOpen(true) : undefined}
           />
         }
       >
-        <SettingsSelectors
-          settings={chat.settings}
-          disabled={chat.busy}
-          onApply={chat.applySettings}
-        />
+        {isNew ? (
+          <DraftControls draft={newSession} />
+        ) : (
+          <SettingsSelectors
+            settings={chat.settings}
+            disabled={chat.busy}
+            onApply={chat.applySettings}
+          />
+        )}
+
+        {/* 附件：图片上传与 @ 文件引用，两种态都可用。 */}
+        <button
+          type="button"
+          aria-label={t("chat.attachments.image")}
+          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+          onClick={() => imageInputRef.current?.click()}
+        >
+          <ImageIcon className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label={t("chat.attachments.file")}
+          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+          onClick={() => setFilePickerOpen(true)}
+        >
+          <AtSignIcon className="size-3.5" />
+        </button>
       </Composer>
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const picked = Array.from(e.target.files ?? [])
+          e.target.value = ""
+          if (picked.length > 0) void addImages(picked)
+        }}
+      />
+
+      <DirPicker
+        mode="file"
+        open={filePickerOpen}
+        onOpenChange={setFilePickerOpen}
+        initialPath={
+          (isNew ? newSession.cwd.trim() : chat.session?.cwd) || undefined
+        }
+        onSelect={(path) =>
+          setFiles((prev) => (prev.includes(path) ? prev : [...prev, path]))
+        }
+      />
+
+      {/* 草稿态：点状态栏里的工作目录换目录。 */}
+      <DirPicker
+        open={cwdPickerOpen}
+        onOpenChange={setCwdPickerOpen}
+        initialPath={newSession.cwd.trim() || newSession.selectedAgent?.cwd || undefined}
+        onSelect={newSession.setCwd}
+      />
     </div>
   )
 }
@@ -875,6 +1001,11 @@ function ChatMessage({ message }: { message: Message }) {
   }
 
   if (message.role === "user") {
+    // 附件（图片 / @ 引用文件）由发送入参或转录重建带回 payload。
+    const payload = message.payload as {
+      images?: { data: string; mimeType: string }[]
+      files?: string[]
+    } | null
     return (
       <MessageRow align="end">
         <MessageContent>
@@ -886,11 +1017,43 @@ function ChatMessage({ message }: { message: Message }) {
               text={message.content}
               className="opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-visible:opacity-100"
             />
-            <Bubble variant="default" align="end">
-              <BubbleContent className="whitespace-pre-wrap">
-                {message.content}
-              </BubbleContent>
-            </Bubble>
+            <div className="flex flex-col items-end gap-1.5">
+              {payload?.images?.length ? (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {payload.images.map((img, index) => (
+                    <img
+                      key={index}
+                      src={`data:${img.mimeType};base64,${img.data}`}
+                      alt=""
+                      className="max-h-40 max-w-60 rounded-lg border border-border object-contain"
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {payload?.files?.length ? (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {payload.files.map((path) => (
+                    <span
+                      key={path}
+                      title={path}
+                      className="flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs text-muted-foreground"
+                    >
+                      <FileIcon className="size-3" />
+                      <span className="max-w-40 truncate font-mono">
+                        {path.split("/").pop()}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {message.content ? (
+                <Bubble variant="default" align="end">
+                  <BubbleContent className="whitespace-pre-wrap">
+                    {message.content}
+                  </BubbleContent>
+                </Bubble>
+              ) : null}
+            </div>
           </div>
         </MessageContent>
       </MessageRow>

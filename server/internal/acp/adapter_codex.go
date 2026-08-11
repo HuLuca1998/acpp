@@ -64,3 +64,13 @@ func (codexAdapter) SetFast(ctx context.Context, s *Session, on bool) error {
 // PlanReview：codex 的 plan 是配置项，模型完成计划后正常结束 turn，
 // 没有「请求退出计划模式」的交互。
 func (codexAdapter) PlanReview(RequestPermissionParams) *PlanReview { return nil }
+
+// Interject 走 _session/steering：注入当前轮，改道后的内容并入当前轮、
+// 由当前轮的 prompt 正常收尾。不用第二个 session/prompt——实测 codex
+// 会吸收其内容但那个请求的响应永远悬着。
+func (codexAdapter) Interject(ctx context.Context, s *Session, blocks []ContentBlock) (PromptResult, bool, error) {
+	if err := s.steeringCall(ctx, blocks); err != nil {
+		return PromptResult{}, false, err
+	}
+	return PromptResult{}, false, nil
+}

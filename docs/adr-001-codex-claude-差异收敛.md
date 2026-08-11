@@ -84,6 +84,22 @@ Flavor 识别：`initialize` 响应的 `agentInfo.name` + 启动命令名双信�
 - SSE：`mode`/`config` 两个 kind 合并为 `settings`（agent 自行切档/改配置时推全量统一视图）；新增 kind `usage`（`{used,size,cost?}`）；`turn_end` 补透传 usage；`tool_call` 补 `content`（diff）/`locations`；`permission` 补 `choice` 与富 `title`/`rawInput`。
 - REST 其余端点、数据模型、消息重建不变（usage 不落库，转录里有原始数据）。
 
+### 交互差异的收敛点（2026-08-11 补充实测）
+
+- **turn 进行中插话（Interject）**：两端通道不同，收敛在 adapter——
+  claude 用 **promptQueueing**（turn 中再发 session/prompt 会排队成独立一轮，
+  有自己的 stopReason/usage；不用 `_session/steering`，实测 0.63 注入后被
+  抢占轮提前 end_turn、插话内容没有轮次边界与结束信号）；codex 用
+  **`_session/steering`**（注入当前轮、内容并入当前轮统一收尾；不用并发
+  prompt，实测第二个请求的响应会永远悬着）。generic 不支持。
+- **ExitPlanMode（计划完成审批）**：claude 独有交互但走两端一致的权限通道，
+  识别信号是 ACP 标准的 `toolCall.kind == "switch_mode"`；选项映射
+  （claude 档位名 → 统一三档，`auto` 丢弃）在 claudeAdapter.PlanReview。
+- **session/delete**：两端都支持，删除会话时尽力清 agent 侧线程历史
+  （进程活着直调；死了拉临时进程；失败只记警告不阻塞本地删除）。
+- **斜杠命令**：`available_commands_update` 两端都推全量清单，发送就是普通
+  文本两端都认；通知只在会话建立后推一次，必须存快照否则页面刷新即丢。
+
 ### 形状差异的收敛点（不涉及概念映射的部分）
 
 - `Usage` 结构：`cachedWriteTokens`/`thoughtTokens`/`cost` 用指针，nil = 「该 runtime 结构性不报」≠ 0，前端遇 nil 隐藏而不是显示 $0。

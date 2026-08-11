@@ -55,6 +55,7 @@ type StreamEvent struct {
 	Settings      *acp.Settings   `json:"settings,omitempty"`
 	Used          int64           `json:"used,omitempty"`
 	Size          int64           `json:"size,omitempty"`
+	Commands      []acp.Command   `json:"commands,omitempty"`
 	Usage         *acp.Usage      `json:"usage,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`
 	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
@@ -104,6 +105,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		if settings, err := s.manager.Settings(key); err == nil {
 			view.Settings = &settings
 		}
+		view.Commands = s.manager.Commands(key)
 		return view, nil
 	}
 
@@ -149,6 +151,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	if settings, err := s.manager.Settings(key); err == nil {
 		view.Settings = &settings
 	}
+	view.Commands = s.manager.Commands(key)
 	return view, nil
 }
 
@@ -195,14 +198,36 @@ func (s *ChatService) ResolveElicitation(sessionID uint, elicitationID, action s
 	return nil
 }
 
+// ImageInput 是随消息上传的一张图片（base64，无 data: 前缀）。
+type ImageInput struct {
+	Data     string `json:"data"`
+	MimeType string `json:"mimeType"`
+}
+
+// SendInput 是发一轮的入参：文本 + 可选图片 + 可选 @ 引用的文件路径。
+type SendInput struct {
+	Content string       `json:"content"`
+	Images  []ImageInput `json:"images,omitempty"`
+	// Files 是 @ 引用的文件（绝对路径或相对会话 cwd），内容由后端读出
+	// 以 resource 块嵌进 prompt（两端 embeddedContext 都支持）。
+	Files []string `json:"files,omitempty"`
+}
+
 // Send 广播用户消息并异步跑一轮。消息本身不落库——session/prompt 请求会
 // 原样进转录，重建时从那里读回；这里广播的临时消息只为界面即时显示。
-func (s *ChatService) Send(ctx context.Context, sessionID uint, text string) (*model.Message, error) {
-	if strings.TrimSpace(text) == "" {
+func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*model.Message, error) {
+	text := in.Content
+	if strings.TrimSpace(text) == "" && len(in.Images) == 0 && len(in.Files) == 0 {
 		return nil, fmt.Errorf("%w: message content is required", ErrInvalid)
 	}
 
 	view, err := s.Open(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 组 prompt 内容块：@ 文件 → resource（后端读内容），图片 → image，正文 → text。
+	blocks, payload, err := s.buildBlocks(view.Cwd, in)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +251,7 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, text string) (*m
 		Role:      model.RoleUser,
 		Kind:      model.KindText,
 		Content:   text,
+		Payload:   payload,
 		CreatedAt: time.Now(),
 	}
 
@@ -233,17 +259,70 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, text string) (*m
 	br.startTurn()
 	br.publish(StreamEvent{Kind: "user_message", Message: msg})
 
-	go s.runTurn(sessionID, br, text)
+	go s.runTurn(sessionID, br, blocks)
 
 	return msg, nil
 }
 
+// buildBlocks 把发送入参翻译成 prompt 内容块，并给临时消息组展示 payload。
+// @ 文件在这里读内容：路径相对会话 cwd 解析，读不到直接报错（发出去
+// 一个空引用比报错更糟）。
+func (s *ChatService) buildBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSONMap, error) {
+	var blocks []acp.ContentBlock
+	payload := model.JSONMap{}
+
+	var files []string
+	for _, path := range in.Files {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(cwd, path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: read %s: %s", ErrInvalid, path, err)
+		}
+		blocks = append(blocks, acp.ResourceBlock("file://"+path, string(data)))
+		files = append(files, path)
+	}
+	if len(files) > 0 {
+		payload["files"] = files
+	}
+
+	var images []map[string]any
+	for _, img := range in.Images {
+		if img.Data == "" || img.MimeType == "" {
+			return nil, nil, fmt.Errorf("%w: image data and mimeType are required", ErrInvalid)
+		}
+		blocks = append(blocks, acp.ImageBlock(img.Data, img.MimeType))
+		images = append(images, map[string]any{"data": img.Data, "mimeType": img.MimeType})
+	}
+	if len(images) > 0 {
+		payload["images"] = images
+	}
+
+	if strings.TrimSpace(in.Content) != "" {
+		blocks = append(blocks, acp.TextBlock(in.Content))
+	}
+	if len(payload) == 0 {
+		payload = nil
+	}
+	return blocks, payload, nil
+}
+
 // runTurn 跑完一轮。它在自己的 goroutine 里，
 // 用 context.Background 是因为发起请求的 HTTP 连接早就返回了。
-func (s *ChatService) runTurn(sessionID uint, br *broker, text string) {
+func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBlock) {
 	ctx := context.Background()
 
-	result, err := s.manager.Prompt(ctx, sessionKey(sessionID), text)
+	result, err := s.manager.Prompt(ctx, sessionKey(sessionID), blocks)
+	if errors.Is(err, acp.ErrBusy) {
+		// turn 进行中：改走插话通道（claude 排队为独立一轮，codex 注入当前轮）。
+		var followUp bool
+		result, followUp, err = s.manager.Interject(ctx, sessionKey(sessionID), blocks)
+		if err == nil && !followUp {
+			// 内容并入当前轮，收尾归当前轮的 runTurn，这里直接退场。
+			return
+		}
+	}
 	if err != nil {
 		br.publish(StreamEvent{Kind: "error", Error: err.Error()})
 		s.markSessionError(sessionID, err)
@@ -398,6 +477,9 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 	case acp.EventUsage:
 		br.publish(StreamEvent{Kind: "usage", Used: ev.Used, Size: ev.Size})
 
+	case acp.EventCommands:
+		br.publish(StreamEvent{Kind: "commands", Commands: ev.Commands})
+
 	case acp.EventElicitation:
 		br.publish(StreamEvent{
 			Kind:          "elicitation",
@@ -436,6 +518,23 @@ func (s *ChatService) Cancel(sessionID uint) error {
 		return err
 	}
 	return nil
+}
+
+// Destroy 在删除会话前做彻底清理：先尽力删掉 agent 侧的线程历史
+//（session/delete，删不掉只记警告不阻塞本地删除），再关进程。
+func (s *ChatService) Destroy(ctx context.Context, sessionID uint) error {
+	view, err := s.sessions.Get(ctx, sessionID)
+	if err == nil && view.ACPSessionID != "" {
+		var agent model.Agent
+		if err := s.db.WithContext(ctx).First(&agent, view.AgentID).Error; err == nil {
+			err := s.manager.DeleteRemote(ctx, sessionKey(sessionID),
+				acp.RuntimeFor(agent.Command, agent.Args, agent.Env), view.ACPSessionID)
+			if err != nil {
+				slog.Warn("delete remote session", "session", sessionID, "err", err)
+			}
+		}
+	}
+	return s.Close(ctx, sessionID)
 }
 
 // Close 关掉 ACP 会话并回收子进程，数据库记录与转录文件保留。

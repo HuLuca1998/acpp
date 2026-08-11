@@ -10,9 +10,11 @@ import type {
   PendingElicitation,
   PendingPermission,
   PlanEntry,
+  SendInput,
   Session,
   SessionSettings,
   SettingsPatch,
+  SlashCommand,
   StreamEvent,
 } from "@/types/acp"
 
@@ -63,6 +65,8 @@ export interface ChatState {
   settings: SessionSettings | null
   /** 上下文用量，agent 每轮会推若干次。 */
   contextUsage: ContextUsage | null
+  /** 可用斜杠命令，agent 推送全量清单，供输入框 "/" 补全。 */
+  commands: SlashCommand[]
   /** agent 正在等用户作答的交互式提问。 */
   elicitation: PendingElicitation | null
   /** agent 正在等用户裁决的权限请求。 */
@@ -87,6 +91,7 @@ const INITIAL: ChatState = {
   stopReason: null,
   settings: null,
   contextUsage: null,
+  commands: [],
   elicitation: null,
   permission: null,
   plan: null,
@@ -164,6 +169,9 @@ export function useChat(sessionId: number) {
             ...prev,
             contextUsage: { used: ev.used ?? 0, size: ev.size },
           }
+
+        case "commands":
+          return { ...prev, commands: ev.commands ?? [] }
 
         case "plan": {
           // 计划整体替换；保留到下一轮开始，让用户能回看最终完成状态。
@@ -243,11 +251,17 @@ export function useChat(sessionId: number) {
     })
   }, [])
 
-  // 打开会话 + 拉历史。
+  // 打开会话 + 拉历史。sessionId 为 0 表示草稿态（会话还没创建），
+  // 不打开、不订阅，只把 loading 清掉让页面直接可用。
   useEffect(() => {
     let cancelled = false
     setState(INITIAL)
     lastSeq.current = 0
+
+    if (!sessionId) {
+      setState((prev) => ({ ...prev, loading: false }))
+      return
+    }
 
     async function bootstrap() {
       try {
@@ -260,6 +274,7 @@ export function useChat(sessionId: number) {
           ...prev,
           session,
           settings: session.settings ?? null,
+          commands: session.commands ?? [],
           messages: history.items,
           loading: false,
         }))
@@ -304,6 +319,7 @@ export function useChat(sessionId: number) {
 
   // 订阅事件流。EventSource 自身会重连，重放的事件靠 seq 去重。
   useEffect(() => {
+    if (!sessionId) return
     const source = new EventSource(api.sessions.eventsUrl(sessionId))
 
     source.onopen = () => setState((prev) => ({ ...prev, connected: true }))
@@ -322,10 +338,10 @@ export function useChat(sessionId: number) {
   }, [sessionId, applyEvent, refreshMessages])
 
   const send = useCallback(
-    async (content: string) => {
+    async (input: SendInput) => {
       setState((prev) => ({ ...prev, busy: true, error: null }))
       try {
-        await api.sessions.send(sessionId, content)
+        await api.sessions.send(sessionId, input)
       } catch (err) {
         setState((prev) => ({
           ...prev,

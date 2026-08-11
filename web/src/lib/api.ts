@@ -3,6 +3,7 @@ import type {
   DirListing,
   Message,
   Paged,
+  SendInput,
   Session,
   SessionSettings,
   SettingsPatch,
@@ -81,11 +82,11 @@ export const api = {
     /** 拉起 agent 子进程并完成 ACP 握手，重复调用是安全的。 */
     open: (id: number) =>
       request<Session>(`/sessions/${id}/open`, { method: "POST" }),
-    /** 发一轮对话。立即返回，agent 的回复走 SSE。 */
-    send: (id: number, content: string) =>
+    /** 发一轮对话（文本 + 可选图片/文件引用）。立即返回，agent 的回复走 SSE。 */
+    send: (id: number, input: SendInput) =>
       request<Message>(`/sessions/${id}/send`, {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(input),
       }),
     cancel: (id: number) =>
       request<null>(`/sessions/${id}/cancel`, { method: "POST" }),
@@ -117,10 +118,13 @@ export const api = {
   },
 
   fs: {
-    /** 列目录，供工作目录选择器导航；path 为空从家目录开始。 */
-    dirs: (path?: string) =>
-      request<DirListing>(
-        `/fs/dirs${path ? `?path=${encodeURIComponent(path)}` : ""}`
-      ),
+    /** 列目录（withFiles 时连同文件），供选择器导航；path 为空从家目录开始。 */
+    dirs: (path?: string, withFiles?: boolean) => {
+      const params = new URLSearchParams()
+      if (path) params.set("path", path)
+      if (withFiles) params.set("files", "1")
+      const qs = params.toString()
+      return request<DirListing>(`/fs/dirs${qs ? `?${qs}` : ""}`)
+    },
   },
 }

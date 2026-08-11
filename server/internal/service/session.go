@@ -32,6 +32,8 @@ type SessionView struct {
 	Running bool `json:"running"`
 	// Settings 是活会话的统一设置视图，只在会话开着时非空。
 	Settings *acp.Settings `json:"settings,omitempty"`
+	// Commands 是活会话的斜杠命令清单（会话开着时才有）。
+	Commands []acp.Command `json:"commands,omitempty"`
 	// GitBranch 是工作目录当前的 git 分支（detached 时是短 hash），
 	// 非 git 目录为空。每次取视图时现读，agent 切分支后刷新即可见。
 	GitBranch string `json:"gitBranch,omitempty"`

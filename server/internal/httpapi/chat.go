@@ -38,15 +38,13 @@ func (h chatHandler) send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var in struct {
-		Content string `json:"content"`
-	}
+	var in service.SendInput
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, err)
 		return
 	}
 
-	msg, err := h.chat.Send(r.Context(), id, in.Content)
+	msg, err := h.chat.Send(r.Context(), id, in)
 	if err != nil {
 		if errors.Is(err, service.ErrBusy) {
 			writeJSON(w, http.StatusConflict, envelope{Error: err.Error()})

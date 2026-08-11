@@ -133,6 +133,7 @@ export default {
   },
   dirPicker: {
     title: "Choose a working directory",
+    fileTitle: "Choose a file to reference",
     browse: "Browse directories",
     up: "Parent directory",
     select: "Use this directory",
@@ -207,6 +208,11 @@ export default {
       title: "Plan ready",
       run: "Run · {{level}}",
       keepPlanning: "Keep planning",
+    },
+    attachments: {
+      image: "Add image",
+      file: "Reference a file",
+      remove: "Remove attachment",
     },
     elicitation: {
       title: "The agent needs your input",

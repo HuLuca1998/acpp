@@ -84,7 +84,9 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 
 `make dev` 每次都会重新编译后端——改完代码再跑一次就是更新；`make stop` 停止、`make status` 看状态。要盯实时日志时用 `make dev-server` / `make dev-web` 前台跑。端口是固定约定，被占会自动清掉旧进程，见 [AGENTS.md §4.0](AGENTS.md)。
 
-然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp` 或 `claude-agent-acp`）→ 任意页面点 **新建会话** 直接进入对话。新会话页的模型选择器按 agent 分组列出全部可用模型（注册后自动探测缓存），选哪个模型就用哪个 agent；发出首条消息时才真正创建会话，标题自动取自首条消息。会话进行中只能切换当前 agent 自己的模型。
+然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp` 或 `claude-agent-acp`）→ 任意页面点 **新建会话** 直接进入对话。新会话与老会话是**同一个页面**，只有两处差异：草稿态的模型选择器按 agent 分组列出全部可用模型（注册后自动探测缓存，选哪个模型就用哪个 agent），且状态栏里的工作目录可点击修改；发出首条消息才真正创建会话，此后模型只能在当前 agent 内切、工作目录不可再改。
+
+输入框支持：**粘贴/上传图片**、**@ 引用文件**（后端读内容嵌入 prompt）、**`/` 斜杠命令补全**（清单来自 agent），以及 **turn 进行中直接插话**（不用等上一轮结束）。
 
 单进程部署（后端托管前端产物）：`make serve`。
 
@@ -118,16 +120,16 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
 | POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor 与模型清单），同步返回 |
 | GET/POST | `/api/sessions` | 会话列表（支持 `?agentId=`）/ 新建 |
-| GET/DELETE | `/api/sessions/{id}` | 会话详情 / 删除（同时回收子进程） |
+| GET/DELETE | `/api/sessions/{id}` | 会话详情 / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息 |
 | POST | `/api/sessions/{id}/open` | 拉起 agent 并握手，幂等 |
-| POST | `/api/sessions/{id}/send` | 发一轮，立即返回 |
+| POST | `/api/sessions/{id}/send` | 发一轮（`{content, images?, files?}`：图片 base64、@ 引用文件路径由后端读内容嵌入），立即返回；**turn 进行中再发会插进当前轮**（claude 排队为独立一轮，codex steering 注入当前轮） |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings` |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
 
 ## 数据模型
 

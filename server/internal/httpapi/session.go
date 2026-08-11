@@ -74,7 +74,7 @@ func (h sessionHandler) remove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 先收子进程再删记录，否则 agent 会变成没人认领的孤儿进程。
-	if err := h.chat.Close(r.Context(), id); err != nil {
+	if err := h.chat.Destroy(r.Context(), id); err != nil {
 		writeError(w, err)
 		return
 	}

@@ -36,9 +36,10 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 		})
 	})
 
-	// 目录浏览：供工作目录选择器导航本机目录（浏览器拿不到绝对路径）。
+	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。
+	// ?files=1 时连同文件一起列（@ 文件引用用）。
 	api.HandleFunc("GET /api/fs/dirs", func(w http.ResponseWriter, r *http.Request) {
-		listing, err := service.ListDirs(r.URL.Query().Get("path"))
+		listing, err := service.ListDirs(r.URL.Query().Get("path"), r.URL.Query().Get("files") == "1")
 		if err != nil {
 			writeError(w, err)
 			return

@@ -117,11 +117,36 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			var p acp.PromptParams
 			if err := json.Unmarshal(msg.Params, &p); err == nil {
 				var text []byte
+				var images []map[string]any
+				var files []string
 				for _, block := range p.Prompt {
-					text = append(text, block.Text...)
+					switch block.Type {
+					case "image":
+						// 图片原文在转录里，重建时装回 payload 供气泡显示。
+						images = append(images, map[string]any{
+							"data": block.Data, "mimeType": block.MimeType,
+						})
+					case "resource":
+						if block.Resource != nil {
+							files = append(files, block.Resource.URI)
+						}
+					default:
+						text = append(text, block.Text...)
+					}
 				}
-				if content := trimmed(text); content != "" {
-					emit(model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content}, entry.TS)
+				content := trimmed(text)
+				if content != "" || len(images) > 0 || len(files) > 0 {
+					payload := model.JSONMap{}
+					if len(images) > 0 {
+						payload["images"] = images
+					}
+					if len(files) > 0 {
+						payload["files"] = files
+					}
+					if len(payload) == 0 {
+						payload = nil
+					}
+					emit(model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content, Payload: payload}, entry.TS)
 				}
 			}
 			turn = &rebuildTurn{tools: map[string]*rebuildTool{}}

@@ -128,6 +128,7 @@ export default {
   },
   dirPicker: {
     title: "选择工作目录",
+    fileTitle: "选择要引用的文件",
     browse: "浏览目录",
     up: "上级目录",
     select: "选择此目录",
@@ -201,6 +202,11 @@ export default {
       title: "计划已就绪",
       run: "开始执行 · {{level}}",
       keepPlanning: "继续规划",
+    },
+    attachments: {
+      image: "添加图片",
+      file: "引用文件",
+      remove: "移除附件",
     },
     elicitation: {
       title: "Agent 请求你的输入",

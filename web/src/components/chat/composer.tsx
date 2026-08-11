@@ -1,8 +1,12 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import type { SlashCommand } from "@/types/acp"
+import { imagesFromClipboard } from "@/lib/files"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowUpIcon, SquareIcon } from "lucide-react"
+import { ArrowUpIcon, SlashIcon, SquareIcon } from "lucide-react"
 
 /**
  * 聊天输入卡：吸底渐变 + 毛玻璃材质，左下角放上下文控件（children），
@@ -19,6 +23,9 @@ export function Composer({
   placeholder,
   children,
   footer,
+  commands,
+  attachments,
+  onPasteImages,
 }: {
   value: string
   onChange: (value: string) => void
@@ -34,31 +41,119 @@ export function Composer({
   children?: React.ReactNode
   /** 输入卡下沿的状态栏（工作目录 / 分支 / 用量等）。 */
   footer?: React.ReactNode
+  /** agent 的斜杠命令清单；输入以 "/" 开头时弹补全菜单。 */
+  commands?: SlashCommand[]
+  /** 待发送附件预览（textarea 上方）。 */
+  attachments?: React.ReactNode
+  /** 粘贴进来的图片文件。 */
+  onPasteImages?: (files: File[]) => void
 }) {
   const { t } = useTranslation()
   const canSend = !disabled && !pending && value.trim() !== ""
+
+  // "/" 补全：只在整条输入是一个未完成的命令词时出现。
+  const slashQuery =
+    value.startsWith("/") && !/\s/.test(value) ? value.slice(1) : null
+  const matches =
+    slashQuery !== null && commands && commands.length > 0
+      ? commands
+          .filter((c) =>
+            c.name.toLowerCase().startsWith(slashQuery.toLowerCase())
+          )
+          .slice(0, 8)
+      : []
+  const [activeIndex, setActiveIndex] = useState(0)
+  const menuOpen = matches.length > 0
+  const active = Math.min(activeIndex, matches.length - 1)
+
+  function pickCommand(name: string) {
+    onChange(`/${name} `)
+    setActiveIndex(0)
+  }
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
       <div className="absolute inset-x-0 -top-8 bottom-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
       <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 lg:px-6">
         {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。 */}
-        <div className="pointer-events-auto rounded-2xl border border-border/60 bg-card/80 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-border dark:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.06),0_8px_32px_rgba(0,0,0,0.35)]">
+        <div className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/80 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-border dark:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.06),0_8px_32px_rgba(0,0,0,0.35)]">
+          {menuOpen ? (
+            <div className="absolute inset-x-2 bottom-[calc(100%+0.5rem)] max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
+              {matches.map((cmd, index) => (
+                <button
+                  key={cmd.name}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                    index === active
+                      ? "bg-accent text-accent-foreground"
+                      : "hover:bg-muted"
+                  )}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => pickCommand(cmd.name)}
+                >
+                  <SlashIcon className="size-3 shrink-0 self-center text-muted-foreground" />
+                  <span className="shrink-0 font-mono">{cmd.name}</span>
+                  {cmd.description ? (
+                    <span className="truncate text-xs text-muted-foreground">
+                      {cmd.description}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {attachments}
           <textarea
             value={value}
             rows={1}
             placeholder={placeholder}
             disabled={disabled}
             className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-1 text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground disabled:opacity-50"
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              onChange(e.target.value)
+              setActiveIndex(0)
+            }}
+            onPaste={(e) => {
+              if (!onPasteImages) return
+              const files = imagesFromClipboard(e.clipboardData.items)
+              if (files.length > 0) {
+                e.preventDefault()
+                onPasteImages(files)
+              }
+            }}
             onKeyDown={(e) => {
+              // 补全菜单打开时接管方向键与确认键。
+              if (menuOpen && !e.nativeEvent.isComposing) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault()
+                  setActiveIndex((active + 1) % matches.length)
+                  return
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault()
+                  setActiveIndex((active - 1 + matches.length) % matches.length)
+                  return
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault()
+                  pickCommand(matches[active].name)
+                  return
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault()
+                  onChange(value + " ")
+                  return
+                }
+              }
+              // busy 时 Enter 也能发：消息会被插进正在跑的轮。
               if (
                 e.key === "Enter" &&
                 !e.shiftKey &&
                 !e.nativeEvent.isComposing
               ) {
                 e.preventDefault()
-                if (canSend && !busy) onSubmit()
+                if (canSend) onSubmit()
               }
               // Esc 中止当前轮：等价于点中止按钮，手不用离开键盘。
               if (e.key === "Escape" && busy && onCancel) {

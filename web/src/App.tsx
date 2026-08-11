@@ -7,7 +7,6 @@ import { NotFound } from "@/routes/not-found"
 import { Overview } from "@/routes/overview"
 import { Placeholder } from "@/routes/placeholder"
 import { SessionChat } from "@/routes/session-chat"
-import { SessionNew } from "@/routes/session-new"
 import { Sessions } from "@/routes/sessions"
 
 /** 尚未实现、但已在导航里占位的页面。 */
@@ -47,7 +46,9 @@ export function App() {
         <Route index element={<Overview />} />
         <Route path="agents" element={<Agents />} />
         <Route path="sessions" element={<Sessions />} />
-        <Route path="sessions/new" element={<SessionNew />} />
+        {/* 新会话与老会话共用同一个页面：草稿态只是多了跨 ACP 模型选择
+            与可编辑工作目录，首条消息落地才真正创建会话。 */}
+        <Route path="sessions/new" element={<SessionChat />} />
         <Route path="sessions/:id" element={<SessionChat />} />
         {PLACEHOLDERS.map(({ path, titleKey, descKey }) => (
           <Route
