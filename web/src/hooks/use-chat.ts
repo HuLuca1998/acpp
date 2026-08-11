@@ -187,6 +187,7 @@ export function useChat(sessionId: number) {
               rawInput: ev.rawInput,
               content: ev.content,
               options: ev.options,
+              planReview: ev.planReview,
             },
           }
 

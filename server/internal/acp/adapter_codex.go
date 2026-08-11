@@ -60,3 +60,7 @@ func (codexAdapter) SetPlan(ctx context.Context, s *Session, on bool) error {
 func (codexAdapter) SetFast(ctx context.Context, s *Session, on bool) error {
 	return s.setConfigOption(ctx, "fast-mode", onOff(on))
 }
+
+// PlanReview：codex 的 plan 是配置项，模型完成计划后正常结束 turn，
+// 没有「请求退出计划模式」的交互。
+func (codexAdapter) PlanReview(RequestPermissionParams) *PlanReview { return nil }

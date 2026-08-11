@@ -63,8 +63,10 @@ type Event struct {
 	ElicitationID string          `json:"elicitationId,omitempty"`
 	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
 	// Title/RawInput/Content 只有 claude 带，前端按空值收敛。
+	// PlanReview 非空时这是「计划完成」审批，前端渲染专门卡片。
 	PermissionID string             `json:"permissionId,omitempty"`
 	Options      []PermissionOption `json:"options,omitempty"`
+	PlanReview   *PlanReview        `json:"planReview,omitempty"`
 	StopReason   StopReason         `json:"stopReason,omitempty"`
 	Usage        *Usage             `json:"usage,omitempty"`
 	Error        string             `json:"error,omitempty"`
@@ -744,6 +746,8 @@ func (h *sessionHandler) RequestPermission(ctx context.Context, p RequestPermiss
 		RawInput:     p.ToolCall.RawInput,
 		Content:      p.ToolCall.Content,
 		Options:      p.Options,
+		// 「计划完成」审批由 adapter 识别并翻译成统一视图。
+		PlanReview: s.adapter.PlanReview(p),
 	})
 
 	select {

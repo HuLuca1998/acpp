@@ -106,6 +106,19 @@ export interface PermissionOption {
   kind: string
 }
 
+/** 「计划完成」审批的一个去向；level 为空表示继续规划（拒绝）。 */
+export interface PlanChoice {
+  optionId: string
+  level?: AccessLevel
+}
+
+/** 「计划完成，请求开始执行」的统一视图，由后端 adapter 从权限请求翻译。 */
+export interface PlanReview {
+  /** markdown 计划全文。 */
+  plan: string
+  choices: PlanChoice[]
+}
+
 /** 一次挂起的权限请求，agent 阻塞等用户裁决。 */
 export interface PendingPermission {
   id: string
@@ -117,6 +130,8 @@ export interface PendingPermission {
   /** diff 等内容块，只有 claude 带。 */
   content?: unknown
   options: PermissionOption[]
+  /** 非空时这是「计划完成」审批，渲染专门卡片。 */
+  planReview?: PlanReview
 }
 
 /** 目录浏览器的一项与一次列取结果。 */
@@ -173,6 +188,7 @@ export interface StreamEvent {
   /** permission 事件：ID 用于回传裁决，options 是 agent 给的选项。 */
   permissionId?: string
   options?: PermissionOption[]
+  planReview?: PlanReview
   elicitationId?: string
   stopReason?: string
   error?: string

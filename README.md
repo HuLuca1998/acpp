@@ -173,6 +173,5 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建/详情页仍是占位页。
-- **ExitPlanMode 的专用卡片**：claude 退出计划模式是一种权限请求（选项即模式切换），现在用通用权限卡片渲染，能用但不如专门的「计划完成，选择执行档位」卡直观。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。

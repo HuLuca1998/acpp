@@ -212,6 +212,55 @@ func TestGenericSettingsByCategory(t *testing.T) {
 	}
 }
 
+func TestClaudePlanReview(t *testing.T) {
+	// fixture 是 2026-08-11 实测的 ExitPlanMode 权限请求形状。
+	params := RequestPermissionParams{
+		ToolCall: PermissionToolCall{
+			ToolCallID: "toolu_x",
+			Kind:       "switch_mode",
+			Title:      "Ready to code?",
+			RawInput:   []byte(`{"plan":"# 计划\n1. 写文件","planFilePath":"/tmp/plan.md"}`),
+		},
+		Options: []PermissionOption{
+			{OptionID: "bypassPermissions", Name: "Yes, and bypass permissions", Kind: "allow_always"},
+			{OptionID: "auto", Name: `Yes, and use "auto" mode`, Kind: "allow_always"},
+			{OptionID: "acceptEdits", Name: "Yes, and auto-accept edits", Kind: "allow_always"},
+			{OptionID: "default", Name: "Yes, and manually approve edits", Kind: "allow_once"},
+			{OptionID: "plan", Name: "No, keep planning", Kind: "reject_once"},
+		},
+	}
+
+	review := claudeAdapter{}.PlanReview(params)
+	if review == nil {
+		t.Fatal("should recognize switch_mode as plan review")
+	}
+	if review.Plan != "# 计划\n1. 写文件" {
+		t.Fatalf("plan = %q", review.Plan)
+	}
+	// auto 不在词汇表内被丢弃；其余映射到统一档；reject 项 Level 为空。
+	want := []PlanChoice{
+		{OptionID: "bypassPermissions", Level: AccessFull},
+		{OptionID: "acceptEdits", Level: AccessAutoEdit},
+		{OptionID: "default", Level: AccessSafe},
+		{OptionID: "plan"},
+	}
+	if !reflect.DeepEqual(review.Choices, want) {
+		t.Fatalf("choices = %+v", review.Choices)
+	}
+
+	// 普通权限请求不误判。
+	ordinary := RequestPermissionParams{
+		ToolCall: PermissionToolCall{Kind: "edit", RawInput: []byte(`{"file_path":"a.txt"}`)},
+		Options:  params.Options,
+	}
+	if (claudeAdapter{}).PlanReview(ordinary) != nil {
+		t.Fatal("edit kind must not be treated as plan review")
+	}
+	if (codexAdapter{}).PlanReview(params) != nil {
+		t.Fatal("codex has no plan review interaction")
+	}
+}
+
 func TestFlavorOf(t *testing.T) {
 	cases := []struct {
 		agentName, command string

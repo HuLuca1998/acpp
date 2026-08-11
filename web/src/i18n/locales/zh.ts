@@ -197,6 +197,11 @@ export default {
       resolved: "权限已裁决：{{title}} → {{choice}}",
       cancelled: "已取消",
     },
+    planReview: {
+      title: "计划已就绪",
+      run: "开始执行 · {{level}}",
+      keepPlanning: "继续规划",
+    },
     elicitation: {
       title: "Agent 请求你的输入",
       otherLabel: "其他",

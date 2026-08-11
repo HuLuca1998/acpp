@@ -17,6 +17,7 @@ import { Composer } from "@/components/chat/composer"
 import { ComposerStatus } from "@/components/chat/composer-status"
 import { CopyButton } from "@/components/chat/copy-button"
 import { PermissionCard } from "@/components/chat/permission-card"
+import { PlanReviewCard } from "@/components/chat/plan-review-card"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { PlanCard } from "@/components/chat/plan-card"
 import { ThoughtBlock } from "@/components/chat/thought-block"
@@ -315,16 +316,29 @@ export function SessionChat() {
                       key={chat.permission.id}
                       scrollAnchor={false}
                     >
-                      <PermissionCard
-                        permission={chat.permission}
-                        onResolve={(optionId, choiceName) =>
-                          void chat.resolvePermission(
-                            chat.permission!.id,
-                            optionId,
-                            choiceName
-                          )
-                        }
-                      />
+                      {chat.permission.planReview ? (
+                        <PlanReviewCard
+                          permission={chat.permission}
+                          onResolve={(optionId, choiceName) =>
+                            void chat.resolvePermission(
+                              chat.permission!.id,
+                              optionId,
+                              choiceName
+                            )
+                          }
+                        />
+                      ) : (
+                        <PermissionCard
+                          permission={chat.permission}
+                          onResolve={(optionId, choiceName) =>
+                            void chat.resolvePermission(
+                              chat.permission!.id,
+                              optionId,
+                              choiceName
+                            )
+                          }
+                        />
+                      )}
                     </MessageScrollerItem>
                   ) : null}
 

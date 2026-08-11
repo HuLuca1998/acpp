@@ -203,6 +203,11 @@ export default {
       resolved: "Permission resolved: {{title}} → {{choice}}",
       cancelled: "Cancelled",
     },
+    planReview: {
+      title: "Plan ready",
+      run: "Run · {{level}}",
+      keepPlanning: "Keep planning",
+    },
     elicitation: {
       title: "The agent needs your input",
       otherLabel: "Other",

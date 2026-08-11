@@ -58,8 +58,10 @@ type StreamEvent struct {
 	Usage         *acp.Usage      `json:"usage,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`
 	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
+	// PlanReview 非空时这是「计划完成」审批，前端渲染专门卡片。
 	PermissionID string                 `json:"permissionId,omitempty"`
 	Options      []acp.PermissionOption `json:"options,omitempty"`
+	PlanReview   *acp.PlanReview        `json:"planReview,omitempty"`
 	StopReason   string                 `json:"stopReason,omitempty"`
 	Error        string                 `json:"error,omitempty"`
 
@@ -384,6 +386,7 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 			RawInput:     ev.RawInput,
 			Content:      ev.Content,
 			Options:      ev.Options,
+			PlanReview:   ev.PlanReview,
 		})
 
 	case acp.EventPermissionDone:

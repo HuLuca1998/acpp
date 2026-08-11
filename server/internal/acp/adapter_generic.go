@@ -44,3 +44,6 @@ func (genericAdapter) SetPlan(context.Context, *Session, bool) error {
 func (genericAdapter) SetFast(context.Context, *Session, bool) error {
 	return ErrUnsupported
 }
+
+// PlanReview：未知 runtime 的模式切换语义无从推断，一律按普通权限请求走。
+func (genericAdapter) PlanReview(RequestPermissionParams) *PlanReview { return nil }

@@ -104,6 +104,21 @@ type SettingsPatch struct {
 	Fast   *bool        `json:"fast,omitempty"`
 }
 
+// PlanReview 是「计划完成，请求开始执行」的统一视图（claude 的
+// ExitPlanMode 权限请求）。Plan 是 markdown 计划全文；Choices 是批准后
+// 的执行档（词汇表外的档位已被 adapter 丢弃）。
+type PlanReview struct {
+	Plan    string       `json:"plan"`
+	Choices []PlanChoice `json:"choices"`
+}
+
+// PlanChoice 是计划审批的一个去向。Level 为空表示「继续规划」（拒绝）。
+type PlanChoice struct {
+	// OptionID 原样回传给 agent，上层不解释。
+	OptionID string      `json:"optionId"`
+	Level    AccessLevel `json:"level,omitempty"`
+}
+
 // Adapter 把一个 runtime 的语义差异封装在实现内部：读方法从能力快照提取
 // 统一视图，写方法把统一概念翻译成该 runtime 的协议调用。
 // `if flavor == ...` 只允许出现在 adapter 实现文件里。
@@ -116,6 +131,10 @@ type Adapter interface {
 	SetAccessLevel(ctx context.Context, s *Session, l AccessLevel) error
 	SetPlan(ctx context.Context, s *Session, on bool) error
 	SetFast(ctx context.Context, s *Session, on bool) error
+
+	// PlanReview 识别「计划完成」权限请求并翻译成统一视图；
+	// 不是这类请求（或该 runtime 没有此交互）时返回 nil。
+	PlanReview(p RequestPermissionParams) *PlanReview
 }
 
 // ---- adapter 共用的取数工具 ----
