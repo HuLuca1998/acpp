@@ -20,7 +20,7 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/
 │   │   │   ├── dashboard-layout.tsx  # dashboard-01 外壳（侧边栏 + 顶栏 + Outlet）
-│   │   │   ├── overview.tsx          # 概览（指标卡 + 图表 + 数据表）
+│   │   │   ├── overview.tsx          # 概览（真实指标卡 + 最近会话 + agent 状态）
 │   │   │   ├── agents.tsx            # agent 列表
 │   │   │   ├── sessions.tsx          # 会话列表
 │   │   │   ├── session-new.tsx       # 新建会话
@@ -36,7 +36,7 @@ acpp/
 │   │   │   ├── ui/             # shadcn 组件，由 CLI 生成，尽量不手改
 │   │   │   ├── app-sidebar.tsx # 侧边栏导航
 │   │   │   ├── language-switcher.tsx
-│   │   │   └── ...             # dashboard-01 自带的图表 / 数据表 / 指标卡
+│   │   │   └── ...             # 状态点、工具调用块、markdown、切换器等
 │   │   ├── lib/api.ts          # 后端 API 客户端
 │   │   ├── types/acp.ts        # 领域类型，与 server/internal/model 对齐
 │   │   └── index.css           # Tailwind v4 主题变量
