@@ -3,9 +3,8 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "web"],
-      "port": 5173
+      "url": "http://localhost:45173",
+      "port": 45173
     }
   ]
 }

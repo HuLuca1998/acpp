@@ -11,11 +11,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // 端口是项目固定约定（见根 AGENTS.md §4.0），改动要连后端与脚本一起改。
+    port: 45173,
     proxy: {
       // 开发期把 /api 转发到 Go 后端，避免 CORS。
       "/api": {
-        target: "http://127.0.0.1:8080",
+        target: "http://127.0.0.1:48080",
         changeOrigin: true,
       },
     },

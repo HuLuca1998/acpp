@@ -12,12 +12,24 @@ install: ## 安装前后端依赖
 	cd $(WEB_DIR) && npm install
 	cd $(SERVER_DIR) && go mod download
 
+.PHONY: dev
+dev: ## 后台启动/重启前后端（重编译后端；scripts/dev.sh restart all）
+	scripts/dev.sh restart all
+
+.PHONY: stop
+stop: ## 停止前后端开发服务
+	scripts/dev.sh stop all
+
+.PHONY: status
+status: ## 查看前后端开发服务状态
+	scripts/dev.sh status
+
 .PHONY: dev-web
-dev-web: ## 启动前端开发服务器 (http://localhost:5173)
+dev-web: ## 前台启动前端开发服务器 (http://localhost:45173)
 	cd $(WEB_DIR) && npm run dev
 
 .PHONY: dev-server
-dev-server: ## 启动后端开发服务器 (http://127.0.0.1:8080)
+dev-server: ## 前台启动后端开发服务器 (http://127.0.0.1:48080)
 	cd $(SERVER_DIR) && ACP_DEBUG=1 go run ./cmd/server
 
 .PHONY: build

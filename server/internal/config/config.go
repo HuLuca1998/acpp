@@ -29,10 +29,10 @@ type Config struct {
 func Load() Config {
 	dsn := env("ACP_DSN", "data/acp.db")
 	return Config{
-		Addr:          env("ACP_ADDR", "127.0.0.1:8080"),
+		Addr:          env("ACP_ADDR", "127.0.0.1:48080"),
 		DSN:           dsn,
 		TranscriptDir: env("ACP_TRANSCRIPT_DIR", filepath.Join(filepath.Dir(dsn), "transcripts")),
-		CORSOrigins:   splitAndTrim(env("ACP_CORS_ORIGINS", "http://localhost:5173")),
+		CORSOrigins:   splitAndTrim(env("ACP_CORS_ORIGINS", "http://localhost:45173")),
 		WebDir:        env("ACP_WEB_DIR", ""),
 		Debug:         env("ACP_DEBUG", "") != "",
 		MaxSessions:   envInt("ACP_MAX_SESSIONS", 8),
