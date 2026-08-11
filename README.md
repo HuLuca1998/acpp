@@ -28,7 +28,7 @@ acpp/
 │   │   │   ├── agents.tsx            # agent 列表
 │   │   │   ├── sessions.tsx          # 会话列表
 │   │   │   ├── agent-detail.tsx      # agent 配置页（探测信息 + models/commands 勾选）
-│   │   │   ├── session-chat.tsx      # 对话页（流式；/sessions/new 的草稿态共用本页）
+│   │   │   ├── session-chat.tsx      # 会话工作区宿主页（流式对话 + dockview 多面板，草稿态共用）
 │   │   │   ├── placeholder.tsx       # 未实现页面的占位
 │   │   │   └── not-found.tsx
 │   │   ├── hooks/use-chat.ts   # SSE 订阅 + 流式状态机
@@ -41,6 +41,7 @@ acpp/
 │   │   │   ├── app-sidebar.tsx # 侧边栏导航
 │   │   │   ├── language-switcher.tsx
 │   │   │   ├── chat/           # 聊天专用：markdown/工具调用/计划卡/思考块/复制
+│   │   │   ├── workspace/      # 会话工作区（adr-002）：dockview 编排、命令总线、六类面板
 │   │   │   └── ...             # 状态点、后端状态、新建会话弹窗、切换器等
 │   │   ├── lib/api.ts          # 后端 API 客户端
 │   │   ├── types/acp.ts        # 领域类型，与 server/internal/model 对齐
@@ -123,6 +124,8 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建 |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本）/ 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早） |
+| GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；gitignore + 固定黑名单过滤，路径限制在会话 cwd 内） |
+| GET | `/api/sessions/{id}/fs/file` | 工作区文件预览（`?path=`；1MB 截断、二进制检测，同上 path guard） |
 | POST | `/api/sessions/{id}/open` | 拉起 agent 并握手，幂等。**前端不再主动调**——发消息时 `send` 顺路连接（懒连接），连接完成经 SSE 推 `settings`/`commands` |
 | POST | `/api/sessions/{id}/send` | 发一轮（`{content, images?, files?}`：图片 base64、@ 引用文件路径由后端读内容嵌入），立即返回；**turn 进行中再发会插进当前轮**（claude 排队为独立一轮，codex steering 注入当前轮） |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
@@ -178,5 +181,6 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）已落地 M1：dockview 骨架、对话/文件树/预览面板、⋯ 窗口菜单、布局持久化。diff / 未推送 commit（M2）与真 PTY 终端（M3）目前是占位面板。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。
