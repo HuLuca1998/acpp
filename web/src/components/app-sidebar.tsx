@@ -83,7 +83,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:p-1.5! h-auto"
+              className="h-auto data-[slot=sidebar-menu-button]:p-1.5!"
               render={<Link to="/" />}
             >
               {/* 品牌徽标：主色渐变方块，palette 切换时自动跟随。 */}

@@ -23,8 +23,7 @@ function extractText(node: React.ReactNode): string {
  */
 function CodeBlock({ children }: { children?: React.ReactNode }) {
   const codeEl = children as
-    | { props?: { className?: string; children?: React.ReactNode } }
-    | undefined
+    { props?: { className?: string; children?: React.ReactNode } } | undefined
   const lang =
     /language-([\w-]+)/.exec(codeEl?.props?.className ?? "")?.[1] ?? "text"
   const text = extractText(codeEl?.props?.children ?? null).replace(/\n$/, "")

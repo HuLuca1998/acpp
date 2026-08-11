@@ -37,7 +37,8 @@ export function PlanCard({ entries }: { entries: PlanEntry[] }) {
             )}
             <span
               className={cn(
-                entry.status === "completed" && "text-muted-foreground line-through",
+                entry.status === "completed" &&
+                  "text-muted-foreground line-through",
                 entry.status === "in_progress" && "font-medium",
                 entry.status === "pending" && "text-muted-foreground"
               )}

@@ -61,7 +61,10 @@ export function Overview() {
   useEffect(() => {
     let cancelled = false
     // 概览只需要最近几条 + 总数，别把全部会话拉下来。
-    Promise.all([api.agents.list(), api.sessions.list({ pageSize: RECENT_LIMIT })])
+    Promise.all([
+      api.agents.list(),
+      api.sessions.list({ pageSize: RECENT_LIMIT }),
+    ])
       .then(([agentRes, sessionRes]) => {
         if (cancelled) return
         setAgents(agentRes.items)

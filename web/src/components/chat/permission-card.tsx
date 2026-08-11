@@ -2,7 +2,10 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { PendingPermission } from "@/types/acp"
-import { ToolCallBlock, type ToolCallPayload } from "@/components/chat/tool-call"
+import {
+  ToolCallBlock,
+  type ToolCallPayload,
+} from "@/components/chat/tool-call"
 import { Button } from "@/components/ui/button"
 import { ShieldIcon } from "lucide-react"
 

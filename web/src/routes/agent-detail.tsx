@@ -65,7 +65,11 @@ export function AgentDetail() {
 
   async function toggleModel(id: string, disabled: boolean) {
     try {
-      setAgent(await api.agents.updateCatalog(agentId, { models: [{ key: id, disabled }] }))
+      setAgent(
+        await api.agents.updateCatalog(agentId, {
+          models: [{ key: id, disabled }],
+        })
+      )
     } catch (err) {
       setError((err as Error).message)
     }
@@ -74,7 +78,9 @@ export function AgentDetail() {
   async function toggleCommand(name: string, disabled: boolean) {
     try {
       setAgent(
-        await api.agents.updateCatalog(agentId, { commands: [{ key: name, disabled }] })
+        await api.agents.updateCatalog(agentId, {
+          commands: [{ key: name, disabled }],
+        })
       )
     } catch (err) {
       setError((err as Error).message)
@@ -243,10 +249,18 @@ export function AgentDetail() {
                 onChange={(e) => setCommandQuery(e.target.value)}
               />
             </div>
-            <Button size="sm" variant="outline" onClick={() => void bulkCommands(false)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void bulkCommands(false)}
+            >
               {t("agents.detail.enableAll")}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => void bulkCommands(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void bulkCommands(true)}
+            >
               {t("agents.detail.disableAll")}
             </Button>
           </div>

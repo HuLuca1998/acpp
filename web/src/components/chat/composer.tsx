@@ -109,7 +109,7 @@ export function Composer({
             rows={1}
             placeholder={placeholder}
             disabled={disabled}
-            className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-1 text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground disabled:opacity-50"
+            className="[field-sizing:content] max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-1 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
             onChange={(e) => {
               onChange(e.target.value)
               setActiveIndex(0)

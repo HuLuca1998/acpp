@@ -99,10 +99,18 @@ export function Sessions() {
   /** 运行中优先展示（进程活着最值得被看见），出错永远压过其他状态。 */
   function stateLabel(session: Session) {
     if (session.state === "error") {
-      return { tone: "destructive" as const, pulse: false, text: t("sessions.stateError") }
+      return {
+        tone: "destructive" as const,
+        pulse: false,
+        text: t("sessions.stateError"),
+      }
     }
     if (session.running) {
-      return { tone: "success" as const, pulse: true, text: t("sessions.running") }
+      return {
+        tone: "success" as const,
+        pulse: true,
+        text: t("sessions.running"),
+      }
     }
     return {
       tone: STATE_TONE[session.state],
@@ -204,7 +212,10 @@ export function Sessions() {
                         </TableCell>
                         <TableCell
                           className="text-muted-foreground tabular-nums"
-                          title={formatDateTime(session.updatedAt, i18n.language)}
+                          title={formatDateTime(
+                            session.updatedAt,
+                            i18n.language
+                          )}
                         >
                           {formatRelativeTime(session.updatedAt, i18n.language)}
                         </TableCell>

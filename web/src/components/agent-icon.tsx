@@ -18,7 +18,12 @@ const OPENAI_PATH =
 
 function ClaudeMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
       <path d={CLAUDE_PATH} />
     </svg>
   )
@@ -26,7 +31,12 @@ function ClaudeMark({ className }: { className?: string }) {
 
 function OpenAIMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 320 320" fill="currentColor" className={className} aria-hidden>
+    <svg
+      viewBox="0 0 320 320"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
       <path d={OPENAI_PATH} />
     </svg>
   )

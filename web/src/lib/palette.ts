@@ -16,8 +16,14 @@ export const PALETTE_SWATCHES: Record<
   { surface: string; primary: string }
 > = {
   forest: { surface: "oklch(0.985 0 0)", primary: "oklch(0.527 0.154 150.1)" },
-  bay: { surface: "oklch(0.975 0.006 240)", primary: "oklch(0.546 0.215 262.9)" },
-  dusk: { surface: "oklch(0.975 0.008 300)", primary: "oklch(0.541 0.247 293)" },
+  bay: {
+    surface: "oklch(0.975 0.006 240)",
+    primary: "oklch(0.546 0.215 262.9)",
+  },
+  dusk: {
+    surface: "oklch(0.975 0.008 300)",
+    primary: "oklch(0.541 0.247 293)",
+  },
   sand: { surface: "oklch(0.97 0.012 85)", primary: "oklch(0.6 0.155 45)" },
   graphite: { surface: "oklch(1 0 0)", primary: "oklch(0.3 0 0)" },
 }

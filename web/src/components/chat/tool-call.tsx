@@ -240,8 +240,8 @@ function hasDetail(payload: ToolCallPayload | null | undefined): boolean {
   if (!payload) return false
   return Boolean(
     (payload.content ?? []).some((c) => c.type === "diff") ||
-      payload.rawInput ||
-      payload.rawOutput
+    payload.rawInput ||
+    payload.rawOutput
   )
 }
 
