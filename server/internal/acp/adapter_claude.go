@@ -80,7 +80,7 @@ func (claudeAdapter) Interject(ctx context.Context, s *Session, blocks []Content
 // PlanReview 识别 ExitPlanMode：kind=switch_mode 的权限请求，rawInput.plan
 // 是 markdown 计划全文（实测形状见 docs/adr-001）。选项 optionId 是 claude
 // 的模式名，翻译进统一三档；词汇表外的档（auto）丢弃；reject 类选项
-//（"No, keep planning"）翻译为 Level 为空的「继续规划」。
+// （"No, keep planning"）翻译为 Level 为空的「继续规划」。
 func (claudeAdapter) PlanReview(p RequestPermissionParams) *PlanReview {
 	if p.ToolCall.Kind != "switch_mode" {
 		return nil

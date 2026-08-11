@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -18,11 +19,12 @@ import (
 // Version 会随 health 接口返回，方便前端确认后端版本。
 const Version = "0.1.0"
 
-// NewRouter 组装全部路由与中间件。除 handler 外把 ChatService 一并交回，
-// 供装配层挂后台职责（空闲回收）。
-func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcripts *transcript.Store) (http.Handler, *service.ChatService) {
+// NewRouter 组装全部路由与中间件。除 handler 外把 ChatService 与
+// TerminalService 一并交回，供装配层挂后台职责（空闲回收、pty 回收）。
+func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcripts *transcript.Store) (http.Handler, *service.ChatService, *service.TerminalService) {
 	sessionService := service.NewSessionService(gdb)
 	chatService := service.NewChatService(gdb, sessionService, manager, transcripts)
+	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 
 	agents := agentHandler{agents: service.NewAgentService(gdb), chat: chatService}
 	sessions := sessionHandler{sessions: sessionService, chat: chatService}
@@ -75,6 +77,17 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	api.HandleFunc("GET /api/sessions/{id}/git/diff", workspace.gitDiff)
 	api.HandleFunc("GET /api/sessions/{id}/git/commits/{sha}", workspace.gitCommit)
 
+	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
+	terminals := terminalHandler{
+		sessions:       sessionService,
+		terms:          terminalService,
+		originPatterns: corsHosts(cfg.CORSOrigins),
+	}
+	api.HandleFunc("POST /api/sessions/{id}/terminals", terminals.create)
+	api.HandleFunc("GET /api/sessions/{id}/terminals", terminals.list)
+	api.HandleFunc("DELETE /api/sessions/{id}/terminals/{tid}", terminals.remove)
+	api.HandleFunc("GET /api/sessions/{id}/terminals/{tid}/ws", terminals.attach)
+
 	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)
 	api.HandleFunc("POST /api/sessions/{id}/send", chat.send)
@@ -92,7 +105,20 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 		root.Handle("/", spaHandler(cfg.WebDir))
 	}
 
-	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root))), chatService
+	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root))), chatService, terminalService
+}
+
+// corsHosts 把 CORS origin 列表转成 ws 升级用的 host pattern
+// （websocket.AcceptOptions 只认 host，不带 scheme）。
+func corsHosts(origins []string) []string {
+	hosts := make([]string, 0, len(origins))
+	for _, o := range origins {
+		o = strings.TrimPrefix(strings.TrimPrefix(o, "https://"), "http://")
+		if o != "" {
+			hosts = append(hosts, o)
+		}
+	}
+	return hosts
 }
 
 // spaHandler 托管前端构建产物，未命中的路径回落到 index.html 交给前端路由。

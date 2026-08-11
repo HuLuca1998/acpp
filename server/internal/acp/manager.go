@@ -184,7 +184,7 @@ type Manager struct {
 }
 
 // NewManager 构造会话池。turnTimeout 是单轮硬上限，<=0 表示不限时
-//（默认）——空闲回收以在途调用计数为准，turn 跑多久都不会被误收。
+// （默认）——空闲回收以在途调用计数为准，turn 跑多久都不会被误收。
 func NewManager(max int, turnTimeout time.Duration) *Manager {
 	if max <= 0 {
 		max = 8

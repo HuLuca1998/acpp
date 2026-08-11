@@ -711,7 +711,7 @@ func (s *ChatService) Cancel(sessionID uint) error {
 }
 
 // Destroy 在删除会话前做彻底清理：先尽力删掉 agent 侧的线程历史
-//（session/delete，删不掉只记警告不阻塞本地删除），再关进程。
+// （session/delete，删不掉只记警告不阻塞本地删除），再关进程。
 func (s *ChatService) Destroy(ctx context.Context, sessionID uint) error {
 	view, err := s.sessions.Get(ctx, sessionID)
 	if err == nil && view.ACPSessionID != "" {
@@ -743,7 +743,7 @@ func (s *ChatService) Close(ctx context.Context, sessionID uint) error {
 }
 
 // Release 回收空闲会话的子进程但保留续聊能力：上下文留在 agent 侧
-//（acpSessionId 已持久化），下次发消息 Open 会用 session/load 无感恢复。
+// （acpSessionId 已持久化），下次发消息 Open 会用 session/load 无感恢复。
 func (s *ChatService) Release(ctx context.Context, sessionID uint) error {
 	if err := s.manager.Close(sessionKey(sessionID)); err != nil {
 		return err

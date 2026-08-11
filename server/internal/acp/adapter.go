@@ -255,4 +255,3 @@ func onOff(on bool) string {
 	}
 	return "off"
 }
-

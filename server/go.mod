@@ -3,6 +3,8 @@ module acpp/server
 go 1.26.4
 
 require (
+	github.com/coder/websocket v1.8.15
+	github.com/creack/pty v1.1.24
 	github.com/glebarez/sqlite v1.11.0
 	gorm.io/gorm v1.31.2
 )

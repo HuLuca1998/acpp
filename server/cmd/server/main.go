@@ -64,7 +64,9 @@ func run() error {
 		slog.Warn("normalize stale sessions", "err", err)
 	}
 
-	handler, chatService := httpapi.NewRouter(cfg, gdb, manager, transcripts)
+	handler, chatService, terminalService := httpapi.NewRouter(cfg, gdb, manager, transcripts)
+	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
+	defer terminalService.Shutdown()
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

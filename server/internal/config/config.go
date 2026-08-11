@@ -30,6 +30,8 @@ type Config struct {
 	// TurnTimeout 是单轮硬上限，默认 0 = 不限时——长程任务跑几个小时是
 	// 正常使用方式；turn 进行中不受空闲回收影响。要保护就显式设。
 	TurnTimeout time.Duration
+	// MaxTerminals 是每个会话的工作区终端实例上限，防止 pty 进程失控。
+	MaxTerminals int
 }
 
 // Load 从环境变量读取配置。
@@ -45,6 +47,7 @@ func Load() Config {
 		MaxSessions:   envInt("ACP_MAX_SESSIONS", 8),
 		IdleTimeout:   envDuration("ACP_IDLE_TIMEOUT", 10*time.Minute),
 		TurnTimeout:   envDuration("ACP_TURN_TIMEOUT", 0),
+		MaxTerminals:  envInt("ACP_MAX_TERMINALS", 5),
 	}
 }
 

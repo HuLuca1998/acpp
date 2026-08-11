@@ -25,7 +25,7 @@ type DirEntry struct {
 }
 
 // DirListing 是一次目录浏览的结果。Files 只在 withFiles 时带上
-//（@ 文件引用的选择器要它，工作目录选择器不要）。
+// （@ 文件引用的选择器要它，工作目录选择器不要）。
 type DirListing struct {
 	Path   string     `json:"path"`
 	Parent string     `json:"parent,omitempty"`
