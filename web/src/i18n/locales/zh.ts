@@ -273,6 +273,18 @@ export default {
       commits: "开发中——这里将列出本地领先远端的提交。",
       terminal: "开发中——这里将提供工作目录里的真实终端。",
     },
+    git: {
+      notRepo: "该目录不是 git 仓库",
+      clean: "工作区干净，没有未提交变更。",
+      refresh: "刷新",
+      noUpstream: "未设置上游分支，显示最近提交。",
+      allPushed: "已全部推送。",
+      loadFailed: "git 状态加载失败",
+      binary: "二进制文件，无法展示 diff。",
+    },
+    diff: {
+      clipped: "… 其余 {{count}} 行未显示",
+    },
   },
   errors: {
     sessionNotFound: "会话不存在",

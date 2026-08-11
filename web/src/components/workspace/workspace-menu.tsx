@@ -51,31 +51,31 @@ export function WorkspaceMenu({
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t("workspace.menu.windows")}</DropdownMenuLabel>
           {TOGGLEABLE_PANELS.map((id) => {
-          const Icon = PANEL_ICONS[id]
-          const open = openPanels.has(id)
-          return (
-            <DropdownMenuCheckboxItem
-              key={id}
-              checked={open}
-              onCheckedChange={() => {
-                if (open) {
-                  ws.closePanel(id)
-                } else {
-                  ws.ensureOpen(id)
-                }
-                setOpenPanels((prev) => {
-                  const next = new Set(prev)
+            const Icon = PANEL_ICONS[id]
+            const open = openPanels.has(id)
+            return (
+              <DropdownMenuCheckboxItem
+                key={id}
+                checked={open}
+                onCheckedChange={() => {
                   if (open) {
-                    next.delete(id)
+                    ws.closePanel(id)
                   } else {
-                    next.add(id)
+                    ws.ensureOpen(id)
                   }
-                  return next
-                })
-              }}
-            >
-              <Icon className="size-3.5 text-muted-foreground" />
-              {t(`workspace.panels.${id}` as never)}
+                  setOpenPanels((prev) => {
+                    const next = new Set(prev)
+                    if (open) {
+                      next.delete(id)
+                    } else {
+                      next.add(id)
+                    }
+                    return next
+                  })
+                }}
+              >
+                <Icon className="size-3.5 text-muted-foreground" />
+                {t(`workspace.panels.${id}` as never)}
               </DropdownMenuCheckboxItem>
             )
           })}

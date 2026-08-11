@@ -2,6 +2,9 @@ import type {
   Agent,
   CatalogInput,
   DirListing,
+  GitCommitDetail,
+  GitDiffView,
+  GitOverview,
   Message,
   Paged,
   SendInput,
@@ -151,6 +154,23 @@ export const api = {
     workspaceFile: (id: number, path: string) =>
       request<WorkspaceFile>(
         `/sessions/${id}/fs/file?path=${encodeURIComponent(path)}`
+      ),
+
+    /** git 汇总：分支/领先落后/变更文件/未推送 commit，diff 与 commit 面板共享。 */
+    gitOverview: (id: number) =>
+      request<GitOverview>(`/sessions/${id}/git/overview`),
+    /** 工作区单文件 diff（HEAD 版对工作区版的两端全文）。 */
+    gitDiff: (id: number, path: string) =>
+      request<GitDiffView>(
+        `/sessions/${id}/git/diff?path=${encodeURIComponent(path)}`
+      ),
+    /** 提交详情（文件清单）。 */
+    gitCommit: (id: number, sha: string) =>
+      request<GitCommitDetail>(`/sessions/${id}/git/commits/${sha}`),
+    /** 某文件在一条提交前后的全文。 */
+    gitCommitFile: (id: number, sha: string, path: string) =>
+      request<GitDiffView>(
+        `/sessions/${id}/git/commits/${sha}?path=${encodeURIComponent(path)}`
       ),
   },
 

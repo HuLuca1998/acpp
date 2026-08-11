@@ -12,7 +12,10 @@ import {
   type ChatPanelData,
 } from "@/components/workspace/chat-panel-context"
 import { WorkspaceDock } from "@/components/workspace/workspace-dock"
-import { WorkspaceProvider } from "@/components/workspace/workspace-provider"
+import {
+  WorkspaceAutoRefresh,
+  WorkspaceProvider,
+} from "@/components/workspace/workspace-provider"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -140,6 +143,8 @@ export function SessionChat() {
           <WorkspaceDock />
         </div>
       </ChatPanelContext.Provider>
+      {/* turn 结束刷新 git/文件树——agent 改完文件的时刻。 */}
+      <WorkspaceAutoRefresh busy={chat.busy} />
 
       <input
         ref={imageInputRef}

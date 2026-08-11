@@ -281,6 +281,18 @@ export default {
       commits: "Coming soon — local commits ahead of the remote.",
       terminal: "Coming soon — a real terminal in the working directory.",
     },
+    git: {
+      notRepo: "This directory is not a git repository",
+      clean: "Working tree clean, nothing uncommitted.",
+      refresh: "Refresh",
+      noUpstream: "No upstream branch, showing recent commits.",
+      allPushed: "Everything pushed.",
+      loadFailed: "Failed to load git status",
+      binary: "Binary file, no diff to show.",
+    },
+    diff: {
+      clipped: "… {{count}} more lines not shown",
+    },
   },
   errors: {
     sessionNotFound: "Session not found",

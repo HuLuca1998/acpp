@@ -195,6 +195,47 @@ export interface WorkspaceFile {
   binary?: boolean
 }
 
+/** 一条文件级 git 变更，与 service.GitFileChange 对齐；-1 表示无行数概念。 */
+export interface GitFileChange {
+  path: string
+  status: string
+  added: number
+  deleted: number
+}
+
+export interface GitCommit {
+  sha: string
+  short: string
+  subject: string
+  author: string
+  time: number
+}
+
+/** diff / commit 面板共享的一次性视图，与 service.GitOverview 对齐。 */
+export interface GitOverview {
+  isRepo: boolean
+  branch?: string
+  upstream?: string
+  ahead: number
+  behind: number
+  files: GitFileChange[]
+  commits: GitCommit[]
+}
+
+/** 单文件 diff 的两端全文，行级对齐在前端做。 */
+export interface GitDiffView {
+  path: string
+  oldText: string
+  newText: string
+  binary?: boolean
+  truncated?: boolean
+}
+
+export interface GitCommitDetail {
+  commit: GitCommit
+  files: GitFileChange[]
+}
+
 /** 随消息上传的一张图片（base64，无 data: 前缀）。 */
 export interface ImageAttachment {
   data: string

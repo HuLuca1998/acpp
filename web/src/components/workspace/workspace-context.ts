@@ -1,7 +1,15 @@
 import { createContext, useContext, useSyncExternalStore } from "react"
 import type { DockviewApi } from "dockview-react"
 
+import type { GitOverview } from "@/types/acp"
 import type { WorkspacePanelId } from "@/components/workspace/workspace-panels"
+
+/** git 汇总的加载态快照：引用不可变，更新即换新对象。 */
+export interface GitStoreState {
+  data: GitOverview | null
+  loading: boolean
+  error: string | null
+}
 
 /**
  * 工作区命令总线：面板间不直接对话，联动动作一律走这里的命令。
@@ -27,6 +35,15 @@ export interface WorkspaceValue {
     subscribe: (listener: () => void) => () => void
     get: () => string | null
   }
+  /** 重取 git 汇总（diff / commit 面板与 tab 徽标共享一份数据）。 */
+  refreshGit: () => void
+  gitStore: {
+    subscribe: (listener: () => void) => () => void
+    get: () => GitStoreState
+  }
+  /** 刷新整个工作区数据面：git 汇总 + 广播给订阅方（文件树重拉）。 */
+  refreshWorkspace: () => void
+  onWorkspaceRefresh: (listener: () => void) => () => void
 }
 
 export const WorkspaceContext = createContext<WorkspaceValue | null>(null)
@@ -42,4 +59,10 @@ export function useWorkspace(): WorkspaceValue {
 export function usePreviewPath(): string | null {
   const ws = useWorkspace()
   return useSyncExternalStore(ws.previewStore.subscribe, ws.previewStore.get)
+}
+
+/** git 汇总快照；只有 diff / commit 面板与 tab 徽标订阅它。 */
+export function useGitOverview(): GitStoreState {
+  const ws = useWorkspace()
+  return useSyncExternalStore(ws.gitStore.subscribe, ws.gitStore.get)
 }

@@ -62,6 +62,9 @@ export const FileTreePanel = memo(function FileTreePanel() {
     load()
   }, [load])
 
+  // turn 结束后的工作区广播：树跟着 git 数据一起重拉。
+  useEffect(() => ws.onWorkspaceRefresh(load), [ws, load])
+
   const toggleDir = useCallback(
     (entry: TreeEntry) => {
       setExpanded((prev) => {

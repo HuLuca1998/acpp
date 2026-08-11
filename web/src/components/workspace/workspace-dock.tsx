@@ -15,9 +15,14 @@ import { XIcon } from "lucide-react"
 
 import { ChatPanel } from "@/components/workspace/chat-panel"
 import { ComingSoonPanel } from "@/components/workspace/coming-soon-panel"
+import { CommitsPanel } from "@/components/workspace/commits-panel"
+import { DiffPanel } from "@/components/workspace/diff-panel"
 import { FilePreviewPanel } from "@/components/workspace/file-preview-panel"
 import { FileTreePanel } from "@/components/workspace/file-tree-panel"
-import { useWorkspace } from "@/components/workspace/workspace-context"
+import {
+  useGitOverview,
+  useWorkspace,
+} from "@/components/workspace/workspace-context"
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu"
 import {
   PANEL_ICONS,
@@ -36,12 +41,6 @@ const ACPP_THEME: DockviewTheme = {
   tabAnimation: "smooth",
 }
 
-function DiffPanel() {
-  return <ComingSoonPanel id="diff" />
-}
-function CommitsPanel() {
-  return <ComingSoonPanel id="commits" />
-}
 function TerminalPanel() {
   return <ComingSoonPanel id="terminal" />
 }
@@ -72,9 +71,13 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
       className="flex h-full items-center gap-1.5 px-2 text-xs"
       title={t(`workspace.panels.${id}` as never)}
     >
-      <Icon className="size-3.5 shrink-0" />
-      <span className="acpp-tab-label truncate">
+      <span className="relative shrink-0">
+        <Icon className="size-3.5" />
+        {id === "commits" ? <CommitsTabDot /> : null}
+      </span>
+      <span className="acpp-tab-label flex items-center gap-1 truncate">
         {t(`workspace.panels.${id}` as never)}
+        {id === "commits" ? <CommitsTabCount /> : null}
       </span>
       {id !== "chat" ? (
         <button
@@ -91,6 +94,28 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
         </button>
       ) : null}
     </div>
+  )
+}
+
+/** 未推送数徽标（tab 文字态）：ahead > 0 才出现。 */
+function CommitsTabCount() {
+  const git = useGitOverview()
+  const ahead = git.data?.ahead ?? 0
+  if (ahead <= 0) return null
+  return (
+    <span className="rounded-full bg-primary/15 px-1.5 text-[10px] text-primary tabular-nums">
+      {ahead}
+    </span>
+  )
+}
+
+/** 未推送标记（tab 图标态）：窄栏文字隐藏时叠在图标角上。 */
+function CommitsTabDot() {
+  const git = useGitOverview()
+  const ahead = git.data?.ahead ?? 0
+  if (ahead <= 0) return null
+  return (
+    <span className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-primary" />
   )
 }
 

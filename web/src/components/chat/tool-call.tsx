@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
+import { DiffView } from "@/components/diff-view"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -59,99 +60,6 @@ function outputOf(payload: ToolCallPayload): {
   const raw = payload.rawOutput
   if (typeof raw === "string") return { output: raw }
   return { output: raw?.formatted_output, exitCode: raw?.exit_code }
-}
-
-type DiffLine = { type: "same" | "del" | "add"; text: string }
-
-/** 行级 diff：LCS 对齐；超大文件退化为整删整增，避免 O(n·m) 爆内存。 */
-function lineDiff(oldText: string, newText: string): DiffLine[] {
-  const a = oldText === "" ? [] : oldText.replace(/\n$/, "").split("\n")
-  const b = newText === "" ? [] : newText.replace(/\n$/, "").split("\n")
-
-  if (a.length * b.length > 250_000) {
-    return [
-      ...a.map((text) => ({ type: "del" as const, text })),
-      ...b.map((text) => ({ type: "add" as const, text })),
-    ]
-  }
-
-  // LCS 动态规划表
-  const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
-    new Array<number>(b.length + 1).fill(0)
-  )
-  for (let i = a.length - 1; i >= 0; i--) {
-    for (let j = b.length - 1; j >= 0; j--) {
-      dp[i][j] =
-        a[i] === b[j]
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1])
-    }
-  }
-
-  const lines: DiffLine[] = []
-  let i = 0
-  let j = 0
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      lines.push({ type: "same", text: a[i] })
-      i++
-      j++
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      lines.push({ type: "del", text: a[i] })
-      i++
-    } else {
-      lines.push({ type: "add", text: b[j] })
-      j++
-    }
-  }
-  while (i < a.length) lines.push({ type: "del", text: a[i++] })
-  while (j < b.length) lines.push({ type: "add", text: b[j++] })
-  return lines
-}
-
-function DiffView({
-  path,
-  oldText,
-  newText,
-}: {
-  path?: string
-  oldText: string
-  newText: string
-}) {
-  const lines = lineDiff(oldText, newText)
-  return (
-    <div className="overflow-hidden rounded-lg border border-border">
-      {path ? (
-        <div
-          className="flex items-center gap-1.5 border-b border-border bg-muted/50 px-2.5 py-1.5 font-mono text-xs text-muted-foreground"
-          title={path}
-        >
-          <FileDiffIcon className="size-3.5 shrink-0" />
-          <span className="truncate [direction:rtl] [unicode-bidi:plaintext]">
-            {path}
-          </span>
-        </div>
-      ) : null}
-      <pre className="max-h-72 overflow-auto bg-background/50 py-1 font-mono text-xs leading-5">
-        {lines.map((line, idx) => (
-          <div
-            key={idx}
-            className={cn(
-              "px-2.5 whitespace-pre-wrap",
-              line.type === "del" &&
-                "bg-destructive/10 text-destructive dark:bg-destructive/15",
-              line.type === "add" &&
-                "bg-primary/10 text-primary dark:bg-primary/15",
-              line.type === "same" && "text-muted-foreground"
-            )}
-          >
-            {line.type === "del" ? "- " : line.type === "add" ? "+ " : "  "}
-            {line.text}
-          </div>
-        ))}
-      </pre>
-    </div>
-  )
 }
 
 function TerminalView({
