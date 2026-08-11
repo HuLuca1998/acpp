@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `src/routes/` | 页面，与路由表（`App.tsx`）一一对应 | 不放可复用组件 |
 | `src/components/` | 跨页面复用的组件；同一功能域 ≥3 个时建子目录 | 不放页面 |
-| `src/components/ui/` | shadcn CLI 生成 | **禁止手改**，升级会整体覆盖。需要变体就在外面包一层 |
+| `src/components/ui/` | shadcn 组件（CLI 生成为起点，**允许直改**打磨细节） | 升级用 `npx shadcn add <c> --diff` 对比后手动合并，禁止盲目 `--overwrite` |
 | `src/hooks/` | 自定义 hooks | 不放纯函数（那是 `lib/`） |
 | `src/lib/` | 纯函数与客户端（`api.ts`、`utils.ts`） | 不出现 JSX、不依赖组件 |
 | `src/types/` | 领域类型，`acp.ts` 与 `server/internal/model` 字段对齐 | 组件 props 类型不放这里，跟组件走 |
@@ -59,13 +59,14 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 - **主题方案**：`<html data-palette>` 切换（`lib/palette.ts` + `index.css` 的 data-palette 块），每套全量定义语义 token，light/dark 各一版，与明暗切换正交。新增主题 = index.css 加一个 data-palette 块（两版）+ `palette.ts` 注册。改语义 token 必须核对**五套方案 × 明暗两模式**都成立。
 - **圆角**：`rounded-sm…4xl` 全部由 `--radius` 推导，不写任意值。间距用 Tailwind 标度（`gap-2` / `p-4`），不写 `p-[13px]` 除非对齐第三方像素。
 - **字体**：正文系统栈；命令、路径、id、版本号一律 `font-mono`；数字列表列加 `tabular-nums` 防跳动。
+- **材质与光感（视觉深度层）**：`index.css` 末段的无层级 data-slot 块统一负责——内容区主色氛围光晕、卡片投影与深色受光顶缘、实心按钮键帽高光、侧栏当前项主色浸染。这些全部由 `--primary` 等语义 token 推导，**新 palette 零成本继承**；不要在单个组件里手写 box-shadow/渐变去仿造同类效果，往这个层里加。
 
 ### 5.2 组件规则（shadcn 之上）
 
 - **优先组合现有 `components/ui/`**，缺什么 `npx shadcn@latest add <component>`。基于 **Base UI**（不是 Radix）：自定义触发元素用 `render={<Link to="..." />}`，**没有 `asChild`**。
-- **`ui/` 禁止手改**（CLI 覆盖会丢）。定制只有两条正规通道：
-  1. **全局 data-slot 层**：`index.css` 的 `@layer components` 用 `[data-slot="…"]` 选择器统一加行为（按压反馈、过渡就是这么做的）；
-  2. **外层包装**：在 `components/` 写包装组件（参考 `status-dot.tsx`）。
+- **`ui/` 以 shadcn 生成为起点，允许直接修改**——组件代码归我们所有，动效、细节不合基调就直接改（Dialog 的入出场就是这么调的）。约束两条：
+  1. 升级组件必须 `npx shadcn add <c> --diff` 对比后**手动合并**，禁止盲目 `--overwrite` 冲掉本地打磨；
+  2. 定制的**优先级**依然是：语义 token（改一处全局生效）→ `index.css` 视觉深度层（`[data-slot="…"]` 一次覆盖所有实例）→ 直改单个 ui/ 组件（只影响该组件）→ 外层包装（新增语义时）。能在上游解决的不下沉。
 - **专用组件优先于裸标签**：空态用 `Empty`，加载用 `Skeleton`（形状贴近真实内容），提示条用 `Alert`，危险确认用 `AlertDialog`（**禁用原生 `window.confirm`**），toast 用 `sonner`，分隔用 `Separator`，标签用 `Badge`。表单用 `FieldGroup`/`Field`，按钮内图标用 `data-icon="inline-start|end"`。
 - **聊天界面**只用 chat 原语：`MessageScroller`（滚动/跟随/回到底部）、`Message`、`Bubble`、`Marker`，不手写滚动容器与气泡 div。
 - **图标**：只用 `lucide-react`，默认 `size-4`，与文字并排对齐基线；纯图标按钮必须有 `aria-label`。
@@ -97,8 +98,9 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 - **持续动效工具类**：`text-shimmer`（等待文案微光）、`animate-breathe`（活跃状态点呼吸），只用于「系统正在干活」的语义，不做纯装饰。
 - **reduced-motion 是硬规则**：位移/缩放类动效必须给 `motion-reduce:` 降级（保留透明度渐变，去掉移动）；工具类需自带降级（`text-shimmer` 已内置）。
 
-### 5.5 交互细节
+### 5.5 交互模式
 
+- **轻量流程用弹窗，不切页**：创建/编辑这类 ≤5 个字段的流程一律 `Dialog` 原地弹出（参考 `new-session-dialog.tsx`），完成后直接跳目标页；只有内容本身是"一整页"（对话流、详情、列表）才配路由。判断标准：用户做完这件事还要回到原地吗？要 → 弹窗。
 - **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`；行内次级操作（删除等）默认 `opacity-0`，`group-hover` / `focus-visible` 浮现，并保证键盘可达。
 - **危险操作**：一律 `AlertDialog` 确认，确认按钮 `variant="destructive"`，文案讲清后果（如"子进程会一并回收，记录不可恢复"）。
 - **时间显示**：列表用相对时间（`lib/format.ts`），`title` 悬停给完整时间；时间与数字列加 `tabular-nums`。
@@ -112,7 +114,7 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 1. loading / error / empty 三态齐全，empty 带下一步 CTA；
 2. light / dark × 当前 palette 下都检查过（至少 forest + graphite 两套）；
 3. 所有文案走 `t()`，zh/en 双语齐；
-4. 无硬编码色值、无 `ui/` 手改、无原生 confirm/alert；
+4. 无硬编码色值、无原生 confirm/alert；轻量创建/编辑走 Dialog 不切页；
 5. 动效符合 §5.4（时长/easing/reduced-motion）；
 6. 命令与路径 `font-mono`，数字列 `tabular-nums`，图标 `size-4` 基线对齐；
 7. 键盘走查一遍：focus 可见、次级操作可达、弹窗可 Esc。

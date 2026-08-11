@@ -23,7 +23,6 @@ acpp/
 │   │   │   ├── overview.tsx          # 概览（真实指标卡 + 最近会话 + agent 状态）
 │   │   │   ├── agents.tsx            # agent 列表
 │   │   │   ├── sessions.tsx          # 会话列表
-│   │   │   ├── session-new.tsx       # 新建会话
 │   │   │   ├── session-chat.tsx      # 对话页（流式）
 │   │   │   ├── placeholder.tsx       # 未实现页面的占位
 │   │   │   └── not-found.tsx
@@ -33,7 +32,7 @@ acpp/
 │   │   │   ├── i18next.d.ts    # 让 t("chat.send") 受类型检查
 │   │   │   └── locales/{zh,en}.ts
 │   │   ├── components/
-│   │   │   ├── ui/             # shadcn 组件，由 CLI 生成，尽量不手改
+│   │   │   ├── ui/             # shadcn 组件（生成为起点，可直改；升级走 --diff 合并）
 │   │   │   ├── app-sidebar.tsx # 侧边栏导航
 │   │   │   ├── language-switcher.tsx
 │   │   │   └── ...             # 状态点、工具调用块、markdown、切换器等
@@ -76,7 +75,7 @@ make dev-server   # 终端 1：后端 http://127.0.0.1:8080
 make dev-web      # 终端 2：前端 http://localhost:5173
 ```
 
-然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp`）→ **Sessions → 新建会话** → 开聊。
+然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp`）→ 任意页面点 **新建会话**（弹窗）→ 开聊。
 
 单进程部署（后端托管前端产物）：`make serve`。
 
