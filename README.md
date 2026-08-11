@@ -129,6 +129,9 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | GET | `/api/sessions/{id}/git/overview` | git 汇总：分支、upstream、ahead/behind、变更文件（含 numstat）、未推送 commit；非仓库返回 `isRepo:false` |
 | GET | `/api/sessions/{id}/git/diff` | 单文件工作区 diff（`?path=`，返回 HEAD 版与工作区版全文，行级对齐在前端） |
 | GET | `/api/sessions/{id}/git/commits/{sha}` | 提交详情（文件清单）；带 `?path=` 时返回该文件在这条提交前后的全文 |
+| GET/POST | `/api/sessions/{id}/terminals` | 工作区终端列表 / 新建（会话 cwd 起交互 shell，每会话上限见 `ACP_MAX_TERMINALS`） |
+| DELETE | `/api/sessions/{id}/terminals/{tid}` | 关闭终端（杀 pty） |
+| WS | `/api/sessions/{id}/terminals/{tid}/ws` | 终端双向流：二进制帧 = 原始字节，文本帧 = `{"type":"resize","cols","rows"}`；断线后 pty 保活 30s 供重连（带回放缓冲） |
 | POST | `/api/sessions/{id}/open` | 拉起 agent 并握手，幂等。**前端不再主动调**——发消息时 `send` 顺路连接（懒连接），连接完成经 SSE 推 `settings`/`commands` |
 | POST | `/api/sessions/{id}/send` | 发一轮（`{content, images?, files?}`：图片 base64、@ 引用文件路径由后端读内容嵌入），立即返回；**turn 进行中再发会插进当前轮**（claude 排队为独立一轮，codex steering 注入当前轮） |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
@@ -152,6 +155,8 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 2. **fs 代理 path guard** — 声明了 `fs` capability，agent 的 `fs/read_text_file` / `fs/write_text_file` 会走到我们进程里，路径解析成 canonical 形式后必须落在 cwd 内。**注意这条不是可靠拦截点**：codex 用自带 shell 完全不走 fs 代理，claude 0.63 实测权限批准后也由 SDK 自行落盘。它只是纵深防御的一层，真正的隔离靠第 3 条之外的 runtime 沙箱档 + OS 兜底。
 3. **权限裁决** — `session/request_permission` 挂起交给用户在界面上点选（批准/拒绝），拒绝真实生效（实测文件不会被创建）。runtime 只在当前权限档认为需要时才会问，所以它仍是策略层不是安全边界——真正的隔离要靠 runtime 自身的沙箱档位 + OS 级兜底。
 
+**工作区终端是本机任意命令执行面**：`/terminals` 端点在会话 cwd 起真实交互 shell（用户显式操作才创建），与 agent 已有的命令执行权限面同级。服务只监听 127.0.0.1；若把 `ACP_ADDR` 改成对外地址，这个面会随之暴露，必须配合网络层访问控制。
+
 另外启动 agent 前会摘掉嵌套会话标记（`CLAUDECODE`、`CODEX_SANDBOX` 等）。不摘的话，从 Claude Code 终端启动本服务时 agent 会误判自己跑在另一个 agent 内部而拒绝服务——这个坑只在那种场景复现，本机开发时碰不到。
 
 ## 配置
@@ -165,6 +170,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 | `ACP_MAX_SESSIONS` | `8` | 同时活着的 agent 子进程上限 |
 | `ACP_IDLE_TIMEOUT` | `10m` | 空闲会话子进程的回收时限（`0` 关闭）。上下文留在 agent 侧，续聊时 `session/load` 无感恢复 |
 | `ACP_TURN_TIMEOUT` | `0`（不限时） | 单轮硬上限。长程任务跑几个小时是正常使用方式；turn 进行中（含等待权限/提问裁决）不会被空闲回收 |
+| `ACP_MAX_TERMINALS` | `5` | 每会话的工作区终端（pty）实例上限 |
 | `ACP_DEBUG` | 空 | 非空则打开 SQL 与 debug 日志 |
 
 前端可用 `VITE_API_BASE` 覆盖 API 前缀，默认 `/api`。
@@ -184,6 +190,6 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
-- **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）已落地 M1：dockview 骨架、对话/文件树/预览面板、⋯ 窗口菜单、布局持久化。diff / 未推送 commit（M2）与真 PTY 终端（M3）目前是占位面板。
+- **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M3 已落地：dockview 骨架、文件树/预览、diff / 未推送 commit、多实例 PTY 终端与引用联动。剩 M4 打磨（布局预设、diff 虚拟滚动、压力验收）。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。

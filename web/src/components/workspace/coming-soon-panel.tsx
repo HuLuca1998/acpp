@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next"
 
 import {
   PANEL_ICONS,
-  type WorkspacePanelId,
+  type WorkspacePanelKind,
 } from "@/components/workspace/workspace-panels"
 import {
   Empty,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/empty"
 
 /** diff / commits / terminal 落地前的诚实占位：说明这里将来是什么。 */
-export function ComingSoonPanel({ id }: { id: WorkspacePanelId }) {
+export function ComingSoonPanel({ id }: { id: WorkspacePanelKind }) {
   const { t } = useTranslation()
   const Icon = PANEL_ICONS[id]
   return (

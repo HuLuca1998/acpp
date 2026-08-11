@@ -253,6 +253,12 @@ export default {
       label: "窗口管理",
       windows: "工作区窗口",
       resetLayout: "恢复默认布局",
+      newTerminal: "新建终端",
+    },
+    terminal: {
+      exitedTitle: "终端已结束",
+      exitedHint: "shell 进程已退出或连接已回收。",
+      restart: "重新启动",
     },
     tree: {
       refresh: "刷新",

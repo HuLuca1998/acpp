@@ -1,12 +1,13 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MoreHorizontalIcon } from "lucide-react"
+import { MoreHorizontalIcon, PlusIcon, TerminalIcon } from "lucide-react"
 
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import {
   PANEL_ICONS,
+  panelKindOf,
   TOGGLEABLE_PANELS,
-  type WorkspacePanelId,
+  type WorkspacePanelKind,
 } from "@/components/workspace/workspace-panels"
 import {
   DropdownMenu,
@@ -19,9 +20,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+interface TerminalEntry {
+  panelId: string
+  num: number
+}
+
 /**
- * ⋯ 窗口管理菜单：其余 5 类面板的显隐勾选 + 恢复默认布局。
- * 勾选状态在菜单打开瞬间从 dockview 现读，不常驻订阅布局事件。
+ * ⋯ 窗口管理菜单：单例面板显隐勾选、终端实例列表 + 新建、恢复默认布局。
+ * 状态在菜单打开瞬间从 dockview 现读，不常驻订阅布局事件。
  */
 export function WorkspaceMenu({
   onResetLayout,
@@ -30,14 +36,30 @@ export function WorkspaceMenu({
 }) {
   const { t } = useTranslation()
   const ws = useWorkspace()
-  const [openPanels, setOpenPanels] = useState<Set<WorkspacePanelId>>(new Set())
+  const [openPanels, setOpenPanels] = useState<Set<WorkspacePanelKind>>(
+    new Set()
+  )
+  const [terminals, setTerminals] = useState<TerminalEntry[]>([])
 
   return (
     <DropdownMenu
       onOpenChange={(open) => {
         if (!open) return
-        const api = wsApiPanels(ws)
-        setOpenPanels(api)
+        const opened = new Set<WorkspacePanelKind>()
+        for (const id of TOGGLEABLE_PANELS) {
+          if (ws.isOpen(id)) opened.add(id)
+        }
+        setOpenPanels(opened)
+        const dock = ws.getApi()
+        setTerminals(
+          (dock?.panels ?? [])
+            .filter((p) => panelKindOf(p.id) === "terminal")
+            .map((p) => ({
+              panelId: p.id,
+              num: (p.params as { num?: number })?.num ?? 0,
+            }))
+            .sort((a, b) => a.num - b.num)
+        )
       }}
     >
       <DropdownMenuTrigger
@@ -46,7 +68,7 @@ export function WorkspaceMenu({
       >
         <MoreHorizontalIcon className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent align="end" className="w-52">
         {/* Base UI 的 GroupLabel 必须住在 Group 里，直接平铺会抛错。 */}
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t("workspace.menu.windows")}</DropdownMenuLabel>
@@ -81,18 +103,34 @@ export function WorkspaceMenu({
           })}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {t("workspace.panels.terminal")}
+          </DropdownMenuLabel>
+          {terminals.map((term) => (
+            <DropdownMenuItem
+              key={term.panelId}
+              onClick={() => {
+                const dock = ws.getApi()
+                dock?.getPanel(term.panelId)?.api.setActive()
+              }}
+            >
+              <TerminalIcon className="size-3.5 text-muted-foreground" />
+              {term.num
+                ? `${t("workspace.panels.terminal")} ${term.num}`
+                : t("workspace.panels.terminal")}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onClick={ws.newTerminal}>
+            <PlusIcon className="size-3.5 text-muted-foreground" />
+            {t("workspace.menu.newTerminal")}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onResetLayout}>
           {t("workspace.menu.resetLayout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
-
-function wsApiPanels(ws: ReturnType<typeof useWorkspace>) {
-  const open = new Set<WorkspacePanelId>()
-  for (const id of TOGGLEABLE_PANELS) {
-    if (ws.isOpen(id)) open.add(id)
-  }
-  return open
 }

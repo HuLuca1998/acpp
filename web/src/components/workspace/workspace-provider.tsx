@@ -9,8 +9,9 @@ import {
   type WorkspaceValue,
 } from "@/components/workspace/workspace-context"
 import {
+  addTerminalPanel,
   addWorkspacePanel,
-  type WorkspacePanelId,
+  type WorkspacePanelKind,
 } from "@/components/workspace/workspace-panels"
 
 /** 命令总线的宿主：状态全在 ref 里，provider 本身不因命令重渲染。 */
@@ -34,7 +35,7 @@ export function WorkspaceProvider({
   const referenceSinkRef = useRef<((path: string) => void) | null>(null)
 
   const value = useMemo<WorkspaceValue>(() => {
-    const ensureOpen = (id: WorkspacePanelId) => {
+    const ensureOpen = (id: WorkspacePanelKind) => {
       const api = apiRef.current
       if (!api) return
       const panel = api.getPanel(id)
@@ -54,9 +55,23 @@ export function WorkspaceProvider({
       isOpen: (id) => apiRef.current?.getPanel(id) !== undefined,
       closePanel: (id) => {
         if (id === "chat") return
-        const api = apiRef.current
-        const panel = api?.getPanel(id)
-        if (api && panel) api.removePanel(panel)
+        const dock = apiRef.current
+        const panel = dock?.getPanel(id)
+        if (dock && panel) dock.removePanel(panel)
+        // 关闭终端 tab = 杀 pty 的诚实语义；其余路径靠 detach 兜底回收。
+        if (id.startsWith("terminal:") && sessionId) {
+          void api.sessions
+            .terminalRemove(sessionId, id.slice("terminal:".length))
+            .catch(() => {})
+        }
+      },
+      newTerminal: () => {
+        const dock = apiRef.current
+        if (!dock || !sessionId) return
+        void api.sessions
+          .terminalCreate(sessionId)
+          .then((info) => addTerminalPanel(dock, info.id, info.num))
+          .catch(() => {})
       },
       openPreview: (path) => {
         previewRef.current = path

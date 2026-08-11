@@ -11,6 +11,7 @@ import type {
   Session,
   SessionSettings,
   SettingsPatch,
+  TerminalInfo,
   TreeListing,
   WorkspaceFile,
 } from "@/types/acp"
@@ -172,6 +173,26 @@ export const api = {
       request<GitDiffView>(
         `/sessions/${id}/git/commits/${sha}?path=${encodeURIComponent(path)}`
       ),
+
+    /** 工作区终端：REST 管生命周期，ws 走 terminalWsUrl。 */
+    terminalCreate: (id: number) =>
+      request<TerminalInfo>(`/sessions/${id}/terminals`, { method: "POST" }),
+    terminalList: (id: number) =>
+      request<TerminalInfo[]>(`/sessions/${id}/terminals`),
+    terminalRemove: (id: number, tid: string) =>
+      request<null>(`/sessions/${id}/terminals/${tid}`, { method: "DELETE" }),
+    terminalWsUrl: (id: number, tid: string) => {
+      // 开发态直连后端：vite 的 ws 代理在 HMR/重启后会僵死（输入静默丢失），
+      // 端口是项目固定约定（根 AGENTS.md §4.0），后端 ws 升级已放行本源。
+      if (import.meta.env.DEV && !BASE.startsWith("http")) {
+        return `ws://127.0.0.1:48080/api/sessions/${id}/terminals/${tid}/ws`
+      }
+      const proto = location.protocol === "https:" ? "wss" : "ws"
+      const base = BASE.startsWith("http")
+        ? BASE.replace(/^http/, "ws")
+        : `${proto}://${location.host}${BASE}`
+      return `${base}/sessions/${id}/terminals/${tid}/ws`
+    },
   },
 
   fs: {

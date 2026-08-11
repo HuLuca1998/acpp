@@ -236,6 +236,13 @@ export interface GitCommitDetail {
   files: GitFileChange[]
 }
 
+/** 工作区终端实例，与 service.TerminalInfo 对齐。 */
+export interface TerminalInfo {
+  id: string
+  num: number
+  running: boolean
+}
+
 /** 随消息上传的一张图片（base64，无 data: 前缀）。 */
 export interface ImageAttachment {
   data: string

@@ -260,6 +260,12 @@ export default {
       label: "Manage windows",
       windows: "Workspace windows",
       resetLayout: "Reset layout",
+      newTerminal: "New terminal",
+    },
+    terminal: {
+      exitedTitle: "Terminal ended",
+      exitedHint: "The shell process exited or the connection was reclaimed.",
+      restart: "Restart",
     },
     tree: {
       refresh: "Refresh",

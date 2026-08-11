@@ -14,11 +14,11 @@ import "dockview/dist/styles/dockview.css"
 import { XIcon } from "lucide-react"
 
 import { ChatPanel } from "@/components/workspace/chat-panel"
-import { ComingSoonPanel } from "@/components/workspace/coming-soon-panel"
 import { CommitsPanel } from "@/components/workspace/commits-panel"
 import { DiffPanel } from "@/components/workspace/diff-panel"
 import { FilePreviewPanel } from "@/components/workspace/file-preview-panel"
 import { FileTreePanel } from "@/components/workspace/file-tree-panel"
+import { TerminalPanel } from "@/components/workspace/terminal-panel"
 import {
   useGitOverview,
   useWorkspace,
@@ -26,7 +26,8 @@ import {
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu"
 import {
   PANEL_ICONS,
-  type WorkspacePanelId,
+  panelKindOf,
+  type WorkspacePanelKind,
 } from "@/components/workspace/workspace-panels"
 
 const LAYOUT_KEY = "acpp.workspace.layout.v1"
@@ -41,13 +42,9 @@ const ACPP_THEME: DockviewTheme = {
   tabAnimation: "smooth",
 }
 
-function TerminalPanel() {
-  return <ComingSoonPanel id="terminal" />
-}
-
 /** 面板组件注册表：引用必须稳定（模块级），dockview 据此重建面板。 */
 const COMPONENTS: Record<
-  WorkspacePanelId,
+  WorkspacePanelKind,
   React.FunctionComponent<IDockviewPanelProps>
 > = {
   chat: ChatPanel,
@@ -64,22 +61,29 @@ const COMPONENTS: Record<
  */
 function PanelTab(props: IDockviewPanelHeaderProps) {
   const { t } = useTranslation()
-  const id = props.api.id as WorkspacePanelId
-  const Icon = PANEL_ICONS[id] ?? PANEL_ICONS.files
+  const ws = useWorkspace()
+  const id = props.api.id
+  const kind = panelKindOf(id)
+  const Icon = PANEL_ICONS[kind] ?? PANEL_ICONS.files
+  const num = (props.params as { num?: number })?.num
+  const label =
+    kind === "terminal" && num
+      ? `${t("workspace.panels.terminal")} ${num}`
+      : t(`workspace.panels.${kind}` as never)
   return (
     <div
       className="flex h-full items-center gap-1.5 px-2 text-xs"
-      title={t(`workspace.panels.${id}` as never)}
+      title={label}
     >
       <span className="relative shrink-0">
         <Icon className="size-3.5" />
-        {id === "commits" ? <CommitsTabDot /> : null}
+        {kind === "commits" ? <CommitsTabDot /> : null}
       </span>
       <span className="acpp-tab-label flex items-center gap-1 truncate">
-        {t(`workspace.panels.${id}` as never)}
-        {id === "commits" ? <CommitsTabCount /> : null}
+        {label}
+        {kind === "commits" ? <CommitsTabCount /> : null}
       </span>
-      {id !== "chat" ? (
+      {kind !== "chat" ? (
         <button
           type="button"
           aria-label={t("workspace.closePanel")}
@@ -87,7 +91,8 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation()
-            props.api.close()
+            // 统一走命令总线：终端面板要顺带杀 pty。
+            ws.closePanel(id)
           }}
         >
           <XIcon className="size-3" />
@@ -152,7 +157,7 @@ function buildDefaultLayout(api: DockviewApi) {
     component: "files",
     position: { referencePanel: "chat", direction: "right" },
   })
-  for (const id of ["diff", "commits", "terminal"] as const) {
+  for (const id of ["diff", "commits"] as const) {
     api.addPanel({
       id,
       component: id,
@@ -160,6 +165,15 @@ function buildDefaultLayout(api: DockviewApi) {
       position: { referencePanel: "files", direction: "within" },
     })
   }
+  // 终端待命 tab：首次点到才 spawn pty（面板内的惰性激活逻辑）。
+  api.addPanel({
+    id: "terminal:boot",
+    component: "terminal",
+    renderer: "always",
+    inactive: true,
+    params: {},
+    position: { referencePanel: "files", direction: "within" },
+  })
   // dockview 挂载瞬间的容器是 100px 占位尺寸，此时按比例 setSize 会被
   // 最小宽度钳死成空操作、落盘均分布局。逐帧等到真实测量（能同时容纳
   // 对话最小宽与右栏）再定 80/20，约 2s 兜底放弃。
@@ -182,8 +196,11 @@ function tryRestoreLayout(api: DockviewApi): boolean {
   if (!raw) return false
   try {
     const data = JSON.parse(raw) as SerializedDockview
-    const ids = Object.keys(data.panels ?? {})
-    if (!ids.includes("chat") || ids.some((id) => !(id in COMPONENTS))) {
+    const panels = data.panels ?? {}
+    const badComponent = Object.values(panels).some(
+      (p) => !((p.contentComponent ?? "") in COMPONENTS)
+    )
+    if (!("chat" in panels) || badComponent) {
       throw new Error("layout shape mismatch")
     }
     api.fromJSON(data)
