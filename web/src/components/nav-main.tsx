@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
 
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ export function NavMain({
     icon?: React.ReactNode
   }[]
 }) {
+  const { t } = useTranslation()
   const { pathname } = useLocation()
 
   return (
@@ -27,12 +29,12 @@ export function NavMain({
         <SidebarMenu>
           <SidebarMenuItem className="flex items-center gap-2">
             <SidebarMenuButton
-              tooltip="New Session"
+              tooltip={t("nav.newSession")}
               className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
               render={<Link to="/sessions/new" />}
             >
               <CirclePlusIcon />
-              <span>New Session</span>
+              <span>{t("nav.newSession")}</span>
             </SidebarMenuButton>
             <Button
               size="icon"
@@ -40,7 +42,7 @@ export function NavMain({
               variant="outline"
             >
               <RefreshCwIcon />
-              <span className="sr-only">Reconnect agents</span>
+              <span className="sr-only">{t("nav.reconnect")}</span>
             </Button>
           </SidebarMenuItem>
         </SidebarMenu>

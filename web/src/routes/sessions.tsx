@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { api } from "@/lib/api"
@@ -29,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { MessagesSquareIcon, PlusIcon } from "lucide-react"
+import { MessagesSquareIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
 const STATE_VARIANT: Record<
   SessionState,
@@ -42,37 +43,40 @@ const STATE_VARIANT: Record<
 }
 
 export function Sessions() {
+  const { t } = useTranslation()
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(() => {
     api.sessions
       .list()
-      .then((res) => {
-        if (!cancelled) setSessions(res.items)
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message)
-      })
-    return () => {
-      cancelled = true
-    }
+      .then((res) => setSessions(res.items))
+      .catch((err: Error) => setError(err.message))
   }, [])
+
+  useEffect(load, [load])
+
+  async function remove(id: number) {
+    if (!window.confirm(t("sessions.deleteConfirm"))) return
+    try {
+      await api.sessions.remove(id)
+      setSessions((prev) => prev?.filter((s) => s.id !== id) ?? null)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>
-            <CardTitle>Sessions</CardTitle>
-            <CardDescription>
-              每个会话对应一次 session/new，消息流由 session/update 推送。
-            </CardDescription>
+            <CardTitle>{t("sessions.title")}</CardTitle>
+            <CardDescription>{t("sessions.description")}</CardDescription>
             <CardAction>
               <Button size="sm" render={<Link to="/sessions/new" />}>
                 <PlusIcon data-icon="inline-start" />
-                New session
+                {t("sessions.create")}
               </Button>
             </CardAction>
           </CardHeader>
@@ -83,7 +87,7 @@ export function Sessions() {
                   <EmptyMedia variant="icon">
                     <MessagesSquareIcon />
                   </EmptyMedia>
-                  <EmptyTitle>加载失败</EmptyTitle>
+                  <EmptyTitle>{t("common.loadFailed")}</EmptyTitle>
                   <EmptyDescription>{error}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -99,40 +103,65 @@ export function Sessions() {
                   <EmptyMedia variant="icon">
                     <MessagesSquareIcon />
                   </EmptyMedia>
-                  <EmptyTitle>还没有会话</EmptyTitle>
-                  <EmptyDescription>
-                    选择一个 agent 并新建会话后，这里会列出全部对话记录。
-                  </EmptyDescription>
+                  <EmptyTitle>{t("sessions.empty")}</EmptyTitle>
+                  <EmptyDescription>{t("sessions.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Agent</TableHead>
-                    <TableHead>Messages</TableHead>
-                    <TableHead>State</TableHead>
-                    <TableHead>Updated</TableHead>
+                    <TableHead>{t("sessions.columnTitle")}</TableHead>
+                    <TableHead>{t("sessions.agent")}</TableHead>
+                    <TableHead>{t("sessions.messages")}</TableHead>
+                    <TableHead>{t("sessions.state")}</TableHead>
+                    <TableHead>{t("sessions.updated")}</TableHead>
+                    <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sessions.map((session) => (
                     <TableRow key={session.id}>
                       <TableCell className="font-medium">
-                        <Link to={`/sessions/${session.id}`}>
-                          {session.title || `Session #${session.id}`}
+                        <Link
+                          to={`/sessions/${session.id}`}
+                          className="hover:underline"
+                        >
+                          {session.title ||
+                            `${t("common.unnamed")} #${session.id}`}
                         </Link>
                       </TableCell>
                       <TableCell>{session.agentName}</TableCell>
                       <TableCell>{session.messageCount}</TableCell>
                       <TableCell>
-                        <Badge variant={STATE_VARIANT[session.state]}>
-                          {session.state}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={STATE_VARIANT[session.state]}>
+                            {t(
+                              `sessions.state${capitalize(session.state)}` as never,
+                              {
+                                defaultValue: session.state,
+                              }
+                            )}
+                          </Badge>
+                          {session.running ? (
+                            <Badge variant="secondary">
+                              {t("sessions.running")}
+                            </Badge>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(session.updatedAt).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("common.delete")}
+                          onClick={() => void remove(session.id)}
+                        >
+                          <Trash2Icon />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -144,4 +173,8 @@ export function Sessions() {
       </div>
     </div>
   )
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }

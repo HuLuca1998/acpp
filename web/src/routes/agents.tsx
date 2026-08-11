@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { api } from "@/lib/api"
@@ -42,6 +43,7 @@ const STATUS_VARIANT: Record<
 }
 
 export function Agents() {
+  const { t } = useTranslation()
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,14 +67,12 @@ export function Agents() {
       <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>
-            <CardTitle>Agents</CardTitle>
-            <CardDescription>
-              已注册的 ACP agent，通过 stdio 启动并完成 initialize 握手。
-            </CardDescription>
+            <CardTitle>{t("agents.title")}</CardTitle>
+            <CardDescription>{t("agents.description")}</CardDescription>
             <CardAction>
               <Button size="sm" render={<Link to="/agents/new" />}>
                 <PlusIcon data-icon="inline-start" />
-                Add agent
+                {t("agents.add")}
               </Button>
             </CardAction>
           </CardHeader>
@@ -83,7 +83,7 @@ export function Agents() {
                   <EmptyMedia variant="icon">
                     <BotIcon />
                   </EmptyMedia>
-                  <EmptyTitle>加载失败</EmptyTitle>
+                  <EmptyTitle>{t("common.loadFailed")}</EmptyTitle>
                   <EmptyDescription>{error}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -99,20 +99,18 @@ export function Agents() {
                   <EmptyMedia variant="icon">
                     <BotIcon />
                   </EmptyMedia>
-                  <EmptyTitle>还没有 agent</EmptyTitle>
-                  <EmptyDescription>
-                    添加一个可执行命令（如 claude-code-acp）来接入第一个 agent。
-                  </EmptyDescription>
+                  <EmptyTitle>{t("agents.empty")}</EmptyTitle>
+                  <EmptyDescription>{t("agents.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Command</TableHead>
-                    <TableHead>Working dir</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("agents.name")}</TableHead>
+                    <TableHead>{t("agents.command")}</TableHead>
+                    <TableHead>{t("agents.cwd")}</TableHead>
+                    <TableHead>{t("agents.status")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -125,11 +123,16 @@ export function Agents() {
                         {[agent.command, ...agent.args].join(" ")}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {agent.cwd || "—"}
+                        {agent.cwd || t("common.none")}
                       </TableCell>
                       <TableCell>
                         <Badge variant={STATUS_VARIANT[agent.status]}>
-                          {agent.status}
+                          {t(
+                            `agents.status${capitalize(agent.status)}` as never,
+                            {
+                              defaultValue: agent.status,
+                            }
+                          )}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -142,4 +145,8 @@ export function Agents() {
       </div>
     </div>
   )
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }

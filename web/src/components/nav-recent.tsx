@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import {
@@ -25,16 +26,17 @@ import {
 
 /** 侧边栏「最近会话」分组。 */
 export function NavRecent({
-  label = "Recent Sessions",
+  label,
   items,
 }: {
-  label?: string
+  label: string
   items: {
     name: string
     url: string
     icon: React.ReactNode
   }[]
 }) {
+  const { t } = useTranslation()
   const { isMobile } = useSidebar()
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -56,7 +58,7 @@ export function NavRecent({
                 }
               >
                 <MoreHorizontalIcon />
-                <span className="sr-only">More</span>
+                <span className="sr-only">{t("nav.viewAll")}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 className="w-32"
@@ -65,16 +67,16 @@ export function NavRecent({
               >
                 <DropdownMenuItem>
                   <PlayIcon />
-                  <span>Resume</span>
+                  <span>{t("nav.resume")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <ShareIcon />
-                  <span>Export</span>
+                  <span>{t("nav.export")}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive">
                   <Trash2Icon />
-                  <span>Delete</span>
+                  <span>{t("common.delete")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -86,7 +88,7 @@ export function NavRecent({
             render={<Link to="/sessions" />}
           >
             <MoreHorizontalIcon className="text-sidebar-foreground/70" />
-            <span>View all</span>
+            <span>{t("nav.viewAll")}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

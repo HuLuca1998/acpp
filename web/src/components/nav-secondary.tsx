@@ -13,6 +13,7 @@ import {
 
 export function NavSecondary({
   items,
+  children,
   ...props
 }: {
   items: {
@@ -20,6 +21,8 @@ export function NavSecondary({
     url: string
     icon: React.ReactNode
   }[]
+  /** 追加在链接之后的自定义菜单项（如外观/语言切换）。 */
+  children?: React.ReactNode
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
   return (
     <SidebarGroup {...props}>
@@ -33,6 +36,7 @@ export function NavSecondary({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
+          {children}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
