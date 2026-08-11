@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
 
-import { Button } from "@/components/ui/button"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -9,7 +8,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { CirclePlusIcon, RefreshCwIcon } from "lucide-react"
+import { CirclePlusIcon } from "lucide-react"
 
 export function NavMain({
   items,
@@ -27,7 +26,7 @@ export function NavMain({
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2">
+          <SidebarMenuItem>
             <SidebarMenuButton
               tooltip={t("nav.newSession")}
               className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
@@ -36,14 +35,6 @@ export function NavMain({
               <CirclePlusIcon />
               <span>{t("nav.newSession")}</span>
             </SidebarMenuButton>
-            <Button
-              size="icon"
-              className="size-8 group-data-[collapsible=icon]:opacity-0"
-              variant="outline"
-            >
-              <RefreshCwIcon />
-              <span className="sr-only">{t("nav.reconnect")}</span>
-            </Button>
           </SidebarMenuItem>
         </SidebarMenu>
         <SidebarMenu>

@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { AppearanceSwitcher } from "@/components/appearance-switcher"
+import { BackendStatus } from "@/components/backend-status"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { NavMain } from "@/components/nav-main"
 import { NavRecent } from "@/components/nav-recent"
 import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
@@ -102,7 +102,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </NavSecondary>
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={{ name: "acp", email: "local@acp.dev", avatar: "" }} />
+        <BackendStatus />
       </SidebarFooter>
     </Sidebar>
   )

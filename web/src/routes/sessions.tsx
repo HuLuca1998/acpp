@@ -3,8 +3,20 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { api } from "@/lib/api"
+import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Session, SessionState } from "@/types/acp"
-import { Badge } from "@/components/ui/badge"
+import { StatusDot, type StatusTone } from "@/components/status-dot"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -16,6 +28,7 @@ import {
 } from "@/components/ui/card"
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -32,18 +45,15 @@ import {
 } from "@/components/ui/table"
 import { MessagesSquareIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
-const STATE_VARIANT: Record<
-  SessionState,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  active: "default",
-  idle: "secondary",
-  ended: "outline",
+const STATE_TONE: Record<SessionState, StatusTone> = {
+  active: "success",
+  idle: "muted",
+  ended: "muted",
   error: "destructive",
 }
 
 export function Sessions() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,12 +67,28 @@ export function Sessions() {
   useEffect(load, [load])
 
   async function remove(id: number) {
-    if (!window.confirm(t("sessions.deleteConfirm"))) return
     try {
       await api.sessions.remove(id)
       setSessions((prev) => prev?.filter((s) => s.id !== id) ?? null)
     } catch (err) {
       setError((err as Error).message)
+    }
+  }
+
+  /** 运行中优先展示（进程活着最值得被看见），出错永远压过其他状态。 */
+  function stateLabel(session: Session) {
+    if (session.state === "error") {
+      return { tone: "destructive" as const, pulse: false, text: t("sessions.stateError") }
+    }
+    if (session.running) {
+      return { tone: "success" as const, pulse: true, text: t("sessions.running") }
+    }
+    return {
+      tone: STATE_TONE[session.state],
+      pulse: false,
+      text: t(`sessions.state${capitalize(session.state)}` as never, {
+        defaultValue: session.state,
+      }),
     }
   }
 
@@ -93,9 +119,9 @@ export function Sessions() {
               </Empty>
             ) : sessions === null ? (
               <div className="flex flex-col gap-2">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
               </div>
             ) : sessions.length === 0 ? (
               <Empty>
@@ -106,6 +132,12 @@ export function Sessions() {
                   <EmptyTitle>{t("sessions.empty")}</EmptyTitle>
                   <EmptyDescription>{t("sessions.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
+                <EmptyContent>
+                  <Button size="sm" render={<Link to="/sessions/new" />}>
+                    <PlusIcon data-icon="inline-start" />
+                    {t("sessions.create")}
+                  </Button>
+                </EmptyContent>
               </Empty>
             ) : (
               <Table>
@@ -113,58 +145,56 @@ export function Sessions() {
                   <TableRow>
                     <TableHead>{t("sessions.columnTitle")}</TableHead>
                     <TableHead>{t("sessions.agent")}</TableHead>
-                    <TableHead>{t("sessions.messages")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("sessions.messages")}
+                    </TableHead>
                     <TableHead>{t("sessions.state")}</TableHead>
                     <TableHead>{t("sessions.updated")}</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sessions.map((session) => (
-                    <TableRow key={session.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          to={`/sessions/${session.id}`}
-                          className="hover:underline"
+                  {sessions.map((session) => {
+                    const state = stateLabel(session)
+                    return (
+                      <TableRow key={session.id} className="group relative">
+                        <TableCell className="max-w-64 font-medium">
+                          {/* 拉伸链接铺满整行：视觉上整行可点，语义仍是 <a>。 */}
+                          <Link
+                            to={`/sessions/${session.id}`}
+                            className="truncate after:absolute after:inset-0"
+                          >
+                            {session.title ||
+                              `${t("common.unnamed")} #${session.id}`}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {session.agentName}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground tabular-nums">
+                          {session.messageCount}
+                        </TableCell>
+                        <TableCell>
+                          <StatusDot
+                            tone={state.tone}
+                            pulse={state.pulse}
+                            label={state.text}
+                          />
+                        </TableCell>
+                        <TableCell
+                          className="text-muted-foreground tabular-nums"
+                          title={formatDateTime(session.updatedAt, i18n.language)}
                         >
-                          {session.title ||
-                            `${t("common.unnamed")} #${session.id}`}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{session.agentName}</TableCell>
-                      <TableCell>{session.messageCount}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={STATE_VARIANT[session.state]}>
-                            {t(
-                              `sessions.state${capitalize(session.state)}` as never,
-                              {
-                                defaultValue: session.state,
-                              }
-                            )}
-                          </Badge>
-                          {session.running ? (
-                            <Badge variant="secondary">
-                              {t("sessions.running")}
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(session.updatedAt).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("common.delete")}
-                          onClick={() => void remove(session.id)}
-                        >
-                          <Trash2Icon />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          {formatRelativeTime(session.updatedAt, i18n.language)}
+                        </TableCell>
+                        <TableCell className="py-0">
+                          <DeleteSessionButton
+                            onConfirm={() => void remove(session.id)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -172,6 +202,48 @@ export function Sessions() {
         </Card>
       </div>
     </div>
+  )
+}
+
+/** 删除按钮：默认隐身，行 hover / 聚焦时浮现；确认走 AlertDialog 而非原生 confirm。 */
+function DeleteSessionButton({ onConfirm }: { onConfirm: () => void }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("common.delete")}
+            className="relative text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100 aria-expanded:opacity-100"
+          />
+        }
+      >
+        <Trash2Icon />
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("sessions.deleteTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("sessions.deleteConfirm")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => {
+              setOpen(false)
+              onConfirm()
+            }}
+          >
+            {t("common.delete")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

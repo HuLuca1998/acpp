@@ -24,7 +24,6 @@ export default {
     help: "帮助",
     search: "搜索",
     newSession: "新建会话",
-    reconnect: "重连 agent",
     recentSessions: "最近会话",
     viewAll: "查看全部",
     resume: "继续",
@@ -54,6 +53,10 @@ export default {
     onboardHint:
       "先注册一个 ACP agent（如 codex-acp），再从它发起会话，对话流会实时出现在这里。",
     messagesCount: "{{count}} 条消息",
+  },
+  backend: {
+    connected: "后端已连接",
+    unreachable: "后端不可达",
   },
   language: {
     label: "语言",
@@ -89,6 +92,7 @@ export default {
     statusConnected: "已连接",
     statusError: "错误",
     statusDisabled: "已禁用",
+    updated: "更新时间",
   },
   sessions: {
     title: "会话",
@@ -107,6 +111,7 @@ export default {
     stateIdle: "空闲",
     stateEnded: "已结束",
     stateError: "出错",
+    deleteTitle: "删除会话",
     deleteConfirm: "删除这条会话？agent 子进程会一并回收，聊天记录不可恢复。",
     form: {
       title: "新建会话",

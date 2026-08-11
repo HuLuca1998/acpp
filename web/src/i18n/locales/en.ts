@@ -24,7 +24,6 @@ export default {
     help: "Get Help",
     search: "Search",
     newSession: "New Session",
-    reconnect: "Reconnect agents",
     recentSessions: "Recent Sessions",
     viewAll: "View all",
     resume: "Resume",
@@ -54,6 +53,10 @@ export default {
     onboardHint:
       "Register an ACP agent (e.g. codex-acp), then start a session — the conversation stream shows up here in real time.",
     messagesCount: "{{count}} messages",
+  },
+  backend: {
+    connected: "Backend connected",
+    unreachable: "Backend unreachable",
   },
   language: {
     label: "Language",
@@ -91,6 +94,7 @@ export default {
     statusConnected: "Connected",
     statusError: "Error",
     statusDisabled: "Disabled",
+    updated: "Updated",
   },
   sessions: {
     title: "Sessions",
@@ -111,6 +115,7 @@ export default {
     stateIdle: "Idle",
     stateEnded: "Ended",
     stateError: "Error",
+    deleteTitle: "Delete session",
     deleteConfirm:
       "Delete this session? The agent subprocess is reclaimed and the transcript cannot be recovered.",
     form: {
