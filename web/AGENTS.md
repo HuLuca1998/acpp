@@ -44,16 +44,75 @@
 - 状态管理：优先组件局部 state 与自定义 hook（参考 `use-chat.ts`）。**不引入**全局状态库（redux/zustand 等），确有跨页面共享需求先在任务里讨论。
 - SSE / 流式逻辑集中在 `hooks/use-chat.ts` 的状态机里，组件只消费状态，不直接操作 EventSource。
 
-## 5. 设计规范（UI/UX）
+## 5. 设计系统规范（UI/UX）
 
-视觉基调：macOS 原生 app 质感（目标是打包为桌面应用）。系统字体栈（macOS 上即 SF Pro）、箭头光标（不用手型）、chrome 区不可选中、overlay 细滚动条、按压 scale 反馈、强 easing（`ease-snappy` 等，定义在 `index.css`）、克制的毛玻璃材质。布局骨架沿用 shadcn dashboard-01。完整主题方案通过 `<html data-palette>` 切换（见 `lib/palette.ts` 与 `index.css` 的 data-palette 块）：每套定义全量语义 token（背景/表面/边框/侧栏/主色），light 与 dark 各一版，与明暗切换正交。新增主题 = index.css 加一个 data-palette 块（两版）+ `lib/palette.ts` 注册；改动语义 token 时必须核对五套方案 × 明暗两模式都成立。
+### 5.0 视觉基调
 
-- **组件**：优先用现有 `components/ui/` 的组件；缺什么用 `npx shadcn@latest add <component>` 添加。组件基于 **Base UI**（不是 Radix）：自定义触发元素用 `render={<Link to="..." />}`，**没有 `asChild`**。
-- **颜色**：只用 `index.css` 定义的语义 token（`bg-background`、`text-muted-foreground`、`border-border`、`text-destructive` 等）。**禁止**硬编码色值（`#hex`、`rgb()`、`text-blue-500` 这类原始色板类）。需要新颜色 → 先在 `index.css` 定义语义变量。
-- **暗色模式**：语义 token 天然双主题。任何新界面必须在 light / dark 下都检查过。
-- **图标**：只用 `lucide-react`，默认 `size-4`，与文字并排时对齐基线。
-- **间距/圆角**：用 Tailwind 标度（`gap-2` / `p-4` / `rounded-lg`），不写任意值（`p-[13px]`）除非对齐第三方像素。
-- **类名合并**：一律 `cn()`（`lib/utils.ts`），不手拼字符串。
-- **三态完整**：每个数据页面必须处理 loading / error / empty 三态，不允许白屏或裸报错。错误提示与 toast 用 `sonner`。
-- **响应式**：移动端判断用 `use-mobile.ts`，布局断点用 Tailwind `md:` 等前缀。侧边栏等既有响应式行为不破坏。
-- **可访问性**：可点击元素用 `<button>` / `<a>`（或 shadcn 等价物），不给 `div` 挂 onClick；表单控件有 label；纯图标按钮加 `aria-label`（文案同样走 i18n）。
+macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（macOS 上即 SF Pro）、箭头光标（不用手型）、chrome 区不可选中、overlay 细滚动条、按压 scale 反馈、强 easing、克制的毛玻璃材质。布局骨架沿用 shadcn dashboard-01。整体气质是**安静的专业工具**：颜色只出现在需要被看见的地方（状态点、主按钮、危险操作），大面积永远是中性的纸面色。
+
+### 5.1 Token 体系
+
+一切视觉常量都是 `index.css` 里的语义 token，组件里**禁止**硬编码色值（`#hex`、`rgb()`、`text-blue-500` 等原始色板类）。需要新颜色 → 先在 `index.css` 定义语义变量，再用。
+
+- **界面色**：`bg-background` / `bg-card` / `bg-popover` / `bg-muted` / `bg-accent`、`text-foreground` / `text-muted-foreground`、`border-border`、`ring-ring`。
+- **意图色**：`primary`（品牌与主操作）、`destructive`（危险）、`success`（活跃/健康）、`warning`（注意）。success/warning 跨全部 palette 恒定，只在 `:root` / `.dark` 定义。
+- **主题方案**：`<html data-palette>` 切换（`lib/palette.ts` + `index.css` 的 data-palette 块），每套全量定义语义 token，light/dark 各一版，与明暗切换正交。新增主题 = index.css 加一个 data-palette 块（两版）+ `palette.ts` 注册。改语义 token 必须核对**五套方案 × 明暗两模式**都成立。
+- **圆角**：`rounded-sm…4xl` 全部由 `--radius` 推导，不写任意值。间距用 Tailwind 标度（`gap-2` / `p-4`），不写 `p-[13px]` 除非对齐第三方像素。
+- **字体**：正文系统栈；命令、路径、id、版本号一律 `font-mono`；数字列表列加 `tabular-nums` 防跳动。
+
+### 5.2 组件规则（shadcn 之上）
+
+- **优先组合现有 `components/ui/`**，缺什么 `npx shadcn@latest add <component>`。基于 **Base UI**（不是 Radix）：自定义触发元素用 `render={<Link to="..." />}`，**没有 `asChild`**。
+- **`ui/` 禁止手改**（CLI 覆盖会丢）。定制只有两条正规通道：
+  1. **全局 data-slot 层**：`index.css` 的 `@layer components` 用 `[data-slot="…"]` 选择器统一加行为（按压反馈、过渡就是这么做的）；
+  2. **外层包装**：在 `components/` 写包装组件（参考 `status-dot.tsx`）。
+- **专用组件优先于裸标签**：空态用 `Empty`，加载用 `Skeleton`（形状贴近真实内容），提示条用 `Alert`，危险确认用 `AlertDialog`（**禁用原生 `window.confirm`**），toast 用 `sonner`，分隔用 `Separator`，标签用 `Badge`。表单用 `FieldGroup`/`Field`，按钮内图标用 `data-icon="inline-start|end"`。
+- **聊天界面**只用 chat 原语：`MessageScroller`（滚动/跟随/回到底部）、`Message`、`Bubble`、`Marker`，不手写滚动容器与气泡 div。
+- **图标**：只用 `lucide-react`，默认 `size-4`，与文字并排对齐基线；纯图标按钮必须有 `aria-label`。
+- **类名合并**一律 `cn()`；布局用 `flex gap-*`，不用 `space-x/y-*`；等宽高用 `size-*`。
+
+### 5.3 状态语言
+
+运行状态统一用 `StatusDot`（`components/status-dot.tsx`），不用填充式 Badge 表达状态——颜色只落在 6px 的点上：
+
+| tone | 含义 | 用例 |
+| --- | --- | --- |
+| `success` | 活着/健康/进行中 | agent connected、会话 running、后端 ok |
+| `muted` | 静止/中性 | idle、ended、disabled |
+| `destructive` | 出错 | agent error、会话 error、后端不可达 |
+| `warning` | 需要注意（预留） | 降级、重连中 |
+
+优先级：**出错 > 运行中 > 其他**。「正在运行」加 `pulse`（呼吸动画），静止状态永远不动。
+
+### 5.4 动效系统
+
+写动效前先过三问：**多久看一次？为了什么？多快结束？**
+
+- **频率决定有无**：高频动作（键盘触发、每日百次）不加动画；中频（hover、导航）只做 ≤150ms 的颜色/透明度过渡；低频（弹窗、入场、空态）可以完整动画；等待场景（thinking、加载）允许持续性动效（shimmer/breathe）。
+- **easing 只用三条曲线**（`index.css` 定义）：`ease-snappy`（默认，进出场与交互反馈）、`ease-fluid`（屏上移动/形变）、`ease-drawer`（抽屉/sheet）。**禁止 ease-in 开头的 UI 动画**。
+- **时长上限**：按压反馈 100–160ms；tooltip/popover 125–200ms；下拉/展开 150–250ms；弹窗/抽屉 200–300ms。**UI 动画不超过 300ms**。
+- **入场规范**：用 `@starting-style`（Tailwind `starting:` 变体），从 `opacity-0 + 位移 ≤8px`（或 `scale ≥0.95`）进入，**永远不从 `scale(0)` 开始**；列表/卡片群入场用 30–80ms stagger（参考 overview 指标卡）。
+- **只动 `transform` 与 `opacity`**（外加 clip-path），不动 width/height/padding。可被连续触发的用 CSS transition（可中断重定向），不用 keyframes。
+- **按压反馈**是全局的（`index.css` 的 data-slot 层，`:active` scale 0.97），新组件挂上对应 `data-slot` 即自动获得，不要在组件里重复写。
+- **持续动效工具类**：`text-shimmer`（等待文案微光）、`animate-breathe`（活跃状态点呼吸），只用于「系统正在干活」的语义，不做纯装饰。
+- **reduced-motion 是硬规则**：位移/缩放类动效必须给 `motion-reduce:` 降级（保留透明度渐变，去掉移动）；工具类需自带降级（`text-shimmer` 已内置）。
+
+### 5.5 交互细节
+
+- **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`；行内次级操作（删除等）默认 `opacity-0`，`group-hover` / `focus-visible` 浮现，并保证键盘可达。
+- **危险操作**：一律 `AlertDialog` 确认，确认按钮 `variant="destructive"`，文案讲清后果（如"子进程会一并回收，记录不可恢复"）。
+- **时间显示**：列表用相对时间（`lib/format.ts`），`title` 悬停给完整时间；时间与数字列加 `tabular-nums`。
+- **可访问性**：可点击元素用 `<button>` / `<a>`（或 shadcn 等价物），不给 `div` 挂 onClick；表单控件有 label；hover 专属效果不承载唯一信息。
+- **响应式**：移动端判断用 `use-mobile.ts`，断点用 `md:` 等前缀；容器查询（`@container`）优先于视口断点做卡片级适配。侧边栏既有响应式行为不破坏。
+
+### 5.6 页面验收清单
+
+新页面 / 改版合入前逐条自查：
+
+1. loading / error / empty 三态齐全，empty 带下一步 CTA；
+2. light / dark × 当前 palette 下都检查过（至少 forest + graphite 两套）；
+3. 所有文案走 `t()`，zh/en 双语齐；
+4. 无硬编码色值、无 `ui/` 手改、无原生 confirm/alert；
+5. 动效符合 §5.4（时长/easing/reduced-motion）；
+6. 命令与路径 `font-mono`，数字列 `tabular-nums`，图标 `size-4` 基线对齐；
+7. 键盘走查一遍：focus 可见、次级操作可达、弹窗可 Esc。
