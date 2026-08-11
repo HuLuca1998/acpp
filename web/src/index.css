@@ -42,6 +42,9 @@
     --color-success: var(--success);
     --color-warning: var(--warning);
 
+    /* 品牌色：agent 图标用，跨 palette 与明暗恒定（Claude 官方橙）。 */
+    --color-brand-claude: #d97757;
+
     /* 活跃状态点的呼吸动画：比 animate-pulse 轻得多，只做存在感提示。 */
     --animate-breathe: breathe 2.6s var(--ease-fluid) infinite;
 

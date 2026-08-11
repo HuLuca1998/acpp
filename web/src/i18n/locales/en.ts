@@ -127,6 +127,7 @@ export default {
     stateIdle: "Idle",
     stateEnded: "Ended",
     stateError: "Error",
+    loadMore: "Load more ({{loaded}} / {{total}})",
     deleteTitle: "Delete session",
     deleteConfirm:
       "Delete this session? The agent subprocess is reclaimed and the transcript cannot be recovered.",
@@ -172,6 +173,7 @@ export default {
     plan: "Plan",
     expand: "Show more",
     collapse: "Show less",
+    loadEarlier: "Load earlier messages",
     suggestions: {
       intro: "Walk me through this project's structure and purpose",
       changes: "Check git status and summarize uncommitted changes",

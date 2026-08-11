@@ -122,6 +122,7 @@ export default {
     stateIdle: "空闲",
     stateEnded: "已结束",
     stateError: "出错",
+    loadMore: "加载更多（{{loaded}} / {{total}}）",
     deleteTitle: "删除会话",
     deleteConfirm: "删除这条会话？agent 子进程会一并回收，聊天记录不可恢复。",
     form: {
@@ -165,6 +166,7 @@ export default {
     plan: "任务计划",
     expand: "展开",
     collapse: "收起",
+    loadEarlier: "加载更早的消息",
     suggestions: {
       intro: "介绍一下这个项目的结构和用途",
       changes: "查看 git 状态，总结未提交的变更",

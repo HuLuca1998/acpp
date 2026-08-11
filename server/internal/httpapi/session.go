@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"acpp/server/internal/model"
 	"acpp/server/internal/service"
 )
 
@@ -21,17 +22,24 @@ func (h sessionHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 		agentID = id
 	}
+	pageNum := queryInt(r, "page", 1)
+	pageSize := queryInt(r, "pageSize", 50)
 
-	sessions, err := h.sessions.List(r.Context(), agentID)
+	sessions, total, err := h.sessions.List(r.Context(), agentID, pageNum, pageSize)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	// 消息数走缓存列；这里只补实时的进程状态。
 	for i := range sessions {
 		sessions[i].Running = h.chat.Running(sessions[i].ID)
-		sessions[i].MessageCount = int64(h.chat.MessageCount(sessions[i].ID))
 	}
-	writeData(w, http.StatusOK, newPage(sessions))
+	writeData(w, http.StatusOK, page[service.SessionView]{
+		Items:    sessions,
+		Total:    total,
+		Page:     pageNum,
+		PageSize: pageSize,
+	})
 }
 
 func (h sessionHandler) get(w http.ResponseWriter, r *http.Request) {
@@ -41,13 +49,12 @@ func (h sessionHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := h.sessions.Get(r.Context(), id)
+	// Peek 不拉进程：查看记录是零成本读操作。
+	session, err := h.chat.Peek(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	session.Running = h.chat.Running(id)
-	session.MessageCount = int64(h.chat.MessageCount(id))
 	writeData(w, http.StatusOK, session)
 }
 
@@ -86,6 +93,7 @@ func (h sessionHandler) remove(w http.ResponseWriter, r *http.Request) {
 }
 
 // listMessages 从转录重建消息列表；会话必须存在。
+// ?limit= 取尾部 N 条（默认全量），?before=<id> 是「加载更早」的游标。
 func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -98,12 +106,19 @@ func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := h.chat.Messages(id)
+	limit := queryInt(r, "limit", 0)
+	before := uint(queryInt(r, "before", 0))
+	messages, total, err := h.chat.Messages(id, limit, before)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, newPage(messages))
+	writeData(w, http.StatusOK, page[model.Message]{
+		Items:    messages,
+		Total:    int64(total),
+		Page:     1,
+		PageSize: len(messages),
+	})
 }
 
 // transcript 原样下发会话的 JSONL 转录，供导出与调试。

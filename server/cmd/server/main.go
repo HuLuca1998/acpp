@@ -79,6 +79,8 @@ func run() error {
 
 	// 空闲子进程定期回收：上下文在 agent 侧持久化，续聊时无感恢复。
 	chatService.StartIdleReaper(ctx, cfg.IdleTimeout)
+	// 老会话的消息数缓存回填，后台低优跑一次。
+	go chatService.BackfillMessageCounts(ctx)
 
 	errCh := make(chan error, 1)
 	go func() {

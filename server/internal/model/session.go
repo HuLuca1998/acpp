@@ -23,9 +23,12 @@ type Session struct {
 	Cwd          string       `gorm:"size:512" json:"cwd"`
 	State        SessionState `gorm:"size:32;not null;default:active;index" json:"state"`
 	// StopReason 记录 session/prompt 的返回原因，如 end_turn、max_tokens、cancelled。
-	StopReason string    `gorm:"size:64" json:"stopReason"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	StopReason string `gorm:"size:64" json:"stopReason"`
+	// MessageCount 是重建后的消息数缓存：turn 结束时写回，列表读取 O(1)——
+	// 别在列表路径上做全量转录重建。
+	MessageCount int       `json:"messageCount"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `gorm:"index" json:"updatedAt"`
 
 	Agent    *Agent    `gorm:"foreignKey:AgentID" json:"-"`
 	Messages []Message `gorm:"constraint:OnDelete:CASCADE" json:"-"`

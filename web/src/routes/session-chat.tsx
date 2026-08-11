@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { memo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
 
@@ -289,6 +289,20 @@ export function SessionChat() {
             <MessageScroller>
               <MessageScrollerViewport>
                 <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
+                  {chat.hasEarlier ? (
+                    <MessageScrollerItem scrollAnchor={false}>
+                      <div className="flex justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground"
+                          onClick={() => void chat.loadEarlier()}
+                        >
+                          {t("chat.loadEarlier")}
+                        </Button>
+                      </div>
+                    </MessageScrollerItem>
+                  ) : null}
                   {groupMessages(chat.messages).map((block) =>
                     block.type === "chat" ? (
                       <MessageScrollerItem
@@ -971,8 +985,12 @@ function LiveToolMarker({ tool }: { tool: LiveToolCall }) {
   )
 }
 
-/** activity 块内的单条过程消息。 */
-function ActivityMessage({ message }: { message: Message }) {
+/** activity 块内的单条过程消息。memo 理由同 ChatMessage。 */
+const ActivityMessage = memo(function ActivityMessage({
+  message,
+}: {
+  message: Message
+}) {
   if (message.kind === "thought") {
     return <ThoughtBlock content={message.content} />
   }
@@ -996,11 +1014,12 @@ function ActivityMessage({ message }: { message: Message }) {
       payload={payload}
     />
   )
-}
+})
 
 /** 正文消息：用户消息用主色气泡靠右，agent 输出通栏渲染 markdown。
- *  两者 hover 都浮现复制操作，悬停可见完整时间。 */
-function ChatMessage({ message }: { message: Message }) {
+ *  memo 是必须的——流式期间每个 chunk 都触发页面重渲染，
+ *  没有它整份历史的 markdown 会一遍遍重新解析。 */
+const ChatMessage = memo(function ChatMessage({ message }: { message: Message }) {
   const { i18n } = useTranslation()
   const timestamp = formatDateTime(message.createdAt, i18n.language)
 
@@ -1077,7 +1096,7 @@ function ChatMessage({ message }: { message: Message }) {
       </div>
     </div>
   )
-}
+})
 
 /** 已完成的交互式提问：每题显示全部选项，标出用户的选择，可随时回看。 */
 function ElicitationAnsweredCard({ message }: { message: Message }) {

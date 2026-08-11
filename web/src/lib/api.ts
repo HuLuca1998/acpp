@@ -71,9 +71,13 @@ export const api = {
   },
 
   sessions: {
-    list: (params?: { agentId?: number }) => {
-      const qs = params?.agentId ? `?agentId=${params.agentId}` : ""
-      return request<Paged<Session>>(`/sessions${qs}`)
+    list: (params?: { agentId?: number; page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.agentId) qs.set("agentId", String(params.agentId))
+      if (params?.page) qs.set("page", String(params.page))
+      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
+      const s = qs.toString()
+      return request<Paged<Session>>(`/sessions${s ? `?${s}` : ""}`)
     },
     get: (id: number) => request<Session>(`/sessions/${id}`),
     create: (input: { agentId: number; title?: string; cwd?: string }) =>
@@ -83,8 +87,14 @@ export const api = {
       }),
     remove: (id: number) =>
       request<null>(`/sessions/${id}`, { method: "DELETE" }),
-    messages: (id: number) =>
-      request<Paged<Message>>(`/sessions/${id}/messages`),
+    /** 消息列表：limit 取尾部 N 条，before 是「加载更早」的游标。 */
+    messages: (id: number, params?: { limit?: number; before?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.limit) qs.set("limit", String(params.limit))
+      if (params?.before) qs.set("before", String(params.before))
+      const s = qs.toString()
+      return request<Paged<Message>>(`/sessions/${id}/messages${s ? `?${s}` : ""}`)
+    },
 
     /** 拉起 agent 子进程并完成 ACP 握手，重复调用是安全的。 */
     open: (id: number) =>

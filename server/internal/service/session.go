@@ -23,11 +23,13 @@ func NewSessionService(db *gorm.DB) *SessionService {
 	return &SessionService{db: db}
 }
 
-// SessionView 是会话的对外视图，额外带上 agent 名称与消息数。
+// SessionView 是会话的对外视图，额外带上 agent 名称与方言。
+// 消息数直接用 model.Session.MessageCount 缓存列，不在读路径重建。
 type SessionView struct {
 	model.Session
-	AgentName    string `json:"agentName"`
-	MessageCount int64  `json:"messageCount"`
+	AgentName string `json:"agentName"`
+	// AgentFlavor 供界面显示品牌图标（claude/codex/generic）。
+	AgentFlavor string `json:"agentFlavor,omitempty"`
 	// Running 表示当前有没有活着的 agent 子进程，由 HTTP 层填充。
 	Running bool `json:"running"`
 	// Settings 是活会话的统一设置视图，只在会话开着时非空。
@@ -46,26 +48,48 @@ type SessionInput struct {
 	Cwd     string `json:"cwd"`
 }
 
-func (s *SessionService) List(ctx context.Context, agentID uint) ([]SessionView, error) {
-	q := s.db.WithContext(ctx).Model(&model.Session{}).Preload("Agent")
+// List 按更新时间倒序分页。pageSize 有默认与上限——全量拉取会随
+// 会话数线性变慢，侧栏这类场景只需要前几条。
+func (s *SessionService) List(ctx context.Context, agentID uint, page, pageSize int) ([]SessionView, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+
+	q := s.db.WithContext(ctx).Model(&model.Session{})
 	if agentID != 0 {
 		q = q.Where("agent_id = ?", agentID)
 	}
 
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count sessions: %w", err)
+	}
+
 	var sessions []model.Session
-	if err := q.Order("updated_at desc").Find(&sessions).Error; err != nil {
-		return nil, fmt.Errorf("list sessions: %w", err)
+	err := q.Preload("Agent").
+		Order("updated_at desc").
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Find(&sessions).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("list sessions: %w", err)
 	}
 
 	views := make([]SessionView, 0, len(sessions))
 	for i := range sessions {
 		view, err := s.toView(ctx, &sessions[i])
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		views = append(views, *view)
 	}
-	return views, nil
+	return views, total, nil
 }
 
 func (s *SessionService) Get(ctx context.Context, id uint) (*SessionView, error) {
@@ -132,6 +156,7 @@ func (s *SessionService) toView(_ context.Context, session *model.Session) (*Ses
 	view := SessionView{Session: *session}
 	if session.Agent != nil {
 		view.AgentName = session.Agent.Name
+		view.AgentFlavor = session.Agent.Flavor
 	}
 	view.GitBranch = gitBranch(view.Cwd)
 	return &view, nil

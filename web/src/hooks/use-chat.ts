@@ -67,6 +67,8 @@ export interface ChatState {
   contextUsage: ContextUsage | null
   /** 可用斜杠命令，agent 推送全量清单，供输入框 "/" 补全。 */
   commands: SlashCommand[]
+  /** 还有更早的消息没加载（消息按尾部分页）。 */
+  hasEarlier: boolean
   /** agent 正在等用户作答的交互式提问。 */
   elicitation: PendingElicitation | null
   /** agent 正在等用户裁决的权限请求。 */
@@ -76,6 +78,9 @@ export interface ChatState {
   /** 当前轮内已裁决的权限请求。 */
   permissions: ResolvedPermission[]
 }
+
+/** 初次进入拉取的消息条数；更早的用「加载更早」按需取。 */
+const MESSAGE_PAGE = 200
 
 const INITIAL: ChatState = {
   session: null,
@@ -92,6 +97,7 @@ const INITIAL: ChatState = {
   settings: null,
   contextUsage: null,
   commands: [],
+  hasEarlier: false,
   elicitation: null,
   permission: null,
   plan: null,
@@ -265,9 +271,11 @@ export function useChat(sessionId: number) {
 
     async function bootstrap() {
       try {
+        // 只读加载：详情与历史都是毫秒级，不拉 agent 进程——
+        // 查看记录零成本，真正发消息时后端才会连接（Send 内置幂等 Open）。
         const [session, history] = await Promise.all([
-          api.sessions.open(sessionId),
-          api.sessions.messages(sessionId),
+          api.sessions.get(sessionId),
+          api.sessions.messages(sessionId, { limit: MESSAGE_PAGE }),
         ])
         if (cancelled) return
         setState((prev) => ({
@@ -276,6 +284,7 @@ export function useChat(sessionId: number) {
           settings: session.settings ?? null,
           commands: session.commands ?? [],
           messages: history.items,
+          hasEarlier: history.items.length < history.total,
           loading: false,
         }))
       } catch (err) {
@@ -304,8 +313,14 @@ export function useChat(sessionId: number) {
   // 顺带刷新会话详情——agent 这一轮可能切了 git 分支。
   const refreshMessages = useCallback(async () => {
     try {
-      const history = await api.sessions.messages(sessionId)
-      setState((prev) => ({ ...prev, messages: history.items }))
+      const history = await api.sessions.messages(sessionId, {
+        limit: MESSAGE_PAGE,
+      })
+      setState((prev) => ({
+        ...prev,
+        messages: history.items,
+        hasEarlier: history.items.length < history.total,
+      }))
     } catch {
       // 拉不到就等下一轮，流式态还在，界面不至于空白。
     }
@@ -314,6 +329,32 @@ export function useChat(sessionId: number) {
       setState((prev) => ({ ...prev, session }))
     } catch {
       // 会话详情拉不到不影响对话，下一轮再试。
+    }
+  }, [sessionId])
+
+  // 「加载更早」：以当前最早一条重建消息的 id 为游标向前翻页。
+  const loadEarlier = useCallback(async () => {
+    let before = 0
+    setState((prev) => {
+      before = prev.messages[0]?.id ?? 0
+      return prev
+    })
+    if (!before) return
+    try {
+      const res = await api.sessions.messages(sessionId, {
+        limit: MESSAGE_PAGE,
+        before,
+      })
+      setState((prev) => {
+        const merged = [...res.items, ...prev.messages]
+        return {
+          ...prev,
+          messages: merged,
+          hasEarlier: res.items.length > 0 && merged.length < res.total,
+        }
+      })
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: (err as Error).message }))
     }
   }, [sessionId])
 
@@ -450,6 +491,7 @@ export function useChat(sessionId: number) {
     applySettings,
     resolvePermission,
     resolveElicitation,
+    loadEarlier,
   }
 }
 

@@ -93,6 +93,8 @@ export interface Session {
   id: number
   agentId: number
   agentName: string
+  /** agent 的 runtime 方言，界面用它显示品牌图标。 */
+  agentFlavor?: AgentFlavor
   /** agent 侧返回的 sessionId（uuid v7），用于后续的 session/prompt。 */
   acpSessionId: string
   title: string

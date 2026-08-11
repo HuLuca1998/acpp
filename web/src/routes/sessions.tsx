@@ -52,19 +52,40 @@ const STATE_TONE: Record<SessionState, StatusTone> = {
   error: "destructive",
 }
 
+const PAGE_SIZE = 50
+
 export function Sessions() {
   const { t, i18n } = useTranslation()
   const [sessions, setSessions] = useState<Session[] | null>(null)
+  const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     api.sessions
-      .list()
-      .then((res) => setSessions(res.items))
+      .list({ pageSize: PAGE_SIZE })
+      .then((res) => {
+        setSessions(res.items)
+        setTotal(res.total)
+      })
       .catch((err: Error) => setError(err.message))
   }, [])
 
   useEffect(load, [load])
+
+  /** 追加下一页：以已加载条数推算页码，避免维护独立游标。 */
+  const loadMore = useCallback(() => {
+    const loaded = sessions?.length ?? 0
+    api.sessions
+      .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
+      .then((res) => {
+        setSessions((prev) => {
+          const seen = new Set((prev ?? []).map((s) => s.id))
+          return [...(prev ?? []), ...res.items.filter((s) => !seen.has(s.id))]
+        })
+        setTotal(res.total)
+      })
+      .catch((err: Error) => setError(err.message))
+  }, [sessions])
 
   async function remove(id: number) {
     try {
@@ -198,6 +219,21 @@ export function Sessions() {
                 </TableBody>
               </Table>
             )}
+            {sessions !== null && sessions.length < total ? (
+              <div className="flex justify-center py-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={loadMore}
+                >
+                  {t("sessions.loadMore", {
+                    loaded: sessions.length,
+                    total,
+                  })}
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

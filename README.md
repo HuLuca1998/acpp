@@ -120,10 +120,10 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
 | POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor、模型与命令清单），同步返回 |
 | PUT | `/api/agents/{id}/catalog` | 配置页勾选：更新 models/commands 的启用状态（禁用只影响本软件的下拉与补全，agent 侧能力不变） |
-| GET/POST | `/api/sessions` | 会话列表（支持 `?agentId=`）/ 新建 |
-| GET/DELETE | `/api/sessions/{id}` | 会话详情 / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
-| GET | `/api/sessions/{id}/messages` | 历史消息 |
-| POST | `/api/sessions/{id}/open` | 拉起 agent 并握手，幂等 |
+| GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建 |
+| GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本）/ 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
+| GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早） |
+| POST | `/api/sessions/{id}/open` | 拉起 agent 并握手，幂等。**前端不再主动调**——发消息时 `send` 顺路连接（懒连接），连接完成经 SSE 推 `settings`/`commands` |
 | POST | `/api/sessions/{id}/send` | 发一轮（`{content, images?, files?}`：图片 base64、@ 引用文件路径由后端读内容嵌入），立即返回；**turn 进行中再发会插进当前轮**（claude 排队为独立一轮，codex steering 注入当前轮） |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |

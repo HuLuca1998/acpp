@@ -6,6 +6,7 @@ import { AppearanceSwitcher } from "@/components/appearance-switcher"
 import { BackendStatus } from "@/components/backend-status"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { NavMain } from "@/components/nav-main"
+import { AgentIcon } from "@/components/agent-icon"
 import { NavRecent } from "@/components/nav-recent"
 import { NavSecondary } from "@/components/nav-secondary"
 import {
@@ -26,11 +27,10 @@ import {
   PlugZapIcon,
   ScrollTextIcon,
   Settings2Icon,
-  TerminalIcon,
   WrenchIcon,
 } from "lucide-react"
 
-const RECENT_LIMIT = 3
+const RECENT_LIMIT = 10
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation()
@@ -41,9 +41,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   React.useEffect(() => {
     let cancelled = false
     api.sessions
-      .list()
+      .list({ pageSize: RECENT_LIMIT })
       .then((res) => {
-        if (!cancelled) setRecent(res.items.slice(0, RECENT_LIMIT))
+        if (!cancelled) setRecent(res.items)
       })
       .catch(() => {
         // 侧边栏的最近列表拉不到就空着，不打断主流程。
@@ -70,10 +70,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     { title: t("nav.connections"), url: "/connections", icon: <PlugZapIcon /> },
   ]
 
+  // 品牌图标标出会话属于哪个 agent，一眼可辨。
   const recentItems = recent.map((session) => ({
     name: session.title || `${t("common.unnamed")} #${session.id}`,
     url: `/sessions/${session.id}`,
-    icon: <TerminalIcon />,
+    icon: <AgentIcon flavor={session.agentFlavor} className="size-4" />,
   }))
 
   return (

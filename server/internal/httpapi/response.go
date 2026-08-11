@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/service"
@@ -64,6 +65,15 @@ func writeError(w http.ResponseWriter, err error) {
 		slog.Error("request failed", "err", err)
 	}
 	writeJSON(w, status, envelope{Error: err.Error()})
+}
+
+// queryInt 解析正整数查询参数，缺失或非法时用默认值。
+func queryInt(r *http.Request, key string, fallback int) int {
+	v, err := strconv.Atoi(r.URL.Query().Get(key))
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
 }
 
 func decodeJSON(r *http.Request, dst any) error {

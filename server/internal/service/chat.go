@@ -152,6 +152,27 @@ func (cat agentCatalog) filterCommands(commands []acp.Command) []acp.Command {
 	return kept
 }
 
+// Peek 返回会话视图但绝不拉起进程——「查看记录」是零成本读操作，
+// 只有真的发消息才值得连接 agent。进程恰好活着时顺带附上统一设置。
+func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, error) {
+	view, err := s.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	key := sessionKey(sessionID)
+	if _, ok := s.manager.Get(key); !ok {
+		return view, nil
+	}
+	view.Running = true
+	cat := s.catalogFor(ctx, sessionID)
+	if settings, err := s.manager.Settings(key); err == nil {
+		cat.filterSettings(&settings)
+		view.Settings = &settings
+	}
+	view.Commands = cat.filterCommands(s.manager.Commands(key))
+	return view, nil
+}
+
 // Open 为一条已存在的数据库会话拉起 agent 并完成 ACP 握手。
 // 会话已经开着时直接返回，重复调用是安全的。
 func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, error) {
@@ -215,8 +236,14 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	if settings, err := s.manager.Settings(key); err == nil {
 		cat.filterSettings(&settings)
 		view.Settings = &settings
+		// 懒连接下 Open 多由 Send 顺路触发，前端不会拿到这份 HTTP 响应——
+		// 统一视图与命令清单同时走 SSE 广播一份。
+		br.publish(StreamEvent{Kind: "settings", Settings: &settings})
 	}
 	view.Commands = cat.filterCommands(s.manager.Commands(key))
+	if len(view.Commands) > 0 {
+		br.publish(StreamEvent{Kind: "commands", Commands: view.Commands})
+	}
 	return view, nil
 }
 
@@ -409,6 +436,10 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBl
 		// 只有 end_turn 是正常说完；其余四种都意味着回答可能是残缺的。
 		updates["state"] = model.SessionError
 	}
+	// 消息数在写路径上重建一次并缓存——列表读取绝不做全量重建。
+	if all, err := s.rebuildAll(sessionID); err == nil {
+		updates["message_count"] = len(all)
+	}
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", sessionID).Updates(updates).Error; err != nil {
 		slog.Error("save stop reason", "session", sessionID, "err", err)
 	}
@@ -513,8 +544,7 @@ func (s *ChatService) ProbeAgentAsync(agentID uint) {
 	}()
 }
 
-// Messages 从转录重建会话的消息列表。
-func (s *ChatService) Messages(sessionID uint) ([]model.Message, error) {
+func (s *ChatService) rebuildAll(sessionID uint) ([]model.Message, error) {
 	entries, err := s.transcripts.Read(sessionKey(sessionID))
 	if err != nil {
 		return nil, fmt.Errorf("read transcript: %w", err)
@@ -522,13 +552,55 @@ func (s *ChatService) Messages(sessionID uint) ([]model.Message, error) {
 	return RebuildMessages(sessionID, entries), nil
 }
 
-// MessageCount 是会话重建后的消息数，供列表页显示。
-func (s *ChatService) MessageCount(sessionID uint) int {
-	messages, err := s.Messages(sessionID)
+// Messages 从转录重建消息并按尾部分页：limit<=0 表示全量；
+// before>0 时只取 id 小于它的那一段的尾部（「加载更早」的游标——
+// 转录是 append-only 的，重建 id 按行号递增，跨请求稳定）。
+// total 是全量条数，供前端判断还有没有更早的。
+func (s *ChatService) Messages(sessionID uint, limit int, before uint) ([]model.Message, int, error) {
+	all, err := s.rebuildAll(sessionID)
 	if err != nil {
-		return 0
+		return nil, 0, err
 	}
-	return len(messages)
+	total := len(all)
+
+	if before > 0 {
+		cut := len(all)
+		for i, m := range all {
+			if m.ID >= before {
+				cut = i
+				break
+			}
+		}
+		all = all[:cut]
+	}
+	if limit > 0 && len(all) > limit {
+		all = all[len(all)-limit:]
+	}
+	return all, total, nil
+}
+
+// BackfillMessageCounts 为历史会话补消息数缓存（新列上线时全是 0）。
+// 启动后在后台跑一次，量级是会话数 × 单次重建的毫秒级成本。
+func (s *ChatService) BackfillMessageCounts(ctx context.Context) {
+	var sessions []model.Session
+	if err := s.db.WithContext(ctx).Select("id", "message_count").Find(&sessions).Error; err != nil {
+		slog.Warn("backfill message counts", "err", err)
+		return
+	}
+	for _, session := range sessions {
+		if session.MessageCount > 0 {
+			continue
+		}
+		all, err := s.rebuildAll(session.ID)
+		if err != nil || len(all) == 0 {
+			continue
+		}
+		if err := s.db.WithContext(ctx).Model(&model.Session{}).
+			Where("id = ?", session.ID).
+			Update("message_count", len(all)).Error; err != nil {
+			slog.Warn("backfill message count", "session", session.ID, "err", err)
+		}
+	}
 }
 
 // TranscriptPath 返回会话转录文件的路径，供原始日志下载。

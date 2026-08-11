@@ -55,15 +55,18 @@ export function Overview() {
   const { t, i18n } = useTranslation()
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [sessions, setSessions] = useState<Session[] | null>(null)
+  const [sessionTotal, setSessionTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([api.agents.list(), api.sessions.list()])
+    // 概览只需要最近几条 + 总数，别把全部会话拉下来。
+    Promise.all([api.agents.list(), api.sessions.list({ pageSize: RECENT_LIMIT })])
       .then(([agentRes, sessionRes]) => {
         if (cancelled) return
         setAgents(agentRes.items)
         setSessions(sessionRes.items)
+        setSessionTotal(sessionRes.total)
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message)
@@ -169,7 +172,7 @@ export function Overview() {
       key: "sessions",
       icon: <MessagesSquareIcon />,
       label: t("overview.statSessions"),
-      value: sessions.length,
+      value: sessionTotal,
       hint:
         activeCount > 0 ? (
           <StatusDot
