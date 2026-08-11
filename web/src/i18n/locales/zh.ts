@@ -239,6 +239,41 @@ export default {
     },
     busy: "上一轮还没结束，请等它跑完或点中止。",
   },
+  workspace: {
+    panels: {
+      chat: "对话",
+      files: "文件树",
+      preview: "预览",
+      diff: "工作区 diff",
+      commits: "未推送 commit",
+      terminal: "终端",
+    },
+    closePanel: "关闭面板",
+    menu: {
+      label: "窗口管理",
+      windows: "工作区窗口",
+      resetLayout: "恢复默认布局",
+    },
+    tree: {
+      refresh: "刷新",
+      empty: "目录为空",
+      truncated: "条目过多，其余已省略",
+      draftTitle: "工作区尚未就绪",
+      draftHint: "发送首条消息创建会话后，这里会显示工作目录的文件树。",
+      loadFailed: "目录加载失败",
+    },
+    preview: {
+      emptyTitle: "没有打开的文件",
+      emptyHint: "在文件树中点击文件即可预览。",
+      binary: "二进制文件，无法预览。",
+      truncated: "内容过长，已截断显示。",
+    },
+    comingSoon: {
+      diff: "开发中——这里将展示工作目录的未提交变更。",
+      commits: "开发中——这里将列出本地领先远端的提交。",
+      terminal: "开发中——这里将提供工作目录里的真实终端。",
+    },
+  },
   errors: {
     sessionNotFound: "会话不存在",
     sessionNotFoundHint: "它可能已被删除，或链接已失效。",

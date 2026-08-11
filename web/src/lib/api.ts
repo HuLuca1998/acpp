@@ -8,6 +8,8 @@ import type {
   Session,
   SessionSettings,
   SettingsPatch,
+  TreeListing,
+  WorkspaceFile,
 } from "@/types/acp"
 
 /** 开发环境走 vite proxy，生产环境同源。可用 VITE_API_BASE 覆盖。 */
@@ -93,7 +95,9 @@ export const api = {
       if (params?.limit) qs.set("limit", String(params.limit))
       if (params?.before) qs.set("before", String(params.before))
       const s = qs.toString()
-      return request<Paged<Message>>(`/sessions/${id}/messages${s ? `?${s}` : ""}`)
+      return request<Paged<Message>>(
+        `/sessions/${id}/messages${s ? `?${s}` : ""}`
+      )
     },
 
     /** 拉起 agent 子进程并完成 ACP 握手，重复调用是安全的。 */
@@ -132,6 +136,22 @@ export const api = {
       }),
     /** SSE 事件流地址。 */
     eventsUrl: (id: number) => `${BASE}/sessions/${id}/events`,
+
+    /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
+    workspaceTree: (id: number, params?: { path?: string; depth?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.path) qs.set("path", params.path)
+      if (params?.depth) qs.set("depth", String(params.depth))
+      const s = qs.toString()
+      return request<TreeListing>(
+        `/sessions/${id}/fs/entries${s ? `?${s}` : ""}`
+      )
+    },
+    /** 工作区文件内容（预览用，路径限制在会话 cwd 内）。 */
+    workspaceFile: (id: number, path: string) =>
+      request<WorkspaceFile>(
+        `/sessions/${id}/fs/file?path=${encodeURIComponent(path)}`
+      ),
   },
 
   fs: {

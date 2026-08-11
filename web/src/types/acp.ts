@@ -168,6 +168,33 @@ export interface DirListing {
   files?: DirEntry[]
 }
 
+/** 工作区文件树的一个节点，与 server/internal/service.TreeEntry 对齐。 */
+export interface TreeEntry {
+  name: string
+  path: string
+  kind: "dir" | "file"
+  size?: number
+  /** true = 本次已展开（children 可信，空就是真的空）；否则前端懒加载。 */
+  listed?: boolean
+  children?: TreeEntry[]
+}
+
+export interface TreeListing {
+  root: string
+  entries: TreeEntry[]
+  truncated?: boolean
+}
+
+/** 工作区文件预览内容，与 server/internal/service.WorkspaceFileView 对齐。 */
+export interface WorkspaceFile {
+  path: string
+  name: string
+  size: number
+  content: string
+  truncated?: boolean
+  binary?: boolean
+}
+
 /** 随消息上传的一张图片（base64，无 data: 前缀）。 */
 export interface ImageAttachment {
   data: string

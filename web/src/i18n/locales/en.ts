@@ -246,6 +246,42 @@ export default {
     },
     busy: "The previous turn is still running — wait for it or hit stop.",
   },
+  workspace: {
+    panels: {
+      chat: "Chat",
+      files: "Files",
+      preview: "Preview",
+      diff: "Working tree",
+      commits: "Unpushed commits",
+      terminal: "Terminal",
+    },
+    closePanel: "Close panel",
+    menu: {
+      label: "Manage windows",
+      windows: "Workspace windows",
+      resetLayout: "Reset layout",
+    },
+    tree: {
+      refresh: "Refresh",
+      empty: "Empty directory",
+      truncated: "Too many entries, the rest are omitted",
+      draftTitle: "Workspace not ready",
+      draftHint:
+        "Send the first message to create the session, then the working directory tree shows up here.",
+      loadFailed: "Failed to load directory",
+    },
+    preview: {
+      emptyTitle: "No file open",
+      emptyHint: "Click a file in the file tree to preview it.",
+      binary: "Binary file, cannot preview.",
+      truncated: "Content too long, display truncated.",
+    },
+    comingSoon: {
+      diff: "Coming soon — uncommitted changes of the working directory.",
+      commits: "Coming soon — local commits ahead of the remote.",
+      terminal: "Coming soon — a real terminal in the working directory.",
+    },
+  },
   errors: {
     sessionNotFound: "Session not found",
     sessionNotFoundHint: "It may have been deleted, or the link is stale.",

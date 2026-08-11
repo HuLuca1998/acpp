@@ -646,3 +646,53 @@
     }
   }
 }
+/* ---- 工作区 docking 皮肤（dockview，adr-002）：全部由语义 token 推导，
+   五套 palette × 明暗两模式零成本继承；结构性覆盖只做描边与圆角。 ---- */
+.dockview-theme-acpp {
+  --dv-group-view-background-color: var(--card);
+  --dv-tabs-and-actions-container-background-color: transparent;
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--muted);
+  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-tab-divider-color: transparent;
+  --dv-tab-border-radius: calc(var(--radius) - 4px);
+  --dv-border-radius: var(--radius);
+  --dv-tab-margin-block: 3px;
+  --dv-tab-margin-inline: 3px;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--primary);
+  --dv-drag-over-background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  --dv-drag-over-border-color: var(--primary);
+  --dv-icon-hover-background-color: var(--muted);
+  --dv-tabs-container-scrollbar-color: color-mix(in oklab, var(--foreground) 25%, transparent);
+  --dv-scrollbar-background-color: color-mix(in oklab, var(--foreground) 25%, transparent);
+  --dv-edge-dock-indicator-color: color-mix(in oklab, var(--primary) 55%, transparent);
+  --dv-context-menu-background-color: var(--popover);
+  --dv-context-menu-color: var(--popover-foreground);
+  --dv-floating-box-shadow: 0 8px 32px rgb(0 0 0 / 0.22), 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+/* 组容器：卡片质感（细描边 + 圆角裁切），gap 露出的缝隙是页面底色。 */
+.dockview-theme-acpp .dv-groupview {
+  border: 1px solid var(--border);
+  border-radius: var(--dv-border-radius);
+  overflow: hidden;
+}
+
+/* tab 头容器声明为查询容器：窄栏时标题与关闭钮退隐、只剩图标。 */
+.dockview-theme-acpp .dv-tabs-and-actions-container {
+  container-type: inline-size;
+  border-bottom: 1px solid var(--border);
+}
+@container (max-width: 280px) {
+  .acpp-tab-label {
+    display: none;
+  }
+}
