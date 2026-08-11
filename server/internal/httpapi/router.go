@@ -54,6 +54,8 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	api.HandleFunc("DELETE /api/agents/{id}", agents.remove)
 	// 重探 agent 的统一设置能力（flavor 与模型清单），同步返回最新记录。
 	api.HandleFunc("POST /api/agents/{id}/probe", agents.probe)
+	// 配置页勾选：更新 models/commands 的启用状态。
+	api.HandleFunc("PUT /api/agents/{id}/catalog", agents.catalog)
 
 	api.HandleFunc("GET /api/sessions", sessions.list)
 	api.HandleFunc("POST /api/sessions", sessions.create)

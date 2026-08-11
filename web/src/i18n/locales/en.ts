@@ -95,6 +95,18 @@ export default {
     statusError: "Error",
     statusDisabled: "Disabled",
     updated: "Updated",
+    detail: {
+      probe: "Re-probe",
+      models: "Models",
+      commands: "Slash commands",
+      commandsHint:
+        "Unchecking only hides it from this app's autocomplete; the agent keeps the capability.",
+      enabledCount: "{{enabled}} of {{total}} enabled",
+      searchCommands: "Search commands…",
+      enableAll: "Enable all",
+      disableAll: "Disable all",
+      noData: "No data yet — run a probe first.",
+    },
   },
   sessions: {
     title: "Sessions",

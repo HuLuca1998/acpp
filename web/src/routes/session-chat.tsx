@@ -463,7 +463,13 @@ export function SessionChat() {
         pending={newSession.creating}
         disabled={isNew && (newSession.agents === null || !newSession.selected)}
         placeholder={t("chat.placeholder")}
-        commands={chat.commands}
+        commands={
+          isNew
+            ? (newSession.selectedAgent?.commands ?? []).filter(
+                (c) => !c.disabled
+              )
+            : chat.commands
+        }
         attachments={
           <AttachmentTray
             images={images}

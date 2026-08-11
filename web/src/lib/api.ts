@@ -1,5 +1,6 @@
 import type {
   Agent,
+  CatalogInput,
   DirListing,
   Message,
   Paged,
@@ -61,6 +62,12 @@ export const api = {
     /** 重探 agent 的统一设置能力（flavor 与模型清单），同步返回最新记录。 */
     probe: (id: number) =>
       request<Agent>(`/agents/${id}/probe`, { method: "POST" }),
+    /** 配置页勾选：更新 models/commands 的启用状态。 */
+    updateCatalog: (id: number, input: CatalogInput) =>
+      request<Agent>(`/agents/${id}/catalog`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
   },
 
   sessions: {

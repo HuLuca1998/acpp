@@ -19,9 +19,13 @@ export interface ModelGroup {
   choices: ModelChoice[]
 }
 
-/** 每个 agent 一组：有探测缓存就列模型，没有就给一条「默认」兜底项。 */
+/**
+ * 每个 agent 一组：有探测缓存就列模型（配置页禁用的不列），
+ * 没有就给一条「默认」兜底项。
+ */
 function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
-  if (agent.models.length === 0) {
+  const enabled = agent.models.filter((m) => !m.disabled)
+  if (enabled.length === 0) {
     return [
       {
         key: `${agent.id}:`,
@@ -31,7 +35,7 @@ function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
       },
     ]
   }
-  return agent.models.map((m) => ({
+  return enabled.map((m) => ({
     key: `${agent.id}:${m.id}`,
     agentId: agent.id,
     modelId: m.id,

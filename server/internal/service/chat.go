@@ -92,6 +92,66 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 	}
 }
 
+// agentCatalog 是配置页取舍的快照：被禁用的模型与命令。
+type agentCatalog struct {
+	models   map[string]bool
+	commands map[string]bool
+}
+
+// catalogFor 读会话所属 agent 的配置页取舍。读不到按全启用处理——
+// 过滤是体验优化，不该因为一次查库失败把清单清空。
+func (s *ChatService) catalogFor(ctx context.Context, sessionID uint) agentCatalog {
+	cat := agentCatalog{models: map[string]bool{}, commands: map[string]bool{}}
+	var session model.Session
+	if err := s.db.WithContext(ctx).First(&session, sessionID).Error; err != nil {
+		return cat
+	}
+	var agent model.Agent
+	if err := s.db.WithContext(ctx).First(&agent, session.AgentID).Error; err != nil {
+		return cat
+	}
+	for _, m := range agent.Models {
+		if m.Disabled {
+			cat.models[m.ID] = true
+		}
+	}
+	for _, c := range agent.Commands {
+		if c.Disabled {
+			cat.commands[c.Name] = true
+		}
+	}
+	return cat
+}
+
+// filterSettings 把配置页禁用的模型从统一视图的清单里去掉。
+// 当前值不动——就算被禁也如实显示，只是不再出现在可选项里。
+func (cat agentCatalog) filterSettings(settings *acp.Settings) {
+	if settings == nil || len(cat.models) == 0 {
+		return
+	}
+	kept := make([]acp.Model, 0, len(settings.Models))
+	for _, m := range settings.Models {
+		if !cat.models[m.ID] {
+			kept = append(kept, m)
+		}
+	}
+	settings.Models = kept
+}
+
+// filterCommands 去掉配置页禁用的斜杠命令。
+func (cat agentCatalog) filterCommands(commands []acp.Command) []acp.Command {
+	if len(cat.commands) == 0 {
+		return commands
+	}
+	kept := make([]acp.Command, 0, len(commands))
+	for _, c := range commands {
+		if !cat.commands[c.Name] {
+			kept = append(kept, c)
+		}
+	}
+	return kept
+}
+
 // Open 为一条已存在的数据库会话拉起 agent 并完成 ACP 握手。
 // 会话已经开着时直接返回，重复调用是安全的。
 func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, error) {
@@ -102,10 +162,12 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 
 	key := sessionKey(sessionID)
 	if _, ok := s.manager.Get(key); ok {
+		cat := s.catalogFor(ctx, sessionID)
 		if settings, err := s.manager.Settings(key); err == nil {
+			cat.filterSettings(&settings)
 			view.Settings = &settings
 		}
-		view.Commands = s.manager.Commands(key)
+		view.Commands = cat.filterCommands(s.manager.Commands(key))
 		return view, nil
 	}
 
@@ -124,7 +186,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		Key:     key,
 		Runtime: acp.RuntimeFor(agent.Command, agent.Args, agent.Env),
 		Cwd:     cwd,
-		OnEvent: func(ev acp.Event) { s.handleEvent(br, ev) },
+		OnEvent: func(ev acp.Event) { s.handleEvent(sessionID, br, ev) },
 		// 全量线级消息进转录，这是对话内容唯一的持久化。
 		WireTap: func(dir string, msg json.RawMessage) { s.transcripts.Append(key, dir, msg) },
 		// 进程重启后优先恢复 agent 侧的同一条会话，保住上下文。
@@ -148,10 +210,12 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	if err != nil {
 		return nil, err
 	}
+	cat := s.catalogFor(ctx, sessionID)
 	if settings, err := s.manager.Settings(key); err == nil {
+		cat.filterSettings(&settings)
 		view.Settings = &settings
 	}
-	view.Commands = s.manager.Commands(key)
+	view.Commands = cat.filterCommands(s.manager.Commands(key))
 	return view, nil
 }
 
@@ -161,6 +225,7 @@ func (s *ChatService) ApplySettings(ctx context.Context, sessionID uint, patch a
 	if err != nil {
 		return nil, translateNoSession(sessionID, err)
 	}
+	s.catalogFor(ctx, sessionID).filterSettings(&settings)
 	s.brokerFor(sessionID).publish(StreamEvent{Kind: "settings", Settings: &settings})
 	return &settings, nil
 }
@@ -370,20 +435,53 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 	if err != nil {
 		updates["flavor"] = ""
 		updates["models"] = model.AgentModelSlice{}
+		updates["commands"] = model.AgentCommandSlice{}
 		updates["status"] = model.AgentError
 		updates["last_error"] = truncateError(err.Error())
 	} else {
 		settings, serr := s.manager.Settings(key)
+		// 斜杠命令清单以通知形式在会话建立后异步推到，等它一小会——
+		// 拿不到就算了（agent 可能真的没有命令），不拖垮探测。
+		var commands []acp.Command
+		for range 30 {
+			if commands = s.manager.Commands(key); len(commands) > 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 		_ = s.manager.Close(key)
 		if serr != nil {
 			return nil, serr
 		}
+		// 重探不清空配置页的取舍：旧缓存里被禁用的条目保持禁用。
+		oldDisabled := map[string]bool{}
+		for _, m := range agent.Models {
+			if m.Disabled {
+				oldDisabled["m:"+m.ID] = true
+			}
+		}
+		for _, c := range agent.Commands {
+			if c.Disabled {
+				oldDisabled["c:"+c.Name] = true
+			}
+		}
 		models := make(model.AgentModelSlice, 0, len(settings.Models))
 		for _, m := range settings.Models {
-			models = append(models, model.AgentModel{ID: m.ID, Name: m.Name, Description: m.Description})
+			models = append(models, model.AgentModel{
+				ID: m.ID, Name: m.Name, Description: m.Description,
+				Disabled: oldDisabled["m:"+m.ID],
+			})
+		}
+		cached := make(model.AgentCommandSlice, 0, len(commands))
+		for _, c := range commands {
+			cached = append(cached, model.AgentCommand{
+				Name: c.Name, Description: c.Description,
+				Disabled: oldDisabled["c:"+c.Name],
+			})
 		}
 		updates["flavor"] = string(settings.Flavor)
 		updates["models"] = models
+		updates["commands"] = cached
 		updates["status"] = model.AgentIdle
 		updates["last_error"] = ""
 	}
@@ -433,7 +531,7 @@ func (s *ChatService) TranscriptPath(sessionID uint) string {
 
 // handleEvent 把 ACP 事件转成 SSE 事件推给浏览器。
 // 持久化不在这里发生——线级消息已经由 WireTap 写进转录。
-func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
+func (s *ChatService) handleEvent(sessionID uint, br *broker, ev acp.Event) {
 	switch ev.Kind {
 	case acp.EventMessage:
 		br.publish(StreamEvent{Kind: "message_chunk", Text: ev.Text})
@@ -472,13 +570,16 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 		br.publish(StreamEvent{Kind: "permission_done", PermissionID: ev.PermissionID})
 
 	case acp.EventSettings:
+		// agent 自行改配置推来的视图同样要过配置页的取舍。
+		s.catalogFor(context.Background(), sessionID).filterSettings(ev.Settings)
 		br.publish(StreamEvent{Kind: "settings", Settings: ev.Settings})
 
 	case acp.EventUsage:
 		br.publish(StreamEvent{Kind: "usage", Used: ev.Used, Size: ev.Size})
 
 	case acp.EventCommands:
-		br.publish(StreamEvent{Kind: "commands", Commands: ev.Commands})
+		commands := s.catalogFor(context.Background(), sessionID).filterCommands(ev.Commands)
+		br.publish(StreamEvent{Kind: "commands", Commands: commands})
 
 	case acp.EventElicitation:
 		br.publish(StreamEvent{

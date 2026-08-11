@@ -93,6 +93,17 @@ export default {
     statusError: "错误",
     statusDisabled: "已禁用",
     updated: "更新时间",
+    detail: {
+      probe: "重新探测",
+      models: "模型",
+      commands: "斜杠命令",
+      commandsHint: "取消勾选只影响本软件的补全清单，agent 侧能力不变。",
+      enabledCount: "已启用 {{enabled}} / {{total}}",
+      searchCommands: "搜索命令…",
+      enableAll: "全部启用",
+      disableAll: "全部禁用",
+      noData: "还没有数据，先探测一次。",
+    },
   },
   sessions: {
     title: "会话",

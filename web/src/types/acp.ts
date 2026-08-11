@@ -2,6 +2,20 @@
 
 export type AgentStatus = "idle" | "connected" | "error" | "disabled"
 
+/** agent 暴露的一条斜杠命令；发送时就是普通文本（"/plan …"）。 */
+export interface SlashCommand {
+  name: string
+  description?: string
+  /** 配置页的取舍：true 表示不在本软件里使用（缺省启用）。 */
+  disabled?: boolean
+}
+
+/** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
+export interface CatalogInput {
+  models?: { key: string; disabled: boolean }[]
+  commands?: { key: string; disabled: boolean }[]
+}
+
 /** runtime 方言，由后端从 agent 身份识别；generic 表示未知 runtime。 */
 export type AgentFlavor = "codex" | "claude" | "generic" | ""
 
@@ -10,6 +24,8 @@ export interface UnifiedModel {
   id: string
   name: string
   description?: string
+  /** 配置页的取舍：true 表示不在本软件里使用（缺省启用）。 */
+  disabled?: boolean
 }
 
 export interface Agent {
@@ -22,9 +38,10 @@ export interface Agent {
   cwd: string
   status: AgentStatus
   lastError: string
-  /** 探测缓存：flavor 与可用模型清单，供新会话页在建会话前展示。 */
+  /** 探测缓存：flavor、模型清单与斜杠命令，供草稿态在建会话前使用。 */
   flavor: AgentFlavor
   models: UnifiedModel[]
+  commands: SlashCommand[]
   createdAt: string
   updatedAt: string
 }
@@ -99,12 +116,6 @@ export interface PlanEntry {
   content: string
   priority?: string
   status?: "pending" | "in_progress" | "completed" | string
-}
-
-/** agent 暴露的一条斜杠命令；发送时就是普通文本（"/plan …"）。 */
-export interface SlashCommand {
-  name: string
-  description?: string
 }
 
 /** 权限请求的一个选项，agent 提供。 */

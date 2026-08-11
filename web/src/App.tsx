@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Route, Routes } from "react-router"
 
+import { AgentDetail } from "@/routes/agent-detail"
 import { Agents } from "@/routes/agents"
 import { DashboardLayout } from "@/routes/dashboard-layout"
 import { NotFound } from "@/routes/not-found"
@@ -30,11 +31,6 @@ const PLACEHOLDERS = [
     titleKey: "agents.add",
     descKey: "placeholderPage.agentNew",
   },
-  {
-    path: "agents/:id",
-    titleKey: "agents.title",
-    descKey: "placeholderPage.agentDetail",
-  },
 ] as const
 
 export function App() {
@@ -45,6 +41,7 @@ export function App() {
       <Route element={<DashboardLayout />}>
         <Route index element={<Overview />} />
         <Route path="agents" element={<Agents />} />
+        <Route path="agents/:id" element={<AgentDetail />} />
         <Route path="sessions" element={<Sessions />} />
         {/* 新会话与老会话共用同一个页面：草稿态只是多了跨 ACP 模型选择
             与可编辑工作目录，首条消息落地才真正创建会话。 */}

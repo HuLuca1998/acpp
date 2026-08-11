@@ -76,6 +76,28 @@ func (h agentHandler) update(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, agent)
 }
 
+// catalog 更新配置页的勾选（models/commands 的启用状态）。
+func (h agentHandler) catalog(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	var in service.CatalogInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	agent, err := h.agents.UpdateCatalog(r.Context(), id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, agent)
+}
+
 // probe 同步探测 agent 的模型清单，返回带缓存结果的最新记录。
 func (h agentHandler) probe(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

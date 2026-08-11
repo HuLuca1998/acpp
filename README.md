@@ -116,9 +116,10 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
-| GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型清单） |
+| GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型与命令清单） |
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
-| POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor 与模型清单），同步返回 |
+| POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor、模型与命令清单），同步返回 |
+| PUT | `/api/agents/{id}/catalog` | 配置页勾选：更新 models/commands 的启用状态（禁用只影响本软件的下拉与补全，agent 侧能力不变） |
 | GET/POST | `/api/sessions` | 会话列表（支持 `?agentId=`）/ 新建 |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情 / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息 |
@@ -133,7 +134,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 ## 数据模型
 
-- **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。`flavor` 与 `models` 是注册/更新后自动探测的缓存（拉临时会话读能力），供新会话页在建会话之前展示跨 agent 模型清单。
+- **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。`flavor` / `models` / `commands` 是注册/更新后自动探测的缓存（拉临时会话读能力），供草稿态在建会话之前展示跨 agent 模型清单与 `/` 补全；每个条目带 `disabled` 标记（agent 详情页勾选，重探不清空取舍）。
 - **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。
 
@@ -174,6 +175,6 @@ cd web && npx shadcn@latest add <component>
 
 ## 尚未实现
 
-- 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建/详情页仍是占位页。
+- 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。

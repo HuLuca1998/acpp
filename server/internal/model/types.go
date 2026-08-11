@@ -54,10 +54,12 @@ func (m *StringMap) Scan(src any) error {
 
 // AgentModel 是探测缓存下来的一个可用模型（与 acp.Model 字段对齐，
 // model 包不依赖 acp，由 service 层转换）。
+// Disabled 是用户在配置页的取舍——零值即启用，旧缓存数据天然兼容。
 type AgentModel struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	Disabled    bool   `json:"disabled,omitempty"`
 }
 
 // AgentModelSlice 以 JSON 文本形式存进 sqlite 的模型清单。
@@ -81,6 +83,37 @@ func (s *AgentModelSlice) Scan(src any) error {
 		return nil
 	}
 	return json.Unmarshal(b, (*[]AgentModel)(s))
+}
+
+// AgentCommand 是探测缓存下来的一条斜杠命令（与 acp.Command 字段对齐）。
+// Disabled 是用户在配置页的取舍——零值即启用，旧缓存数据天然兼容。
+type AgentCommand struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Disabled    bool   `json:"disabled,omitempty"`
+}
+
+// AgentCommandSlice 以 JSON 文本形式存进 sqlite 的斜杠命令清单。
+type AgentCommandSlice []AgentCommand
+
+func (s AgentCommandSlice) Value() (driver.Value, error) {
+	if s == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal([]AgentCommand(s))
+	return string(b), err
+}
+
+func (s *AgentCommandSlice) Scan(src any) error {
+	b, err := toBytes(src)
+	if err != nil {
+		return fmt.Errorf("scan AgentCommandSlice: %w", err)
+	}
+	if len(b) == 0 {
+		*s = nil
+		return nil
+	}
+	return json.Unmarshal(b, (*[]AgentCommand)(s))
 }
 
 // JSONMap 存放结构不固定的载荷，例如 ACP 的 tool_call 参数。
