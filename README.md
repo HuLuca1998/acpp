@@ -23,6 +23,7 @@ acpp/
 │   │   │   ├── overview.tsx          # 概览（真实指标卡 + 最近会话 + agent 状态）
 │   │   │   ├── agents.tsx            # agent 列表
 │   │   │   ├── sessions.tsx          # 会话列表
+│   │   │   ├── session-new.tsx       # 草稿会话页（首条消息落地才建会话）
 │   │   │   ├── session-chat.tsx      # 对话页（流式）
 │   │   │   ├── placeholder.tsx       # 未实现页面的占位
 │   │   │   └── not-found.tsx
@@ -76,7 +77,7 @@ make dev-server   # 终端 1：后端 http://127.0.0.1:8080
 make dev-web      # 终端 2：前端 http://localhost:5173
 ```
 
-然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp`）→ 任意页面点 **新建会话**（弹窗）→ 开聊。
+然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp`）→ 任意页面点 **新建会话** 直接进入对话，发出首条消息时才真正创建会话，标题自动取自首条消息。
 
 单进程部署（后端托管前端产物）：`make serve`。
 

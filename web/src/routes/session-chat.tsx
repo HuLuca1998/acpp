@@ -6,6 +6,7 @@ import { useChat, type LiveToolCall } from "@/hooks/use-chat"
 import type { Message, PendingElicitation, SessionCaps } from "@/types/acp"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/format"
+import { Composer } from "@/components/chat/composer"
 import { CopyButton } from "@/components/chat/copy-button"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { PlanCard } from "@/components/chat/plan-card"
@@ -49,7 +50,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  ArrowUpIcon,
   BrainIcon,
   ChevronRightIcon,
   CircleAlertIcon,
@@ -58,7 +58,6 @@ import {
   ShieldCheckIcon,
   ShieldIcon,
   SparklesIcon,
-  SquareIcon,
   WrenchIcon,
 } from "lucide-react"
 
@@ -358,63 +357,22 @@ export function SessionChat() {
         )}
       </div>
 
-      {/* 悬浮输入：吸底渐变 + 卡片，选择器与发送键内嵌。 */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
-        <div className="absolute inset-x-0 -top-8 bottom-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
-        <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 lg:px-6">
-          {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。 */}
-          <div className="pointer-events-auto rounded-2xl border border-border/60 bg-card/80 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-border dark:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.06),0_8px_32px_rgba(0,0,0,0.35)]">
-            <textarea
-              value={draft}
-              rows={1}
-              placeholder={t("chat.placeholder")}
-              className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-1 text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault()
-                  submit()
-                }
-                // Esc 中止当前轮：等价于点中止按钮，手不用离开键盘。
-                if (e.key === "Escape" && chat.busy) {
-                  e.preventDefault()
-                  void chat.cancel()
-                }
-              }}
-            />
-            <div className="flex flex-wrap items-center gap-0.5 px-2 pb-2">
-              <CapSelectors
-                caps={chat.caps}
-                disabled={chat.busy}
-                onSetMode={chat.setMode}
-                onSetModel={chat.setModel}
-                onSetConfig={chat.setConfig}
-              />
-              {chat.busy ? (
-                <Button
-                  size="icon-sm"
-                  variant="outline"
-                  className="ml-auto rounded-full"
-                  aria-label={t("chat.stop")}
-                  onClick={() => void chat.cancel()}
-                >
-                  <SquareIcon className="size-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  size="icon-sm"
-                  className="ml-auto rounded-full"
-                  aria-label={t("chat.send")}
-                  disabled={draft.trim() === ""}
-                  onClick={submit}
-                >
-                  <ArrowUpIcon className="size-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={submit}
+        onCancel={() => void chat.cancel()}
+        busy={chat.busy}
+        placeholder={t("chat.placeholder")}
+      >
+        <CapSelectors
+          caps={chat.caps}
+          disabled={chat.busy}
+          onSetMode={chat.setMode}
+          onSetModel={chat.setModel}
+          onSetConfig={chat.setConfig}
+        />
+      </Composer>
     </div>
   )
 }

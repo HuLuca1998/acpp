@@ -5,7 +5,6 @@ import { Link } from "react-router"
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Session, SessionState } from "@/types/acp"
-import { NewSessionDialog } from "@/components/new-session-dialog"
 import { StatusDot, type StatusTone } from "@/components/status-dot"
 import {
   AlertDialog,
@@ -101,14 +100,10 @@ export function Sessions() {
             <CardTitle>{t("sessions.title")}</CardTitle>
             <CardDescription>{t("sessions.description")}</CardDescription>
             <CardAction>
-              <NewSessionDialog
-                trigger={
-                  <Button size="sm">
-                    <PlusIcon data-icon="inline-start" />
-                    {t("sessions.create")}
-                  </Button>
-                }
-              />
+              <Button size="sm" render={<Link to="/sessions/new" />}>
+                <PlusIcon data-icon="inline-start" />
+                {t("sessions.create")}
+              </Button>
             </CardAction>
           </CardHeader>
           <CardContent>
@@ -138,14 +133,10 @@ export function Sessions() {
                   <EmptyDescription>{t("sessions.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <NewSessionDialog
-                    trigger={
-                      <Button size="sm">
-                        <PlusIcon data-icon="inline-start" />
-                        {t("sessions.create")}
-                      </Button>
-                    }
-                  />
+                  <Button size="sm" render={<Link to="/sessions/new" />}>
+                    <PlusIcon data-icon="inline-start" />
+                    {t("sessions.create")}
+                  </Button>
                 </EmptyContent>
               </Empty>
             ) : (

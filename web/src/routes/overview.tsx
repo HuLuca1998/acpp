@@ -5,7 +5,6 @@ import { Link } from "react-router"
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Agent, Session, SessionState } from "@/types/acp"
-import { NewSessionDialog } from "@/components/new-session-dialog"
 import { StatusDot, type StatusTone } from "@/components/status-dot"
 import { Button } from "@/components/ui/button"
 import {
@@ -256,14 +255,10 @@ export function Overview() {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <NewSessionDialog
-                    trigger={
-                      <Button size="sm">
-                        <PlusIcon data-icon="inline-start" />
-                        {t("overview.newSession")}
-                      </Button>
-                    }
-                  />
+                  <Button size="sm" render={<Link to="/sessions/new" />}>
+                    <PlusIcon data-icon="inline-start" />
+                    {t("overview.newSession")}
+                  </Button>
                 </EmptyContent>
               </Empty>
             ) : (

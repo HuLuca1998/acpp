@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
 
-import { NewSessionDialog } from "@/components/new-session-dialog"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -28,17 +27,14 @@ export function NavMain({
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <NewSessionDialog
-              trigger={
-                <SidebarMenuButton
-                  tooltip={t("nav.newSession")}
-                  className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
-                >
-                  <CirclePlusIcon />
-                  <span>{t("nav.newSession")}</span>
-                </SidebarMenuButton>
-              }
-            />
+            <SidebarMenuButton
+              tooltip={t("nav.newSession")}
+              className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
+              render={<Link to="/sessions/new" />}
+            >
+              <CirclePlusIcon />
+              <span>{t("nav.newSession")}</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
         <SidebarMenu>

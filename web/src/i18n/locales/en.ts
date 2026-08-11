@@ -119,21 +119,13 @@ export default {
     deleteConfirm:
       "Delete this session? The agent subprocess is reclaimed and the transcript cannot be recovered.",
     form: {
-      title: "New session",
-      description:
-        "Pick an agent and a working directory. Creating it spawns the subprocess and completes the ACP handshake.",
       agentLabel: "Agent",
       agentPlaceholder: "Select an agent",
       agentHint: "Nothing to pick? Add one on the Agents page first.",
-      titleLabel: "Session title",
-      titlePlaceholder: "e.g. Refactor the auth module",
-      titleHint: "Leave empty to fall back to the session number.",
       cwdLabel: "Working directory",
       cwdPlaceholder: "/absolute/path",
       cwdHint:
         "Must be an absolute path; it is created if missing. Leave empty to use the agent's default.",
-      submit: "Create and start chatting",
-      submitting: "Creating…",
     },
   },
   chat: {

@@ -114,20 +114,12 @@ export default {
     deleteTitle: "删除会话",
     deleteConfirm: "删除这条会话？agent 子进程会一并回收，聊天记录不可恢复。",
     form: {
-      title: "新建会话",
-      description:
-        "选择 agent 并指定工作目录，创建后会拉起子进程完成 ACP 握手。",
       agentLabel: "Agent",
       agentPlaceholder: "选择一个 agent",
       agentHint: "没有可选项？先到 Agent 页面添加一个。",
-      titleLabel: "会话标题",
-      titlePlaceholder: "例如：重构 auth 模块",
-      titleHint: "留空则自动用会话编号。",
       cwdLabel: "工作目录",
       cwdPlaceholder: "/absolute/path",
       cwdHint: "必须是绝对路径，不存在会自动创建。留空则用 agent 的默认目录。",
-      submit: "创建并开始对话",
-      submitting: "正在创建…",
     },
   },
   chat: {
