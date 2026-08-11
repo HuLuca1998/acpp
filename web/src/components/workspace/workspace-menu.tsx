@@ -1,7 +1,13 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MoreHorizontalIcon, PlusIcon, TerminalIcon } from "lucide-react"
+import {
+  LayoutTemplateIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  TerminalIcon,
+} from "lucide-react"
 
+import { LAYOUT_PRESETS } from "@/components/workspace/layout-presets"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import {
   PANEL_ICONS,
@@ -125,6 +131,19 @@ export function WorkspaceMenu({
             <PlusIcon className="size-3.5 text-muted-foreground" />
             {t("workspace.menu.newTerminal")}
           </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t("workspace.menu.layouts")}</DropdownMenuLabel>
+          {LAYOUT_PRESETS.map((preset) => (
+            <DropdownMenuItem
+              key={preset}
+              onClick={() => ws.applyPreset(preset)}
+            >
+              <LayoutTemplateIcon className="size-3.5 text-muted-foreground" />
+              {t(`workspace.layouts.${preset}` as never)}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onResetLayout}>

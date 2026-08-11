@@ -14,6 +14,7 @@ import "dockview/dist/styles/dockview.css"
 import { XIcon } from "lucide-react"
 
 import { ChatPanel } from "@/components/workspace/chat-panel"
+import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import { CommitsPanel } from "@/components/workspace/commits-panel"
 import { DiffPanel } from "@/components/workspace/diff-panel"
 import { FilePreviewPanel } from "@/components/workspace/file-preview-panel"
@@ -149,45 +150,9 @@ function WorkspaceMenuSlot() {
   )
 }
 
-/** 初始默认布局：对话 80% 居左；右栏 tab 组 = 文件树（激活）+ 待命三块。 */
+/** 初始默认布局：见 layout-presets 的 default 预设（对话 80% + 右栏 tab 组）。 */
 function buildDefaultLayout(api: DockviewApi) {
-  api.addPanel({ id: "chat", component: "chat", minimumWidth: 320 })
-  api.addPanel({
-    id: "files",
-    component: "files",
-    position: { referencePanel: "chat", direction: "right" },
-  })
-  for (const id of ["diff", "commits"] as const) {
-    api.addPanel({
-      id,
-      component: id,
-      inactive: true,
-      position: { referencePanel: "files", direction: "within" },
-    })
-  }
-  // 终端待命 tab：首次点到才 spawn pty（面板内的惰性激活逻辑）。
-  api.addPanel({
-    id: "terminal:boot",
-    component: "terminal",
-    renderer: "always",
-    inactive: true,
-    params: {},
-    position: { referencePanel: "files", direction: "within" },
-  })
-  // dockview 挂载瞬间的容器是 100px 占位尺寸，此时按比例 setSize 会被
-  // 最小宽度钳死成空操作、落盘均分布局。逐帧等到真实测量（能同时容纳
-  // 对话最小宽与右栏）再定 80/20，约 2s 兜底放弃。
-  let frames = 0
-  const applyRatio = () => {
-    const chat = api.getPanel("chat")
-    if (!chat) return
-    if (api.width >= 480) {
-      chat.api.setSize({ width: Math.round(api.width * 0.8) })
-      return
-    }
-    if (frames++ < 120) requestAnimationFrame(applyRatio)
-  }
-  requestAnimationFrame(applyRatio)
+  applyLayoutPreset(api, "default")
 }
 
 /** 布局恢复：结构不合法（缺 chat / 未知组件）一律弃用重建。 */

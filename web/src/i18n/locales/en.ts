@@ -261,6 +261,13 @@ export default {
       windows: "Workspace windows",
       resetLayout: "Reset layout",
       newTerminal: "New terminal",
+      layouts: "Layouts",
+    },
+    layouts: {
+      default: "Default (chat first)",
+      ide: "IDE classic",
+      review: "Code review",
+      terminalBench: "Terminal bench",
     },
     terminal: {
       exitedTitle: "Terminal ended",

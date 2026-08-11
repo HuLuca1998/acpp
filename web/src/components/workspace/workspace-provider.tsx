@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react"
 import type { DockviewApi } from "dockview-react"
 
 import { api } from "@/lib/api"
+import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import {
   useWorkspace,
   WorkspaceContext,
@@ -72,6 +73,10 @@ export function WorkspaceProvider({
           .terminalCreate(sessionId)
           .then((info) => addTerminalPanel(dock, info.id, info.num))
           .catch(() => {})
+      },
+      applyPreset: (preset) => {
+        const dock = apiRef.current
+        if (dock) applyLayoutPreset(dock, preset)
       },
       openPreview: (path) => {
         previewRef.current = path

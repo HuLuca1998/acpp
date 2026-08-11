@@ -254,6 +254,13 @@ export default {
       windows: "工作区窗口",
       resetLayout: "恢复默认布局",
       newTerminal: "新建终端",
+      layouts: "布局",
+    },
+    layouts: {
+      default: "默认（对话为主）",
+      ide: "IDE 经典",
+      review: "代码审查",
+      terminalBench: "终端工作台",
     },
     terminal: {
       exitedTitle: "终端已结束",

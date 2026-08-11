@@ -2,6 +2,7 @@ import { createContext, useContext, useSyncExternalStore } from "react"
 import type { DockviewApi } from "dockview-react"
 
 import type { GitOverview } from "@/types/acp"
+import type { LayoutPreset } from "@/components/workspace/layout-presets"
 import type { WorkspacePanelKind } from "@/components/workspace/workspace-panels"
 
 /** git 汇总的加载态快照：引用不可变，更新即换新对象。 */
@@ -31,6 +32,8 @@ export interface WorkspaceValue {
   closePanel: (id: string) => void
   /** 新建一个终端实例：后端 spawn pty 后落成 `terminal:<id>` 面板。 */
   newTerminal: () => void
+  /** 应用内置布局预设（终端实例原样保留）。 */
+  applyPreset: (preset: LayoutPreset) => void
   /** 打开文件预览：自动 ensureOpen 预览面板并切到该文件。 */
   openPreview: (path: string) => void
   /** 把文件/文件夹加进 composer 的 @ 引用（由页面层注册实现）。 */
