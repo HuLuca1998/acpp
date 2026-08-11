@@ -117,6 +117,9 @@ export default {
       agentLabel: "Agent",
       agentPlaceholder: "选择一个 agent",
       agentHint: "没有可选项？先到 Agent 页面添加一个。",
+      modelLabel: "模型",
+      modelPlaceholder: "选择模型",
+      defaultModel: "默认模型",
       cwdLabel: "工作目录",
       cwdPlaceholder: "/absolute/path",
       cwdHint: "必须是绝对路径，不存在会自动创建。留空则用 agent 的默认目录。",
@@ -146,24 +149,32 @@ export default {
       changes: "查看 git 状态，总结未提交的变更",
       help: "你能帮我做什么？",
     },
-    /** agent 能力项的本地化：按 modeId / 配置 value 映射，未知值回退 agent 原文。 */
-    caps: {
-      value: {
-        "read-only": "只读",
-        agent: "智能体",
-        "agent-full-access": "完全访问",
-        default: "默认",
-        plan: "计划",
+    /** 统一设置控件的本地化：值来自后端统一词汇表，不含 runtime 字面量。 */
+    settings: {
+      model: "模型",
+      effortLabel: "思考深度",
+      effort: {
         low: "低",
         medium: "中",
         high: "高",
         xhigh: "超高",
         max: "最大",
-        ultra: "极限",
-        off: "关",
-        on: "开",
       },
+      levelLabel: "权限档",
+      level: {
+        safe: "安全",
+        "auto-edit": "自动编辑",
+        full: "完全放行",
+      },
+      levelDesc: {
+        safe: "写操作逐项确认",
+        "auto-edit": "自动接受编辑，危险命令仍拦",
+        full: "跳过一切权限检查",
+      },
+      plan: "计划模式",
+      fast: "快速",
     },
+    contextUsage: "上下文 {{percent}}%",
     toolStatus: {
       pending: "等待中",
       in_progress: "执行中",

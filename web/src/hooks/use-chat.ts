@@ -10,7 +10,8 @@ import type {
   PendingElicitation,
   PlanEntry,
   Session,
-  SessionCaps,
+  SessionSettings,
+  SettingsPatch,
   StreamEvent,
 } from "@/types/acp"
 
@@ -22,6 +23,13 @@ export interface LiveToolCall {
   status: string
   rawInput?: unknown
   rawOutput?: unknown
+  content?: unknown
+}
+
+/** 上下文用量（usage 事件），按占比展示。 */
+export interface ContextUsage {
+  used: number
+  size: number
 }
 
 /** 一次已自动放行的权限请求（当前轮内展示用）。 */
@@ -48,8 +56,10 @@ export interface ChatState {
   notFound: boolean
   /** 非 end_turn 的结束原因，说明回答可能是残缺的。 */
   stopReason: string | null
-  /** 活会话的可配置能力（模式/模型/配置项），open 成功后可用。 */
-  caps: SessionCaps | null
+  /** 活会话的统一设置视图，open 成功后可用。 */
+  settings: SessionSettings | null
+  /** 上下文用量，agent 每轮会推若干次。 */
+  contextUsage: ContextUsage | null
   /** agent 正在等用户作答的交互式提问。 */
   elicitation: PendingElicitation | null
   /** agent 的任务计划，每次 plan 事件整体替换；跨轮保留展示最终状态。 */
@@ -70,7 +80,8 @@ const INITIAL: ChatState = {
   error: null,
   notFound: false,
   stopReason: null,
-  caps: null,
+  settings: null,
+  contextUsage: null,
   elicitation: null,
   plan: null,
   permissions: [],
@@ -136,22 +147,16 @@ export function useChat(sessionId: number) {
           if (!ev.message) return prev
           return { ...prev, messages: upsert(prev.messages, ev.message) }
 
-        case "mode":
-          // agent 侧切档（或我们主动切换后广播回来），同步到 caps。
-          if (!ev.modeId || !prev.caps?.modes) return prev
-          return {
-            ...prev,
-            caps: {
-              ...prev.caps,
-              modes: { ...prev.caps.modes, currentModeId: ev.modeId },
-            },
-          }
+        case "settings":
+          // agent 侧改了设置（或我们主动变更后广播回来），整体替换视图。
+          if (!ev.settings) return prev
+          return { ...prev, settings: ev.settings }
 
-        case "config":
-          if (!ev.configOptions) return prev
+        case "usage":
+          if (!ev.size) return prev
           return {
             ...prev,
-            caps: { ...prev.caps, configOptions: ev.configOptions },
+            contextUsage: { used: ev.used ?? 0, size: ev.size },
           }
 
         case "plan": {
@@ -171,7 +176,7 @@ export function useChat(sessionId: number) {
               ...prev.permissions,
               {
                 id: ev.toolCallId || String(ev.seq),
-                title: ev.title ?? "",
+                title: ev.choice ?? "",
                 kind: ev.toolKind ?? "",
               },
             ],
@@ -237,7 +242,7 @@ export function useChat(sessionId: number) {
         setState((prev) => ({
           ...prev,
           session,
-          caps: session.caps ?? null,
+          settings: session.settings ?? null,
           messages: history.items,
           loading: false,
         }))
@@ -316,35 +321,11 @@ export function useChat(sessionId: number) {
     }
   }, [sessionId])
 
-  const setMode = useCallback(
-    async (modeId: string) => {
+  const applySettings = useCallback(
+    async (patch: SettingsPatch) => {
       try {
-        const caps = await api.sessions.setMode(sessionId, modeId)
-        setState((prev) => ({ ...prev, caps }))
-      } catch (err) {
-        setState((prev) => ({ ...prev, error: (err as Error).message }))
-      }
-    },
-    [sessionId]
-  )
-
-  const setModel = useCallback(
-    async (modelId: string) => {
-      try {
-        const caps = await api.sessions.setModel(sessionId, modelId)
-        setState((prev) => ({ ...prev, caps }))
-      } catch (err) {
-        setState((prev) => ({ ...prev, error: (err as Error).message }))
-      }
-    },
-    [sessionId]
-  )
-
-  const setConfig = useCallback(
-    async (configId: string, value: string) => {
-      try {
-        const caps = await api.sessions.setConfig(sessionId, configId, value)
-        setState((prev) => ({ ...prev, caps }))
+        const settings = await api.sessions.applySettings(sessionId, patch)
+        setState((prev) => ({ ...prev, settings }))
       } catch (err) {
         setState((prev) => ({ ...prev, error: (err as Error).message }))
       }
@@ -395,7 +376,7 @@ export function useChat(sessionId: number) {
     [sessionId]
   )
 
-  return { ...state, send, cancel, setMode, setModel, setConfig, resolveElicitation }
+  return { ...state, send, cancel, applySettings, resolveElicitation }
 }
 
 function upsert(messages: Message[], incoming: Message): Message[] {
@@ -420,6 +401,7 @@ function mergeTool(tools: LiveToolCall[], ev: StreamEvent): LiveToolCall[] {
         status: ev.status ?? "pending",
         rawInput: ev.rawInput,
         rawOutput: ev.rawOutput,
+        content: ev.content,
       },
     ]
   }
@@ -434,6 +416,7 @@ function mergeTool(tools: LiveToolCall[], ev: StreamEvent): LiveToolCall[] {
     status: ev.status || current.status,
     rawInput: ev.rawInput ?? current.rawInput,
     rawOutput: ev.rawOutput ?? current.rawOutput,
+    content: ev.content ?? current.content,
   }
   return next
 }

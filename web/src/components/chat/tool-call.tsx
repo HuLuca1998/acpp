@@ -28,22 +28,37 @@ const KIND_ICONS: Record<string, LucideIcon> = {
   fetch: GlobeIcon,
 }
 
-/** tool_call 消息 payload 的已知形状（codex-acp 实测）。 */
+/**
+ * tool_call 消息 payload 的已知形状。rawOutput 随 runtime 变：
+ * codex 是对象 {formatted_output, exit_code}，claude 是纯字符串。
+ */
 export interface ToolCallPayload {
   toolCallId?: string
   kind?: string
   status?: string
   rawInput?: { command?: string; cwd?: string } & Record<string, unknown>
-  rawOutput?: {
-    formatted_output?: string
-    exit_code?: number
-  } & Record<string, unknown>
+  rawOutput?:
+    | string
+    | ({
+        formatted_output?: string
+        exit_code?: number
+      } & Record<string, unknown>)
   content?: {
     type: string
     path?: string
     oldText?: string | null
     newText?: string
   }[]
+}
+
+/** 归一化两种 rawOutput 形状，取正文与退出码。 */
+function outputOf(payload: ToolCallPayload): {
+  output?: string
+  exitCode?: number
+} {
+  const raw = payload.rawOutput
+  if (typeof raw === "string") return { output: raw }
+  return { output: raw?.formatted_output, exitCode: raw?.exit_code }
 }
 
 type DiffLine = { type: "same" | "del" | "add"; text: string }
@@ -183,8 +198,7 @@ function ToolCallDetail({ payload }: { payload: ToolCallPayload }) {
     (c) => c.type === "diff" && typeof c.newText === "string"
   )
   const command = payload.rawInput?.command
-  const output = payload.rawOutput?.formatted_output
-  const exitCode = payload.rawOutput?.exit_code
+  const { output, exitCode } = outputOf(payload)
 
   if (diffs.length > 0 || command || output) {
     return (

@@ -1,4 +1,11 @@
-import type { Agent, Message, Paged, Session, SessionCaps } from "@/types/acp"
+import type {
+  Agent,
+  Message,
+  Paged,
+  Session,
+  SessionSettings,
+  SettingsPatch,
+} from "@/types/acp"
 
 /** 开发环境走 vite proxy，生产环境同源。可用 VITE_API_BASE 覆盖。 */
 const BASE = import.meta.env.VITE_API_BASE ?? "/api"
@@ -49,6 +56,9 @@ export const api = {
       }),
     remove: (id: number) =>
       request<null>(`/agents/${id}`, { method: "DELETE" }),
+    /** 重探 agent 的统一设置能力（flavor 与模型清单），同步返回最新记录。 */
+    probe: (id: number) =>
+      request<Agent>(`/agents/${id}/probe`, { method: "POST" }),
   },
 
   sessions: {
@@ -78,23 +88,11 @@ export const api = {
       }),
     cancel: (id: number) =>
       request<null>(`/sessions/${id}/cancel`, { method: "POST" }),
-    /** 切换审批/沙箱模式，返回最新能力快照。 */
-    setMode: (id: number, modeId: string) =>
-      request<SessionCaps>(`/sessions/${id}/mode`, {
-        method: "POST",
-        body: JSON.stringify({ modeId }),
-      }),
-    /** 切换模型，返回最新能力快照。 */
-    setModel: (id: number, modelId: string) =>
-      request<SessionCaps>(`/sessions/${id}/model`, {
-        method: "POST",
-        body: JSON.stringify({ modelId }),
-      }),
-    /** 设置配置项（协作模式、推理档等），返回最新能力快照。 */
-    setConfig: (id: number, configId: string, value: string) =>
-      request<SessionCaps>(`/sessions/${id}/config`, {
-        method: "POST",
-        body: JSON.stringify({ configId, value }),
+    /** 应用统一设置变更（模型/思考深度/权限档/plan/fast，逐项可选）。 */
+    applySettings: (id: number, patch: SettingsPatch) =>
+      request<SessionSettings>(`/sessions/${id}/settings`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
       }),
     /** 把交互式提问的作答回给阻塞中的 agent。 */
     resolveElicitation: (

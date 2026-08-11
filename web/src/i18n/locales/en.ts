@@ -122,6 +122,9 @@ export default {
       agentLabel: "Agent",
       agentPlaceholder: "Select an agent",
       agentHint: "Nothing to pick? Add one on the Agents page first.",
+      modelLabel: "Model",
+      modelPlaceholder: "Select a model",
+      defaultModel: "Default model",
       cwdLabel: "Working directory",
       cwdPlaceholder: "/absolute/path",
       cwdHint:
@@ -153,24 +156,32 @@ export default {
       changes: "Check git status and summarize uncommitted changes",
       help: "What can you help me with?",
     },
-    /** Localized labels for agent capability values, falling back to agent-provided names. */
-    caps: {
-      value: {
-        "read-only": "Read-only",
-        agent: "Agent",
-        "agent-full-access": "Full access",
-        default: "Default",
-        plan: "Plan",
+    /** Unified settings controls; values come from the backend vocabulary, no runtime literals. */
+    settings: {
+      model: "Model",
+      effortLabel: "Effort",
+      effort: {
         low: "Low",
         medium: "Medium",
         high: "High",
         xhigh: "X-high",
         max: "Max",
-        ultra: "Ultra",
-        off: "Off",
-        on: "On",
       },
+      levelLabel: "Access",
+      level: {
+        safe: "Safe",
+        "auto-edit": "Auto edit",
+        full: "Full access",
+      },
+      levelDesc: {
+        safe: "Confirm every write operation",
+        "auto-edit": "Auto-accept edits, still gate dangerous commands",
+        full: "Skip all permission checks",
+      },
+      plan: "Plan mode",
+      fast: "Fast",
     },
+    contextUsage: "Context {{percent}}%",
     toolStatus: {
       pending: "Pending",
       in_progress: "Running",

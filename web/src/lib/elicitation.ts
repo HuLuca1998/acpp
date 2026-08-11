@@ -14,7 +14,23 @@ export interface ElicitationSchema {
   required?: string[]
 }
 
-/** 把 requestedSchema 解析成结构化题目列表；`__other` 字段归位为对应题的自由输入。 */
+const CUSTOM_SUFFIX = "_custom"
+
+/** claude 的自由输入字段：`<题目id>_custom` 命名约定，且对应题目存在。 */
+function claudeCustomTarget(
+  key: string,
+  props: NonNullable<ElicitationSchema["properties"]>
+): string | null {
+  if (!key.endsWith(CUSTOM_SUFFIX)) return null
+  const target = key.slice(0, -CUSTOM_SUFFIX.length)
+  return target in props ? target : null
+}
+
+/**
+ * 把 requestedSchema 解析成结构化题目列表，自由输入字段归位为对应题的
+ * otherFieldId。两条 ACP 的标记方式不同：codex 用 `_meta.codex.isOtherAnswer`
+ * （字段名 `__other`），claude 用 `<题目id>_custom` 命名约定——差异吃在这里。
+ */
 export function parseElicitationSchema(
   schema: ElicitationSchema | null | undefined
 ): ElicitationQuestion[] {
@@ -26,12 +42,16 @@ export function parseElicitationSchema(
     const codex = prop._meta?.codex
     if (codex?.isOtherAnswer && codex.questionId) {
       others.set(codex.questionId, key)
+      continue
     }
+    const target = claudeCustomTarget(key, props)
+    if (target) others.set(target, key)
   }
 
   const questions: ElicitationQuestion[] = []
   for (const [key, prop] of Object.entries(props)) {
     if (prop._meta?.codex?.isOtherAnswer) continue
+    if (claudeCustomTarget(key, props)) continue
     questions.push({
       id: key,
       title: prop.title ?? key,

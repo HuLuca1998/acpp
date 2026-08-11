@@ -3,7 +3,14 @@ import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
 
 import { useChat, type LiveToolCall } from "@/hooks/use-chat"
-import type { Message, PendingElicitation, SessionCaps } from "@/types/acp"
+import type {
+  AccessLevel,
+  EffortLevel,
+  Message,
+  PendingElicitation,
+  SessionSettings,
+  SettingsPatch,
+} from "@/types/acp"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/format"
 import { Composer } from "@/components/chat/composer"
@@ -54,11 +61,13 @@ import {
   ChevronRightIcon,
   CircleAlertIcon,
   CircleHelpIcon,
+  ListTodoIcon,
   MessagesSquareIcon,
   ShieldCheckIcon,
   ShieldIcon,
   SparklesIcon,
   WrenchIcon,
+  ZapIcon,
 } from "lucide-react"
 
 /** 思考 / 工具调用等过程性消息，聚合成一个可折叠块展示。 */
@@ -178,6 +187,18 @@ export function SessionChat() {
               <span className="shrink-0">{chat.session.agentName}</span>
               <span className="truncate font-mono">{chat.session.cwd}</span>
             </>
+          ) : null}
+          {chat.contextUsage ? (
+            <span
+              className="ml-auto shrink-0 tabular-nums"
+              title={`${chat.contextUsage.used.toLocaleString()} / ${chat.contextUsage.size.toLocaleString()}`}
+            >
+              {t("chat.contextUsage", {
+                percent: Math.round(
+                  (chat.contextUsage.used / chat.contextUsage.size) * 100
+                ),
+              })}
+            </span>
           ) : null}
         </div>
 
@@ -365,12 +386,10 @@ export function SessionChat() {
         busy={chat.busy}
         placeholder={t("chat.placeholder")}
       >
-        <CapSelectors
-          caps={chat.caps}
+        <SettingsSelectors
+          settings={chat.settings}
           disabled={chat.busy}
-          onSetMode={chat.setMode}
-          onSetModel={chat.setModel}
-          onSetConfig={chat.setConfig}
+          onApply={chat.applySettings}
         />
       </Composer>
     </div>
@@ -378,100 +397,136 @@ export function SessionChat() {
 }
 
 /**
- * 会话能力选择器：模式（审批档）来自 modes，其余动态渲染 select 型配置项。
- * configOptions 里没有模型项而 models 存在时，降级渲染 models 列表。
+ * 统一设置选择器：模型 / 思考深度 / 权限档三个下拉 + plan / fast 两个开关。
+ * 只认后端的统一 Settings 视图，不出现任何 runtime 特有的字面量；
+ * 空数组 / 不支持的维度直接不渲染对应控件。
  */
-function CapSelectors({
-  caps,
+function SettingsSelectors({
+  settings,
   disabled,
-  onSetMode,
-  onSetModel,
-  onSetConfig,
+  onApply,
 }: {
-  caps: SessionCaps | null
+  settings: SessionSettings | null
   disabled: boolean
-  onSetMode: (modeId: string) => Promise<void>
-  onSetModel: (modelId: string) => Promise<void>
-  onSetConfig: (configId: string, value: string) => Promise<void>
+  onApply: (patch: SettingsPatch) => Promise<void>
 }) {
   const { t } = useTranslation()
-  if (!caps) return null
-
-  // 已知的模式/档位值显示本地化文案，模型名等未知值回退 agent 原文。
-  const localize = (value: string, fallback: string) =>
-    t(`chat.caps.value.${value}` as never, { defaultValue: fallback })
-
-  const configSelects = (caps.configOptions ?? []).filter(
-    (opt) =>
-      opt.type === "select" &&
-      (opt.options?.length ?? 0) > 0 &&
-      // codex 会把审批档同时放进 modes 和 configOptions，两边内容一样；
-      // modes 已经单独渲染，这里跳过重复项。
-      !(caps.modes && opt.category === "mode")
-  )
-  const hasModelConfig = configSelects.some((opt) => opt.category === "model")
+  if (!settings) return null
 
   return (
     <>
-      {caps.modes && caps.modes.availableModes.length > 0 ? (
-        <CapSelect
-          icon={<ShieldIcon className="size-3.5" />}
-          value={caps.modes.currentModeId}
-          options={caps.modes.availableModes.map((m) => ({
-            value: m.id,
-            name: localize(m.id, m.name),
-            description: m.description,
-          }))}
-          disabled={disabled}
-          onChange={(v) => void onSetMode(v)}
-        />
-      ) : null}
-
-      {configSelects.map((opt) => (
-        <CapSelect
-          key={opt.id}
-          icon={
-            opt.category === "model" ? (
-              <SparklesIcon className="size-3.5" />
-            ) : undefined
-          }
-          value={opt.currentValue ?? ""}
-          options={(opt.options ?? []).map((o) => ({
-            value: o.value,
-            name: localize(o.value, o.name),
-            description: o.description,
-          }))}
-          disabled={disabled}
-          onChange={(v) => void onSetConfig(opt.id, v)}
-        />
-      ))}
-
-      {!hasModelConfig && caps.models ? (
+      {settings.models.length > 0 ? (
         <CapSelect
           icon={<SparklesIcon className="size-3.5" />}
-          value={caps.models.currentModelId}
-          options={caps.models.availableModels.map((m) => ({
-            value: m.modelId,
+          value={settings.currentModel ?? ""}
+          placeholder={t("chat.settings.model")}
+          options={settings.models.map((m) => ({
+            value: m.id,
             name: m.name,
             description: m.description,
           }))}
           disabled={disabled}
-          onChange={(v) => void onSetModel(v)}
+          onChange={(v) => void onApply({ model: v })}
+        />
+      ) : null}
+
+      {settings.efforts.length > 0 ? (
+        <CapSelect
+          icon={<BrainIcon className="size-3.5" />}
+          value={settings.currentEffort ?? ""}
+          placeholder={t("chat.settings.effortLabel")}
+          options={settings.efforts.map((e) => ({
+            value: e,
+            name: t(`chat.settings.effort.${e}`),
+          }))}
+          disabled={disabled}
+          onChange={(v) => void onApply({ effort: v as EffortLevel })}
+        />
+      ) : null}
+
+      {settings.levels.length > 0 ? (
+        <CapSelect
+          icon={<ShieldIcon className="size-3.5" />}
+          value={settings.currentLevel ?? ""}
+          placeholder={t("chat.settings.levelLabel")}
+          options={settings.levels.map((l) => ({
+            value: l,
+            name: t(`chat.settings.level.${l}`),
+            description: t(`chat.settings.levelDesc.${l}`),
+          }))}
+          disabled={disabled}
+          onChange={(v) => void onApply({ level: v as AccessLevel })}
+        />
+      ) : null}
+
+      {settings.planSupported ? (
+        <SettingToggle
+          icon={<ListTodoIcon className="size-3.5" />}
+          label={t("chat.settings.plan")}
+          on={settings.planOn}
+          disabled={disabled}
+          onToggle={(on) => void onApply({ plan: on })}
+        />
+      ) : null}
+
+      {settings.fastSupported ? (
+        <SettingToggle
+          icon={<ZapIcon className="size-3.5" />}
+          label={t("chat.settings.fast")}
+          on={settings.fastOn}
+          disabled={disabled}
+          onToggle={(on) => void onApply({ fast: on })}
         />
       ) : null}
     </>
   )
 }
 
+/** 胶囊式开关：开启时主色浸染，与选择器同排使用。 */
+function SettingToggle({
+  icon,
+  label,
+  on,
+  disabled,
+  onToggle,
+}: {
+  icon: React.ReactNode
+  label: string
+  on: boolean
+  disabled: boolean
+  onToggle: (on: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={() => onToggle(!on)}
+      className={cn(
+        "flex h-7 items-center gap-1 rounded-full px-2.5 text-xs transition-[scale,background-color,color] duration-150 ease-snappy active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50",
+        on
+          ? "bg-primary/15 text-primary"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
 function CapSelect({
   icon,
   value,
+  placeholder,
   options,
   disabled,
   onChange,
 }: {
   icon?: React.ReactNode
   value: string
+  /** 当前值不在选项里（如 runtime 默认态）时显示的占位文案。 */
+  placeholder?: string
   options: { value: string; name: string; description?: string }[]
   disabled: boolean
   onChange: (value: string) => void
@@ -491,7 +546,7 @@ function CapSelect({
         className="h-7 gap-1 rounded-full border-transparent bg-transparent px-2.5 text-xs text-muted-foreground shadow-none transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97] dark:bg-transparent dark:hover:bg-muted"
       >
         {icon}
-        <SelectValue>{current?.name ?? value}</SelectValue>
+        <SelectValue>{current?.name ?? (value || placeholder)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (
@@ -747,6 +802,7 @@ function LiveToolMarker({ tool }: { tool: LiveToolCall }) {
         kind: tool.kind,
         rawInput: tool.rawInput as ToolCallPayload["rawInput"],
         rawOutput: tool.rawOutput as ToolCallPayload["rawOutput"],
+        content: tool.content as ToolCallPayload["content"],
       }}
     />
   )

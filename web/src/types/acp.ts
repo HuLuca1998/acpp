@@ -2,6 +2,16 @@
 
 export type AgentStatus = "idle" | "connected" | "error" | "disabled"
 
+/** runtime 方言，由后端从 agent 身份识别；generic 表示未知 runtime。 */
+export type AgentFlavor = "codex" | "claude" | "generic" | ""
+
+/** 统一模型描述，id 是 runtime 自己的标识，透传不映射。 */
+export interface UnifiedModel {
+  id: string
+  name: string
+  description?: string
+}
+
 export interface Agent {
   id: number
   name: string
@@ -12,42 +22,54 @@ export interface Agent {
   cwd: string
   status: AgentStatus
   lastError: string
+  /** 探测缓存：flavor 与可用模型清单，供新会话页在建会话前展示。 */
+  flavor: AgentFlavor
+  models: UnifiedModel[]
   createdAt: string
   updatedAt: string
 }
 
 export type SessionState = "active" | "idle" | "ended" | "error"
 
-/** 会话模式（审批/沙箱档位），来自 session/new 的 modes。 */
-export interface SessionMode {
-  id: string
-  name: string
-  description?: string
+/** 统一思考深度，五档——两条 ACP 选项的交集。 */
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max"
+
+/** 统一权限档，三档，两条 ACP 全覆盖。 */
+export type AccessLevel = "safe" | "auto-edit" | "full"
+
+/**
+ * 会话设置的统一视图（交集规范：只含两条 ACP 都支持的维度）。
+ * 空数组表示该 runtime 不支持这个维度，对应控件应隐藏。
+ */
+export interface SessionSettings {
+  flavor: AgentFlavor
+  models: UnifiedModel[]
+  currentModel?: string
+  efforts: EffortLevel[]
+  currentEffort?: EffortLevel
+  levels: AccessLevel[]
+  currentLevel?: AccessLevel
+  planSupported: boolean
+  planOn: boolean
+  fastSupported: boolean
+  fastOn: boolean
 }
 
-/** 会话可用模型，来自 session/new 的 models。 */
-export interface SessionModel {
-  modelId: string
-  name: string
-  description?: string
+/** 逐项可选的设置变更，缺省字段不动。 */
+export interface SettingsPatch {
+  model?: string
+  effort?: EffortLevel
+  level?: AccessLevel
+  plan?: boolean
+  fast?: boolean
 }
 
-/** 会话配置项（模型族、协作模式、推理档等），来自 session/new 的 configOptions。 */
-export interface ConfigOption {
-  id: string
-  name: string
-  description?: string
-  category?: string
-  type: string
-  currentValue?: string
-  options?: { value: string; name: string; description?: string }[]
-}
-
-/** 活会话的可配置能力快照，只在 agent 子进程开着时非空。 */
-export interface SessionCaps {
-  modes?: { availableModes: SessionMode[]; currentModeId: string }
-  models?: { availableModels: SessionModel[]; currentModelId: string }
-  configOptions?: ConfigOption[]
+/** 一轮的 token 计量（两端交集字段）。 */
+export interface TurnUsage {
+  inputTokens: number
+  outputTokens: number
+  cachedReadTokens: number
+  totalTokens: number
 }
 
 export interface Session {
@@ -63,7 +85,7 @@ export interface Session {
   messageCount: number
   /** 当前是否有活着的 agent 子进程。 */
   running: boolean
-  caps?: SessionCaps
+  settings?: SessionSettings
   createdAt: string
   updatedAt: string
 }
@@ -83,8 +105,8 @@ export type StreamEventKind =
   | "tool_call"
   | "permission"
   | "plan"
-  | "mode"
-  | "config"
+  | "settings"
+  | "usage"
   | "elicitation"
   | "elicitation_done"
   | "turn_end"
@@ -103,8 +125,18 @@ export interface StreamEvent {
   status?: string
   rawInput?: unknown
   rawOutput?: unknown
-  modeId?: string
-  configOptions?: ConfigOption[]
+  /** tool_call 的内容块（diff 等），流式期间即可渲染。 */
+  content?: unknown
+  locations?: unknown
+  /** agent 自行切档/改配置后的最新统一设置视图。 */
+  settings?: SessionSettings
+  /** usage 事件：上下文用量（按占比展示）。 */
+  used?: number
+  size?: number
+  /** permission 事件：自动选中的选项名。 */
+  choice?: string
+  /** turn_end 事件：本轮 token 计量。 */
+  usage?: TurnUsage
   elicitationId?: string
   stopReason?: string
   error?: string

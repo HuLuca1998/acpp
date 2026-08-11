@@ -20,6 +20,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -28,19 +29,51 @@ import {
   FolderIcon,
   MessagesSquareIcon,
   PlusIcon,
+  SparklesIcon,
 } from "lucide-react"
+
+/** 草稿页的模型选择：跨 agent 的分组清单，选模型即选定 agent。 */
+interface ModelChoice {
+  key: string
+  agentId: number
+  /** 空串表示「该 agent 的 runtime 默认模型」（清单未探测到时的兜底项）。 */
+  modelId: string
+  label: string
+  description?: string
+}
+
+/** 每个 agent 一组：有探测缓存就列模型，没有就给一条「默认」兜底项。 */
+function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
+  if (agent.models.length === 0) {
+    return [
+      {
+        key: `${agent.id}:`,
+        agentId: agent.id,
+        modelId: "",
+        label: fallbackLabel,
+      },
+    ]
+  }
+  return agent.models.map((m) => ({
+    key: `${agent.id}:${m.id}`,
+    agentId: agent.id,
+    modelId: m.id,
+    label: m.name,
+    description: m.description,
+  }))
+}
 
 /**
  * 草稿会话页：点「新建会话」直接进来，不弹窗、不建会话。
- * agent 与工作目录在输入框旁选（可不选用默认），首条消息发出时才真正创建，
- * 标题由后端从首条消息自动简写。对齐 ChatGPT / Claude 的进入即聊模式。
+ * 模型在输入框旁选——跨 agent 的分组清单，选哪个模型就用哪个 agent；
+ * 首条消息发出时才真正创建，标题由后端从首条消息自动简写。
  */
 export function SessionNew() {
   const { t } = useTranslation()
   const navigate = useNavigate()
 
   const [agents, setAgents] = useState<Agent[] | null>(null)
-  const [agentId, setAgentId] = useState("")
+  const [choiceKey, setChoiceKey] = useState("")
   const [cwd, setCwd] = useState("")
   const [draft, setDraft] = useState("")
   const [creating, setCreating] = useState(false)
@@ -53,8 +86,13 @@ export function SessionNew() {
       .then((res) => {
         if (cancelled) return
         setAgents(res.items)
-        // 默认选第一个 agent，多数场景零配置直接开聊。
-        if (res.items.length > 0) setAgentId(String(res.items[0].id))
+        // 默认选第一个 agent 的第一个模型，多数场景零配置直接开聊。
+        const first = res.items[0]
+        if (first) {
+          setChoiceKey(
+            modelChoicesOf(first, t("sessions.form.defaultModel"))[0].key
+          )
+        }
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message)
@@ -62,20 +100,36 @@ export function SessionNew() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [t])
 
-  const selectedAgent = agents?.find((a) => String(a.id) === agentId)
+  const groups = (agents ?? []).map((agent) => ({
+    agent,
+    choices: modelChoicesOf(agent, t("sessions.form.defaultModel")),
+  }))
+  const selected = groups
+    .flatMap((g) => g.choices)
+    .find((c) => c.key === choiceKey)
+  const selectedAgent = agents?.find((a) => a.id === selected?.agentId)
 
-  /** 首条消息落地：创建会话 → 发送 → 跳进正式会话页（replace 掉草稿页）。 */
+  /**
+   * 首条消息落地：创建会话 →（选了具体模型则先 open 再应用）→ 发送 →
+   * 跳进正式会话页（replace 掉草稿页）。
+   */
   async function start(content: string) {
-    if (!agentId || creating) return
+    if (!selected || creating) return
     setCreating(true)
     setError(null)
     try {
       const session = await api.sessions.create({
-        agentId: Number(agentId),
+        agentId: selected.agentId,
         cwd: cwd.trim(),
       })
+      if (selected.modelId) {
+        await api.sessions.open(session.id)
+        await api.sessions.applySettings(session.id, {
+          model: selected.modelId,
+        })
+      }
       await api.sessions.send(session.id, content)
       void navigate(`/sessions/${session.id}`, { replace: true })
     } catch (err) {
@@ -135,7 +189,7 @@ export function SessionNew() {
                   variant="outline"
                   size="sm"
                   className="rounded-full"
-                  disabled={creating || !agentId}
+                  disabled={creating || !selected}
                   onClick={() => void start(t(`chat.suggestions.${key}`))}
                 >
                   {t(`chat.suggestions.${key}`)}
@@ -151,43 +205,55 @@ export function SessionNew() {
         onChange={setDraft}
         onSubmit={submit}
         pending={creating}
-        disabled={agents === null || !agentId}
+        disabled={agents === null || !selected}
         placeholder={t("chat.placeholder")}
       >
-        {/* agent 选择：与会话页能力选择器同款的胶囊样式。 */}
-        {agents !== null && agents.length > 1 ? (
+        {/* 模型选择：跨 agent 的分组清单，选模型即选定 agent。 */}
+        {agents !== null && agents.length > 0 ? (
           <Select
-            value={agentId}
+            value={choiceKey}
             onValueChange={(v) => {
-              if (typeof v === "string" && v) setAgentId(v)
+              if (typeof v === "string" && v) setChoiceKey(v)
             }}
           >
             <SelectTrigger
               size="sm"
-              aria-label={t("sessions.form.agentLabel")}
+              aria-label={t("sessions.form.modelLabel")}
               disabled={creating}
               className="h-7 gap-1 rounded-full border-transparent bg-transparent px-2.5 text-xs text-muted-foreground shadow-none transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97] dark:bg-transparent dark:hover:bg-muted"
             >
-              <BotIcon className="size-3.5" />
+              <SparklesIcon className="size-3.5" />
               <SelectValue>
-                {selectedAgent?.name ?? t("sessions.form.agentPlaceholder")}
+                {selected
+                  ? groups.length > 1
+                    ? `${selectedAgent?.name} · ${selected.label}`
+                    : selected.label
+                  : t("sessions.form.modelPlaceholder")}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectGroup>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={String(agent.id)}>
+              {groups.map(({ agent, choices }) => (
+                <SelectGroup key={agent.id}>
+                  <SelectLabel className="flex items-center gap-1.5 text-xs uppercase">
+                    <BotIcon className="size-3" />
                     {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
+                  </SelectLabel>
+                  {choices.map((choice) => (
+                    <SelectItem key={choice.key} value={choice.key}>
+                      <div className="flex min-w-0 flex-col">
+                        <span>{choice.label}</span>
+                        {choice.description ? (
+                          <span className="max-w-64 truncate text-xs text-muted-foreground">
+                            {choice.description}
+                          </span>
+                        ) : null}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
             </SelectContent>
           </Select>
-        ) : selectedAgent ? (
-          <span className="flex h-7 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground">
-            <BotIcon className="size-3.5" />
-            {selectedAgent.name}
-          </span>
         ) : null}
 
         {/* 工作目录：可留空用 agent 默认；聚焦时展宽。 */}
