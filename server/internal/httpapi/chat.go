@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"acpp/server/internal/acp"
 	"acpp/server/internal/service"
 )
 
@@ -57,77 +58,26 @@ func (h chatHandler) send(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusAccepted, msg)
 }
 
-// setMode 切换会话的审批/沙箱模式。
-func (h chatHandler) setMode(w http.ResponseWriter, r *http.Request) {
+// settings 应用统一设置变更（模型/思考深度/权限档/plan/fast，逐项可选）。
+func (h chatHandler) settings(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 
-	var in struct {
-		ModeID string `json:"modeId"`
-	}
+	var in acp.SettingsPatch
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, err)
 		return
 	}
 
-	caps, err := h.chat.SetMode(r.Context(), id, in.ModeID)
+	settings, err := h.chat.ApplySettings(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, caps)
-}
-
-// setModel 切换会话模型。
-func (h chatHandler) setModel(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	var in struct {
-		ModelID string `json:"modelId"`
-	}
-	if err := decodeJSON(r, &in); err != nil {
-		writeError(w, err)
-		return
-	}
-
-	caps, err := h.chat.SetModel(r.Context(), id, in.ModelID)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeData(w, http.StatusOK, caps)
-}
-
-// setConfig 设置会话配置项（协作模式、推理档等）。
-func (h chatHandler) setConfig(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	var in struct {
-		ConfigID string `json:"configId"`
-		Value    string `json:"value"`
-	}
-	if err := decodeJSON(r, &in); err != nil {
-		writeError(w, err)
-		return
-	}
-
-	caps, err := h.chat.SetConfigOption(r.Context(), id, in.ConfigID, in.Value)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeData(w, http.StatusOK, caps)
+	writeData(w, http.StatusOK, settings)
 }
 
 // elicitation 把用户对交互式提问的作答回给阻塞中的 agent。

@@ -8,6 +8,8 @@ import (
 
 type agentHandler struct {
 	agents *service.AgentService
+	// chat 用于探测 agent 的模型清单（要拉临时会话，归 ChatService 管）。
+	chat *service.ChatService
 }
 
 func (h agentHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +48,8 @@ func (h agentHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// 后台探测模型清单，前端刷新列表时拿到结果。
+	h.chat.ProbeAgentAsync(agent.ID)
 	writeData(w, http.StatusCreated, agent)
 }
 
@@ -63,6 +67,24 @@ func (h agentHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agent, err := h.agents.Update(r.Context(), id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	// 命令/环境可能变了，模型清单跟着重探。
+	h.chat.ProbeAgentAsync(agent.ID)
+	writeData(w, http.StatusOK, agent)
+}
+
+// probe 同步探测 agent 的模型清单，返回带缓存结果的最新记录。
+func (h agentHandler) probe(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	agent, err := h.chat.ProbeAgent(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return

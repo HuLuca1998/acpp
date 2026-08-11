@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"acpp/server/internal/acp"
 	"acpp/server/internal/service"
 )
 
@@ -54,6 +55,10 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, service.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, service.ErrInvalid):
+		status = http.StatusBadRequest
+	case errors.Is(err, acp.ErrUnsupported):
+		// 该 runtime 不支持这个统一设置维度；正常前端不会发（控件按
+		// Settings 隐藏），发了就是入参问题。
 		status = http.StatusBadRequest
 	default:
 		slog.Error("request failed", "err", err)

@@ -27,8 +27,8 @@ type SessionView struct {
 	MessageCount int64  `json:"messageCount"`
 	// Running 表示当前有没有活着的 agent 子进程，由 HTTP 层填充。
 	Running bool `json:"running"`
-	// Caps 是活会话的可配置能力（模式/模型/配置项），只在会话开着时非空。
-	Caps *acp.Caps `json:"caps,omitempty"`
+	// Settings 是活会话的统一设置视图，只在会话开着时非空。
+	Settings *acp.Settings `json:"settings,omitempty"`
 }
 
 // SessionInput 是创建会话的入参。

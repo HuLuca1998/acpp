@@ -23,7 +23,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	sessionService := service.NewSessionService(gdb)
 	chatService := service.NewChatService(gdb, sessionService, manager, transcripts)
 
-	agents := agentHandler{agents: service.NewAgentService(gdb)}
+	agents := agentHandler{agents: service.NewAgentService(gdb), chat: chatService}
 	sessions := sessionHandler{sessions: sessionService, chat: chatService}
 	chat := chatHandler{chat: chatService}
 
@@ -41,6 +41,8 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	api.HandleFunc("GET /api/agents/{id}", agents.get)
 	api.HandleFunc("PUT /api/agents/{id}", agents.update)
 	api.HandleFunc("DELETE /api/agents/{id}", agents.remove)
+	// 重探 agent 的统一设置能力（flavor 与模型清单），同步返回最新记录。
+	api.HandleFunc("POST /api/agents/{id}/probe", agents.probe)
 
 	api.HandleFunc("GET /api/sessions", sessions.list)
 	api.HandleFunc("POST /api/sessions", sessions.create)
@@ -54,10 +56,8 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	api.HandleFunc("POST /api/sessions/{id}/send", chat.send)
 	api.HandleFunc("GET /api/sessions/{id}/events", chat.events)
 	api.HandleFunc("POST /api/sessions/{id}/cancel", chat.cancel)
-	// 会话级配置：模式（审批档）、模型与通用配置项（协作模式、推理档等）。
-	api.HandleFunc("POST /api/sessions/{id}/mode", chat.setMode)
-	api.HandleFunc("POST /api/sessions/{id}/model", chat.setModel)
-	api.HandleFunc("POST /api/sessions/{id}/config", chat.setConfig)
+	// 会话级统一设置：模型/思考深度/权限档/plan/fast，逐项可选。
+	api.HandleFunc("PUT /api/sessions/{id}/settings", chat.settings)
 	// 交互式提问的作答回传。
 	api.HandleFunc("POST /api/sessions/{id}/elicitation", chat.elicitation)
 

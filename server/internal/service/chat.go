@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,18 +43,23 @@ type StreamEvent struct {
 	// Seq 在同一条会话内单调递增，供前端去重与断线续传。
 	Seq int `json:"seq"`
 
-	Text          string             `json:"text,omitempty"`
-	ToolCallID    string             `json:"toolCallId,omitempty"`
-	Title         string             `json:"title,omitempty"`
-	ToolKind      string             `json:"toolKind,omitempty"`
-	Status        string             `json:"status,omitempty"`
-	RawInput      json.RawMessage    `json:"rawInput,omitempty"`
-	RawOutput     json.RawMessage    `json:"rawOutput,omitempty"`
-	ModeID        string             `json:"modeId,omitempty"`
-	ConfigOptions []acp.ConfigOption `json:"configOptions,omitempty"`
-	ElicitationID string             `json:"elicitationId,omitempty"`
-	StopReason    string             `json:"stopReason,omitempty"`
-	Error         string             `json:"error,omitempty"`
+	Text          string          `json:"text,omitempty"`
+	ToolCallID    string          `json:"toolCallId,omitempty"`
+	Title         string          `json:"title,omitempty"`
+	ToolKind      string          `json:"toolKind,omitempty"`
+	Status        string          `json:"status,omitempty"`
+	RawInput      json.RawMessage `json:"rawInput,omitempty"`
+	RawOutput     json.RawMessage `json:"rawOutput,omitempty"`
+	Content       json.RawMessage `json:"content,omitempty"`
+	Locations     json.RawMessage `json:"locations,omitempty"`
+	Settings      *acp.Settings   `json:"settings,omitempty"`
+	Used          int64           `json:"used,omitempty"`
+	Size          int64           `json:"size,omitempty"`
+	Choice        string          `json:"choice,omitempty"`
+	Usage         *acp.Usage      `json:"usage,omitempty"`
+	ElicitationID string          `json:"elicitationId,omitempty"`
+	StopReason    string          `json:"stopReason,omitempty"`
+	Error         string          `json:"error,omitempty"`
 
 	// Message 在一条消息落库后带上完整记录，前端用它替换流式占位。
 	Message *model.Message `json:"message,omitempty"`
@@ -89,9 +96,10 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	}
 
 	key := sessionKey(sessionID)
-	if sess, ok := s.manager.Get(key); ok {
-		caps := sess.Caps()
-		view.Caps = &caps
+	if _, ok := s.manager.Get(key); ok {
+		if settings, err := s.manager.Settings(key); err == nil {
+			view.Settings = &settings
+		}
 		return view, nil
 	}
 
@@ -134,38 +142,20 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	if err != nil {
 		return nil, err
 	}
-	caps := sess.Caps()
-	view.Caps = &caps
+	if settings, err := s.manager.Settings(key); err == nil {
+		view.Settings = &settings
+	}
 	return view, nil
 }
 
-// SetMode 切换会话的审批/沙箱模式，返回最新能力快照。
-func (s *ChatService) SetMode(ctx context.Context, sessionID uint, modeID string) (*acp.Caps, error) {
-	caps, err := s.manager.SetMode(ctx, sessionKey(sessionID), modeID)
+// ApplySettings 逐项应用统一设置变更并广播最新视图（多标签页保持同步）。
+func (s *ChatService) ApplySettings(ctx context.Context, sessionID uint, patch acp.SettingsPatch) (*acp.Settings, error) {
+	settings, err := s.manager.Apply(ctx, sessionKey(sessionID), patch)
 	if err != nil {
 		return nil, translateNoSession(sessionID, err)
 	}
-	s.brokerFor(sessionID).publish(StreamEvent{Kind: "mode", ModeID: modeID})
-	return &caps, nil
-}
-
-// SetModel 切换会话模型，返回最新能力快照。
-func (s *ChatService) SetModel(ctx context.Context, sessionID uint, modelID string) (*acp.Caps, error) {
-	caps, err := s.manager.SetModel(ctx, sessionKey(sessionID), modelID)
-	if err != nil {
-		return nil, translateNoSession(sessionID, err)
-	}
-	return &caps, nil
-}
-
-// SetConfigOption 设置会话配置项（协作模式、推理档等），返回最新能力快照。
-func (s *ChatService) SetConfigOption(ctx context.Context, sessionID uint, configID, value string) (*acp.Caps, error) {
-	caps, err := s.manager.SetConfigOption(ctx, sessionKey(sessionID), configID, value)
-	if err != nil {
-		return nil, translateNoSession(sessionID, err)
-	}
-	s.brokerFor(sessionID).publish(StreamEvent{Kind: "config", ConfigOptions: caps.ConfigOptions})
-	return &caps, nil
+	s.brokerFor(sessionID).publish(StreamEvent{Kind: "settings", Settings: &settings})
+	return &settings, nil
 }
 
 func translateNoSession(sessionID uint, err error) error {
@@ -262,6 +252,70 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, text string) {
 	br.endTurn()
 }
 
+// ProbeAgent 拉一个临时会话读取 agent 的统一设置能力（flavor 与模型清单），
+// 缓存进 Agent 记录后立即关闭。新会话页靠这份缓存在建会话之前展示
+// 跨 agent 的模型清单。探测失败时清单置空并记下错误，不影响 agent 使用。
+func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agent, error) {
+	var agent model.Agent
+	if err := s.db.WithContext(ctx).First(&agent, agentID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("agent %d: %w", agentID, ErrNotFound)
+		}
+		return nil, fmt.Errorf("load agent %d: %w", agentID, err)
+	}
+
+	// 探测会话不干活，cwd 用独立的临时目录，不碰 agent 配置的工作目录。
+	probeCwd := filepath.Join(os.TempDir(), "acpp-probe")
+	key := fmt.Sprintf("probe-agent-%d", agentID)
+
+	updates := map[string]any{}
+	_, err := s.manager.Open(ctx, acp.OpenOptions{
+		Key:     key,
+		Runtime: acp.RuntimeFor(agent.Command, agent.Args, agent.Env),
+		Cwd:     probeCwd,
+		OnEvent: func(acp.Event) {},
+	})
+	if err != nil {
+		updates["flavor"] = ""
+		updates["models"] = model.AgentModelSlice{}
+		updates["status"] = model.AgentError
+		updates["last_error"] = truncateError(err.Error())
+	} else {
+		settings, serr := s.manager.Settings(key)
+		_ = s.manager.Close(key)
+		if serr != nil {
+			return nil, serr
+		}
+		models := make(model.AgentModelSlice, 0, len(settings.Models))
+		for _, m := range settings.Models {
+			models = append(models, model.AgentModel{ID: m.ID, Name: m.Name, Description: m.Description})
+		}
+		updates["flavor"] = string(settings.Flavor)
+		updates["models"] = models
+		updates["status"] = model.AgentIdle
+		updates["last_error"] = ""
+	}
+
+	if err := s.db.WithContext(ctx).Model(&model.Agent{}).Where("id = ?", agentID).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("save agent probe result: %w", err)
+	}
+	if err := s.db.WithContext(ctx).First(&agent, agentID).Error; err != nil {
+		return nil, fmt.Errorf("reload agent %d: %w", agentID, err)
+	}
+	return &agent, nil
+}
+
+// ProbeAgentAsync 在后台探测（注册/更新 agent 后自动触发），完成后结果落库。
+func (s *ChatService) ProbeAgentAsync(agentID uint) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if _, err := s.ProbeAgent(ctx, agentID); err != nil {
+			slog.Warn("probe agent", "agent", agentID, "err", err)
+		}
+	}()
+}
+
 // Messages 从转录重建会话的消息列表。
 func (s *ChatService) Messages(sessionID uint) ([]model.Message, error) {
 	entries, err := s.transcripts.Read(sessionKey(sessionID))
@@ -305,6 +359,8 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 			Status:     ev.Status,
 			RawInput:   ev.RawInput,
 			RawOutput:  ev.RawOutput,
+			Content:    ev.Content,
+			Locations:  ev.Locations,
 		})
 
 	case acp.EventPermission:
@@ -312,14 +368,14 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 			Kind:       "permission",
 			ToolCallID: ev.ToolCallID,
 			ToolKind:   ev.ToolKind,
-			Title:      ev.Title,
+			Choice:     ev.Choice,
 		})
 
-	case acp.EventMode:
-		br.publish(StreamEvent{Kind: "mode", ModeID: ev.ModeID})
+	case acp.EventSettings:
+		br.publish(StreamEvent{Kind: "settings", Settings: ev.Settings})
 
-	case acp.EventConfig:
-		br.publish(StreamEvent{Kind: "config", ConfigOptions: ev.ConfigOptions})
+	case acp.EventUsage:
+		br.publish(StreamEvent{Kind: "usage", Used: ev.Used, Size: ev.Size})
 
 	case acp.EventElicitation:
 		br.publish(StreamEvent{
@@ -337,7 +393,7 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 		br.publish(StreamEvent{Kind: "plan", RawInput: ev.Entries})
 
 	case acp.EventTurnEnd:
-		br.publish(StreamEvent{Kind: "turn_end", StopReason: string(ev.StopReason)})
+		br.publish(StreamEvent{Kind: "turn_end", StopReason: string(ev.StopReason), Usage: ev.Usage})
 
 	case acp.EventError:
 		br.publish(StreamEvent{Kind: "error", Error: ev.Error})

@@ -52,6 +52,37 @@ func (m *StringMap) Scan(src any) error {
 	return json.Unmarshal(b, (*map[string]string)(m))
 }
 
+// AgentModel 是探测缓存下来的一个可用模型（与 acp.Model 字段对齐，
+// model 包不依赖 acp，由 service 层转换）。
+type AgentModel struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// AgentModelSlice 以 JSON 文本形式存进 sqlite 的模型清单。
+type AgentModelSlice []AgentModel
+
+func (s AgentModelSlice) Value() (driver.Value, error) {
+	if s == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal([]AgentModel(s))
+	return string(b), err
+}
+
+func (s *AgentModelSlice) Scan(src any) error {
+	b, err := toBytes(src)
+	if err != nil {
+		return fmt.Errorf("scan AgentModelSlice: %w", err)
+	}
+	if len(b) == 0 {
+		*s = nil
+		return nil
+	}
+	return json.Unmarshal(b, (*[]AgentModel)(s))
+}
+
 // JSONMap 存放结构不固定的载荷，例如 ACP 的 tool_call 参数。
 type JSONMap map[string]any
 

@@ -1,0 +1,62 @@
+package acp
+
+import "context"
+
+// codexAdapter 对接 codex-acp。权限档住在 session modes；plan 是独立配置项
+// collaboration_mode；模型/思考深度/fast 是 configOptions。
+// codex 顶层 models（模型×推理档笛卡尔积）与 session/set_model 都不用——
+// 后者与 set_config_option 写同一状态、互相覆盖。
+type codexAdapter struct{}
+
+// codexLevels 是统一权限档到 codex modeId 的映射。codex 的 read-only
+// （编辑与命令都要批准）语义上就是「写操作逐项确认」，映射到 safe。
+var codexLevels = []levelPair{
+	{AccessSafe, "read-only"},
+	{AccessAutoEdit, "agent"},
+	{AccessFull, "agent-full-access"},
+}
+
+func (codexAdapter) Flavor() Flavor { return FlavorCodex }
+
+func (codexAdapter) Settings(caps Caps) Settings {
+	s := Settings{Flavor: FlavorCodex}
+	s.Models, s.CurrentModel = modelsFrom(optionByID(caps, "model"))
+	// ultra 档（自动任务委派）不在词汇表内，effortsFrom 按交集自动丢弃。
+	s.Efforts, s.CurrentEffort = effortsFrom(optionByID(caps, "reasoning_effort"))
+	s.Levels, s.CurrentLevel = levelsFrom(caps.Modes, codexLevels)
+	s.FastSupported, s.FastOn = boolFrom(optionByID(caps, "fast-mode"))
+
+	if opt := optionByID(caps, "collaboration_mode"); opt != nil {
+		s.PlanSupported = true
+		s.PlanOn = opt.CurrentValue == "plan"
+	}
+	return s
+}
+
+func (codexAdapter) SetModel(ctx context.Context, s *Session, id string) error {
+	return s.setConfigOption(ctx, "model", id)
+}
+
+func (codexAdapter) SetEffort(ctx context.Context, s *Session, e Effort) error {
+	return s.setConfigOption(ctx, "reasoning_effort", string(e))
+}
+
+func (codexAdapter) SetAccessLevel(ctx context.Context, s *Session, l AccessLevel) error {
+	modeID, ok := modeIDForLevel(codexLevels, l)
+	if !ok {
+		return ErrUnsupported
+	}
+	return s.setMode(ctx, modeID)
+}
+
+func (codexAdapter) SetPlan(ctx context.Context, s *Session, on bool) error {
+	value := "default"
+	if on {
+		value = "plan"
+	}
+	return s.setConfigOption(ctx, "collaboration_mode", value)
+}
+
+func (codexAdapter) SetFast(ctx context.Context, s *Session, on bool) error {
+	return s.setConfigOption(ctx, "fast-mode", onOff(on))
+}

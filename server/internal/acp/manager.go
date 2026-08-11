@@ -28,8 +28,10 @@ const (
 	EventToolCall   EventKind = "tool_call"
 	EventPlan       EventKind = "plan"
 	EventPermission EventKind = "permission"
-	EventMode       EventKind = "mode"
-	EventConfig     EventKind = "config"
+	// EventSettings 在 agent 自行切档/改配置后发出，带最新的统一设置视图。
+	EventSettings EventKind = "settings"
+	// EventUsage 是上下文用量快照（usage_update 通知）。
+	EventUsage EventKind = "usage"
 	// EventElicitation 表示 agent 在等用户作答；Done 在作答/超时后发出，
 	// 界面收到后应收起提问卡片。
 	EventElicitation     EventKind = "elicitation"
@@ -49,9 +51,13 @@ type Event struct {
 	Status        string          `json:"status,omitempty"`
 	RawInput      json.RawMessage `json:"rawInput,omitempty"`
 	RawOutput     json.RawMessage `json:"rawOutput,omitempty"`
+	Content       json.RawMessage `json:"content,omitempty"`
+	Locations     json.RawMessage `json:"locations,omitempty"`
 	Entries       json.RawMessage `json:"entries,omitempty"`
-	ModeID        string          `json:"modeId,omitempty"`
-	ConfigOptions []ConfigOption  `json:"configOptions,omitempty"`
+	Settings      *Settings       `json:"settings,omitempty"`
+	Used          int64           `json:"used,omitempty"`
+	Size          int64           `json:"size,omitempty"`
+	Choice        string          `json:"choice,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`
 	StopReason    StopReason      `json:"stopReason,omitempty"`
 	Usage         *Usage          `json:"usage,omitempty"`
@@ -70,6 +76,8 @@ type Session struct {
 	acpSessionID string
 	cwd          string
 	onEvent      func(Event)
+	// adapter 按 flavor 把统一设置概念翻译成该 runtime 的协议调用。
+	adapter Adapter
 
 	turnMu     sync.Mutex
 	mu         sync.Mutex
@@ -100,11 +108,10 @@ func (s *Session) isReplaying() bool {
 	return s.replaying
 }
 
-// Caps 是会话的可配置能力：模式、模型与配置项。字段可能为 nil——
-// 不是每个 agent 都支持全部三种。
+// Caps 是会话能力的原始快照（modes 与 configOptions），只在 acp 包内部
+// 流转——上层消费的是 adapter 从它提取的统一 Settings 视图。
 type Caps struct {
 	Modes         *Modes         `json:"modes,omitempty"`
-	Models        *Models        `json:"models,omitempty"`
 	ConfigOptions []ConfigOption `json:"configOptions,omitempty"`
 }
 
@@ -131,11 +138,6 @@ func (c Caps) clone() Caps {
 		modes := *c.Modes
 		modes.AvailableModes = append([]Mode(nil), c.Modes.AvailableModes...)
 		out.Modes = &modes
-	}
-	if c.Models != nil {
-		models := *c.Models
-		models.AvailableModels = append([]Model(nil), c.Models.AvailableModels...)
-		out.Models = &models
 	}
 	if len(c.ConfigOptions) > 0 {
 		out.ConfigOptions = make([]ConfigOption, len(c.ConfigOptions))
@@ -236,7 +238,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 	}
 	sess.conn = conn
 
-	if err := m.handshake(ctx, conn, sess, opts.ResumeACPSessionID); err != nil {
+	if err := m.handshake(ctx, conn, sess, opts.Runtime.Command, opts.ResumeACPSessionID); err != nil {
 		_ = conn.Close()
 		return nil, err
 	}
@@ -261,7 +263,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 	return sess, nil
 }
 
-func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, resumeID string) error {
+func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, command, resumeID string) error {
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 
@@ -283,6 +285,13 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, resu
 		return fmt.Errorf("acp: unsupported protocol version %d (we speak %d)", init.ProtocolVersion, ProtocolVersion)
 	}
 
+	// 方言识别用 agent 自报身份 + 启动命令双信号；差异全部由 adapter 吃掉。
+	agentName := ""
+	if init.AgentInfo != nil {
+		agentName = init.AgentInfo.Name
+	}
+	sess.adapter = adapterFor(flavorOf(agentName, command))
+
 	// 先尝试恢复：上下文留在 agent 侧同一个 thread 里，进程重启后还能续聊。
 	// load 会重放全部历史 update，重放期间的内容事件被抑制，不能混进实时流。
 	if resumeID != "" && init.AgentCapabilities.LoadSession {
@@ -302,7 +311,6 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, resu
 			sess.mu.Lock()
 			sess.caps = Caps{
 				Modes:         loaded.Modes,
-				Models:        loaded.Models,
 				ConfigOptions: loaded.ConfigOptions,
 			}
 			sess.mu.Unlock()
@@ -327,92 +335,105 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, resu
 	sess.mu.Lock()
 	sess.caps = Caps{
 		Modes:         created.Modes,
-		Models:        created.Models,
 		ConfigOptions: created.ConfigOptions,
 	}
 	sess.mu.Unlock()
 	return nil
 }
 
-// SetMode 切换会话模式（审批/沙箱档位），成功后更新本地快照。
-func (m *Manager) SetMode(ctx context.Context, key, modeID string) (Caps, error) {
-	sess, ok := m.Get(key)
-	if !ok {
-		return Caps{}, ErrNoSession
-	}
-
+// setMode 是 adapter 专用的协议原语：切 session mode 并更新本地快照。
+func (s *Session) setMode(ctx context.Context, modeID string) error {
 	var result json.RawMessage
-	err := sess.conn.Call(ctx, "session/set_mode", SetModeParams{
-		SessionID: sess.acpSessionID,
+	err := s.conn.Call(ctx, "session/set_mode", SetModeParams{
+		SessionID: s.acpSessionID,
 		ModeID:    modeID,
 	}, &result)
 	if err != nil {
-		return Caps{}, fmt.Errorf("session/set_mode: %w", err)
+		return fmt.Errorf("session/set_mode: %w", err)
 	}
 
-	sess.mu.Lock()
-	if sess.caps.Modes != nil {
-		sess.caps.Modes.CurrentModeID = modeID
+	s.mu.Lock()
+	if s.caps.Modes != nil {
+		s.caps.Modes.CurrentModeID = modeID
 	}
-	sess.mu.Unlock()
-	return sess.Caps(), nil
+	s.mu.Unlock()
+	return nil
 }
 
-// SetModel 切换会话模型，成功后更新本地快照。
-func (m *Manager) SetModel(ctx context.Context, key, modelID string) (Caps, error) {
-	sess, ok := m.Get(key)
-	if !ok {
-		return Caps{}, ErrNoSession
-	}
-
-	var result json.RawMessage
-	err := sess.conn.Call(ctx, "session/set_model", SetModelParams{
-		SessionID: sess.acpSessionID,
-		ModelID:   modelID,
-	}, &result)
-	if err != nil {
-		return Caps{}, fmt.Errorf("session/set_model: %w", err)
-	}
-
-	sess.mu.Lock()
-	if sess.caps.Models != nil {
-		sess.caps.Models.CurrentModelID = modelID
-	}
-	sess.mu.Unlock()
-	return sess.Caps(), nil
-}
-
-// SetConfigOption 设置一个配置项（协作模式、推理档等）。
-// codex-acp 的响应带回全量配置项，直接覆盖快照。
-func (m *Manager) SetConfigOption(ctx context.Context, key, configID, value string) (Caps, error) {
-	sess, ok := m.Get(key)
-	if !ok {
-		return Caps{}, ErrNoSession
-	}
-
+// setConfigOption 是 adapter 专用的协议原语。两端的响应都带回全量配置项，
+// 直接覆盖快照。
+func (s *Session) setConfigOption(ctx context.Context, configID, value string) error {
 	var result SetConfigOptionResult
-	err := sess.conn.Call(ctx, "session/set_config_option", SetConfigOptionParams{
-		SessionID: sess.acpSessionID,
+	err := s.conn.Call(ctx, "session/set_config_option", SetConfigOptionParams{
+		SessionID: s.acpSessionID,
 		ConfigID:  configID,
 		Value:     value,
 	}, &result)
 	if err != nil {
-		return Caps{}, fmt.Errorf("session/set_config_option: %w", err)
+		return fmt.Errorf("session/set_config_option: %w", err)
 	}
 
-	sess.mu.Lock()
+	s.mu.Lock()
 	if len(result.ConfigOptions) > 0 {
-		sess.caps.ConfigOptions = result.ConfigOptions
+		s.caps.ConfigOptions = result.ConfigOptions
 	} else {
 		// 响应没带全量时至少把本地这一项改掉。
-		for i := range sess.caps.ConfigOptions {
-			if sess.caps.ConfigOptions[i].ID == configID {
-				sess.caps.ConfigOptions[i].CurrentValue = value
+		for i := range s.caps.ConfigOptions {
+			if s.caps.ConfigOptions[i].ID == configID {
+				s.caps.ConfigOptions[i].CurrentValue = value
 			}
 		}
 	}
-	sess.mu.Unlock()
-	return sess.Caps(), nil
+	s.mu.Unlock()
+	return nil
+}
+
+// Settings 返回会话设置的统一视图。
+func (m *Manager) Settings(key string) (Settings, error) {
+	sess, ok := m.Get(key)
+	if !ok {
+		return Settings{}, ErrNoSession
+	}
+	return sess.adapter.Settings(sess.Caps()), nil
+}
+
+// Apply 逐项应用设置变更，翻译工作由会话的 adapter 完成；
+// 任何一项失败立刻返回，已生效的项不回滚（与用户逐个点选的语义一致）。
+func (m *Manager) Apply(ctx context.Context, key string, patch SettingsPatch) (Settings, error) {
+	sess, ok := m.Get(key)
+	if !ok {
+		return Settings{}, ErrNoSession
+	}
+	ad := sess.adapter
+
+	if patch.Model != nil {
+		if err := ad.SetModel(ctx, sess, *patch.Model); err != nil {
+			return Settings{}, err
+		}
+	}
+	if patch.Effort != nil {
+		if err := ad.SetEffort(ctx, sess, *patch.Effort); err != nil {
+			return Settings{}, err
+		}
+	}
+	if patch.Fast != nil {
+		if err := ad.SetFast(ctx, sess, *patch.Fast); err != nil {
+			return Settings{}, err
+		}
+	}
+	// plan 必须先于 level：claude 退出 plan 会回落到默认档，level 放最后
+	// 才能保证 {plan:false, level:x} 这类组合以 x 收尾。
+	if patch.Plan != nil {
+		if err := ad.SetPlan(ctx, sess, *patch.Plan); err != nil {
+			return Settings{}, err
+		}
+	}
+	if patch.Level != nil {
+		if err := ad.SetAccessLevel(ctx, sess, *patch.Level); err != nil {
+			return Settings{}, err
+		}
+	}
+	return ad.Settings(sess.Caps()), nil
 }
 
 // Get 返回已打开的会话。
@@ -537,7 +558,8 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 	if h.session.isReplaying() {
 		switch u.SessionUpdate {
 		case UpdateAgentMessageChunk, UpdateAgentThoughtChunk,
-			UpdateUserMessageChunk, UpdateToolCall, UpdateToolCallUpdate, UpdatePlan:
+			UpdateUserMessageChunk, UpdateToolCall, UpdateToolCallUpdate,
+			UpdatePlan, UpdateUsage:
 			return
 		}
 	}
@@ -558,20 +580,23 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 			Status:     u.Status,
 			RawInput:   u.RawInput,
 			RawOutput:  u.RawOutput,
+			Content:    u.Content,
+			Locations:  u.Locations,
 		})
 
 	case UpdatePlan:
 		h.session.emit(Event{Kind: EventPlan, Entries: u.Entries})
 
 	case UpdateCurrentMode:
-		// agent 会自己切档，不听这条界面上显示的档位就与实际不符。
+		// agent 会自己切档（如 claude 的 ExitPlanMode），不跟着更新界面上
+		// 显示的档位就与实际不符。推统一 Settings 视图，翻译交给 adapter。
 		modeID := u.EffectiveModeID()
 		h.session.mu.Lock()
 		if h.session.caps.Modes != nil && modeID != "" {
 			h.session.caps.Modes.CurrentModeID = modeID
 		}
 		h.session.mu.Unlock()
-		h.session.emit(Event{Kind: EventMode, ModeID: modeID})
+		h.session.emitSettings()
 
 	case UpdateConfigOption:
 		// 配置项变化（比如 agent 通过斜杠命令切了协作模式），带全量新配置。
@@ -579,8 +604,13 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 			h.session.mu.Lock()
 			h.session.caps.ConfigOptions = u.ConfigOptions
 			h.session.mu.Unlock()
-			h.session.emit(Event{Kind: EventConfig, ConfigOptions: u.ConfigOptions})
+			h.session.emitSettings()
 		}
+
+	case UpdateUsage:
+		// 上下文用量快照。size 语义两端有出入（窗口大小 vs 水位），
+		// 按占比展示两端都成立；claude 独有的 cost 按交集规范不透出。
+		h.session.emit(Event{Kind: EventUsage, Used: u.Used, Size: u.Size})
 
 	case UpdateUserMessageChunk:
 		// 只在 session/load 重放历史时出现，这里不重放，忽略。
@@ -588,9 +618,19 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 	case UpdateAvailableCommands:
 		// 当前界面不展示斜杠命令，明确丢弃。
 
+	case UpdateSessionInfo:
+		// claude 带自动标题（与本项目「首条消息简写」策略重复）、codex 带
+		// threadStatus，都无用途，明确丢弃。
+
 	default:
 		slog.Debug("acp: unhandled session update", "kind", u.SessionUpdate)
 	}
+}
+
+// emitSettings 推送最新的统一设置视图。
+func (s *Session) emitSettings() {
+	settings := s.adapter.Settings(s.Caps())
+	s.emit(Event{Kind: EventSettings, Settings: &settings})
 }
 
 // Elicitation 把 agent 的交互式提问推给界面并阻塞等用户作答。
@@ -672,7 +712,7 @@ func (h *sessionHandler) RequestPermission(_ context.Context, p RequestPermissio
 		ToolCallID: p.ToolCall.ToolCallID,
 		ToolKind:   p.ToolCall.Kind,
 		Status:     p.ToolCall.Status,
-		Title:      chosen.Name,
+		Choice:     chosen.Name,
 	})
 
 	return RequestPermissionResult{

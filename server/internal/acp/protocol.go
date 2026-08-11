@@ -66,7 +66,15 @@ type FSCapability struct {
 type InitializeResult struct {
 	ProtocolVersion   int               `json:"protocolVersion"`
 	AgentCapabilities AgentCapabilities `json:"agentCapabilities"`
-	AuthMethods       []AuthMethod      `json:"authMethods"`
+	// AgentInfo 是 agent 自报的身份，flavor 识别的信号之一。
+	AgentInfo   *AgentInfo   `json:"agentInfo,omitempty"`
+	AuthMethods []AuthMethod `json:"authMethods"`
+}
+
+type AgentInfo struct {
+	Name    string `json:"name"`
+	Title   string `json:"title,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 type AgentCapabilities struct {
@@ -87,10 +95,11 @@ type NewSessionParams struct {
 	MCPServers []any `json:"mcpServers"`
 }
 
+// NewSessionResult 只收 modes 与 configOptions；codex 顶层的 models
+// （模型×推理档笛卡尔积）按交集规范弃用——统一模型清单从 configOptions 提取。
 type NewSessionResult struct {
 	SessionID     string         `json:"sessionId"`
 	Modes         *Modes         `json:"modes,omitempty"`
-	Models        *Models        `json:"models,omitempty"`
 	ConfigOptions []ConfigOption `json:"configOptions,omitempty"`
 }
 
@@ -101,17 +110,6 @@ type Modes struct {
 
 type Mode struct {
 	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-}
-
-type Models struct {
-	AvailableModels []Model `json:"availableModels"`
-	CurrentModelID  string  `json:"currentModelId"`
-}
-
-type Model struct {
-	ModelID     string `json:"modelId"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
@@ -134,16 +132,13 @@ type ConfigOptionValue struct {
 	Description string `json:"description,omitempty"`
 }
 
-// ---- session/set_mode、session/set_model、session/set_config_option ----
+// ---- session/set_mode、session/set_config_option ----
+// 注意没有 set_model：claude 没实现它，codex 上它与 set_config_option
+// 写同一个状态互相覆盖——模型切换统一走 set_config_option。
 
 type SetModeParams struct {
 	SessionID string `json:"sessionId"`
 	ModeID    string `json:"modeId"`
-}
-
-type SetModelParams struct {
-	SessionID string `json:"sessionId"`
-	ModelID   string `json:"modelId"`
 }
 
 type SetConfigOptionParams struct {
@@ -223,6 +218,8 @@ const (
 // OK 报告这一轮是否正常说完；其余四种都意味着回答可能是残缺的。
 func (s StopReason) OK() bool { return s == StopEndTurn }
 
+// Usage 是一轮的 token 计量，只保留两端 runtime 都报的交集字段
+// （claude 的 cachedWriteTokens/cost、codex 的 thoughtTokens 按交集规范废弃）。
 type Usage struct {
 	InputTokens      int `json:"inputTokens"`
 	OutputTokens     int `json:"outputTokens"`
@@ -251,6 +248,8 @@ const (
 	UpdateCurrentMode       UpdateKind = "current_mode_update"
 	UpdateAvailableCommands UpdateKind = "available_commands_update"
 	UpdateConfigOption      UpdateKind = "config_option_update"
+	UpdateUsage             UpdateKind = "usage_update"
+	UpdateSessionInfo       UpdateKind = "session_info_update"
 )
 
 // SessionNotification 是 session/update 的 params。
@@ -268,15 +267,25 @@ type SessionUpdate struct {
 	Content json.RawMessage `json:"content,omitempty"`
 
 	// 工具调用。tool_call_update 里除 ToolCallID 外全是可选，必须按 id 合并。
+	// RawOutput 的形状随 runtime 变：codex 是对象 {formatted_output, exit_code}，
+	// claude 是纯字符串——所以只能收原文，展示层自行兼容。
 	ToolCallID string          `json:"toolCallId,omitempty"`
 	Title      string          `json:"title,omitempty"`
 	Kind       string          `json:"kind,omitempty"`
 	Status     string          `json:"status,omitempty"`
 	RawInput   json.RawMessage `json:"rawInput,omitempty"`
 	RawOutput  json.RawMessage `json:"rawOutput,omitempty"`
+	// Locations 是工具触碰的文件位置 [{path}]，两端都带。
+	Locations json.RawMessage `json:"locations,omitempty"`
 
 	// plan
 	Entries json.RawMessage `json:"entries,omitempty"`
+
+	// usage_update：上下文用量。size 的语义两端有出入（claude 是模型窗口
+	// 大小，codex 是会话水位），按占比展示两端都成立；claude 独有的 cost
+	// 按交集规范废弃，不解析。
+	Used int64 `json:"used,omitempty"`
+	Size int64 `json:"size,omitempty"`
 
 	// current_mode_update：agent 自己切了档。不同实现字段名不同，两个都收。
 	CurrentModeID string `json:"currentModeId,omitempty"`
