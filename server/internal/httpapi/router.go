@@ -18,8 +18,9 @@ import (
 // Version 会随 health 接口返回，方便前端确认后端版本。
 const Version = "0.1.0"
 
-// NewRouter 组装全部路由与中间件。
-func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcripts *transcript.Store) http.Handler {
+// NewRouter 组装全部路由与中间件。除 handler 外把 ChatService 一并交回，
+// 供装配层挂后台职责（空闲回收）。
+func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcripts *transcript.Store) (http.Handler, *service.ChatService) {
 	sessionService := service.NewSessionService(gdb)
 	chatService := service.NewChatService(gdb, sessionService, manager, transcripts)
 
@@ -81,7 +82,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 		root.Handle("/", spaHandler(cfg.WebDir))
 	}
 
-	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root)))
+	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root))), chatService
 }
 
 // spaHandler 托管前端构建产物，未命中的路径回落到 index.html 交给前端路由。

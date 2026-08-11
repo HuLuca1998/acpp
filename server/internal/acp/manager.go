@@ -10,14 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-// 各阶段的超时。prompt 给得长是因为真实编码任务可以跑几分钟。
-const (
-	handshakeTimeout = 60 * time.Second
-	promptTimeout    = 10 * time.Minute
-)
+// 握手要快；单轮默认不设上限——长程任务跑几个小时是正常使用方式，
+// 需要保护的部署自己传 turnTimeout。
+const handshakeTimeout = 60 * time.Second
 
 // EventKind 是推给上层的归一化事件类型。
 type EventKind string
@@ -101,6 +100,12 @@ type Session struct {
 	// 不存下来的话页面刷新就丢了。
 	commands []Command
 
+	// activeCalls 是在途的 prompt/插话调用数，lastDone 是最后一次调用
+	// 结束的时刻（unix nano）。空闲回收靠这两样判断能否安全关进程；
+	// 权限/提问挂起发生在 prompt 调用之内，天然被 activeCalls 覆盖。
+	activeCalls atomic.Int32
+	lastDone    atomic.Int64
+
 	// elicitations 是挂起的交互式提问：agent 阻塞在 elicitation/create 上，
 	// 等 ResolveElicitation 把用户作答塞进对应 chan。
 	elicitationSeq int64
@@ -173,19 +178,31 @@ type Manager struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
 	// opening 标记正在握手的 key，防止并发 Open 各自拉起一个进程后泄漏其一。
-	opening map[string]chan struct{}
-	max     int
+	opening       map[string]chan struct{}
+	max           int
+	promptTimeout time.Duration
 }
 
-func NewManager(max int) *Manager {
+// NewManager 构造会话池。turnTimeout 是单轮硬上限，<=0 表示不限时
+//（默认）——空闲回收以在途调用计数为准，turn 跑多久都不会被误收。
+func NewManager(max int, turnTimeout time.Duration) *Manager {
 	if max <= 0 {
 		max = 8
 	}
 	return &Manager{
-		sessions: make(map[string]*Session),
-		opening:  make(map[string]chan struct{}),
-		max:      max,
+		sessions:      make(map[string]*Session),
+		opening:       make(map[string]chan struct{}),
+		max:           max,
+		promptTimeout: turnTimeout,
 	}
+}
+
+// turnContext 给一轮调用套上超时；不限时时原样返回。
+func (m *Manager) turnContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m.promptTimeout > 0 {
+		return context.WithTimeout(ctx, m.promptTimeout)
+	}
+	return context.WithCancel(ctx)
 }
 
 // OpenOptions 是打开一条会话所需的全部信息。
@@ -249,6 +266,8 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 	}()
 
 	sess := &Session{cwd: opts.Cwd, onEvent: opts.OnEvent}
+	// 刚打开还没跑过调用，从现在起计空闲，否则零值等于「很久以前」立即被回收。
+	sess.lastDone.Store(time.Now().UnixNano())
 	handler := &sessionHandler{session: sess}
 
 	conn, err := Spawn(ctx, opts.Runtime, handler, opts.WireTap)
@@ -489,7 +508,7 @@ func (m *Manager) Prompt(ctx context.Context, key string, blocks []ContentBlock)
 	}
 	defer sess.turnMu.Unlock()
 
-	turnCtx, cancel := context.WithTimeout(ctx, promptTimeout)
+	turnCtx, cancel := m.turnContext(ctx)
 	defer cancel()
 
 	sess.mu.Lock()
@@ -520,6 +539,12 @@ func (m *Manager) Prompt(ctx context.Context, key string, blocks []ContentBlock)
 // promptCall 是裸的 session/prompt 往返，不做 turn 排他——
 // Prompt 与 claude 的插话（promptQueueing 排队）共用。
 func (s *Session) promptCall(ctx context.Context, blocks []ContentBlock) (PromptResult, error) {
+	s.activeCalls.Add(1)
+	defer func() {
+		s.activeCalls.Add(-1)
+		s.lastDone.Store(time.Now().UnixNano())
+	}()
+
 	var result PromptResult
 	err := s.conn.Call(ctx, "session/prompt", PromptParams{
 		SessionID: s.acpSessionID,
@@ -530,6 +555,12 @@ func (s *Session) promptCall(ctx context.Context, blocks []ContentBlock) (Prompt
 
 // steeringCall 把消息注入正在跑的 turn（_session/steering）。
 func (s *Session) steeringCall(ctx context.Context, blocks []ContentBlock) error {
+	s.activeCalls.Add(1)
+	defer func() {
+		s.activeCalls.Add(-1)
+		s.lastDone.Store(time.Now().UnixNano())
+	}()
+
 	var result json.RawMessage
 	err := s.conn.Call(ctx, "_session/steering", SteeringParams{
 		SessionID: s.acpSessionID,
@@ -541,6 +572,22 @@ func (s *Session) steeringCall(ctx context.Context, blocks []ContentBlock) error
 	return nil
 }
 
+// Idle 返回没有在途调用、且最后一次调用结束早于 olderThan 的会话 key。
+// 回收策略归上层；这里只回答「哪些会话可以安全关」。
+func (m *Manager) Idle(olderThan time.Duration) []string {
+	cutoff := time.Now().Add(-olderThan).UnixNano()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var keys []string
+	for key, sess := range m.sessions {
+		if sess.activeCalls.Load() == 0 && sess.lastDone.Load() < cutoff {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
 // Interject 在 turn 进行中插入一条用户消息，翻译交给 adapter。
 // followUp=true 表示这条消息产生了自己独立的一轮（结果已含在返回值里，
 // 并已发出 turn_end 事件）；false 表示内容并入当前轮、由当前轮统一收尾。
@@ -550,7 +597,7 @@ func (m *Manager) Interject(ctx context.Context, key string, blocks []ContentBlo
 		return PromptResult{}, false, ErrNoSession
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, promptTimeout)
+	ctx, cancel := m.turnContext(ctx)
 	defer cancel()
 
 	result, followUp, err := sess.adapter.Interject(ctx, sess, blocks)

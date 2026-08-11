@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config 是服务的全部可调项，全部来自环境变量，带可用的默认值。
@@ -23,6 +24,12 @@ type Config struct {
 	Debug bool
 	// MaxSessions 是同时活着的 agent 子进程上限，防止进程泄漏。
 	MaxSessions int
+	// IdleTimeout 是空闲会话子进程的回收时限；上下文已持久化在 agent 侧
+	//（acpSessionId），回收后下次发消息用 session/load 无感恢复。0 = 不回收。
+	IdleTimeout time.Duration
+	// TurnTimeout 是单轮硬上限，默认 0 = 不限时——长程任务跑几个小时是
+	// 正常使用方式；turn 进行中不受空闲回收影响。要保护就显式设。
+	TurnTimeout time.Duration
 }
 
 // Load 从环境变量读取配置。
@@ -36,7 +43,21 @@ func Load() Config {
 		WebDir:        env("ACP_WEB_DIR", ""),
 		Debug:         env("ACP_DEBUG", "") != "",
 		MaxSessions:   envInt("ACP_MAX_SESSIONS", 8),
+		IdleTimeout:   envDuration("ACP_IDLE_TIMEOUT", 10*time.Minute),
+		TurnTimeout:   envDuration("ACP_TURN_TIMEOUT", 0),
 	}
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	raw := env(key, "")
+	if raw == "" {
+		return fallback
+	}
+	v, err := time.ParseDuration(raw)
+	if err != nil {
+		return fallback
+	}
+	return v
 }
 
 func envInt(key string, fallback int) int {

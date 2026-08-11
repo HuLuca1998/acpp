@@ -197,9 +197,10 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		return nil, fmt.Errorf("open acp session: %w", err)
 	}
 
+	// Open 只是把进程拉起来，不代表在跑——active 留给 turn 进行中。
 	updates := map[string]any{
 		"acp_session_id": sess.ACPSessionID(),
-		"state":          model.SessionActive,
+		"state":          model.SessionIdle,
 		"cwd":            cwd,
 	}
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", sessionID).Updates(updates).Error; err != nil {
@@ -377,6 +378,12 @@ func (s *ChatService) buildBlocks(cwd string, in SendInput) ([]acp.ContentBlock,
 // 用 context.Background 是因为发起请求的 HTTP 连接早就返回了。
 func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBlock) {
 	ctx := context.Background()
+
+	// active 的语义是「有一轮正在跑」，只在这里出现，结束时归 idle/error。
+	if err := s.db.WithContext(ctx).Model(&model.Session{}).
+		Where("id = ?", sessionID).Update("state", model.SessionActive).Error; err != nil {
+		slog.Warn("mark session active", "session", sessionID, "err", err)
+	}
 
 	result, err := s.manager.Prompt(ctx, sessionKey(sessionID), blocks)
 	if errors.Is(err, acp.ErrBusy) {
@@ -651,6 +658,49 @@ func (s *ChatService) Close(ctx context.Context, sessionID uint) error {
 	return s.db.WithContext(ctx).Model(&model.Session{}).
 		Where("id = ?", sessionID).
 		Update("state", model.SessionEnded).Error
+}
+
+// Release 回收空闲会话的子进程但保留续聊能力：上下文留在 agent 侧
+//（acpSessionId 已持久化），下次发消息 Open 会用 session/load 无感恢复。
+func (s *ChatService) Release(ctx context.Context, sessionID uint) error {
+	if err := s.manager.Close(sessionKey(sessionID)); err != nil {
+		return err
+	}
+	s.transcripts.Close(sessionKey(sessionID))
+	return s.db.WithContext(ctx).Model(&model.Session{}).
+		Where("id = ?", sessionID).
+		Update("state", model.SessionIdle).Error
+}
+
+// StartIdleReaper 周期回收空闲子进程——会话可以随时 resume，没必要一直挂着。
+// timeout <= 0 表示不回收。
+func (s *ChatService) StartIdleReaper(ctx context.Context, timeout time.Duration) {
+	if timeout <= 0 {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for _, key := range s.manager.Idle(timeout) {
+					id, err := strconv.ParseUint(key, 10, 64)
+					if err != nil {
+						// probe-agent-N 这类管理用连接不归这里管。
+						continue
+					}
+					if err := s.Release(ctx, uint(id)); err != nil {
+						slog.Warn("release idle session", "session", id, "err", err)
+					} else {
+						slog.Info("released idle session", "session", id, "timeout", timeout)
+					}
+				}
+			}
+		}
+	}()
 }
 
 // Running 报告该会话当前是否有活着的 agent 进程。

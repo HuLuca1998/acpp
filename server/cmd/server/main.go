@@ -14,6 +14,7 @@ import (
 	"acpp/server/internal/config"
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
+	"acpp/server/internal/model"
 	"acpp/server/internal/transcript"
 )
 
@@ -45,7 +46,7 @@ func run() error {
 	defer sqlDB.Close()
 
 	// 服务退出时必须回收全部 agent 子进程，否则会留下一堆孤儿。
-	manager := acp.NewManager(cfg.MaxSessions)
+	manager := acp.NewManager(cfg.MaxSessions, cfg.TurnTimeout)
 	defer manager.CloseAll()
 
 	// 对话内容唯一的持久化：每条会话一个 JSONL 转录文件。
@@ -55,9 +56,18 @@ func run() error {
 	}
 	defer transcripts.CloseAll()
 
+	// 刚启动时没有任何 agent 进程活着，遗留的「进行中」都是上次进程留下的
+	// 谎言——归一成可续聊的空闲态（error/ended 保留，它们的信息有意义）。
+	if err := gdb.Model(&model.Session{}).
+		Where("state = ?", model.SessionActive).
+		Update("state", model.SessionIdle).Error; err != nil {
+		slog.Warn("normalize stale sessions", "err", err)
+	}
+
+	handler, chatService := httpapi.NewRouter(cfg, gdb, manager, transcripts)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewRouter(cfg, gdb, manager, transcripts),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		// SSE 是长连接，不能给写超时。
 		WriteTimeout: 0,
@@ -66,6 +76,9 @@ func run() error {
 	// 收到中断信号后停止接收新请求，给在途请求 10 秒收尾。
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// 空闲子进程定期回收：上下文在 agent 侧持久化，续聊时无感恢复。
+	chatService.StartIdleReaper(ctx, cfg.IdleTimeout)
 
 	errCh := make(chan error, 1)
 	go func() {
