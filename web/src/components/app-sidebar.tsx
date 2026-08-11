@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
-import { Link } from "react-router"
+import { Link, useLocation } from "react-router"
 
 import { AppearanceSwitcher } from "@/components/appearance-switcher"
 import { BackendStatus } from "@/components/backend-status"
@@ -34,8 +34,10 @@ const RECENT_LIMIT = 3
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation()
+  const { pathname } = useLocation()
   const [recent, setRecent] = React.useState<Session[]>([])
 
+  // 随路由变化刷新：新建/删除会话后列表立即跟上，不留已删会话的死链接。
   React.useEffect(() => {
     let cancelled = false
     api.sessions
@@ -49,7 +51,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [pathname])
 
   const navMain = [
     { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },

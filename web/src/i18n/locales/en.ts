@@ -208,6 +208,8 @@ export default {
   },
   errors: {
     sessionNotFound: "Session not found",
+    sessionNotFoundHint: "It may have been deleted, or the link is stale.",
+    backToSessions: "Back to sessions",
     openFailed: "Could not connect to the agent",
   },
   placeholderPage: {

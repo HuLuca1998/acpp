@@ -201,6 +201,8 @@ export default {
   },
   errors: {
     sessionNotFound: "会话不存在",
+    sessionNotFoundHint: "它可能已被删除，或链接已失效。",
+    backToSessions: "返回会话列表",
     openFailed: "无法连接 agent",
   },
   placeholderPage: {

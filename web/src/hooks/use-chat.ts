@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { api } from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import {
   parseElicitationSchema,
   type ElicitationSchema,
@@ -44,6 +44,8 @@ export interface ChatState {
   connected: boolean
   loading: boolean
   error: string | null
+  /** 会话不存在（已被删除或 id 无效），应展示专门空态而非连接错误。 */
+  notFound: boolean
   /** 非 end_turn 的结束原因，说明回答可能是残缺的。 */
   stopReason: string | null
   /** 活会话的可配置能力（模式/模型/配置项），open 成功后可用。 */
@@ -66,6 +68,7 @@ const INITIAL: ChatState = {
   connected: false,
   loading: true,
   error: null,
+  notFound: false,
   stopReason: null,
   caps: null,
   elicitation: null,
@@ -240,6 +243,11 @@ export function useChat(sessionId: number) {
         }))
       } catch (err) {
         if (cancelled) return
+        // 404 是"会话已不存在"，与 agent 连不上是两码事，分开表达。
+        if (err instanceof ApiError && err.status === 404) {
+          setState((prev) => ({ ...prev, loading: false, notFound: true }))
+          return
+        }
         setState((prev) => ({
           ...prev,
           loading: false,

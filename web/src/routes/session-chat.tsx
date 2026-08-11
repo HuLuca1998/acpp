@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useParams } from "react-router"
+import { Link, useParams } from "react-router"
 
 import { useChat, type LiveToolCall } from "@/hooks/use-chat"
 import type { Message, PendingElicitation, SessionCaps } from "@/types/acp"
@@ -119,6 +119,28 @@ export function SessionChat() {
         <Skeleton className="h-16 w-1/2 self-end" />
         <Skeleton className="h-16 w-3/4" />
       </div>
+    )
+  }
+
+  // 会话已被删除或 id 无效：给明确的出口，而不是报"连不上 agent"。
+  if (chat.notFound) {
+    return (
+      <Empty className="h-full justify-center">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <MessagesSquareIcon />
+          </EmptyMedia>
+          <EmptyTitle>{t("errors.sessionNotFound")}</EmptyTitle>
+          <EmptyDescription>
+            {t("errors.sessionNotFoundHint")}
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button render={<Link to="/sessions" />}>
+            {t("errors.backToSessions")}
+          </Button>
+        </EmptyContent>
+      </Empty>
     )
   }
 
