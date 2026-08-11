@@ -7,12 +7,16 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 
 后端扮演 ACP 里的 **client** 角色：拉起 agent 子进程 → `initialize` 握手 → `session/new` → `session/prompt` → 消费 `session/update` 事件流 → 裁决权限。**不实现 agentic loop**，那是 agent（`codex-acp` / `claude-agent-acp`）自己的事。
 
+两条 runtime 的语义差异（权限档、模型清单位置、配置项 id、rawOutput 形状等）全部收敛在 adapter 层，上层与前端只见**统一词汇表**（模型 / 思考深度五档 / 权限三档 / plan / fast）。规范原则是**交集**：两条 ACP 都能做到的才进统一接口，单端独有的功能废弃。设计与差异清单见 [docs/adr-001](docs/adr-001-codex-claude-差异收敛.md)。
+
 ## 目录结构
 
 ```
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看
+├── docs/                       # 决策记录（adr-001：codex/claude 差异收敛）
+├── scripts/                    # 开发辅助脚本（acp-probe.py：协议探针）
 ├── web/                        # 前端
 │   ├── AGENTS.md               # 前端规范 + 设计规范
 │   ├── src/
@@ -41,7 +45,7 @@ acpp/
 │   │   ├── lib/api.ts          # 后端 API 客户端
 │   │   ├── types/acp.ts        # 领域类型，与 server/internal/model 对齐
 │   │   └── index.css           # Tailwind v4 主题变量
-│   └── vite.config.ts          # /api 代理到 127.0.0.1:8080
+│   └── vite.config.ts          # /api 代理到 127.0.0.1:48080
 └── server/
     ├── AGENTS.md               # 后端规范
     ├── cmd/server/main.go      # 启动、优雅关闭、回收 agent 子进程
@@ -50,7 +54,9 @@ acpp/
         │   ├── protocol.go     # JSON-RPC 与 ACP 类型
         │   ├── conn.go         # stdio 连接：ndjson 读写、请求关联、反向调用
         │   ├── runtime.go      # runtime 注册表 + 嵌套环境变量清理
-        │   └── manager.go      # 会话池、握手、turn 调度、权限与 fs 代理
+        │   ├── adapter.go      # 统一词汇表（模型/思考深度/权限档/plan/fast）+ Adapter 接口
+        │   ├── adapter_*.go    # claude / codex / generic 三个实现，差异全部住在这里
+        │   └── manager.go      # 会话池、握手、turn 调度、统一设置、权限与 fs 代理
         ├── config/             # 环境变量配置
         ├── db/                 # GORM 连接 + AutoMigrate
         ├── model/              # Agent / Session / Message
@@ -64,20 +70,21 @@ acpp/
 
 ## 快速开始
 
-先装一个 ACP runtime（本项目实测用 codex）：
+先装 ACP runtime（两条都支持，可各注册一个）：
 
 ```bash
-npm i -g @agentclientprotocol/codex-acp      # 或 @agentclientprotocol/claude-agent-acp
-codex login                                   # 复用本机登录态
+npm i -g @agentclientprotocol/codex-acp @agentclientprotocol/claude-agent-acp
+codex login    # codex 复用本机登录态；claude 复用 Claude Code 登录态
 ```
 
 ```bash
 make install
-make dev-server   # 终端 1：后端 http://127.0.0.1:8080
-make dev-web      # 终端 2：前端 http://localhost:5173
+make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173，日志在 /tmp/acpp-dev/）
 ```
 
-然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp`）→ 任意页面点 **新建会话** 直接进入对话，发出首条消息时才真正创建会话，标题自动取自首条消息。
+`make dev` 每次都会重新编译后端——改完代码再跑一次就是更新；`make stop` 停止、`make status` 看状态。要盯实时日志时用 `make dev-server` / `make dev-web` 前台跑。端口是固定约定，被占会自动清掉旧进程，见 [AGENTS.md §4.0](AGENTS.md)。
+
+然后在界面里：**Agents → 添加 agent**（命令填 `codex-acp` 或 `claude-agent-acp`）→ 任意页面点 **新建会话** 直接进入对话。新会话页的模型选择器按 agent 分组列出全部可用模型（注册后自动探测缓存），选哪个模型就用哪个 agent；发出首条消息时才真正创建会话，标题自动取自首条消息。会话进行中只能切换当前 agent 自己的模型。
 
 单进程部署（后端托管前端产物）：`make serve`。
 
@@ -106,8 +113,9 @@ make dev-web      # 终端 2：前端 http://localhost:5173
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
-| GET/POST | `/api/agents` | agent 列表 / 新建 |
+| GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型清单） |
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
+| POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor 与模型清单），同步返回 |
 | GET/POST | `/api/sessions` | 会话列表（支持 `?agentId=`）/ 新建 |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情 / 删除（同时回收子进程） |
 | GET | `/api/sessions/{id}/messages` | 历史消息 |
@@ -115,12 +123,13 @@ make dev-web      # 终端 2：前端 http://localhost:5173
 | POST | `/api/sessions/{id}/send` | 发一轮，立即返回 |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
+| PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings` |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`plan`、`mode`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`plan`、`settings`、`usage`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）。
 
 ## 数据模型
 
-- **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。
+- **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。`flavor` 与 `models` 是注册/更新后自动探测的缓存（拉临时会话读能力），供新会话页在建会话之前展示跨 agent 模型清单。
 - **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。
 
@@ -129,7 +138,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 三层，缺一不可，且各自边界诚实：
 
 1. **cwd 隔离** — `session/new` 的 `cwd` 必须是绝对路径，不存在会先创建。
-2. **fs 代理 path guard** — 声明了 `fs` capability，agent 的 `fs/read_text_file` / `fs/write_text_file` 会走到我们进程里，路径解析成 canonical 形式后必须落在 cwd 内。**注意这条只覆盖走 fs 代理的操作**：claude 走，codex 用自带 shell 完全不走。
+2. **fs 代理 path guard** — 声明了 `fs` capability，agent 的 `fs/read_text_file` / `fs/write_text_file` 会走到我们进程里，路径解析成 canonical 形式后必须落在 cwd 内。**注意这条不是可靠拦截点**：codex 用自带 shell 完全不走 fs 代理，claude 0.63 实测权限批准后也由 SDK 自行落盘。它只是纵深防御的一层，真正的隔离靠第 3 条之外的 runtime 沙箱档 + OS 兜底。
 3. **权限裁决** — `session/request_permission` 一律放行（`allow_once` 优先）。权限回调是策略层不是安全边界，用它做安全会同时失去安全性和可用性。真正的隔离要靠 runtime 自身的沙箱档位 + OS 级兜底。
 
 另外启动 agent 前会摘掉嵌套会话标记（`CLAUDECODE`、`CODEX_SANDBOX` 等）。不摘的话，从 Claude Code 终端启动本服务时 agent 会误判自己跑在另一个 agent 内部而拒绝服务——这个坑只在那种场景复现，本机开发时碰不到。
@@ -138,9 +147,9 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ACP_ADDR` | `127.0.0.1:8080` | 监听地址 |
+| `ACP_ADDR` | `127.0.0.1:48080` | 监听地址 |
 | `ACP_DSN` | `data/acp.db` | SQLite 文件路径 |
-| `ACP_CORS_ORIGINS` | `http://localhost:5173` | 允许的跨域来源，逗号分隔 |
+| `ACP_CORS_ORIGINS` | `http://localhost:45173` | 允许的跨域来源，逗号分隔 |
 | `ACP_WEB_DIR` | 空 | 前端产物目录，设置后由后端托管静态文件 |
 | `ACP_MAX_SESSIONS` | `8` | 同时活着的 agent 子进程上限 |
 | `ACP_DEBUG` | 空 | 非空则打开 SQL 与 debug 日志 |
@@ -162,6 +171,5 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建/详情页仍是占位页。
-- **会话恢复**：服务重启后子进程没了，当前是重新 `session/new`（等于新对话）。协议里的 `session/load`（重放历史）/ `session/resume`（不重放）都没接。
-- **权限交互**：现在一律自动放行，没有把请求挂起交给用户裁决的界面。
-- **`session/set_mode`**：没调用，跑在 runtime 的默认档上（codex 默认是 `agent`，不是只读）。
+- **权限交互**：现在一律自动放行，没有把请求挂起交给用户裁决的界面。claude 的 ExitPlanMode 也是一种权限请求（选项即模式切换），自动放行下会选 `allow_once`（=退到 safe 档）；做权限 UI 时它应渲染成模式选择卡。
+- **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
