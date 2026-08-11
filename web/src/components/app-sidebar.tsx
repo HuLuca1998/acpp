@@ -80,11 +80,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
+              className="data-[slot=sidebar-menu-button]:p-1.5! h-auto"
               render={<Link to="/" />}
             >
-              <PlugZapIcon className="size-5!" />
-              <span className="text-base font-semibold">
+              {/* 品牌徽标：主色渐变方块，palette 切换时自动跟随。 */}
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-linear-to-b from-primary to-[color-mix(in_oklch,var(--primary),black_18%)] text-primary-foreground shadow-sm [box-shadow:inset_0_1px_0_oklch(1_0_0/25%),0_1px_2px_oklch(0_0_0/20%)]">
+                <PlugZapIcon className="size-4!" />
+              </span>
+              <span className="text-base font-semibold tracking-tight">
                 {t("common.appName")}
               </span>
             </SidebarMenuButton>
