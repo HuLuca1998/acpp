@@ -133,7 +133,10 @@ export function SessionChat() {
             }
             className={cn(
               "size-2 shrink-0 rounded-full",
-              chat.connected ? "bg-primary" : "bg-destructive"
+              chat.connected ? "bg-success" : "bg-destructive",
+              chat.connected &&
+                chat.busy &&
+                "animate-breathe motion-reduce:animate-none"
             )}
           />
           {chat.session ? (
@@ -258,7 +261,9 @@ export function SessionChat() {
                         <MarkerIcon>
                           <Spinner />
                         </MarkerIcon>
-                        <MarkerContent>{t("chat.thinking")}</MarkerContent>
+                        <MarkerContent className="text-shimmer">
+                          {t("chat.thinking")}
+                        </MarkerContent>
                       </Marker>
                     </MessageScrollerItem>
                   ) : null}

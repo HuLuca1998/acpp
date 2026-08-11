@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { Spinner } from "@/components/ui/spinner"
 import { ChevronRightIcon, FileDiffIcon, TerminalIcon, WrenchIcon } from "lucide-react"
 
 /** tool_call 消息 payload 的已知形状（codex-acp 实测）。 */
@@ -229,7 +230,11 @@ export function ToolCallBlock({
       <WrenchIcon className="size-4 shrink-0" />
       <span className="min-w-0 truncate">{title || t("chat.toolCall")}</span>
       {status ? (
-        <Badge variant="secondary" className="shrink-0">
+        <Badge
+          variant={status === "failed" ? "destructive" : "secondary"}
+          className="shrink-0"
+        >
+          {status === "in_progress" ? <Spinner className="size-3" /> : null}
           {t(`chat.toolStatus.${status}` as never, { defaultValue: status })}
         </Badge>
       ) : null}
