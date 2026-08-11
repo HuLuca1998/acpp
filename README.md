@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看
-├── docs/                       # 决策记录（adr-001：codex/claude 差异收敛）
+├── docs/                       # 决策记录（adr-001：codex/claude 差异收敛；adr-002：会话工作区多面板）
 ├── scripts/                    # 开发辅助脚本（acp-probe.py：协议探针）
 ├── web/                        # 前端
 │   ├── AGENTS.md               # 前端规范 + 设计规范
@@ -27,8 +27,8 @@ acpp/
 │   │   │   ├── overview.tsx          # 概览（真实指标卡 + 最近会话 + agent 状态）
 │   │   │   ├── agents.tsx            # agent 列表
 │   │   │   ├── sessions.tsx          # 会话列表
-│   │   │   ├── session-new.tsx       # 草稿会话页（首条消息落地才建会话）
-│   │   │   ├── session-chat.tsx      # 对话页（流式）
+│   │   │   ├── agent-detail.tsx      # agent 配置页（探测信息 + models/commands 勾选）
+│   │   │   ├── session-chat.tsx      # 对话页（流式；/sessions/new 的草稿态共用本页）
 │   │   │   ├── placeholder.tsx       # 未实现页面的占位
 │   │   │   └── not-found.tsx
 │   │   ├── hooks/use-chat.ts   # SSE 订阅 + 流式状态机

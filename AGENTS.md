@@ -123,6 +123,7 @@ make test        # 后端 go test ./...
 
 - Conventional Commits，描述用中文：`feat: 支持会话恢复`、`fix: SSE 重连后事件去重`。type 常用 `feat` / `fix` / `refactor` / `docs` / `chore` / `test`。
 - 一个提交一个主题；机器生成的变更（`package-lock.json`、shadcn 覆盖）与手写逻辑尽量分开提交。
+- **随做随提交（对 AI 协作者是硬性要求）**：每完成一个独立功能/修复，跑完验证就立即提交，再开始下一个。禁止攒一批功能打包成大杂烩 commit——「文件会交叉」不是攒批的理由，恰恰说明该在交叉发生前提交。节奏固定为：实现 → 验证 → commit → 下一个。跨功能的重构先单独提交。
 - **禁止提交**：`server/data/`（本地库与 transcripts）、`web/dist/`、`server/bin/`、任何密钥或 token。
 - 改动了以下内容必须同步 README：API 端点、SSE 事件 kind、环境变量、目录结构、数据模型。
 
