@@ -21,6 +21,8 @@ const (
 	KindToolResult        MessageKind = "tool_result"
 	KindPermissionRequest MessageKind = "permission_request"
 	KindPlan              MessageKind = "plan"
+	// KindElicitation 是一次已完成的交互式提问：问题 schema + 用户作答。
+	KindElicitation MessageKind = "elicitation"
 )
 
 // Message 是会话中的一条记录，文本放 Content，结构化内容放 Payload。

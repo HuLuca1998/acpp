@@ -10,9 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"acpp/server/internal/acp"
 	"acpp/server/internal/config"
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
+	"acpp/server/internal/transcript"
 )
 
 func main() {
@@ -42,10 +44,23 @@ func run() error {
 	}
 	defer sqlDB.Close()
 
+	// 服务退出时必须回收全部 agent 子进程，否则会留下一堆孤儿。
+	manager := acp.NewManager(cfg.MaxSessions)
+	defer manager.CloseAll()
+
+	// 对话内容唯一的持久化：每条会话一个 JSONL 转录文件。
+	transcripts, err := transcript.NewStore(cfg.TranscriptDir)
+	if err != nil {
+		return err
+	}
+	defer transcripts.CloseAll()
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewRouter(cfg, gdb),
+		Handler:           httpapi.NewRouter(cfg, gdb, manager, transcripts),
 		ReadHeaderTimeout: 10 * time.Second,
+		// SSE 是长连接，不能给写超时。
+		WriteTimeout: 0,
 	}
 
 	// 收到中断信号后停止接收新请求，给在途请求 10 秒收尾。

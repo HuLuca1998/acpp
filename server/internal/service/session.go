@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
 )
 
@@ -24,6 +25,10 @@ type SessionView struct {
 	model.Session
 	AgentName    string `json:"agentName"`
 	MessageCount int64  `json:"messageCount"`
+	// Running 表示当前有没有活着的 agent 子进程，由 HTTP 层填充。
+	Running bool `json:"running"`
+	// Caps 是活会话的可配置能力（模式/模型/配置项），只在会话开着时非空。
+	Caps *acp.Caps `json:"caps,omitempty"`
 }
 
 // SessionInput 是创建会话的入参。
@@ -111,62 +116,9 @@ func (s *SessionService) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-// Messages 按时间正序返回会话内的全部消息。
-func (s *SessionService) Messages(ctx context.Context, sessionID uint) ([]model.Message, error) {
-	if _, err := s.Get(ctx, sessionID); err != nil {
-		return nil, err
-	}
-
-	var messages []model.Message
-	err := s.db.WithContext(ctx).
-		Where("session_id = ?", sessionID).
-		Order("id asc").
-		Find(&messages).Error
-	if err != nil {
-		return nil, fmt.Errorf("list messages of session %d: %w", sessionID, err)
-	}
-	return messages, nil
-}
-
-// AppendMessage 往会话追加一条消息，并刷新会话的 updated_at。
-func (s *SessionService) AppendMessage(ctx context.Context, sessionID uint, msg model.Message) (*model.Message, error) {
-	if _, err := s.Get(ctx, sessionID); err != nil {
-		return nil, err
-	}
-
-	msg.ID = 0
-	msg.SessionID = sessionID
-	if msg.Role == "" {
-		msg.Role = model.RoleUser
-	}
-	if msg.Kind == "" {
-		msg.Kind = model.KindText
-	}
-
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&msg).Error; err != nil {
-			return fmt.Errorf("create message: %w", err)
-		}
-		return tx.Model(&model.Session{}).
-			Where("id = ?", sessionID).
-			Update("updated_at", msg.CreatedAt).Error
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &msg, nil
-}
-
-func (s *SessionService) toView(ctx context.Context, session *model.Session) (*SessionView, error) {
-	var count int64
-	err := s.db.WithContext(ctx).Model(&model.Message{}).
-		Where("session_id = ?", session.ID).
-		Count(&count).Error
-	if err != nil {
-		return nil, fmt.Errorf("count messages of session %d: %w", session.ID, err)
-	}
-
-	view := SessionView{Session: *session, MessageCount: count}
+func (s *SessionService) toView(_ context.Context, session *model.Session) (*SessionView, error) {
+	// MessageCount 由 HTTP 层从转录重建结果填充，消息本身不进库。
+	view := SessionView{Session: *session}
 	if session.Agent != nil {
 		view.AgentName = session.Agent.Name
 	}
