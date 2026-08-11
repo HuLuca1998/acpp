@@ -581,10 +581,10 @@ function SettingsSelectors({
           icon={<SparklesIcon className="size-3.5" />}
           value={settings.currentModel ?? ""}
           placeholder={t("chat.settings.model")}
+          // 只显示模型名：带描述的双行条目会把长清单撑到遮挡。
           options={settings.models.map((m) => ({
             value: m.id,
             name: m.name,
-            description: m.description,
           }))}
           disabled={disabled}
           onChange={(v) => void onApply({ model: v })}
@@ -709,7 +709,9 @@ function CapSelect({
         {icon}
         <SelectValue>{current?.name ?? (value || placeholder)}</SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      {/* 输入框贴底，向上弹出才不被视口截断；关掉选中项对齐的覆盖式定位，
+          并放宽默认的可用高度限制，短清单一屏放完不内滚。 */}
+      <SelectContent side="top" alignItemWithTrigger={false} className="max-h-96">
         {options.map((o) => (
           <SelectItem key={o.value} value={o.value}>
             <div className="flex min-w-0 flex-col">

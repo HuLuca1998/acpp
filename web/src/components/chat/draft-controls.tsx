@@ -51,23 +51,23 @@ export function DraftControls({
                 : t("sessions.form.modelPlaceholder")}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          {/* 输入框贴底，向上弹出才不被视口截断；关掉选中项对齐的覆盖式定位，
+              并放宽默认的可用高度限制，清单一屏放完不内滚。 */}
+          <SelectContent
+            side="top"
+            alignItemWithTrigger={false}
+            className="max-h-96"
+          >
             {groups.map(({ agent, choices }) => (
               <SelectGroup key={agent.id}>
                 <SelectLabel className="flex items-center gap-1.5 text-xs uppercase">
                   <BotIcon className="size-3" />
                   {agent.name}
                 </SelectLabel>
+                {/* 只显示模型名：带描述的双行条目会把长清单撑到遮挡。 */}
                 {choices.map((choice) => (
                   <SelectItem key={choice.key} value={choice.key}>
-                    <div className="flex min-w-0 flex-col">
-                      <span>{choice.label}</span>
-                      {choice.description ? (
-                        <span className="max-w-64 truncate text-xs text-muted-foreground">
-                          {choice.description}
-                        </span>
-                      ) : null}
-                    </div>
+                    {choice.label}
                   </SelectItem>
                 ))}
               </SelectGroup>
