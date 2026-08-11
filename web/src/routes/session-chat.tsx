@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
 
@@ -285,22 +285,17 @@ export function SessionChat() {
             </EmptyContent>
           </Empty>
         ) : (
-          <MessageScrollerProvider>
+          // 打开即定位到底部看最新内容（不是先渲染顶部再跳）；
+          // 「加载更早」prepend 时保持视口位置不跳。
+          <MessageScrollerProvider defaultScrollPosition="end">
             <MessageScroller>
-              <MessageScrollerViewport>
+              <MessageScrollerViewport preserveScrollOnPrepend>
                 <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
                   {chat.hasEarlier ? (
                     <MessageScrollerItem scrollAnchor={false}>
-                      <div className="flex justify-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground"
-                          onClick={() => void chat.loadEarlier()}
-                        >
-                          {t("chat.loadEarlier")}
-                        </Button>
-                      </div>
+                      <EarlierSentinel
+                        onVisible={() => void chat.loadEarlier()}
+                      />
                     </MessageScrollerItem>
                   ) : null}
                   {groupMessages(chat.messages).map((block) =>
@@ -925,6 +920,30 @@ function ElicitationCard({
           {t("chat.elicitation.skip")}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * 顶部哨兵：滚进视野即自动加载更早的消息——无按钮无等待感，
+ * prepend 时视口位置由 preserveScrollOnPrepend 保持不跳。
+ */
+function EarlierSentinel({ onVisible }: { onVisible: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) onVisible()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [onVisible])
+
+  return (
+    <div ref={ref} className="flex justify-center py-2">
+      <Spinner className="size-4 text-muted-foreground" />
     </div>
   )
 }

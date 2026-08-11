@@ -166,7 +166,6 @@ export default {
     plan: "任务计划",
     expand: "展开",
     collapse: "收起",
-    loadEarlier: "加载更早的消息",
     suggestions: {
       intro: "介绍一下这个项目的结构和用途",
       changes: "查看 git 状态，总结未提交的变更",

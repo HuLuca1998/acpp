@@ -173,7 +173,6 @@ export default {
     plan: "Plan",
     expand: "Show more",
     collapse: "Show less",
-    loadEarlier: "Load earlier messages",
     suggestions: {
       intro: "Walk me through this project's structure and purpose",
       changes: "Check git status and summarize uncommitted changes",

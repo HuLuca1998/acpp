@@ -44,6 +44,27 @@
 
     /* 品牌色：agent 图标用，跨 palette 与明暗恒定（Claude 官方橙）。 */
     --color-brand-claude: #d97757;
+}
+
+/* 滚动条随主题走：细条、无轨道底色，thumb 用前景色的低透明版，
+   五套 palette × 明暗两版都自然成立。scrollbar-color 一条属性
+   同时覆盖 Firefox 与 Chromium 121+。 */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent)
+    transparent;
+}
+
+/* 自动跟随滚动时隐藏 thumb，滚动结束浮现（message-scroller 用）。 */
+@utility scrollbar-thumb-transparent {
+  scrollbar-color: transparent transparent;
+}
+
+@utility scrollbar-track-transparent {
+  scrollbar-color: transparent transparent;
+}
+
+@theme inline {
 
     /* 活跃状态点的呼吸动画：比 animate-pulse 轻得多，只做存在感提示。 */
     --animate-breathe: breathe 2.6s var(--ease-fluid) infinite;

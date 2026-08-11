@@ -79,8 +79,11 @@ export interface ChatState {
   permissions: ResolvedPermission[]
 }
 
-/** 初次进入拉取的消息条数；更早的用「加载更早」按需取。 */
-const MESSAGE_PAGE = 200
+/**
+ * 初次进入拉取的消息条数：一屏出头即可——打开只看最新，
+ * 更早的滚动到顶时才自动补，加载与渲染成本都摊到需要时。
+ */
+const MESSAGE_PAGE = 60
 
 const INITIAL: ChatState = {
   session: null,
@@ -333,14 +336,18 @@ export function useChat(sessionId: number) {
   }, [sessionId])
 
   // 「加载更早」：以当前最早一条重建消息的 id 为游标向前翻页。
+  // 由滚动到顶的哨兵自动触发，ref 防重入（观察器可能连续报告可见）。
+  const loadingEarlier = useRef(false)
   const loadEarlier = useCallback(async () => {
-    let before = 0
-    setState((prev) => {
-      before = prev.messages[0]?.id ?? 0
-      return prev
-    })
-    if (!before) return
+    if (loadingEarlier.current) return
+    loadingEarlier.current = true
     try {
+      let before = 0
+      setState((prev) => {
+        before = prev.messages[0]?.id ?? 0
+        return prev
+      })
+      if (!before) return
       const res = await api.sessions.messages(sessionId, {
         limit: MESSAGE_PAGE,
         before,
@@ -355,6 +362,8 @@ export function useChat(sessionId: number) {
       })
     } catch (err) {
       setState((prev) => ({ ...prev, error: (err as Error).message }))
+    } finally {
+      loadingEarlier.current = false
     }
   }, [sessionId])
 
