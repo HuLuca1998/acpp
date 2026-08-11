@@ -31,6 +31,10 @@ export interface WorkspaceValue {
   closePanel: (id: WorkspacePanelId) => void
   /** 打开文件预览：自动 ensureOpen 预览面板并切到该文件。 */
   openPreview: (path: string) => void
+  /** 把文件/文件夹加进 composer 的 @ 引用（由页面层注册实现）。 */
+  addReference: (path: string) => void
+  /** 页面层注册 addReference 的落点；卸载时传 null。 */
+  attachReferenceSink: (sink: ((path: string) => void) | null) => void
   previewStore: {
     subscribe: (listener: () => void) => () => void
     get: () => string | null

@@ -15,6 +15,7 @@ import { WorkspaceDock } from "@/components/workspace/workspace-dock"
 import {
   WorkspaceAutoRefresh,
   WorkspaceProvider,
+  WorkspaceReferenceSink,
 } from "@/components/workspace/workspace-provider"
 import { Button } from "@/components/ui/button"
 import {
@@ -145,6 +146,12 @@ export function SessionChat() {
       </ChatPanelContext.Provider>
       {/* turn 结束刷新 git/文件树——agent 改完文件的时刻。 */}
       <WorkspaceAutoRefresh busy={chat.busy} />
+      {/* 工作区右键/预览的「添加到引用」落到 composer 的 @ 引用列表。 */}
+      <WorkspaceReferenceSink
+        onAdd={(path) =>
+          setFiles((prev) => (prev.includes(path) ? prev : [...prev, path]))
+        }
+      />
 
       <input
         ref={imageInputRef}

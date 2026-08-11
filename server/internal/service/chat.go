@@ -369,11 +369,21 @@ func (s *ChatService) buildBlocks(cwd string, in SendInput) ([]acp.ContentBlock,
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(cwd, path)
 		}
-		data, err := os.ReadFile(path)
+		info, err := os.Stat(path)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%w: read %s: %s", ErrInvalid, path, err)
 		}
-		blocks = append(blocks, acp.ResourceBlock("file://"+path, string(data)))
+		if info.IsDir() {
+			// 文件夹引用嵌「目录清单」而不是递归全文（token 灾难）：
+			// agent 自有 fs 能力，给地图优于给全文（adr-002 §5.3）。
+			blocks = append(blocks, acp.ResourceBlock("file://"+path+"/", DirReferenceListing(path)))
+		} else {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%w: read %s: %s", ErrInvalid, path, err)
+			}
+			blocks = append(blocks, acp.ResourceBlock("file://"+path, string(data)))
+		}
 		files = append(files, path)
 	}
 	if len(files) > 0 {

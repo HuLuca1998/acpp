@@ -281,6 +281,11 @@ export default {
       commits: "Coming soon — local commits ahead of the remote.",
       terminal: "Coming soon — a real terminal in the working directory.",
     },
+    refMenu: {
+      addReference: "Add to chat references",
+      openPreview: "Preview",
+      copyPath: "Copy path",
+    },
     git: {
       notRepo: "This directory is not a git repository",
       clean: "Working tree clean, nothing uncommitted.",

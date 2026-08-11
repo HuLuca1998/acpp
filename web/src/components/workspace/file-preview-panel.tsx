@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { FileTextIcon } from "lucide-react"
+import { AtSignIcon, FileTextIcon } from "lucide-react"
 
 import { api } from "@/lib/api"
 import type { WorkspaceFile } from "@/types/acp"
@@ -85,11 +85,20 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
       <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-3">
         {loading ? <Spinner className="size-3" /> : null}
         <span
-          className="truncate font-mono text-xs text-muted-foreground"
+          className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground [direction:rtl] [unicode-bidi:plaintext]"
           title={path}
         >
           {path}
         </span>
+        <button
+          type="button"
+          aria-label={t("workspace.refMenu.addReference")}
+          title={t("workspace.refMenu.addReference")}
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+          onClick={() => ws.addReference(path)}
+        >
+          <AtSignIcon className="size-3.5" />
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {error ? (

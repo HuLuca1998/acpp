@@ -289,3 +289,47 @@ func gitIgnored(ctx context.Context, cwd string, paths []string) map[string]bool
 	}
 	return ignored
 }
+
+// DirReferenceListing 生成文件夹引用嵌入 prompt 的两层目录清单：给 agent
+// 一张地图并提示自行读取，避免把整个目录的内容灌进上下文（adr-002 §5.3）。
+func DirReferenceListing(path string) string {
+	const maxEntries = 200
+	var b strings.Builder
+	fmt.Fprintf(&b, "Directory listing (2 levels) of %s:\n", path)
+
+	level1, err := listWorkspaceDir(path)
+	if err != nil {
+		return b.String() + "(unreadable)\n"
+	}
+	count := 0
+	for _, e := range level1 {
+		if count >= maxEntries {
+			b.WriteString("…\n")
+			break
+		}
+		if e.Kind == "dir" {
+			fmt.Fprintf(&b, "%s/\n", e.Name)
+			count++
+			children, err := listWorkspaceDir(e.Path)
+			if err != nil {
+				continue
+			}
+			for _, c := range children {
+				if count >= maxEntries {
+					break
+				}
+				suffix := ""
+				if c.Kind == "dir" {
+					suffix = "/"
+				}
+				fmt.Fprintf(&b, "  %s%s\n", c.Name, suffix)
+				count++
+			}
+		} else {
+			fmt.Fprintf(&b, "%s\n", e.Name)
+			count++
+		}
+	}
+	b.WriteString("\nRead individual files as needed for their contents.\n")
+	return b.String()
+}

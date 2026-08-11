@@ -273,6 +273,11 @@ export default {
       commits: "开发中——这里将列出本地领先远端的提交。",
       terminal: "开发中——这里将提供工作目录里的真实终端。",
     },
+    refMenu: {
+      addReference: "添加到对话引用",
+      openPreview: "预览",
+      copyPath: "复制路径",
+    },
     git: {
       notRepo: "该目录不是 git 仓库",
       clean: "工作区干净，没有未提交变更。",

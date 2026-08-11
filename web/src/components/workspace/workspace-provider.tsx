@@ -31,6 +31,7 @@ export function WorkspaceProvider({
   })
   const gitListenersRef = useRef(new Set<() => void>())
   const refreshListenersRef = useRef(new Set<() => void>())
+  const referenceSinkRef = useRef<((path: string) => void) | null>(null)
 
   const value = useMemo<WorkspaceValue>(() => {
     const ensureOpen = (id: WorkspacePanelId) => {
@@ -61,6 +62,12 @@ export function WorkspaceProvider({
         previewRef.current = path
         ensureOpen("preview")
         listenersRef.current.forEach((l) => l())
+      },
+      addReference: (path) => {
+        referenceSinkRef.current?.(path)
+      },
+      attachReferenceSink: (sink) => {
+        referenceSinkRef.current = sink
       },
       previewStore: {
         subscribe: (listener) => {
@@ -113,6 +120,20 @@ export function WorkspaceProvider({
       {children}
     </WorkspaceContext.Provider>
   )
+}
+
+/** 页面层把「加引用」落点注册进命令总线的行为组件，不渲染任何内容。 */
+export function WorkspaceReferenceSink({
+  onAdd,
+}: {
+  onAdd: (path: string) => void
+}) {
+  const ws = useWorkspace()
+  useEffect(() => {
+    ws.attachReferenceSink(onAdd)
+    return () => ws.attachReferenceSink(null)
+  }, [ws, onAdd])
+  return null
 }
 
 /**
