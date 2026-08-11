@@ -5,6 +5,7 @@ import { Link } from "react-router"
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Agent, Session, SessionState } from "@/types/acp"
+import { NewSessionDialog } from "@/components/new-session-dialog"
 import { StatusDot, type StatusTone } from "@/components/status-dot"
 import { Button } from "@/components/ui/button"
 import {
@@ -199,7 +200,7 @@ export function Overview() {
   return (
     <PageShell>
       {/* 指标卡：入场从下轻浮起 + 逐卡 45ms stagger，仅首次挂载可见。 */}
-      <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
+      <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
         {stats.map((stat, i) => (
           <Card
             key={stat.key}
@@ -207,13 +208,16 @@ export function Overview() {
             style={{ transitionDelay: `${i * 45}ms` }}
           >
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5 [&_svg]:size-3.5">
-                {stat.icon}
-                {stat.label}
-              </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardDescription>{stat.label}</CardDescription>
+              <CardTitle className="text-3xl font-semibold tracking-tight tabular-nums">
                 {stat.value.toLocaleString()}
               </CardTitle>
+              <CardAction>
+                {/* 图标芯片：主色轻染的圆角方块，给指标卡一个视觉锚点。 */}
+                <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">
+                  {stat.icon}
+                </span>
+              </CardAction>
             </CardHeader>
             <CardFooter className="text-xs text-muted-foreground">
               {stat.hint}
@@ -252,10 +256,14 @@ export function Overview() {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button size="sm" render={<Link to="/sessions/new" />}>
-                    <PlusIcon data-icon="inline-start" />
-                    {t("overview.newSession")}
-                  </Button>
+                  <NewSessionDialog
+                    trigger={
+                      <Button size="sm">
+                        <PlusIcon data-icon="inline-start" />
+                        {t("overview.newSession")}
+                      </Button>
+                    }
+                  />
                 </EmptyContent>
               </Empty>
             ) : (

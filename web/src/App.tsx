@@ -7,7 +7,6 @@ import { NotFound } from "@/routes/not-found"
 import { Overview } from "@/routes/overview"
 import { Placeholder } from "@/routes/placeholder"
 import { SessionChat } from "@/routes/session-chat"
-import { SessionNew } from "@/routes/session-new"
 import { Sessions } from "@/routes/sessions"
 
 /** 尚未实现、但已在导航里占位的页面。 */
@@ -47,7 +46,6 @@ export function App() {
         <Route index element={<Overview />} />
         <Route path="agents" element={<Agents />} />
         <Route path="sessions" element={<Sessions />} />
-        <Route path="sessions/new" element={<SessionNew />} />
         <Route path="sessions/:id" element={<SessionChat />} />
         {PLACEHOLDERS.map(({ path, titleKey, descKey }) => (
           <Route
