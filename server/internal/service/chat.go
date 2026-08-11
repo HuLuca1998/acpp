@@ -21,6 +21,20 @@ import (
 // ErrBusy 表示该会话上还有一轮没结束，由 HTTP 层翻译成 409。
 var ErrBusy = errors.New("session is busy with another turn")
 
+// deriveTitle 从首条消息取首行并截短，作为会话的自动标题。
+func deriveTitle(text string) string {
+	line := strings.TrimSpace(text)
+	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
+		line = strings.TrimSpace(line[:i])
+	}
+	const maxRunes = 24
+	runes := []rune(line)
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes]) + "…"
+	}
+	return line
+}
+
 // StreamEvent 是推给浏览器的一条 SSE 事件。
 type StreamEvent struct {
 	Kind string `json:"kind"`
@@ -185,8 +199,20 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, text string) (*m
 		return nil, fmt.Errorf("%w: message content is required", ErrInvalid)
 	}
 
-	if _, err := s.Open(ctx, sessionID); err != nil {
+	view, err := s.Open(ctx, sessionID)
+	if err != nil {
 		return nil, err
+	}
+
+	// 无标题的会话用首条消息的简写自动命名（对齐主流 AI 聊天应用）。
+	// 在返回 202 之前同步落库，前端跳转后立刻能看到新标题。
+	if view.Title == "" {
+		if title := deriveTitle(text); title != "" {
+			if err := s.db.WithContext(ctx).Model(&model.Session{}).
+				Where("id = ?", sessionID).Update("title", title).Error; err != nil {
+				slog.Warn("auto title", "session", sessionID, "err", err)
+			}
+		}
 	}
 
 	// 临时 id 用毫秒时间戳：远大于重建器的行号序 id，不会与其冲突；
