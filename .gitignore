@@ -5,10 +5,8 @@ node_modules/
 web/dist/
 server/bin/
 
-# 本地数据库
-server/data/*.db
-server/data/*.db-shm
-server/data/*.db-wal
+# 本地数据（数据库 + transcripts）
+server/data/
 
 # 环境变量
 .env
