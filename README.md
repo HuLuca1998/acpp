@@ -113,6 +113,7 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
+| GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
 | GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型清单） |
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
 | POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor 与模型清单），同步返回 |
@@ -124,8 +125,9 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings` |
+| POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`plan`、`settings`、`usage`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
 
 ## 数据模型
 
@@ -139,7 +141,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 1. **cwd 隔离** — `session/new` 的 `cwd` 必须是绝对路径，不存在会先创建。
 2. **fs 代理 path guard** — 声明了 `fs` capability，agent 的 `fs/read_text_file` / `fs/write_text_file` 会走到我们进程里，路径解析成 canonical 形式后必须落在 cwd 内。**注意这条不是可靠拦截点**：codex 用自带 shell 完全不走 fs 代理，claude 0.63 实测权限批准后也由 SDK 自行落盘。它只是纵深防御的一层，真正的隔离靠第 3 条之外的 runtime 沙箱档 + OS 兜底。
-3. **权限裁决** — `session/request_permission` 一律放行（`allow_once` 优先）。权限回调是策略层不是安全边界，用它做安全会同时失去安全性和可用性。真正的隔离要靠 runtime 自身的沙箱档位 + OS 级兜底。
+3. **权限裁决** — `session/request_permission` 挂起交给用户在界面上点选（批准/拒绝），拒绝真实生效（实测文件不会被创建）。runtime 只在当前权限档认为需要时才会问，所以它仍是策略层不是安全边界——真正的隔离要靠 runtime 自身的沙箱档位 + OS 级兜底。
 
 另外启动 agent 前会摘掉嵌套会话标记（`CLAUDECODE`、`CODEX_SANDBOX` 等）。不摘的话，从 Claude Code 终端启动本服务时 agent 会误判自己跑在另一个 agent 内部而拒绝服务——这个坑只在那种场景复现，本机开发时碰不到。
 
@@ -171,5 +173,6 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建/详情页仍是占位页。
-- **权限交互**：现在一律自动放行，没有把请求挂起交给用户裁决的界面。claude 的 ExitPlanMode 也是一种权限请求（选项即模式切换），自动放行下会选 `allow_once`（=退到 safe 档）；做权限 UI 时它应渲染成模式选择卡。
+- **ExitPlanMode 的专用卡片**：claude 退出计划模式是一种权限请求（选项即模式切换），现在用通用权限卡片渲染，能用但不如专门的「计划完成，选择执行档位」卡直观。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
+- **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。

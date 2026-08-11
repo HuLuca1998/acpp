@@ -80,6 +80,31 @@ func (h chatHandler) settings(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, settings)
 }
 
+// permission 把用户对权限请求的裁决回给阻塞中的 agent。
+func (h chatHandler) permission(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	var in struct {
+		PermissionID string `json:"permissionId"`
+		// OptionID 空串表示取消。
+		OptionID string `json:"optionId"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if err := h.chat.ResolvePermission(id, in.PermissionID, in.OptionID); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, nil)
+}
+
 // elicitation 把用户对交互式提问的作答回给阻塞中的 agent。
 func (h chatHandler) elicitation(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

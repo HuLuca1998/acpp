@@ -36,6 +36,16 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 		})
 	})
 
+	// 目录浏览：供工作目录选择器导航本机目录（浏览器拿不到绝对路径）。
+	api.HandleFunc("GET /api/fs/dirs", func(w http.ResponseWriter, r *http.Request) {
+		listing, err := service.ListDirs(r.URL.Query().Get("path"))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeData(w, http.StatusOK, listing)
+	})
+
 	api.HandleFunc("GET /api/agents", agents.list)
 	api.HandleFunc("POST /api/agents", agents.create)
 	api.HandleFunc("GET /api/agents/{id}", agents.get)
@@ -58,8 +68,9 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	api.HandleFunc("POST /api/sessions/{id}/cancel", chat.cancel)
 	// 会话级统一设置：模型/思考深度/权限档/plan/fast，逐项可选。
 	api.HandleFunc("PUT /api/sessions/{id}/settings", chat.settings)
-	// 交互式提问的作答回传。
+	// 交互式提问的作答与权限裁决回传。
 	api.HandleFunc("POST /api/sessions/{id}/elicitation", chat.elicitation)
+	api.HandleFunc("POST /api/sessions/{id}/permission", chat.permission)
 
 	root := http.NewServeMux()
 	root.Handle("/api/", api)

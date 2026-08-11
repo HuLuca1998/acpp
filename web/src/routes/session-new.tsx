@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router"
 import { api } from "@/lib/api"
 import type { Agent } from "@/types/acp"
 import { Composer } from "@/components/chat/composer"
+import { DirPicker } from "@/components/dir-picker"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,6 +28,7 @@ import {
 import {
   BotIcon,
   FolderIcon,
+  FolderSearchIcon,
   MessagesSquareIcon,
   PlusIcon,
   SparklesIcon,
@@ -75,6 +77,7 @@ export function SessionNew() {
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [choiceKey, setChoiceKey] = useState("")
   const [cwd, setCwd] = useState("")
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [draft, setDraft] = useState("")
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -256,7 +259,7 @@ export function SessionNew() {
           </Select>
         ) : null}
 
-        {/* 工作目录：可留空用 agent 默认；聚焦时展宽。 */}
+        {/* 工作目录：可留空用默认（~/acpp）；聚焦时展宽，放大镜打开目录选择器。 */}
         <label
           className="flex h-7 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground transition-colors duration-150 ease-snappy focus-within:bg-muted focus-within:text-foreground hover:bg-muted"
           title={t("sessions.form.cwdHint")}
@@ -271,7 +274,23 @@ export function SessionNew() {
             onChange={(e) => setCwd(e.target.value)}
           />
         </label>
+        <button
+          type="button"
+          aria-label={t("dirPicker.browse")}
+          disabled={creating}
+          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+          onClick={() => setPickerOpen(true)}
+        >
+          <FolderSearchIcon className="size-3.5" />
+        </button>
       </Composer>
+
+      <DirPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        initialPath={cwd.trim() || selectedAgent?.cwd || undefined}
+        onSelect={setCwd}
+      />
     </div>
   )
 }

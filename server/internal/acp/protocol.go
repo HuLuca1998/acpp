@@ -311,11 +311,15 @@ type RequestPermissionParams struct {
 	Options   []PermissionOption `json:"options"`
 }
 
-// PermissionToolCall 实测只有这三个字段，没有 title。
+// PermissionToolCall 是权限请求关联的工具调用。codex 只给前三个字段；
+// Title/RawInput/Content（diff）只有 claude 带，展示层按空值收敛。
 type PermissionToolCall struct {
-	ToolCallID string `json:"toolCallId"`
-	Kind       string `json:"kind"`
-	Status     string `json:"status"`
+	ToolCallID string          `json:"toolCallId"`
+	Kind       string          `json:"kind"`
+	Status     string          `json:"status"`
+	Title      string          `json:"title,omitempty"`
+	RawInput   json.RawMessage `json:"rawInput,omitempty"`
+	Content    json.RawMessage `json:"content,omitempty"`
 }
 
 type PermissionOption struct {

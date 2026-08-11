@@ -55,11 +55,13 @@ type StreamEvent struct {
 	Settings      *acp.Settings   `json:"settings,omitempty"`
 	Used          int64           `json:"used,omitempty"`
 	Size          int64           `json:"size,omitempty"`
-	Choice        string          `json:"choice,omitempty"`
 	Usage         *acp.Usage      `json:"usage,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`
-	StopReason    string          `json:"stopReason,omitempty"`
-	Error         string          `json:"error,omitempty"`
+	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
+	PermissionID string                 `json:"permissionId,omitempty"`
+	Options      []acp.PermissionOption `json:"options,omitempty"`
+	StopReason   string                 `json:"stopReason,omitempty"`
+	Error        string                 `json:"error,omitempty"`
 
 	// Message 在一条消息落库后带上完整记录，前端用它替换流式占位。
 	Message *model.Message `json:"message,omitempty"`
@@ -163,6 +165,15 @@ func translateNoSession(sessionID uint, err error) error {
 		return fmt.Errorf("session %d: %w", sessionID, ErrNotFound)
 	}
 	return err
+}
+
+// ResolvePermission 把用户对权限请求的裁决回给阻塞中的 agent。
+// optionID 为空表示用户取消。
+func (s *ChatService) ResolvePermission(sessionID uint, permissionID, optionID string) error {
+	if err := s.manager.ResolvePermission(sessionKey(sessionID), permissionID, optionID); err != nil {
+		return translateNoSession(sessionID, err)
+	}
+	return nil
 }
 
 // ResolveElicitation 把用户对交互式提问的作答回给阻塞中的 agent。
@@ -365,11 +376,18 @@ func (s *ChatService) handleEvent(br *broker, ev acp.Event) {
 
 	case acp.EventPermission:
 		br.publish(StreamEvent{
-			Kind:       "permission",
-			ToolCallID: ev.ToolCallID,
-			ToolKind:   ev.ToolKind,
-			Choice:     ev.Choice,
+			Kind:         "permission",
+			PermissionID: ev.PermissionID,
+			ToolCallID:   ev.ToolCallID,
+			ToolKind:     ev.ToolKind,
+			Title:        ev.Title,
+			RawInput:     ev.RawInput,
+			Content:      ev.Content,
+			Options:      ev.Options,
 		})
+
+	case acp.EventPermissionDone:
+		br.publish(StreamEvent{Kind: "permission_done", PermissionID: ev.PermissionID})
 
 	case acp.EventSettings:
 		br.publish(StreamEvent{Kind: "settings", Settings: ev.Settings})

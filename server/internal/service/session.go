@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -29,6 +32,9 @@ type SessionView struct {
 	Running bool `json:"running"`
 	// Settings 是活会话的统一设置视图，只在会话开着时非空。
 	Settings *acp.Settings `json:"settings,omitempty"`
+	// GitBranch 是工作目录当前的 git 分支（detached 时是短 hash），
+	// 非 git 目录为空。每次取视图时现读，agent 切分支后刷新即可见。
+	GitBranch string `json:"gitBranch,omitempty"`
 }
 
 // SessionInput 是创建会话的入参。
@@ -90,6 +96,9 @@ func (s *SessionService) Create(ctx context.Context, in SessionInput) (*SessionV
 	if cwd == "" {
 		cwd = agent.Cwd
 	}
+	if cwd == "" {
+		cwd = DefaultCwd()
+	}
 
 	session := model.Session{
 		AgentID: agent.ID,
@@ -122,5 +131,40 @@ func (s *SessionService) toView(_ context.Context, session *model.Session) (*Ses
 	if session.Agent != nil {
 		view.AgentName = session.Agent.Name
 	}
+	view.GitBranch = gitBranch(view.Cwd)
 	return &view, nil
+}
+
+// gitBranch 读工作目录的当前分支。只读文件不 exec git：
+// 普通仓库读 .git/HEAD；worktree 的 .git 是一个 gitdir 指针文件，跟一跳。
+func gitBranch(cwd string) string {
+	if cwd == "" {
+		return ""
+	}
+	gitPath := filepath.Join(cwd, ".git")
+	head := filepath.Join(gitPath, "HEAD")
+	if fi, err := os.Stat(gitPath); err != nil {
+		return ""
+	} else if !fi.IsDir() {
+		data, err := os.ReadFile(gitPath)
+		if err != nil {
+			return ""
+		}
+		gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(data)), "gitdir:"))
+		head = filepath.Join(gitdir, "HEAD")
+	}
+
+	data, err := os.ReadFile(head)
+	if err != nil {
+		return ""
+	}
+	ref := strings.TrimSpace(string(data))
+	if branch, ok := strings.CutPrefix(ref, "ref: refs/heads/"); ok {
+		return branch
+	}
+	// detached HEAD：给短 hash，聊胜于无。
+	if len(ref) >= 7 {
+		return ref[:7]
+	}
+	return ""
 }

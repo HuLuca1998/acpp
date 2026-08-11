@@ -121,9 +121,18 @@ export default {
       modelPlaceholder: "选择模型",
       defaultModel: "默认模型",
       cwdLabel: "工作目录",
-      cwdPlaceholder: "/absolute/path",
-      cwdHint: "必须是绝对路径，不存在会自动创建。留空则用 agent 的默认目录。",
+      cwdPlaceholder: "~/acpp",
+      cwdHint:
+        "必须是绝对路径，不存在会自动创建。留空依次用 agent 默认目录、~/acpp。",
     },
+  },
+  dirPicker: {
+    title: "选择工作目录",
+    browse: "浏览目录",
+    up: "上级目录",
+    select: "选择此目录",
+    cancel: "取消",
+    empty: "没有子目录",
   },
   chat: {
     placeholder: "输入消息，Enter 发送，Shift+Enter 换行",
@@ -174,15 +183,20 @@ export default {
       plan: "计划模式",
       fast: "快速",
     },
-    contextUsage: "上下文 {{percent}}%",
+    status: {
+      context: "上下文 {{used}} / {{size}} · {{percent}}%",
+    },
     toolStatus: {
       pending: "等待中",
       in_progress: "执行中",
       completed: "已完成",
       failed: "失败",
     },
-    permissionGranted: "已自动放行权限请求",
-    permissionGrantedTitle: "已自动放行：{{title}}",
+    permission: {
+      title: "Agent 请求权限",
+      resolved: "权限已裁决：{{title}} → {{choice}}",
+      cancelled: "已取消",
+    },
     elicitation: {
       title: "Agent 请求你的输入",
       otherLabel: "其他",

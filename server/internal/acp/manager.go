@@ -23,11 +23,14 @@ const (
 type EventKind string
 
 const (
-	EventMessage    EventKind = "message"
-	EventThought    EventKind = "thought"
-	EventToolCall   EventKind = "tool_call"
-	EventPlan       EventKind = "plan"
-	EventPermission EventKind = "permission"
+	EventMessage  EventKind = "message"
+	EventThought  EventKind = "thought"
+	EventToolCall EventKind = "tool_call"
+	EventPlan     EventKind = "plan"
+	// EventPermission 表示 agent 在等用户裁决权限；Done 在裁决/超时后发出，
+	// 界面收到后应收起卡片。
+	EventPermission     EventKind = "permission"
+	EventPermissionDone EventKind = "permission_done"
 	// EventSettings 在 agent 自行切档/改配置后发出，带最新的统一设置视图。
 	EventSettings EventKind = "settings"
 	// EventUsage 是上下文用量快照（usage_update 通知）。
@@ -57,11 +60,14 @@ type Event struct {
 	Settings      *Settings       `json:"settings,omitempty"`
 	Used          int64           `json:"used,omitempty"`
 	Size          int64           `json:"size,omitempty"`
-	Choice        string          `json:"choice,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`
-	StopReason    StopReason      `json:"stopReason,omitempty"`
-	Usage         *Usage          `json:"usage,omitempty"`
-	Error         string          `json:"error,omitempty"`
+	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
+	// Title/RawInput/Content 只有 claude 带，前端按空值收敛。
+	PermissionID string             `json:"permissionId,omitempty"`
+	Options      []PermissionOption `json:"options,omitempty"`
+	StopReason   StopReason         `json:"stopReason,omitempty"`
+	Usage        *Usage             `json:"usage,omitempty"`
+	Error        string             `json:"error,omitempty"`
 }
 
 // ErrBusy 表示这条会话上还有一个 turn 没结束。
@@ -91,6 +97,11 @@ type Session struct {
 	// 等 ResolveElicitation 把用户作答塞进对应 chan。
 	elicitationSeq int64
 	elicitations   map[string]chan ElicitationResult
+
+	// permissions 是挂起的权限请求：agent 阻塞在 session/request_permission
+	// 上，等 ResolvePermission 把用户的裁决塞进对应 chan。
+	permissionSeq int64
+	permissions   map[string]chan RequestPermissionResult
 
 	// replaying 在 session/load 重放历史期间为真，内容事件被抑制。
 	replaying bool
@@ -699,25 +710,77 @@ func (m *Manager) ResolveElicitation(key, elicitationID string, result Elicitati
 	return nil
 }
 
-// RequestPermission 对真实任务一律放行。权限回调是策略层不是安全边界——
-// 用它做安全会同时失去安全性和可用性，真正的隔离靠 cwd + runtime 沙箱档。
-func (h *sessionHandler) RequestPermission(_ context.Context, p RequestPermissionParams) (RequestPermissionResult, error) {
-	chosen := preferOption(p.Options, "allow_once", "allow_always")
-	if chosen == nil {
-		return RequestPermissionResult{Outcome: PermissionOutcome{Outcome: "cancelled"}}, nil
-	}
+// RequestPermission 把权限请求挂起交给用户裁决——runtime 只在当前档位
+// 认为需要确认时才会问（codex agent 档不问、claude acceptEdits 不问编辑），
+// 问了就该给用户看。ctx 超时或连接关闭时以 cancelled 收场。
+// claude 的 ExitPlanMode 也走这条通道（选项即模式切换），交给用户选正合适。
+func (h *sessionHandler) RequestPermission(ctx context.Context, p RequestPermissionParams) (RequestPermissionResult, error) {
+	s := h.session
 
-	h.session.emit(Event{
-		Kind:       EventPermission,
-		ToolCallID: p.ToolCall.ToolCallID,
-		ToolKind:   p.ToolCall.Kind,
-		Status:     p.ToolCall.Status,
-		Choice:     chosen.Name,
+	ch := make(chan RequestPermissionResult, 1)
+	s.mu.Lock()
+	s.permissionSeq++
+	id := fmt.Sprintf("p%d", s.permissionSeq)
+	if s.permissions == nil {
+		s.permissions = make(map[string]chan RequestPermissionResult)
+	}
+	s.permissions[id] = ch
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.permissions, id)
+		s.mu.Unlock()
+		// 无论裁决还是超时，都让界面把卡片收起来。
+		s.emit(Event{Kind: EventPermissionDone, PermissionID: id})
+	}()
+
+	s.emit(Event{
+		Kind:         EventPermission,
+		PermissionID: id,
+		ToolCallID:   p.ToolCall.ToolCallID,
+		ToolKind:     p.ToolCall.Kind,
+		Title:        p.ToolCall.Title,
+		RawInput:     p.ToolCall.RawInput,
+		Content:      p.ToolCall.Content,
+		Options:      p.Options,
 	})
 
-	return RequestPermissionResult{
-		Outcome: PermissionOutcome{Outcome: "selected", OptionID: chosen.OptionID},
-	}, nil
+	select {
+	case res := <-ch:
+		return res, nil
+	case <-ctx.Done():
+		return RequestPermissionResult{Outcome: PermissionOutcome{Outcome: "cancelled"}}, nil
+	}
+}
+
+// ResolvePermission 把用户对权限请求的裁决回给阻塞中的 agent。
+// optionID 为空表示用户取消（agent 侧按放弃处理）。
+func (m *Manager) ResolvePermission(key, permissionID, optionID string) error {
+	sess, ok := m.Get(key)
+	if !ok {
+		return ErrNoSession
+	}
+
+	sess.mu.Lock()
+	ch, pending := sess.permissions[permissionID]
+	if pending {
+		delete(sess.permissions, permissionID)
+	}
+	sess.mu.Unlock()
+
+	if !pending {
+		return fmt.Errorf("permission %s is no longer pending", permissionID)
+	}
+
+	result := RequestPermissionResult{Outcome: PermissionOutcome{Outcome: "cancelled"}}
+	if optionID != "" {
+		result = RequestPermissionResult{
+			Outcome: PermissionOutcome{Outcome: "selected", OptionID: optionID},
+		}
+	}
+	ch <- result
+	return nil
 }
 
 // ReadTextFile 代理 agent 的读文件请求，路径限制在会话 cwd 内。
@@ -780,20 +843,6 @@ func (s *Session) guardPath(path string) (string, error) {
 		return "", fmt.Errorf("path %q is outside the session working directory", path)
 	}
 	return resolved, nil
-}
-
-func preferOption(options []PermissionOption, kinds ...string) *PermissionOption {
-	for _, kind := range kinds {
-		for i := range options {
-			if options[i].Kind == kind {
-				return &options[i]
-			}
-		}
-	}
-	if len(options) > 0 {
-		return &options[0]
-	}
-	return nil
 }
 
 func sliceLines(content string, line, limit *int) string {

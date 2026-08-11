@@ -126,10 +126,18 @@ export default {
       modelPlaceholder: "Select a model",
       defaultModel: "Default model",
       cwdLabel: "Working directory",
-      cwdPlaceholder: "/absolute/path",
+      cwdPlaceholder: "~/acpp",
       cwdHint:
-        "Must be an absolute path; it is created if missing. Leave empty to use the agent's default.",
+        "Must be an absolute path; it is created if missing. Leave empty to fall back to the agent's default, then ~/acpp.",
     },
+  },
+  dirPicker: {
+    title: "Choose a working directory",
+    browse: "Browse directories",
+    up: "Parent directory",
+    select: "Use this directory",
+    cancel: "Cancel",
+    empty: "No subdirectories",
   },
   chat: {
     placeholder: "Type a message. Enter to send, Shift+Enter for a new line",
@@ -181,15 +189,20 @@ export default {
       plan: "Plan mode",
       fast: "Fast",
     },
-    contextUsage: "Context {{percent}}%",
+    status: {
+      context: "Context {{used}} / {{size}} · {{percent}}%",
+    },
     toolStatus: {
       pending: "Pending",
       in_progress: "Running",
       completed: "Completed",
       failed: "Failed",
     },
-    permissionGranted: "Permission request auto-approved",
-    permissionGrantedTitle: "Auto-approved: {{title}}",
+    permission: {
+      title: "The agent requests permission",
+      resolved: "Permission resolved: {{title}} → {{choice}}",
+      cancelled: "Cancelled",
+    },
     elicitation: {
       title: "The agent needs your input",
       otherLabel: "Other",

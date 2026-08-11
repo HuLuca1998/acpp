@@ -86,6 +86,8 @@ export interface Session {
   /** 当前是否有活着的 agent 子进程。 */
   running: boolean
   settings?: SessionSettings
+  /** 工作目录当前的 git 分支（detached 时是短 hash），非 git 目录为空。 */
+  gitBranch?: string
   createdAt: string
   updatedAt: string
 }
@@ -97,6 +99,38 @@ export interface PlanEntry {
   status?: "pending" | "in_progress" | "completed" | string
 }
 
+/** 权限请求的一个选项，agent 提供。 */
+export interface PermissionOption {
+  optionId: string
+  name: string
+  kind: string
+}
+
+/** 一次挂起的权限请求，agent 阻塞等用户裁决。 */
+export interface PendingPermission {
+  id: string
+  toolCallId?: string
+  toolKind?: string
+  /** 只有 claude 带（如 "Write hello.txt"），codex 为空。 */
+  title?: string
+  rawInput?: unknown
+  /** diff 等内容块，只有 claude 带。 */
+  content?: unknown
+  options: PermissionOption[]
+}
+
+/** 目录浏览器的一项与一次列取结果。 */
+export interface DirEntry {
+  name: string
+  path: string
+}
+
+export interface DirListing {
+  path: string
+  parent?: string
+  dirs: DirEntry[]
+}
+
 /** SSE 推来的事件类型。 */
 export type StreamEventKind =
   | "user_message"
@@ -104,6 +138,7 @@ export type StreamEventKind =
   | "thought_chunk"
   | "tool_call"
   | "permission"
+  | "permission_done"
   | "plan"
   | "settings"
   | "usage"
@@ -133,10 +168,11 @@ export interface StreamEvent {
   /** usage 事件：上下文用量（按占比展示）。 */
   used?: number
   size?: number
-  /** permission 事件：自动选中的选项名。 */
-  choice?: string
   /** turn_end 事件：本轮 token 计量。 */
   usage?: TurnUsage
+  /** permission 事件：ID 用于回传裁决，options 是 agent 给的选项。 */
+  permissionId?: string
+  options?: PermissionOption[]
   elicitationId?: string
   stopReason?: string
   error?: string

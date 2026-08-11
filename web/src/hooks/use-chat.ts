@@ -8,6 +8,7 @@ import {
 import type {
   Message,
   PendingElicitation,
+  PendingPermission,
   PlanEntry,
   Session,
   SessionSettings,
@@ -32,11 +33,13 @@ export interface ContextUsage {
   size: number
 }
 
-/** 一次已自动放行的权限请求（当前轮内展示用）。 */
-export interface GrantedPermission {
+/** 一次已裁决的权限请求（当前轮内展示用）。 */
+export interface ResolvedPermission {
   id: string
+  /** 工具标题（claude）或 kind 兜底。 */
   title: string
-  kind: string
+  /** 用户选中的选项名，空串表示取消。 */
+  choice: string
 }
 
 export interface ChatState {
@@ -62,10 +65,12 @@ export interface ChatState {
   contextUsage: ContextUsage | null
   /** agent 正在等用户作答的交互式提问。 */
   elicitation: PendingElicitation | null
+  /** agent 正在等用户裁决的权限请求。 */
+  permission: PendingPermission | null
   /** agent 的任务计划，每次 plan 事件整体替换；跨轮保留展示最终状态。 */
   plan: PlanEntry[] | null
-  /** 当前轮内被自动放行的权限请求。 */
-  permissions: GrantedPermission[]
+  /** 当前轮内已裁决的权限请求。 */
+  permissions: ResolvedPermission[]
 }
 
 const INITIAL: ChatState = {
@@ -83,6 +88,7 @@ const INITIAL: ChatState = {
   settings: null,
   contextUsage: null,
   elicitation: null,
+  permission: null,
   plan: null,
   permissions: [],
 }
@@ -169,18 +175,27 @@ export function useChat(sessionId: number) {
         }
 
         case "permission":
+          if (!ev.permissionId || !ev.options?.length) return prev
           return {
             ...prev,
             busy: true,
-            permissions: [
-              ...prev.permissions,
-              {
-                id: ev.toolCallId || String(ev.seq),
-                title: ev.choice ?? "",
-                kind: ev.toolKind ?? "",
-              },
-            ],
+            permission: {
+              id: ev.permissionId,
+              toolCallId: ev.toolCallId,
+              toolKind: ev.toolKind,
+              title: ev.title,
+              rawInput: ev.rawInput,
+              content: ev.content,
+              options: ev.options,
+            },
           }
+
+        case "permission_done":
+          // 裁决 / 超时后收起卡片；不匹配的 id 说明已经换了一个请求。
+          if (prev.permission && prev.permission.id !== ev.permissionId) {
+            return prev
+          }
+          return { ...prev, permission: null }
 
         case "elicitation":
           return {
@@ -214,6 +229,7 @@ export function useChat(sessionId: number) {
             streamingThought: "",
             liveTools: [],
             elicitation: null,
+            permission: null,
             permissions: [],
           }
 
@@ -269,12 +285,19 @@ export function useChat(sessionId: number) {
 
   // turn 结束后重新拉取消息：后端从转录重建的列表是权威版本，
   // 会替换流式期间的临时用户消息与流式拼接内容。
+  // 顺带刷新会话详情——agent 这一轮可能切了 git 分支。
   const refreshMessages = useCallback(async () => {
     try {
       const history = await api.sessions.messages(sessionId)
       setState((prev) => ({ ...prev, messages: history.items }))
     } catch {
       // 拉不到就等下一轮，流式态还在，界面不至于空白。
+    }
+    try {
+      const session = await api.sessions.get(sessionId)
+      setState((prev) => ({ ...prev, session }))
+    } catch {
+      // 会话详情拉不到不影响对话，下一轮再试。
     }
   }, [sessionId])
 
@@ -333,6 +356,33 @@ export function useChat(sessionId: number) {
     [sessionId]
   )
 
+  const resolvePermission = useCallback(
+    async (permissionId: string, optionId: string, choiceName: string) => {
+      try {
+        await api.sessions.resolvePermission(sessionId, permissionId, optionId)
+      } catch (err) {
+        setState((prev) => ({ ...prev, error: (err as Error).message }))
+      }
+      // 收起卡片并留一条本轮内的裁决记录。
+      setState((prev) => {
+        if (prev.permission?.id !== permissionId) return prev
+        return {
+          ...prev,
+          permission: null,
+          permissions: [
+            ...prev.permissions,
+            {
+              id: permissionId,
+              title: prev.permission.title || prev.permission.toolKind || "",
+              choice: choiceName,
+            },
+          ],
+        }
+      })
+    },
+    [sessionId]
+  )
+
   const resolveElicitation = useCallback(
     async (
       elicitationId: string,
@@ -376,7 +426,14 @@ export function useChat(sessionId: number) {
     [sessionId]
   )
 
-  return { ...state, send, cancel, applySettings, resolveElicitation }
+  return {
+    ...state,
+    send,
+    cancel,
+    applySettings,
+    resolvePermission,
+    resolveElicitation,
+  }
 }
 
 function upsert(messages: Message[], incoming: Message): Message[] {

@@ -18,6 +18,7 @@ export function Composer({
   disabled = false,
   placeholder,
   children,
+  footer,
 }: {
   value: string
   onChange: (value: string) => void
@@ -31,6 +32,8 @@ export function Composer({
   disabled?: boolean
   placeholder: string
   children?: React.ReactNode
+  /** 输入卡下沿的状态栏（工作目录 / 分支 / 用量等）。 */
+  footer?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const canSend = !disabled && !pending && value.trim() !== ""
@@ -93,6 +96,9 @@ export function Composer({
             )}
           </div>
         </div>
+        {footer ? (
+          <div className="pointer-events-auto px-2 pt-1.5">{footer}</div>
+        ) : null}
       </div>
     </div>
   )

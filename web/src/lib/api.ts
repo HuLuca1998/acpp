@@ -1,5 +1,6 @@
 import type {
   Agent,
+  DirListing,
   Message,
   Paged,
   Session,
@@ -94,6 +95,12 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(patch),
       }),
+    /** 把权限裁决回给阻塞中的 agent；optionId 空串表示取消。 */
+    resolvePermission: (id: number, permissionId: string, optionId: string) =>
+      request<null>(`/sessions/${id}/permission`, {
+        method: "POST",
+        body: JSON.stringify({ permissionId, optionId }),
+      }),
     /** 把交互式提问的作答回给阻塞中的 agent。 */
     resolveElicitation: (
       id: number,
@@ -107,5 +114,13 @@ export const api = {
       }),
     /** SSE 事件流地址。 */
     eventsUrl: (id: number) => `${BASE}/sessions/${id}/events`,
+  },
+
+  fs: {
+    /** 列目录，供工作目录选择器导航；path 为空从家目录开始。 */
+    dirs: (path?: string) =>
+      request<DirListing>(
+        `/fs/dirs${path ? `?path=${encodeURIComponent(path)}` : ""}`
+      ),
   },
 }

@@ -14,7 +14,9 @@ import type {
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/format"
 import { Composer } from "@/components/chat/composer"
+import { ComposerStatus } from "@/components/chat/composer-status"
 import { CopyButton } from "@/components/chat/copy-button"
+import { PermissionCard } from "@/components/chat/permission-card"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { PlanCard } from "@/components/chat/plan-card"
 import { ThoughtBlock } from "@/components/chat/thought-block"
@@ -185,20 +187,7 @@ export function SessionChat() {
                 {chat.session.title}
               </span>
               <span className="shrink-0">{chat.session.agentName}</span>
-              <span className="truncate font-mono">{chat.session.cwd}</span>
             </>
-          ) : null}
-          {chat.contextUsage ? (
-            <span
-              className="ml-auto shrink-0 tabular-nums"
-              title={`${chat.contextUsage.used.toLocaleString()} / ${chat.contextUsage.size.toLocaleString()}`}
-            >
-              {t("chat.contextUsage", {
-                percent: Math.round(
-                  (chat.contextUsage.used / chat.contextUsage.size) * 100
-                ),
-              })}
-            </span>
           ) : null}
         </div>
 
@@ -300,11 +289,11 @@ export function SessionChat() {
                               <ShieldCheckIcon />
                             </MarkerIcon>
                             <MarkerContent>
-                              {perm.title
-                                ? t("chat.permissionGrantedTitle", {
-                                    title: perm.title,
-                                  })
-                                : t("chat.permissionGranted")}
+                              {t("chat.permission.resolved", {
+                                title: perm.title,
+                                choice:
+                                  perm.choice || t("chat.permission.cancelled"),
+                              })}
                             </MarkerContent>
                           </Marker>
                         ))}
@@ -318,6 +307,24 @@ export function SessionChat() {
                   {chat.streamingText ? (
                     <MessageScrollerItem scrollAnchor={false}>
                       <MarkdownContent>{chat.streamingText}</MarkdownContent>
+                    </MessageScrollerItem>
+                  ) : null}
+
+                  {chat.permission ? (
+                    <MessageScrollerItem
+                      key={chat.permission.id}
+                      scrollAnchor={false}
+                    >
+                      <PermissionCard
+                        permission={chat.permission}
+                        onResolve={(optionId, choiceName) =>
+                          void chat.resolvePermission(
+                            chat.permission!.id,
+                            optionId,
+                            choiceName
+                          )
+                        }
+                      />
                     </MessageScrollerItem>
                   ) : null}
 
@@ -342,7 +349,8 @@ export function SessionChat() {
                   {chat.busy &&
                   !chat.streamingText &&
                   liveActivityCount === 0 &&
-                  !chat.elicitation ? (
+                  !chat.elicitation &&
+                  !chat.permission ? (
                     <MessageScrollerItem scrollAnchor={false}>
                       <Marker role="status">
                         <MarkerIcon>
@@ -385,6 +393,13 @@ export function SessionChat() {
         onCancel={() => void chat.cancel()}
         busy={chat.busy}
         placeholder={t("chat.placeholder")}
+        footer={
+          <ComposerStatus
+            cwd={chat.session?.cwd}
+            gitBranch={chat.session?.gitBranch}
+            usage={chat.contextUsage}
+          />
+        }
       >
         <SettingsSelectors
           settings={chat.settings}
