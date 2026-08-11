@@ -58,12 +58,18 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	// 配置页勾选：更新 models/commands 的启用状态。
 	api.HandleFunc("PUT /api/agents/{id}/catalog", agents.catalog)
 
+	workspace := workspaceHandler{sessions: sessionService}
+
 	api.HandleFunc("GET /api/sessions", sessions.list)
 	api.HandleFunc("POST /api/sessions", sessions.create)
 	api.HandleFunc("GET /api/sessions/{id}", sessions.get)
 	api.HandleFunc("DELETE /api/sessions/{id}", sessions.remove)
 	api.HandleFunc("GET /api/sessions/{id}/messages", sessions.listMessages)
 	api.HandleFunc("GET /api/sessions/{id}/transcript", sessions.transcript)
+
+	// 工作区面板数据面：文件树（depth≤2 一次返回，gitignore 过滤）与文件预览。
+	api.HandleFunc("GET /api/sessions/{id}/fs/entries", workspace.tree)
+	api.HandleFunc("GET /api/sessions/{id}/fs/file", workspace.file)
 
 	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)
