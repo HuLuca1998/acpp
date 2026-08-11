@@ -70,6 +70,10 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	// 工作区面板数据面：文件树（depth≤2 一次返回，gitignore 过滤）与文件预览。
 	api.HandleFunc("GET /api/sessions/{id}/fs/entries", workspace.tree)
 	api.HandleFunc("GET /api/sessions/{id}/fs/file", workspace.file)
+	// git 数据面：overview 供 diff/commit 两面板共享，diff/commit 按需取全文。
+	api.HandleFunc("GET /api/sessions/{id}/git/overview", workspace.gitOverview)
+	api.HandleFunc("GET /api/sessions/{id}/git/diff", workspace.gitDiff)
+	api.HandleFunc("GET /api/sessions/{id}/git/commits/{sha}", workspace.gitCommit)
 
 	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)
