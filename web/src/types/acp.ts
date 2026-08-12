@@ -381,3 +381,71 @@ export interface Paged<T> {
   page: number
   pageSize: number
 }
+
+// ---- 技能库（磁盘为事实源，与 server/internal/service/skill*.go 对齐）----
+
+export interface Skill {
+  name: string
+  description: string
+  enabled: boolean
+  updatedAt: string
+}
+
+export interface SkillDetail extends Skill {
+  /** frontmatter 之后的 markdown 正文；frontmatter 由后端组装。 */
+  body: string
+}
+
+export interface SkillCreateInput {
+  name: string
+  description: string
+  body: string
+}
+
+export interface SkillUpdateInput {
+  description?: string
+  body?: string
+  enabled?: boolean
+}
+
+export interface SkillFile {
+  path: string
+  size: number
+  binary: boolean
+  updatedAt: string
+}
+
+export interface SkillFileContent extends SkillFile {
+  content: string
+}
+
+export interface SkillScriptVar {
+  name: string
+  label: string
+}
+
+export interface SkillScript {
+  path: string
+  description: string
+  usage: string
+  args: SkillScriptVar[]
+  opts: SkillScriptVar[]
+  envs: SkillScriptVar[]
+  runnable: boolean
+}
+
+export interface SkillScriptRunInput {
+  path: string
+  args: string[]
+  opts: string[]
+  env: Record<string, string>
+}
+
+export interface SkillScriptRunResult {
+  exitCode: number
+  stdout: string
+  stderr: string
+  durationMs: number
+  timedOut: boolean
+  truncated: boolean
+}

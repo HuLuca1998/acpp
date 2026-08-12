@@ -27,6 +27,7 @@ import {
   PlugZapIcon,
   ScrollTextIcon,
   Settings2Icon,
+  PuzzleIcon,
   WrenchIcon,
 } from "lucide-react"
 
@@ -56,6 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navMain = [
     { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },
     { title: t("nav.agents"), url: "/agents", icon: <BotIcon /> },
+    { title: t("nav.skills"), url: "/skills", icon: <PuzzleIcon /> },
     {
       title: t("nav.sessions"),
       url: "/sessions",

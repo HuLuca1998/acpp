@@ -16,6 +16,7 @@ export default {
   nav: {
     overview: "Overview",
     agents: "Agents",
+    skills: "Skills",
     sessions: "Sessions",
     tools: "Tools",
     logs: "Logs",
@@ -111,6 +112,71 @@ export default {
       fastPolicy: "Allow fast mode",
       fastPolicyHint:
         "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
+    },
+  },
+  skills: {
+    title: "Skills",
+    description:
+      "System skill library: these skills are injected into every session, replacing machine-level skills; changes apply to new sessions only.",
+    add: "New skill",
+    empty: "No skills yet",
+    emptyHint:
+      "Create a skill, or drop a skill directory into skills/ under the data directory.",
+    name: "Name",
+    colDescription: "Description",
+    enabled: "Enabled",
+    updated: "Updated",
+    effectNote:
+      "Toggles and edits apply to new sessions; running sessions are unaffected.",
+    enabledToast: "Enabled {{name}}",
+    disabledToast: "Disabled {{name}}",
+    deleteTitle: "Delete skill",
+    deleteBody:
+      "The whole {{name}} directory, including bundled files, will be removed. This cannot be undone.",
+    deleted: "Skill deleted",
+    create: {
+      title: "New skill",
+      nameHint: "kebab-case; cannot be renamed later",
+      namePlaceholder: "code-review-guide",
+      descriptionLabel: "Description (trigger)",
+      descriptionHint:
+        "State what it does and when to use it — the model decides to load the body based on this.",
+      descriptionPlaceholder:
+        "Code review checklist — walk the team conventions when asked to review code",
+      submit: "Create",
+    },
+    detail: {
+      backToList: "Skills",
+      saved: "Saved",
+      body: "Body (markdown)",
+      bodyPlaceholder:
+        "# skill-name\n\nOnly write what the model doesn't know: conventions, steps, pitfalls.",
+      unsaved: "Unsaved",
+      files: "Bundled files",
+      filesHint:
+        "references/ for long reads, scripts/ for scripts, assets/ for output templates.",
+      noFiles: "No bundled files yet",
+      newFile: "New file",
+      filePath: "Relative path",
+      filePathPlaceholder: "references/patterns.md",
+      binary: "binary",
+      fileDeleteTitle: "Delete file",
+      fileDeleteBody: "{{path}} will be removed. This cannot be undone.",
+      scripts: "Scripts",
+      scriptsHint:
+        "Declare desc / usage / arg / opt / env in the script header comments; they render as controls here.",
+      noScripts: "No scripts under scripts/ yet",
+      noMeta: "No header metadata; consider adding desc / arg comments.",
+      notRunnable: "Extension not runnable (.py / .sh / .mjs / .js supported)",
+      run: "Run",
+      running: "Running…",
+      exitCode: "exit {{code}}",
+      duration: "{{ms}} ms",
+      timedOut: "Timed out (60s)",
+      truncated: "Output truncated",
+      stdout: "stdout",
+      stderr: "stderr",
+      envLabel: "Environment",
     },
   },
   sessions: {

@@ -10,6 +10,8 @@ import { Placeholder } from "@/routes/placeholder"
 import { SessionChat } from "@/routes/session-chat"
 import { Sessions } from "@/routes/sessions"
 import { Settings } from "@/routes/settings"
+import { SkillDetail } from "@/routes/skill-detail"
+import { Skills } from "@/routes/skills"
 
 /** 尚未实现、但已在导航里占位的页面。 */
 const PLACEHOLDERS = [
@@ -38,6 +40,8 @@ export function App() {
         <Route index element={<Overview />} />
         <Route path="agents" element={<Agents />} />
         <Route path="agents/:id" element={<AgentDetail />} />
+        <Route path="skills" element={<Skills />} />
+        <Route path="skills/:name" element={<SkillDetail />} />
         <Route path="sessions" element={<Sessions />} />
         {/* 新会话与老会话共用同一个页面：草稿态只是多了跨 ACP 模型选择
             与可编辑工作目录，首条消息落地才真正创建会话。 */}

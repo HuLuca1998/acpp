@@ -11,6 +11,15 @@ import type {
   Session,
   SessionSettings,
   SettingsPatch,
+  Skill,
+  SkillCreateInput,
+  SkillDetail,
+  SkillFile,
+  SkillFileContent,
+  SkillScript,
+  SkillScriptRunInput,
+  SkillScriptRunResult,
+  SkillUpdateInput,
   SystemInfo,
   TerminalInfo,
   TreeListing,
@@ -225,6 +234,44 @@ export const api = {
         : `${proto}://${location.host}${BASE}`
       return `${base}/sessions/${id}/terminals/${tid}/ws`
     },
+  },
+
+  skills: {
+    list: () => request<Paged<Skill>>("/skills"),
+    get: (name: string) => request<SkillDetail>(`/skills/${name}`),
+    create: (input: SkillCreateInput) =>
+      request<SkillDetail>("/skills", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (name: string, input: SkillUpdateInput) =>
+      request<SkillDetail>(`/skills/${name}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    remove: (name: string) =>
+      request<{ deleted: boolean }>(`/skills/${name}`, { method: "DELETE" }),
+
+    files: (name: string) => request<Paged<SkillFile>>(`/skills/${name}/files`),
+    file: (name: string, path: string) =>
+      request<SkillFileContent>(`/skills/${name}/files/${path}`),
+    putFile: (name: string, path: string, content: string) =>
+      request<SkillFile>(`/skills/${name}/files/${path}`, {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+      }),
+    removeFile: (name: string, path: string) =>
+      request<{ deleted: boolean }>(`/skills/${name}/files/${path}`, {
+        method: "DELETE",
+      }),
+
+    scripts: (name: string) =>
+      request<Paged<SkillScript>>(`/skills/${name}/scripts`),
+    runScript: (name: string, input: SkillScriptRunInput) =>
+      request<SkillScriptRunResult>(`/skills/${name}/scripts/run`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
   },
 
   fs: {
