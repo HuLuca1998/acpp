@@ -60,6 +60,8 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 	}
 	agentReqs := map[string]agentReq{}
 	var turn *rebuildTurn
+	// 在途（已发出未响应）的 prompt 数：>1 表示 claude promptQueueing 在排队。
+	pendingPrompts := 0
 
 	// prompt / steering 共用：把内容块拼成一条 user 消息。
 	emitUserBlocks := func(prompt []acp.ContentBlock, ts time.Time) {
@@ -153,13 +155,20 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			if len(msg.ID) > 0 {
 				sentMethods[string(msg.ID)] = msg.Method
 			}
-			// 上一轮如果没等到响应（进程中途死了），先按无结论落掉。
-			flush(entry.TS, "")
-
 			var p acp.PromptParams
 			if err := json.Unmarshal(msg.Params, &p); err == nil {
 				emitUserBlocks(p.Prompt, entry.TS)
 			}
+			if pendingPrompts > 0 && turn != nil {
+				// 上一轮响应未到就来了新 prompt：claude 的 promptQueueing
+				// 排队（引导插话）。只产出 user 消息不结轮——当前轮的内容
+				// 仍归它自己的响应收尾，排队轮的内容在那之后才开始。
+				pendingPrompts++
+				continue
+			}
+			// 上一轮如果没等到响应（进程中途死了），先按无结论落掉。
+			flush(entry.TS, "")
+			pendingPrompts++
 			turn = &rebuildTurn{tools: map[string]*rebuildTool{}}
 
 		case entry.Dir == "send" && msg.Method == "_session/steering":
@@ -223,6 +232,14 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			var result acp.PromptResult
 			_ = json.Unmarshal(msg.Result, &result)
 			flush(entry.TS, string(result.StopReason))
+			if pendingPrompts > 0 {
+				pendingPrompts--
+			}
+			if pendingPrompts > 0 {
+				// 还有排队的 prompt 在途（promptQueueing）：马上开新轮接住
+				// 它的内容分片，否则排队轮的回复会因 turn 为空被整段丢弃。
+				turn = &rebuildTurn{tools: map[string]*rebuildTool{}}
+			}
 		}
 	}
 

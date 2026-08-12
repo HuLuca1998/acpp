@@ -484,7 +484,10 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBl
 		} else {
 			br.publish(StreamEvent{Kind: "error", Error: err.Error()})
 			s.markSessionError(sessionID, err)
-			br.endTurn()
+			// 与正常收尾同理：还有别的轮在途时不发 turn_done。
+			if !s.manager.TurnActive(sessionKey(sessionID)) {
+				br.endTurn()
+			}
 			return
 		}
 	}
@@ -504,6 +507,13 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBl
 		slog.Error("save stop reason", "session", sessionID, "err", err)
 	}
 
+	// claude 的引导轮（promptQueueing）与原轮是两个并行的 runTurn：
+	// 原轮先收尾时引导轮还在跑，此刻发 turn_done 会让前端误判「没有轮
+	// 在跑」，把排队的插话 flush 进正在跑的轮、被二次 Interject 链式排队
+	// （claude 消化不了第二层排队，消息就悬空无回复）。谁最后收尾谁发。
+	if s.manager.TurnActive(sessionKey(sessionID)) {
+		return
+	}
 	br.endTurn()
 }
 

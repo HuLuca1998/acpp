@@ -62,6 +62,41 @@ func TestRebuildMessagesSteering(t *testing.T) {
 	}
 }
 
+// claude 的 promptQueueing（引导插话）：turn 中再发的 prompt 排队为独立轮。
+// 排队 prompt 只产出 user 消息不打断原轮；原轮响应后排队轮的分片
+// 必须落进新轮，不能因 turn 为空被丢弃。
+func TestRebuildMessagesPromptQueueing(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(8, "长任务")),
+		wire(t, "recv", chunkFrame("原轮前半。")),
+		wire(t, "send", promptFrame(9, "引导插话 J")),
+		wire(t, "recv", chunkFrame("原轮后半。")),
+		wire(t, "recv", resultFrame(8)),
+		wire(t, "recv", chunkFrame("这是对 J 的答复。")),
+		wire(t, "recv", resultFrame(9)),
+	}
+
+	got := RebuildMessages(7, entries)
+
+	want := []struct {
+		role    model.MessageRole
+		content string
+	}{
+		{model.RoleUser, "长任务"},
+		{model.RoleUser, "引导插话 J"},
+		{model.RoleAgent, "原轮前半。原轮后半。"},
+		{model.RoleAgent, "这是对 J 的答复。"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d messages, want %d: %+v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i].Role != w.role || got[i].Content != w.content {
+			t.Errorf("message[%d] = (%s, %q), want (%s, %q)", i, got[i].Role, got[i].Content, w.role, w.content)
+		}
+	}
+}
+
 // 普通两轮对话的基线：每轮 prompt 产出 user 消息，轮末落 agent 正文。
 func TestRebuildMessagesTwoTurns(t *testing.T) {
 	entries := []transcript.Entry{
