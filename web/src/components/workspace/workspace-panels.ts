@@ -56,13 +56,15 @@ export function workspacePanelPosition(
     : { referencePanel: "chat", direction: "right" }
 }
 
-/** 打开一个不在布局里的单例面板。位置记忆的精确恢复留到 M4。 */
+/** 打开一个不在布局里的单例面板。位置记忆的精确恢复留作后续优化。 */
 export function addWorkspacePanel(api: DockviewApi, id: WorkspacePanelKind) {
+  const position = workspacePanelPosition(api, id)
   api.addPanel({
     id,
     component: id,
-    position: workspacePanelPosition(api, id),
+    position,
   })
+  sizeNewSideGroup(api, id, position)
 }
 
 /** 打开一个终端实例面板（renderer always：切走 tab 不丢终端状态）。 */
@@ -71,11 +73,29 @@ export function addTerminalPanel(
   termId: string,
   num: number
 ) {
+  const position = workspacePanelPosition(api)
   api.addPanel({
     id: `terminal:${termId}`,
     component: "terminal",
     renderer: "always",
     params: { termId, num },
-    position: workspacePanelPosition(api),
+    position,
   })
+  sizeNewSideGroup(api, `terminal:${termId}`, position)
+}
+
+/**
+ * 从纯对话布局里首次唤起面板时会在 chat 右侧新开一组，dockview 默认
+ * 对半分——把新组收窄到约 1/4，对话仍是主角；并进现有工具组时不动。
+ */
+function sizeNewSideGroup(
+  api: DockviewApi,
+  id: string,
+  position: AddPanelOptions["position"]
+) {
+  const ref = (position as { referencePanel?: string } | undefined)
+    ?.referencePanel
+  if (ref === "chat" && api.width > 0) {
+    api.getPanel(id)?.api.setSize({ width: Math.round(api.width * 0.25) })
+  }
 }

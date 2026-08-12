@@ -141,25 +141,9 @@ export function applyLayoutPreset(api: DockviewApi, preset: LayoutPreset) {
       break
     }
     default: {
-      // 默认两栏：对话 80%，右栏 tab 组（文件树激活 + 待命三块）。
+      // 纯对话铺满（2026-08-12 定稿变更）：工作区面板全部按需唤起
+      //（⋯ 菜单勾选 / 树→预览等联动命令），首屏零工作区开销。
       api.addPanel({ id: "chat", component: "chat", minimumWidth: 320 })
-      api.addPanel({
-        id: "files",
-        component: "files",
-        position: { referencePanel: "chat", direction: "right" },
-      })
-      for (const id of ["diff", "commits"] as const) {
-        api.addPanel({
-          id,
-          component: id,
-          inactive: true,
-          position: { referencePanel: "files", direction: "within" },
-        })
-      }
-      addTerminal({ referencePanel: "files", direction: "within" })
-      afterMeasure(api, () => {
-        setWidth(api, "chat", 0.8)
-      })
     }
   }
 }
