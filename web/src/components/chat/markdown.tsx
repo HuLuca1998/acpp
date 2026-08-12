@@ -56,6 +56,9 @@ export function MarkdownContent({
     <div
       className={cn(
         "prose prose-sm max-w-none wrap-break-word",
+        // prose-sm 默认的 ol 编号区放不下两位数序号，溢出会被消息条的
+        // content-visibility（paint containment）裁掉半个数字。
+        "prose-ol:ps-8",
         "prose-code:before:content-none prose-code:after:content-none",
         className
       )}
