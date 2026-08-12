@@ -28,6 +28,9 @@ type Agent struct {
 	Flavor    string            `gorm:"size:32" json:"flavor"`
 	Models    AgentModelSlice   `gorm:"type:text" json:"models"`
 	Commands  AgentCommandSlice `gorm:"type:text" json:"commands"`
+	// Skeleton 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），
+	// 与 Models 一起构成未连接会话的完整降级设置视图。
+	Skeleton AgentSkeleton `gorm:"type:text" json:"skeleton"`
 	CreatedAt time.Time         `json:"createdAt"`
 	UpdatedAt time.Time         `json:"updatedAt"`
 

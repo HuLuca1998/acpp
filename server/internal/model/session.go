@@ -26,7 +26,11 @@ type Session struct {
 	StopReason string `gorm:"size:64" json:"stopReason"`
 	// MessageCount 是重建后的消息数缓存：turn 结束时写回，列表读取 O(1)——
 	// 别在列表路径上做全量转录重建。
-	MessageCount int       `json:"messageCount"`
+	MessageCount int `json:"messageCount"`
+	// LastSettings 是最后一次生效的统一设置当前值快照
+	// （model/effort/level/plan/fast），恢复会话的降级视图用它填 Current*，
+	// 让三种状态（新建/进行中/恢复）的设置控件显示一致。
+	LastSettings JSONMap `gorm:"type:text" json:"lastSettings,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `gorm:"index" json:"updatedAt"`
 

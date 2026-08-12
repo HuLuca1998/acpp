@@ -161,28 +161,14 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 	}
 	key := sessionKey(sessionID)
 	if _, ok := s.manager.Get(key); !ok {
-		// 进程不在也要给出可用的设置视图：模型清单与斜杠命令来自 agent
-		// 探测缓存，不需要连接就能展示、选择（应用时会幂等拉起进程）。
-		// Current* 留空——运行时之外没人知道当前值，前端显示占位符。
+		// 进程不在也要给出与连接时结构一致的设置视图：维度清单来自 agent
+		// 探测缓存（模型 + 骨架），当前值来自会话的最后设置快照——
+		// 恢复会话的工具栏因此与进行中的会话显示一致。
 		var agent model.Agent
 		if err := s.db.WithContext(ctx).First(&agent, view.AgentID).Error; err == nil {
-			// 切片必须给空值而不是 nil——JSON null 会让前端 .length 直接崩。
-			settings := acp.Settings{
-				Flavor:  acp.Flavor(agent.Flavor),
-				Models:  []acp.Model{},
-				Efforts: []acp.Effort{},
-				Levels:  []acp.AccessLevel{},
-			}
-			for _, m := range agent.Models {
-				if m.Disabled {
-					continue
-				}
-				settings.Models = append(settings.Models, acp.Model{
-					ID: m.ID, Name: m.Name, Description: m.Description,
-				})
-			}
+			settings := degradedSettings(&agent, view.LastSettings)
 			if len(settings.Models) > 0 {
-				view.Settings = &settings
+				view.Settings = settings
 			}
 			for _, c := range agent.Commands {
 				if c.Disabled {
@@ -200,9 +186,67 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 	if settings, err := s.manager.Settings(key); err == nil {
 		cat.filterSettings(&settings)
 		view.Settings = &settings
+		s.saveSettingsSnapshot(sessionID, &settings)
 	}
 	view.Commands = cat.filterCommands(s.manager.Commands(key))
 	return view, nil
+}
+
+// degradedSettings 用 agent 探测缓存与会话最后设置快照拼出未连接时的
+// 设置视图。切片给空值而不是 nil——JSON null 会让前端 .length 直接崩。
+func degradedSettings(agent *model.Agent, last model.JSONMap) *acp.Settings {
+	settings := &acp.Settings{
+		Flavor:        acp.Flavor(agent.Flavor),
+		Models:        []acp.Model{},
+		Efforts:       []acp.Effort{},
+		Levels:        []acp.AccessLevel{},
+		PlanSupported: agent.Skeleton.PlanSupported,
+		FastSupported: agent.Skeleton.FastSupported,
+	}
+	for _, m := range agent.Models {
+		if m.Disabled {
+			continue
+		}
+		settings.Models = append(settings.Models, acp.Model{
+			ID: m.ID, Name: m.Name, Description: m.Description,
+		})
+	}
+	for _, e := range agent.Skeleton.Efforts {
+		settings.Efforts = append(settings.Efforts, acp.Effort(e))
+	}
+	for _, l := range agent.Skeleton.Levels {
+		settings.Levels = append(settings.Levels, acp.AccessLevel(l))
+	}
+	str := func(k string) string {
+		v, _ := last[k].(string)
+		return v
+	}
+	boolean := func(k string) bool {
+		v, _ := last[k].(bool)
+		return v
+	}
+	settings.CurrentModel = str("model")
+	settings.CurrentEffort = acp.Effort(str("effort"))
+	settings.CurrentLevel = acp.AccessLevel(str("level"))
+	settings.PlanOn = boolean("plan")
+	settings.FastOn = boolean("fast")
+	return settings
+}
+
+// saveSettingsSnapshot 把统一设置的当前值写回会话记录（旁路，失败只记日志），
+// 供恢复会话时的降级视图展示与连接时一致的当前值。
+func (s *ChatService) saveSettingsSnapshot(sessionID uint, settings *acp.Settings) {
+	snapshot := model.JSONMap{
+		"model":  settings.CurrentModel,
+		"effort": string(settings.CurrentEffort),
+		"level":  string(settings.CurrentLevel),
+		"plan":   settings.PlanOn,
+		"fast":   settings.FastOn,
+	}
+	if err := s.db.Model(&model.Session{}).
+		Where("id = ?", sessionID).Update("last_settings", snapshot).Error; err != nil {
+		slog.Warn("save settings snapshot", "session", sessionID, "err", err)
+	}
 }
 
 // Open 为一条已存在的数据库会话拉起 agent 并完成 ACP 握手。
@@ -268,6 +312,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	if settings, err := s.manager.Settings(key); err == nil {
 		cat.filterSettings(&settings)
 		view.Settings = &settings
+		s.saveSettingsSnapshot(sessionID, &settings)
 		// 懒连接下 Open 多由 Send 顺路触发，前端不会拿到这份 HTTP 响应——
 		// 统一视图与命令清单同时走 SSE 广播一份。
 		br.publish(StreamEvent{Kind: "settings", Settings: &settings})
@@ -291,6 +336,7 @@ func (s *ChatService) ApplySettings(ctx context.Context, sessionID uint, patch a
 		return nil, translateNoSession(sessionID, err)
 	}
 	s.catalogFor(ctx, sessionID).filterSettings(&settings)
+	s.saveSettingsSnapshot(sessionID, &settings)
 	s.brokerFor(sessionID).publish(StreamEvent{Kind: "settings", Settings: &settings})
 	return &settings, nil
 }
@@ -544,6 +590,7 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 		updates["flavor"] = ""
 		updates["models"] = model.AgentModelSlice{}
 		updates["commands"] = model.AgentCommandSlice{}
+		updates["skeleton"] = model.AgentSkeleton{}
 		updates["status"] = model.AgentError
 		updates["last_error"] = truncateError(err.Error())
 	} else {
@@ -587,9 +634,20 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 				Disabled: oldDisabled["c:"+c.Name],
 			})
 		}
+		skeleton := model.AgentSkeleton{
+			PlanSupported: settings.PlanSupported,
+			FastSupported: settings.FastSupported,
+		}
+		for _, e := range settings.Efforts {
+			skeleton.Efforts = append(skeleton.Efforts, string(e))
+		}
+		for _, l := range settings.Levels {
+			skeleton.Levels = append(skeleton.Levels, string(l))
+		}
 		updates["flavor"] = string(settings.Flavor)
 		updates["models"] = models
 		updates["commands"] = cached
+		updates["skeleton"] = skeleton
 		updates["status"] = model.AgentIdle
 		updates["last_error"] = ""
 	}
@@ -721,6 +779,7 @@ func (s *ChatService) handleEvent(sessionID uint, br *broker, ev acp.Event) {
 	case acp.EventSettings:
 		// agent 自行改配置推来的视图同样要过配置页的取舍。
 		s.catalogFor(context.Background(), sessionID).filterSettings(ev.Settings)
+		s.saveSettingsSnapshot(sessionID, ev.Settings)
 		br.publish(StreamEvent{Kind: "settings", Settings: ev.Settings})
 
 	case acp.EventUsage:

@@ -93,6 +93,33 @@ type AgentCommand struct {
 	Disabled    bool   `json:"disabled,omitempty"`
 }
 
+// AgentSkeleton 是探测缓存的统一设置骨架：除模型外的维度清单与开关
+// 支持位（与 acp.Settings 对齐，model 包不依赖 acp，由 service 层转换）。
+// 未连接的会话靠它拼出与连接时结构一致的设置视图。
+type AgentSkeleton struct {
+	Efforts       []string `json:"efforts,omitempty"`
+	Levels        []string `json:"levels,omitempty"`
+	PlanSupported bool     `json:"planSupported,omitempty"`
+	FastSupported bool     `json:"fastSupported,omitempty"`
+}
+
+func (s AgentSkeleton) Value() (driver.Value, error) {
+	b, err := json.Marshal(s)
+	return string(b), err
+}
+
+func (s *AgentSkeleton) Scan(src any) error {
+	b, err := toBytes(src)
+	if err != nil {
+		return fmt.Errorf("scan AgentSkeleton: %w", err)
+	}
+	if len(b) == 0 {
+		*s = AgentSkeleton{}
+		return nil
+	}
+	return json.Unmarshal(b, s)
+}
+
 // AgentCommandSlice 以 JSON 文本形式存进 sqlite 的斜杠命令清单。
 type AgentCommandSlice []AgentCommand
 
