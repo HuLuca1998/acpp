@@ -433,10 +433,19 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBl
 		}
 	}
 	if err != nil {
-		br.publish(StreamEvent{Kind: "error", Error: err.Error()})
-		s.markSessionError(sessionID, err)
-		br.endTurn()
-		return
+		// codex 对 session/cancel 的反应是让 prompt 报 "context canceled" 错，
+		// 而不是按 ACP 规范返回 stopReason=cancelled。用户主动中止不是故障：
+		// 归一成 cancelled 走正常收尾，否则错误横幅会误报"无法连接 agent"，
+		// 且残余事件会毒化重放缓冲。
+		if strings.Contains(strings.ToLower(err.Error()), "cancel") {
+			result = acp.PromptResult{StopReason: acp.StopCancelled}
+			br.publish(StreamEvent{Kind: "turn_end", StopReason: string(acp.StopCancelled)})
+		} else {
+			br.publish(StreamEvent{Kind: "error", Error: err.Error()})
+			s.markSessionError(sessionID, err)
+			br.endTurn()
+			return
+		}
 	}
 
 	updates := map[string]any{"stop_reason": string(result.StopReason)}

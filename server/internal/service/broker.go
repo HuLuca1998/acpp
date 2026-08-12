@@ -24,19 +24,17 @@ func newBroker() *broker {
 // subscribe 加入一个订阅者，并先把本轮已发生的事件补给它，
 // 这样中途刷新页面也能看到正在跑的这一轮。
 func (b *broker) subscribe() (<-chan StreamEvent, func()) {
-	ch := make(chan StreamEvent, subscriberBuffer)
-
 	b.mu.Lock()
 	backlog := make([]StreamEvent, len(b.replay))
 	copy(backlog, b.replay)
+	// 容量必须装得下整个 backlog：长轮的事件数可以超过 subscriberBuffer，
+	// 非阻塞补发会把尾部（含 turn_done）静默丢掉，前端 busy 就永久卡死。
+	ch := make(chan StreamEvent, max(subscriberBuffer, len(backlog)+subscriberBuffer))
 	b.subs[ch] = struct{}{}
 	b.mu.Unlock()
 
 	for _, ev := range backlog {
-		select {
-		case ch <- ev:
-		default:
-		}
+		ch <- ev
 	}
 
 	var once sync.Once
@@ -80,4 +78,10 @@ func (b *broker) startTurn() {
 
 func (b *broker) endTurn() {
 	b.publish(StreamEvent{Kind: "turn_done"})
+	// 轮已收尾，重放缓冲就完成使命了：之后刷新页面走消息接口拿权威转录，
+	// 不需要（也不应该）重放一整轮的流式事件；agent 中止后迟到的残余
+	// 事件也不该攒着毒化下一次订阅。
+	b.mu.Lock()
+	b.replay = nil
+	b.mu.Unlock()
 }

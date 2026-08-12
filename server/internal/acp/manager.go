@@ -524,6 +524,13 @@ func (m *Manager) Prompt(ctx context.Context, key string, blocks []ContentBlock)
 
 	result, err := sess.promptCall(turnCtx, blocks)
 	if err != nil {
+		// 用户主动中止（session/cancel 取消了 turnCtx）不是故障。codex 对
+		// cancel 的反应是让 prompt 报 "context canceled" 错而非按 ACP 规范
+		// 返回 stopReason=cancelled，这里折算回 cancelled 正常收尾。
+		if errors.Is(turnCtx.Err(), context.Canceled) {
+			sess.emit(Event{Kind: EventTurnEnd, StopReason: StopCancelled})
+			return PromptResult{StopReason: StopCancelled}, nil
+		}
 		// 超时后只 reject 是不够的：agent 还在后台跑、还在烧钱、还可能继续改文件。
 		if errors.Is(turnCtx.Err(), context.DeadlineExceeded) {
 			m.cancelTurn(sess)
