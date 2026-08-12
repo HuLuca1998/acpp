@@ -29,6 +29,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	agents := agentHandler{agents: service.NewAgentService(gdb), chat: chatService}
 	sessions := sessionHandler{sessions: sessionService, chat: chatService}
 	chat := chatHandler{chat: chatService}
+	system := systemHandler{system: service.NewSystemService(gdb, cfg)}
 
 	api := http.NewServeMux()
 
@@ -49,6 +50,10 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 		}
 		writeData(w, http.StatusOK, listing)
 	})
+
+	// 系统配置：数据目录查看 / 迁移（拷贝式，重启后生效）。
+	api.HandleFunc("GET /api/system", system.get)
+	api.HandleFunc("PUT /api/system/data-dir", system.migrate)
 
 	api.HandleFunc("GET /api/agents", agents.list)
 	api.HandleFunc("POST /api/agents", agents.create)

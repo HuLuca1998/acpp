@@ -11,6 +11,16 @@ export interface SlashCommand {
 }
 
 /** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
+/** 系统配置：数据目录状态（设置面板用）。 */
+export interface SystemInfo {
+  /** 当前进程实际使用的数据目录。 */
+  dataDir: string
+  /** 默认数据目录（~/.acpp）。 */
+  defaultDir: string
+  /** 非空表示已迁移到新目录、等待重启生效。 */
+  pendingDir?: string
+}
+
 export interface CatalogInput {
   models?: { key: string; disabled: boolean; alias?: string }[]
   commands?: { key: string; disabled: boolean }[]

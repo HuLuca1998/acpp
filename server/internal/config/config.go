@@ -8,10 +8,13 @@ import (
 	"time"
 )
 
-// Config 是服务的全部可调项，全部来自环境变量，带可用的默认值。
+// Config 是服务的全部可调项，来自环境变量与固定配置文件，带可用默认值。
 type Config struct {
 	// Addr 是 HTTP 监听地址。
 	Addr string
+	// DataDir 是数据根目录：优先级 ACP_DATA_DIR > ~/.acpp/config.json
+	// 里用户选定的目录 > 默认 ~/.acpp。db 与转录默认都派生于它。
+	DataDir string
 	// DSN 是 sqlite 数据库文件路径。
 	DSN string
 	// TranscriptDir 存放每条会话的 ACP 线级转录（JSONL）。
@@ -34,11 +37,19 @@ type Config struct {
 	MaxTerminals int
 }
 
-// Load 从环境变量读取配置。
+// Load 从环境变量与固定配置文件读取配置。
 func Load() Config {
-	dsn := env("ACP_DSN", "data/acp.db")
+	dataDir := env("ACP_DATA_DIR", "")
+	if dataDir == "" {
+		dataDir = SavedDataDir()
+	}
+	if dataDir == "" {
+		dataDir = ConfigHome()
+	}
+	dsn := env("ACP_DSN", filepath.Join(dataDir, "acp.db"))
 	return Config{
 		Addr:          env("ACP_ADDR", "127.0.0.1:48080"),
+		DataDir:       dataDir,
 		DSN:           dsn,
 		TranscriptDir: env("ACP_TRANSCRIPT_DIR", filepath.Join(filepath.Dir(dsn), "transcripts")),
 		CORSOrigins:   splitAndTrim(env("ACP_CORS_ORIGINS", "http://localhost:45173")),

@@ -9,16 +9,12 @@ import { Overview } from "@/routes/overview"
 import { Placeholder } from "@/routes/placeholder"
 import { SessionChat } from "@/routes/session-chat"
 import { Sessions } from "@/routes/sessions"
+import { Settings } from "@/routes/settings"
 
 /** 尚未实现、但已在导航里占位的页面。 */
 const PLACEHOLDERS = [
   { path: "tools", titleKey: "nav.tools", descKey: "placeholderPage.tools" },
   { path: "logs", titleKey: "nav.logs", descKey: "placeholderPage.logs" },
-  {
-    path: "settings",
-    titleKey: "nav.settings",
-    descKey: "placeholderPage.settings",
-  },
   {
     path: "connections",
     titleKey: "nav.connections",
@@ -47,6 +43,7 @@ export function App() {
             与可编辑工作目录，首条消息落地才真正创建会话。 */}
         <Route path="sessions/new" element={<SessionChat />} />
         <Route path="sessions/:id" element={<SessionChat />} />
+        <Route path="settings" element={<Settings />} />
         {PLACEHOLDERS.map(({ path, titleKey, descKey }) => (
           <Route
             key={path}

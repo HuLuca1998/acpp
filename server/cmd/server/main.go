@@ -34,6 +34,11 @@ func run() error {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
+	// 打开数据库前先准备数据目录（自动创建 ~/.acpp，存量数据一次性迁入）。
+	if err := config.PrepareData(cfg); err != nil {
+		return err
+	}
+
 	gdb, err := db.Open(cfg)
 	if err != nil {
 		return err

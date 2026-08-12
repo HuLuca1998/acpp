@@ -338,6 +338,28 @@ export default {
     backToSessions: "Back to sessions",
     openFailed: "Could not connect to the agent",
   },
+  settingsPage: {
+    menu: {
+      system: "System",
+    },
+    system: {
+      title: "Data directory",
+      description:
+        "Where the database and session transcripts live. Defaults to ~/.acpp, created on first launch; legacy server/data content is migrated in automatically.",
+      current: "Current",
+      default: "Default",
+      pendingTitle: "Migrated to a new directory — restart the server to apply",
+      targetPlaceholder: "Absolute path of the new data directory",
+      browse: "Browse",
+      migrate: "Migrate",
+      confirmTitle: "Migrate data directory?",
+      confirmBody:
+        "A database snapshot and all session transcripts will be copied to {{dir}}. The old data stays untouched; the new directory takes effect after a server restart.",
+      confirmAction: "Copy & migrate",
+      cancel: "Cancel",
+      done: "Migration complete — restart the server to apply",
+    },
+  },
   placeholderPage: {
     tools: "Tools exposed by the agent and their call statistics.",
     logs: "Raw JSON-RPC traffic.",

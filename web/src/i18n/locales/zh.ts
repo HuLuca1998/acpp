@@ -328,6 +328,28 @@ export default {
     backToSessions: "返回会话列表",
     openFailed: "无法连接 agent",
   },
+  settingsPage: {
+    menu: {
+      system: "系统",
+    },
+    system: {
+      title: "数据目录",
+      description:
+        "数据库与会话转录的存放位置。默认 ~/.acpp，首次启动自动创建；旧版 server/data 的存量数据会自动迁入。",
+      current: "当前目录",
+      default: "默认",
+      pendingTitle: "已迁移到新目录，重启后端后生效",
+      targetPlaceholder: "新数据目录的绝对路径",
+      browse: "浏览",
+      migrate: "迁移",
+      confirmTitle: "迁移数据目录？",
+      confirmBody:
+        "将把数据库快照与全部会话转录拷贝到 {{dir}}。旧数据保留在原目录不会删除；新目录在重启后端后生效。",
+      confirmAction: "拷贝并迁移",
+      cancel: "取消",
+      done: "迁移完成，重启后端后生效",
+    },
+  },
   placeholderPage: {
     tools: "agent 暴露的工具与调用统计。",
     logs: "JSON-RPC 原始收发日志。",

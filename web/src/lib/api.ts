@@ -11,6 +11,7 @@ import type {
   Session,
   SessionSettings,
   SettingsPatch,
+  SystemInfo,
   TerminalInfo,
   TreeListing,
   WorkspaceFile,
@@ -73,6 +74,16 @@ export const api = {
       request<Agent>(`/agents/${id}/catalog`, {
         method: "PUT",
         body: JSON.stringify(input),
+      }),
+  },
+
+  system: {
+    get: () => request<SystemInfo>("/system"),
+    /** 迁移数据目录（拷贝式，重启后端后生效）。 */
+    migrateDataDir: (dataDir: string) =>
+      request<SystemInfo>("/system/data-dir", {
+        method: "PUT",
+        body: JSON.stringify({ dataDir }),
       }),
   },
 
