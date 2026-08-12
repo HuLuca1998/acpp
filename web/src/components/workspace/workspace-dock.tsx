@@ -19,6 +19,7 @@ import { CommitsPanel } from "@/components/workspace/commits-panel"
 import { DiffPanel } from "@/components/workspace/diff-panel"
 import { FilePreviewPanel } from "@/components/workspace/file-preview-panel"
 import { FileTreePanel } from "@/components/workspace/file-tree-panel"
+import { LogsPanel } from "@/components/workspace/logs-panel"
 import { TerminalPanel } from "@/components/workspace/terminal-panel"
 import {
   useGitOverview,
@@ -53,6 +54,7 @@ const COMPONENTS: Record<
   preview: FilePreviewPanel,
   diff: DiffPanel,
   commits: CommitsPanel,
+  logs: LogsPanel,
   terminal: TerminalPanel,
 }
 

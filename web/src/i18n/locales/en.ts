@@ -261,12 +261,18 @@ export default {
     busy: "The previous turn is still running — wait for it or hit stop.",
   },
   workspace: {
+    logs: {
+      emptyTitle: "No transcript yet",
+      emptyHint:
+        "Raw JSON-RPC frames stream here in real time after the first message.",
+    },
     panels: {
       chat: "Chat",
       files: "Files",
       preview: "Preview",
       diff: "Working tree",
       commits: "Unpushed commits",
+      logs: "Logs",
       terminal: "Terminal",
     },
     closePanel: "Close panel",

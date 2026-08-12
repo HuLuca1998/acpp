@@ -141,6 +141,27 @@ export const api = {
     /** SSE 事件流地址。 */
     eventsUrl: (id: number) => `${BASE}/sessions/${id}/events`,
 
+    /**
+     * 增量读转录 JSONL（logs 面板轮询用）：转录 append-only，用 Range
+     * 字节偏移续读。返回新增文本与下一次的偏移；无新内容返回 null。
+     */
+    transcriptChunk: async (
+      id: number,
+      offset: number
+    ): Promise<{ chunk: string; nextOffset: number } | null> => {
+      const res = await fetch(`${BASE}/sessions/${id}/transcript`, {
+        headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+      })
+      // 416：偏移已到文件末尾，没有新内容。
+      if (res.status === 416) return null
+      if (!res.ok) throw new ApiError(res.status, res.statusText)
+      const chunk = await res.text()
+      if (chunk === "") return null
+      // 偏移按字节推进（JSONL 里的中文是多字节，不能用字符数）。
+      const bytes = new TextEncoder().encode(chunk).length
+      return { chunk, nextOffset: offset + bytes }
+    },
+
     /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
     workspaceTree: (id: number, params?: { path?: string; depth?: number }) => {
       const qs = new URLSearchParams()

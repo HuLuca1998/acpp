@@ -9,6 +9,7 @@ import {
   FolderTreeIcon,
   GitCommitHorizontalIcon,
   MessageSquareIcon,
+  ScrollTextIcon,
   TerminalIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -18,7 +19,7 @@ import {
  * 面板 id 形如 `terminal:<termId>`，其余类型面板 id 即类型名。
  */
 export type WorkspacePanelKind =
-  "chat" | "files" | "preview" | "diff" | "commits" | "terminal"
+  "chat" | "files" | "preview" | "diff" | "commits" | "logs" | "terminal"
 
 /** ⋯ 菜单里勾选显隐的单例面板（终端是实例列表，单独渲染）。 */
 export const TOGGLEABLE_PANELS = [
@@ -26,6 +27,7 @@ export const TOGGLEABLE_PANELS = [
   "preview",
   "diff",
   "commits",
+  "logs",
 ] as const satisfies readonly WorkspacePanelKind[]
 
 export const PANEL_ICONS: Record<WorkspacePanelKind, LucideIcon> = {
@@ -34,6 +36,7 @@ export const PANEL_ICONS: Record<WorkspacePanelKind, LucideIcon> = {
   preview: FileTextIcon,
   diff: FileDiffIcon,
   commits: GitCommitHorizontalIcon,
+  logs: ScrollTextIcon,
   terminal: TerminalIcon,
 }
 

@@ -259,7 +259,12 @@ export default {
       preview: "预览",
       diff: "工作区 diff",
       commits: "未推送 commit",
+      logs: "日志",
       terminal: "终端",
+    },
+    logs: {
+      emptyTitle: "还没有转录",
+      emptyHint: "发出第一条消息后，这里实时显示 JSON-RPC 原始收发帧。",
     },
     closePanel: "关闭面板",
     menu: {

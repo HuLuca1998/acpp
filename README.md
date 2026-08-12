@@ -135,6 +135,7 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | POST | `/api/sessions/{id}/open` | 拉起 agent 并握手，幂等。**前端不再主动调**——发消息时 `send` 顺路连接（懒连接），连接完成经 SSE 推 `settings`/`commands` |
 | POST | `/api/sessions/{id}/send` | 发一轮（`{content, images?, files?}`：图片 base64、@ 引用文件路径由后端读内容嵌入），立即返回；**turn 进行中再发会插进当前轮**（claude 排队为独立一轮，codex steering 注入当前轮） |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
+| GET | `/api/sessions/{id}/transcript` | 线级转录 JSONL 原样下发（`http.ServeFile`，支持 Range 字节续读——工作区 logs 面板靠它轮询增量实时跟随） |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
