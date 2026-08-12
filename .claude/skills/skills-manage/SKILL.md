@@ -45,6 +45,24 @@ frontmatter 只写 `name` 与 `description`：
 - 正文控制在 500 行内，超出就拆 `references/` 并在 SKILL.md 里写明每个文件何时读；引用只嵌一层，全部直接从 SKILL.md 链出。
 - 资源分工：`scripts/` 放需要确定性的可执行操作，`references/` 放按需查阅的长参考，`assets/` 放产出物模板。不建 README、CHANGELOG 等旁支文件。
 
+## 脚本头部规范（scripts/）
+
+技能脚本头部用注释键值声明元信息，管理页面据此渲染参数控件并支持传参试运行。只认文件开头连续注释行（`#` 或 `//`），遇到第一个非注释行停止扫描：
+
+```python
+#!/usr/bin/env python3
+# desc: 校验 SKILL.md frontmatter 是否符合规范
+# usage: validate.py <skill-dir> [--strict]
+# arg: skill-dir 技能目录路径
+# opt: strict 严格模式（勾选后以 --strict 传入）
+# env: ACPP_DEBUG 打开调试输出
+```
+
+- `desc:` 一句话用途；`usage:` 自由格式用法行，页面原样展示。
+- `arg:` 位置参数，格式 `名字 描述`，按声明顺序传入；`opt:` 布尔开关，勾选后以 `--名字` 传入；`env:` 环境变量。
+- 可运行的扩展名：`.py`（python3）、`.sh`（bash）、`.mjs` / `.js`（node）——按扩展名选解释器，不猜 shebang；其余扩展名只展示不给运行。
+- 试运行以技能目录为 cwd，60 秒超时，输出各 256KB 截断；非零退出码是结果不是错误。
+
 ## 管理操作
 
 - **创建**：`~/.acpp/skills/<name>/SKILL.md`，校验 frontmatter（name 存在且与目录一致、description 非空且含触发场景），默认建启用链接。
