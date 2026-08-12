@@ -208,6 +208,7 @@ export default {
       in_progress: "执行中",
       completed: "已完成",
       failed: "失败",
+      cancelled: "已取消",
     },
     permission: {
       title: "Agent 请求权限",

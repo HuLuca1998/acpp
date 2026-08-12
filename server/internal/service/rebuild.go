@@ -107,6 +107,11 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		}
 		for _, id := range turn.toolOrder {
 			tool := turn.tools[id]
+			// 轮已收尾，没走到终态的工具必然被中止/丢弃——
+			// 历史消息不能停留在「执行中」。
+			if tool.status == "" || tool.status == "pending" || tool.status == "in_progress" {
+				tool.status = "cancelled"
+			}
 			payload := model.JSONMap{"toolCallId": id, "status": tool.status}
 			if tool.kind != "" {
 				payload["kind"] = tool.kind

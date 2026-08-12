@@ -215,6 +215,7 @@ export default {
       in_progress: "Running",
       completed: "Completed",
       failed: "Failed",
+      cancelled: "Cancelled",
     },
     permission: {
       title: "The agent requests permission",
