@@ -65,7 +65,10 @@ acpp/
         │   ├── agent.go
         │   ├── session.go
         │   ├── chat.go         # ACP 事件 → 持久化 + 广播
-        │   └── broker.go       # SSE 广播器与本轮内容累积
+        │   ├── broker.go       # SSE 广播器与本轮内容累积
+        │   ├── skill.go        # 技能库：结构化 SKILL.md + skillpack 分发链接
+        │   ├── skill_files.go  # 技能附属文件（references/ assets/）读写
+        │   └── skill_scripts.go # 脚本头部元信息解析 + 传参试运行
         └── httpapi/            # 路由、handler、中间件、统一响应
 ```
 
@@ -121,6 +124,12 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
 | POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor、模型与命令清单），同步返回 |
 | PUT | `/api/agents/{id}/catalog` | 配置页勾选：更新 models/commands 的启用状态（禁用只影响本软件的下拉与补全，agent 侧能力不变） |
+| GET/POST | `/api/skills` | 技能列表（遍历 `<dataDir>/skills`，磁盘为事实源）/ 新建（`{name, description, body}`，frontmatter 由后端组装转义） |
+| GET/PUT/DELETE | `/api/skills/{name}` | 技能详情（`body` 为 frontmatter 之后的正文）/ 更新（`{description?, body?, enabled?}` 逐项可选，启停即建/删 skillpack 符号链接）/ 删除（连源目录带分发链接） |
+| GET/PUT/DELETE | `/api/skills/{name}/files/{path...}` | 附属文件（`references/` / `assets/` 等）读 / 写 / 删；文本可编辑、二进制只列出，路径限制在技能目录内 |
+| GET | `/api/skills/{name}/files` | 附属文件清单（带 size / binary / 修改时间） |
+| GET | `/api/skills/{name}/scripts` | `scripts/` 下脚本的头部元信息（`desc/usage/arg/opt/env` 注释解析成参数控件描述） |
+| POST | `/api/skills/{name}/scripts/run` | 传参试运行脚本（`{path, args, opts, env}`）：以技能目录为 cwd、60s 超时、输出各 256KB 截断，返回退出码与 stdout/stderr |
 | GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建 |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早） |
@@ -179,6 +188,27 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 前端可用 `VITE_API_BASE` 覆盖 API 前缀，默认 `/api`。
 
+## 技能库
+
+系统自管一套技能，注入每条会话、替换机器级技能，项目级技能照常加载。磁盘即事实源，**不进数据库**——技能列表就是遍历目录、读 SKILL.md 的 frontmatter。数据目录下两处：
+
+```
+<dataDir>/
+├── skills/<name>/            # 源目录：全部技能（含停用），SKILL.md + 可选 references/ scripts/ assets/
+└── skillpack/                # 分发目录：只放注入内容，首次操作自动搭好骨架
+    ├── .claude-plugin/plugin.json   # {"name":"acpp"}，两端把技能显示为 acpp:<name>
+    ├── skills/<name> -> ../../skills/<name>   # 启用 = 存在这条符号链接
+    └── .agents/skills -> ./skills            # codex extraRoots 的固定发现入口
+```
+
+- **启停 = 建/删 skillpack 里的符号链接**，源目录路径永远稳定；启用状态从文件系统读。
+- **SKILL.md 走结构化编辑**：前端只提交 `name` / `description` / `body`，frontmatter 由后端组装并对 description 做 YAML 转义——手写一个冒号就能弄坏的东西不交给手写。name 与 description 之外的 frontmatter 行（第三方技能的 `license` 等）编辑时原样保留。
+- **附属文件**（`references/` / `scripts/` / `assets/`）在详情页就地读写，路径限制在技能目录内，二进制只列出。
+- **脚本头部规范**：`scripts/` 下脚本用注释键值声明元信息（`desc` / `usage` / `arg` / `opt` / `env`），页面据此渲染参数控件并支持传参试运行（以技能目录为 cwd、60s 超时、非零退出码是结果不是错误）。规范细则见 [.claude/skills/skills-manage](.claude/skills/skills-manage/SKILL.md)。
+- 一切变更**只对新会话生效**——agent 在 `session/new` 时读取一次，进行中的会话不重载。
+
+> 会话注入（隔离机器级 + 加载 skillpack + 项目级照常）与助理协作尚未接线，见「尚未实现」。
+
 ## 多语言
 
 中文为默认与兜底语言，右上角切换，选择存在 localStorage（`acp-language`）。文案在 `src/i18n/locales/{zh,en}.ts`，`i18next.d.ts` 做了类型增强——写错 key 在编译期就会报错，不会等到运行时才发现少了一句翻译。
@@ -193,7 +223,8 @@ cd web && npx shadcn@latest add <component>
 
 ## 尚未实现
 
-- 侧边栏的 Tools / Logs / Settings / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- 侧边栏的 Tools / Logs / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- **技能会话注入**：管理页面（增删改查、附属文件、脚本试运行）已落地，但 skillpack 尚未接进 `session/new`——隔离机器级 skill（claude `settingSources` + codex `CODEX_CONFIG`）、加载 skillpack（claude plugin + codex `additionalDirectories`）、项目级照常这三件事的接线待做。机制已在 claude-agent-acp 0.63.0 / codex-acp 1.1.7 实测验证，细则见 [.claude/skills/skills-manage](.claude/skills/skills-manage/SKILL.md)。之后才是「技能助理」（复用对话面板、工作目录固定到技能源目录）。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M3 已落地：dockview 骨架、文件树/预览、diff / 未推送 commit、多实例 PTY 终端与引用联动。剩 M4 打磨（布局预设、diff 虚拟滚动、压力验收）。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。
