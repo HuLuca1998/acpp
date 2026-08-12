@@ -69,10 +69,13 @@ export function SessionChat() {
     const input = { content, images, files }
     if (isNew) {
       if (!newSession.selected || newSession.creating) return
+      // 组件跨 /sessions/new → /sessions/:id 复用不重挂，不清会残留到会话页。
+      setDraft("")
+      setImages([])
+      setFiles([])
       void newSession.start(input)
       return
     }
-    // busy 时也允许发送：后端会把消息插进正在跑的轮（steering / 排队）。
     setDraft("")
     setImages([])
     setFiles([])

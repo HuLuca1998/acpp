@@ -114,6 +114,9 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
         void navigate(`/sessions/${session.id}`, { replace: true })
       } catch (err) {
         setError((err as Error).message)
+      } finally {
+        // 成功路径也必须复位：/sessions/new 与 /sessions/:id 共用组件实例，
+        // 跳转不会重挂，残留的 true 会把后续发送键永久锁成转圈。
         setCreating(false)
       }
     },

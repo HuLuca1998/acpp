@@ -348,7 +348,7 @@ export const ChatPanel = memo(function ChatPanel() {
         onSubmit={submit}
         onCancel={isNew ? undefined : () => void chat.cancel()}
         busy={chat.busy}
-        pending={newSession.creating}
+        pending={isNew && newSession.creating}
         disabled={isNew && (newSession.agents === null || !newSession.selected)}
         placeholder={t("chat.placeholder")}
         commands={
