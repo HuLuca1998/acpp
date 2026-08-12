@@ -648,10 +648,19 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 		}
 		models := make(model.AgentModelSlice, 0, len(settings.Models))
 		for _, m := range settings.Models {
+			alias := oldAlias[m.ID]
+			if alias == "" {
+				// 模型 id 往往比 runtime 展示名短得多（"default" vs
+				// "Default (recommended)"），自动派生成别名；派生结果
+				// 反而更长时保留原名不写。
+				if d := deriveModelAlias(m.ID); d != "" && len(d) < len(m.Name) {
+					alias = d
+				}
+			}
 			models = append(models, model.AgentModel{
 				ID: m.ID, Name: m.Name, Description: m.Description,
 				Disabled: oldDisabled["m:"+m.ID],
-				Alias:    oldAlias[m.ID],
+				Alias:    alias,
 			})
 		}
 		cached := make(model.AgentCommandSlice, 0, len(commands))
@@ -695,6 +704,18 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 		return nil, fmt.Errorf("reload agent %d: %w", agentID, err)
 	}
 	return &agent, nil
+}
+
+// deriveModelAlias 从模型 id 派生短别名：去掉方括号后缀、首字母大写。
+func deriveModelAlias(id string) string {
+	name := id
+	if i := strings.Index(name, "["); i > 0 {
+		name = name[:i]
+	}
+	if name == "" {
+		return ""
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 // ProbeAgentAsync 在后台探测（注册/更新 agent 后自动触发），完成后结果落库。
