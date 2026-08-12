@@ -43,7 +43,8 @@ export function NavRecent({
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
-          <SidebarMenuItem key={item.name}>
+          // 标题可重复（如两个"你好"会话），key 用含会话 id 的 url。
+          <SidebarMenuItem key={item.url}>
             <SidebarMenuButton render={<Link to={item.url} />}>
               {item.icon}
               <span>{item.name}</span>
