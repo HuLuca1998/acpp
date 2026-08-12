@@ -165,8 +165,9 @@ export const ChatPanel = memo(function ChatPanel() {
           </Empty>
         ) : (
           // 打开即定位到底部看最新内容（不是先渲染顶部再跳）；
+          // autoScroll 让流式输出贴底跟随（用户上翻自动暂停、滚回底部恢复），
           // 「加载更早」prepend 时保持视口位置不跳。
-          <MessageScrollerProvider defaultScrollPosition="end">
+          <MessageScrollerProvider defaultScrollPosition="end" autoScroll>
             <MessageScroller>
               <MessageScrollerViewport preserveScrollOnPrepend>
                 <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
@@ -179,10 +180,11 @@ export const ChatPanel = memo(function ChatPanel() {
                   ) : null}
                   {groupMessages(chat.messages).map((block) =>
                     block.type === "chat" ? (
+                      // 不设 scrollAnchor：锚定会把新用户消息滚到视口顶并
+                      // 打断贴底跟随，与 autoScroll 的跟随体验相互矛盾。
                       <MessageScrollerItem
                         key={block.message.id}
                         messageId={String(block.message.id)}
-                        scrollAnchor={block.message.role === "user"}
                       >
                         <ChatMessage message={block.message} />
                       </MessageScrollerItem>
