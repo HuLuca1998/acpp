@@ -425,7 +425,16 @@ export const ChatPanel = memo(function ChatPanel() {
         }
       >
         {isNew ? (
-          <DraftControls draft={newSession} />
+          <>
+            <DraftControls draft={newSession} />
+            {/* 模型之外的维度与会话态共用同一组件，三态工具栏显示一致；
+                选择只在本地暂存，创建会话时随模型一起应用。 */}
+            <SettingsSelectors
+              settings={newSession.draftSettings}
+              disabled={newSession.creating}
+              onApply={newSession.applyDraftPatch}
+            />
+          </>
         ) : (
           <SettingsSelectors
             settings={chat.settings}

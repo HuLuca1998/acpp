@@ -42,6 +42,13 @@ export interface Agent {
   flavor: AgentFlavor
   models: UnifiedModel[]
   commands: SlashCommand[]
+  /** 探测缓存的设置骨架：模型之外的维度清单与开关支持位。 */
+  skeleton?: {
+    efforts?: EffortLevel[]
+    levels?: AccessLevel[]
+    planSupported?: boolean
+    fastSupported?: boolean
+  }
   createdAt: string
   updatedAt: string
 }
