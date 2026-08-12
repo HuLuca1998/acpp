@@ -579,6 +579,15 @@ func (s *Session) steeringCall(ctx context.Context, blocks []ContentBlock) error
 	return nil
 }
 
+// TurnActive 报告会话是否有在途的 prompt/steering 调用（一轮正在跑）。
+func (m *Manager) TurnActive(key string) bool {
+	sess, ok := m.Get(key)
+	if !ok {
+		return false
+	}
+	return sess.activeCalls.Load() > 0
+}
+
 // Idle 返回没有在途调用、且最后一次调用结束早于 olderThan 的会话 key。
 // 回收策略归上层；这里只回答「哪些会话可以安全关」。
 func (m *Manager) Idle(olderThan time.Duration) []string {

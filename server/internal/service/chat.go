@@ -386,7 +386,11 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	}
 
 	br := s.brokerFor(sessionID)
-	br.startTurn()
+	// 一轮进行中的插话（steering）并入当前轮，不能清当前轮的重放缓冲；
+	// 只有真正开新轮才重置。
+	if !s.manager.TurnActive(sessionKey(sessionID)) {
+		br.startTurn()
+	}
 	br.publish(StreamEvent{Kind: "user_message", Message: msg})
 
 	go s.runTurn(sessionID, br, blocks)

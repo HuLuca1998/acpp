@@ -61,6 +61,43 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 	agentReqs := map[string]agentReq{}
 	var turn *rebuildTurn
 
+	// prompt / steering 共用：把内容块拼成一条 user 消息。
+	emitUserBlocks := func(prompt []acp.ContentBlock, ts time.Time) {
+		var text []byte
+		var images []map[string]any
+		var files []string
+		for _, block := range prompt {
+			switch block.Type {
+			case "image":
+				// 图片原文在转录里，重建时装回 payload 供气泡显示。
+				images = append(images, map[string]any{
+					"data": block.Data, "mimeType": block.MimeType,
+				})
+			case "resource":
+				if block.Resource != nil {
+					files = append(files, block.Resource.URI)
+				}
+			default:
+				text = append(text, block.Text...)
+			}
+		}
+		content := trimmed(text)
+		if content == "" && len(images) == 0 && len(files) == 0 {
+			return
+		}
+		payload := model.JSONMap{}
+		if len(images) > 0 {
+			payload["images"] = images
+		}
+		if len(files) > 0 {
+			payload["files"] = files
+		}
+		if len(payload) == 0 {
+			payload = nil
+		}
+		emit(model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content, Payload: payload}, ts)
+	}
+
 	flush := func(ts time.Time, stopReason string) {
 		if turn == nil {
 			return
@@ -116,40 +153,17 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 
 			var p acp.PromptParams
 			if err := json.Unmarshal(msg.Params, &p); err == nil {
-				var text []byte
-				var images []map[string]any
-				var files []string
-				for _, block := range p.Prompt {
-					switch block.Type {
-					case "image":
-						// 图片原文在转录里，重建时装回 payload 供气泡显示。
-						images = append(images, map[string]any{
-							"data": block.Data, "mimeType": block.MimeType,
-						})
-					case "resource":
-						if block.Resource != nil {
-							files = append(files, block.Resource.URI)
-						}
-					default:
-						text = append(text, block.Text...)
-					}
-				}
-				content := trimmed(text)
-				if content != "" || len(images) > 0 || len(files) > 0 {
-					payload := model.JSONMap{}
-					if len(images) > 0 {
-						payload["images"] = images
-					}
-					if len(files) > 0 {
-						payload["files"] = files
-					}
-					if len(payload) == 0 {
-						payload = nil
-					}
-					emit(model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content, Payload: payload}, entry.TS)
-				}
+				emitUserBlocks(p.Prompt, entry.TS)
 			}
 			turn = &rebuildTurn{tools: map[string]*rebuildTool{}}
+
+		case entry.Dir == "send" && msg.Method == "_session/steering":
+			// 插话注入正在跑的轮（codex steering）：产出用户消息但不结轮，
+			// 本轮的思考/工具/正文仍由这一轮的 prompt 响应统一收尾。
+			var p acp.SteeringParams
+			if err := json.Unmarshal(msg.Params, &p); err == nil {
+				emitUserBlocks(p.Prompt, entry.TS)
+			}
 
 		case entry.Dir == "send" && msg.Method != "" && len(msg.ID) > 0:
 			sentMethods[string(msg.ID)] = msg.Method
