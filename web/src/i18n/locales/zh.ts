@@ -128,18 +128,17 @@ export default {
     deleteBody: "技能目录 {{name}} 将被整个删除，包括附属文件，不可恢复。",
     deleted: "技能已删除",
     create: {
-      title: "新建技能",
       nameHint: "kebab-case，创建后不可改名",
       namePlaceholder: "code-review-guide",
       descriptionLabel: "描述（触发器）",
       descriptionHint: "写清「做什么 + 何时用」，模型靠它决定是否加载正文。",
       descriptionPlaceholder:
         "代码审查清单——被要求 review 代码时按团队规范逐项检查",
-      submit: "创建",
     },
     detail: {
       backToList: "技能",
       saved: "已保存",
+      saveFirst: "先保存这个技能，再添加附属文件与脚本。",
       body: "正文（markdown）",
       bodyPlaceholder: "# 技能名\n\n只写模型不知道的东西：本域约定、步骤、坑。",
       unsaved: "未保存",

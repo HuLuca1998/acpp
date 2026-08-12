@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Link, useParams } from "react-router"
+import { Link, useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
@@ -23,16 +23,28 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ChevronLeftIcon, PuzzleIcon } from "lucide-react"
 
+const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
+/**
+ * 技能详情页，同时承载草稿态（`/skills/new`，无 name 参数）：
+ * 进入即用——直接进空白编辑页，名称/描述就地填，首次保存才真正创建，
+ * 之后转为编辑态。附属文件与脚本要有技能目录才挂得上，草稿态不显示。
+ */
 export function SkillDetail() {
   const { t } = useTranslation()
-  const { name = "" } = useParams()
+  const navigate = useNavigate()
+  const { name } = useParams()
+  const isDraft = name === undefined
+
   const [skill, setSkill] = useState<SkillDetailData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [draftName, setDraftName] = useState("")
   const [description, setDescription] = useState("")
   const [body, setBody] = useState("")
   const [saving, setSaving] = useState(false)
@@ -40,6 +52,7 @@ export function SkillDetail() {
   const [filesVersion, setFilesVersion] = useState(0)
 
   useEffect(() => {
+    if (isDraft) return
     let cancelled = false
     api.skills
       .get(name)
@@ -55,17 +68,31 @@ export function SkillDetail() {
     return () => {
       cancelled = true
     }
-  }, [name])
+  }, [isDraft, name])
 
+  const draftValid = NAME_RE.test(draftName) && description.trim() !== ""
   const dirty =
+    !isDraft &&
     skill !== null &&
     (description !== skill.description || body !== skill.body)
 
   async function save() {
-    if (!skill) return
     setSaving(true)
     try {
-      const next = await api.skills.update(skill.name, { description, body })
+      if (isDraft) {
+        const created = await api.skills.create({
+          name: draftName,
+          description: description.trim(),
+          body,
+        })
+        toast.success(t("skills.detail.saved"), {
+          description: t("skills.effectNote"),
+        })
+        // 转为编辑态：换 URL 到真实技能，附属文件/脚本区随之出现。
+        navigate(`/skills/${created.name}`, { replace: true })
+        return
+      }
+      const next = await api.skills.update(skill!.name, { description, body })
       setSkill(next)
       setDescription(next.description)
       setBody(next.body)
@@ -112,6 +139,8 @@ export function SkillDetail() {
     )
   }
 
+  const loading = !isDraft && skill === null
+
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="flex flex-col gap-4 px-4 md:gap-6 lg:px-6">
@@ -125,8 +154,19 @@ export function SkillDetail() {
             <ChevronLeftIcon data-icon="inline-start" />
             {t("skills.detail.backToList")}
           </Button>
-          <h1 className="font-mono text-base font-medium">{name}</h1>
-          {skill && (
+          {isDraft ? (
+            <Input
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              placeholder={t("skills.create.namePlaceholder")}
+              aria-label={t("skills.name")}
+              className="h-8 max-w-64 font-mono text-sm"
+              autoFocus
+            />
+          ) : (
+            <h1 className="font-mono text-base font-medium">{name}</h1>
+          )}
+          {!isDraft && skill && (
             <Switch
               checked={skill.enabled}
               onCheckedChange={toggle}
@@ -134,18 +174,29 @@ export function SkillDetail() {
             />
           )}
           <div className="ml-auto flex items-center gap-3">
-            {dirty && (
-              <span className="text-xs text-warning">
-                {t("skills.detail.unsaved")}
-              </span>
-            )}
-            <Button size="sm" disabled={!dirty || saving} onClick={save}>
+            {isDraft
+              ? draftName !== "" &&
+                !NAME_RE.test(draftName) && (
+                  <span className="text-xs text-warning">
+                    {t("skills.create.nameHint")}
+                  </span>
+                )
+              : dirty && (
+                  <span className="text-xs text-warning">
+                    {t("skills.detail.unsaved")}
+                  </span>
+                )}
+            <Button
+              size="sm"
+              disabled={isDraft ? !draftValid || saving : !dirty || saving}
+              onClick={save}
+            >
               {t("common.save")}
             </Button>
           </div>
         </div>
 
-        {skill === null ? (
+        {loading ? (
           <div className="flex flex-col gap-4">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />
@@ -163,6 +214,7 @@ export function SkillDetail() {
                       id="skill-description"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
+                      placeholder={t("skills.create.descriptionPlaceholder")}
                       rows={2}
                     />
                     <FieldDescription>
@@ -185,30 +237,40 @@ export function SkillDetail() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("skills.detail.files")}</CardTitle>
-                <CardDescription>{t("skills.detail.filesHint")}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SkillFiles
-                  skillName={name}
-                  onChanged={() => setFilesVersion((v) => v + 1)}
-                />
-              </CardContent>
-            </Card>
+            {isDraft ? (
+              <p className="px-1 text-sm text-muted-foreground">
+                {t("skills.detail.saveFirst")}
+              </p>
+            ) : (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("skills.detail.files")}</CardTitle>
+                    <CardDescription>
+                      {t("skills.detail.filesHint")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SkillFiles
+                      skillName={name!}
+                      onChanged={() => setFilesVersion((v) => v + 1)}
+                    />
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("skills.detail.scripts")}</CardTitle>
-                <CardDescription>
-                  {t("skills.detail.scriptsHint")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SkillScripts skillName={name} version={filesVersion} />
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("skills.detail.scripts")}</CardTitle>
+                    <CardDescription>
+                      {t("skills.detail.scriptsHint")}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <SkillScripts skillName={name!} version={filesVersion} />
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </>
         )}
       </div>

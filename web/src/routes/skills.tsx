@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Link, useNavigate } from "react-router"
+import { Link } from "react-router"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
@@ -26,14 +26,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -41,8 +33,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -53,14 +43,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Textarea } from "@/components/ui/textarea"
 import { InfoIcon, PlusIcon, PuzzleIcon, Trash2Icon } from "lucide-react"
 
 export function Skills() {
   const { t, i18n } = useTranslation()
   const [skills, setSkills] = useState<Skill[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
   const [deleting, setDeleting] = useState<Skill | null>(null)
 
   const reload = useCallback(() => {
@@ -116,7 +104,7 @@ export function Skills() {
             <CardTitle>{t("skills.title")}</CardTitle>
             <CardDescription>{t("skills.description")}</CardDescription>
             <CardAction>
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Button size="sm" render={<Link to="/skills/new" />}>
                 <PlusIcon data-icon="inline-start" />
                 {t("skills.add")}
               </Button>
@@ -149,7 +137,7 @@ export function Skills() {
                   <EmptyDescription>{t("skills.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                  <Button size="sm" render={<Link to="/skills/new" />}>
                     <PlusIcon data-icon="inline-start" />
                     {t("skills.add")}
                   </Button>
@@ -225,8 +213,6 @@ export function Skills() {
         </Card>
       </div>
 
-      <SkillCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
-
       <AlertDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
@@ -247,87 +233,5 @@ export function Skills() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
-}
-
-/** 轻量创建：只填 name 与 description，创建后直接进详情页写正文。 */
-function SkillCreateDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-
-  const valid = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name) && description.trim() !== ""
-
-  async function submit() {
-    setSubmitting(true)
-    try {
-      const skill = await api.skills.create({
-        name,
-        description: description.trim(),
-        body: "",
-      })
-      onOpenChange(false)
-      navigate(`/skills/${skill.name}`)
-    } catch (err) {
-      toast.error((err as Error).message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("skills.create.title")}</DialogTitle>
-          <DialogDescription>{t("skills.description")}</DialogDescription>
-        </DialogHeader>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="skill-name">{t("skills.name")}</FieldLabel>
-            <Input
-              id="skill-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("skills.create.namePlaceholder")}
-              className="font-mono"
-              autoFocus
-            />
-            <FieldDescription>{t("skills.create.nameHint")}</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="skill-description">
-              {t("skills.create.descriptionLabel")}
-            </FieldLabel>
-            <Textarea
-              id="skill-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("skills.create.descriptionPlaceholder")}
-              rows={3}
-            />
-            <FieldDescription>
-              {t("skills.create.descriptionHint")}
-            </FieldDescription>
-          </Field>
-        </FieldGroup>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button disabled={!valid || submitting} onClick={submit}>
-            {t("skills.create.submit")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

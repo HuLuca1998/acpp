@@ -135,7 +135,6 @@ export default {
       "The whole {{name}} directory, including bundled files, will be removed. This cannot be undone.",
     deleted: "Skill deleted",
     create: {
-      title: "New skill",
       nameHint: "kebab-case; cannot be renamed later",
       namePlaceholder: "code-review-guide",
       descriptionLabel: "Description (trigger)",
@@ -143,11 +142,11 @@ export default {
         "State what it does and when to use it — the model decides to load the body based on this.",
       descriptionPlaceholder:
         "Code review checklist — walk the team conventions when asked to review code",
-      submit: "Create",
     },
     detail: {
       backToList: "Skills",
       saved: "Saved",
+      saveFirst: "Save this skill first, then add bundled files and scripts.",
       body: "Body (markdown)",
       bodyPlaceholder:
         "# skill-name\n\nOnly write what the model doesn't know: conventions, steps, pitfalls.",

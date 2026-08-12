@@ -41,6 +41,8 @@ export function App() {
         <Route path="agents" element={<Agents />} />
         <Route path="agents/:id" element={<AgentDetail />} />
         <Route path="skills" element={<Skills />} />
+        {/* draft-first：新建直接进空白详情页，首条保存才创建（无 name 参数）。 */}
+        <Route path="skills/new" element={<SkillDetail />} />
         <Route path="skills/:name" element={<SkillDetail />} />
         <Route path="sessions" element={<Sessions />} />
         {/* 新会话与老会话共用同一个页面：草稿态只是多了跨 ACP 模型选择
