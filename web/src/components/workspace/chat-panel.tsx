@@ -19,6 +19,8 @@ import { Composer } from "@/components/chat/composer"
 import { ComposerStatus } from "@/components/chat/composer-status"
 import { DraftControls } from "@/components/chat/draft-controls"
 import { ElicitationCard } from "@/components/chat/elicitation-card"
+import { FileEditCard } from "@/components/chat/file-edit-card"
+import type { ToolCallPayload } from "@/components/chat/tool-call"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { PermissionCard } from "@/components/chat/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
@@ -84,14 +86,16 @@ export const ChatPanel = memo(function ChatPanel() {
     draftCwd,
   } = useChatPanel()
 
+  // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
+  const liveEdits = chat.liveTools.filter((tool) => tool.kind === "edit")
+  const liveOthers = chat.liveTools.filter((tool) => tool.kind !== "edit")
   const liveActivityCount =
-    (chat.streamingThought ? 1 : 0) +
-    chat.liveTools.length +
-    chat.permissions.length
+    (chat.streamingThought ? 1 : 0) + liveOthers.length + chat.permissions.length
   const hasContent =
     chat.messages.length > 0 ||
     chat.streamingText !== "" ||
     liveActivityCount > 0 ||
+    liveEdits.length > 0 ||
     (chat.plan?.length ?? 0) > 0
 
   return (
@@ -191,6 +195,21 @@ export const ChatPanel = memo(function ChatPanel() {
                       >
                         <ChatMessage message={block.message} />
                       </MessageScrollerItem>
+                    ) : block.type === "edit" ? (
+                      <MessageScrollerItem
+                        key={block.message.id}
+                        messageId={String(block.message.id)}
+                      >
+                        <FileEditCard
+                          payload={
+                            (block.message.payload ?? {}) as ToolCallPayload
+                          }
+                          status={
+                            (block.message.payload as ToolCallPayload | null)
+                              ?.status
+                          }
+                        />
+                      </MessageScrollerItem>
                     ) : (
                       <MessageScrollerItem key={block.key} scrollAnchor={false}>
                         <ActivitySection count={block.items.length}>
@@ -245,12 +264,29 @@ export const ChatPanel = memo(function ChatPanel() {
                             </MarkerContent>
                           </Marker>
                         ))}
-                        {chat.liveTools.map((tool) => (
+                        {liveOthers.map((tool) => (
                           <LiveToolMarker key={tool.id} tool={tool} />
                         ))}
                       </ActivitySection>
                     </MessageScrollerItem>
                   ) : null}
+
+                  {/* 进行中的文件编辑：独立消息条实时更新，diff 随改随看。 */}
+                  {liveEdits.map((tool) => (
+                    <MessageScrollerItem key={tool.id} scrollAnchor={false}>
+                      <FileEditCard
+                        payload={
+                          {
+                            kind: tool.kind,
+                            rawInput: tool.rawInput,
+                            rawOutput: tool.rawOutput,
+                            content: tool.content,
+                          } as ToolCallPayload
+                        }
+                        status={tool.status}
+                      />
+                    </MessageScrollerItem>
+                  ))}
 
                   {chat.streamingText ? (
                     <MessageScrollerItem scrollAnchor={false}>

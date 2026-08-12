@@ -182,6 +182,10 @@ export default {
       steer: "Steer",
       recall: "Recall",
     },
+    fileEdit: {
+      edited: "Edited",
+      toggle: "Toggle diff",
+    },
     /** Unified settings controls; values come from the backend vocabulary, no runtime literals. */
     settings: {
       model: "Model",

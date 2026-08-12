@@ -175,6 +175,10 @@ export default {
       steer: "引导",
       recall: "撤回",
     },
+    fileEdit: {
+      edited: "已编辑",
+      toggle: "展开改动",
+    },
     /** 统一设置控件的本地化：值来自后端统一词汇表，不含 runtime 字面量。 */
     settings: {
       model: "模型",
