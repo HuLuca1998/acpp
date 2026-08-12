@@ -187,7 +187,7 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
         setCreating(false)
       }
     },
-    [selected, creating, cwd, draftPatch, navigate]
+    [selected, selectedAgent, creating, cwd, draftPatch, navigate]
   )
 
   return {
