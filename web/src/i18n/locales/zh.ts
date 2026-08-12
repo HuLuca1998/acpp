@@ -171,6 +171,10 @@ export default {
       changes: "查看 git 状态，总结未提交的变更",
       help: "你能帮我做什么？",
     },
+    queue: {
+      steer: "引导",
+      recall: "撤回",
+    },
     /** 统一设置控件的本地化：值来自后端统一词汇表，不含 runtime 字面量。 */
     settings: {
       model: "模型",

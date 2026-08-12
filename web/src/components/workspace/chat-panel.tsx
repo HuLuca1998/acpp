@@ -23,6 +23,7 @@ import { MarkdownContent } from "@/components/chat/markdown"
 import { PermissionCard } from "@/components/chat/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
 import { PlanReviewCard } from "@/components/chat/plan-review-card"
+import { QueuedMessages } from "@/components/chat/queued-messages"
 import { SettingsSelectors } from "@/components/chat/settings-selectors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -74,6 +75,8 @@ export const ChatPanel = memo(function ChatPanel() {
     removeFile,
     submit,
     sendSuggestion,
+    recallQueued,
+    steerQueued,
     openImagePicker,
     openFilePicker,
     openCwdPicker,
@@ -369,6 +372,13 @@ export const ChatPanel = memo(function ChatPanel() {
           />
         }
         onPasteImages={(picked) => void addImages(picked)}
+        queue={
+          <QueuedMessages
+            items={chat.queued}
+            onSteer={steerQueued}
+            onRecall={recallQueued}
+          />
+        }
         footer={
           <ComposerStatus
             cwd={isNew ? draftCwd : chat.session?.cwd}

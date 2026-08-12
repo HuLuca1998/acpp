@@ -178,6 +178,10 @@ export default {
       changes: "Check git status and summarize uncommitted changes",
       help: "What can you help me with?",
     },
+    queue: {
+      steer: "Steer",
+      recall: "Recall",
+    },
     /** Unified settings controls; values come from the backend vocabulary, no runtime literals. */
     settings: {
       model: "Model",

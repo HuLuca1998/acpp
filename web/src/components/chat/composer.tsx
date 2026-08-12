@@ -26,6 +26,7 @@ export function Composer({
   commands,
   attachments,
   onPasteImages,
+  queue,
 }: {
   value: string
   onChange: (value: string) => void
@@ -47,6 +48,8 @@ export function Composer({
   attachments?: React.ReactNode
   /** 粘贴进来的图片文件。 */
   onPasteImages?: (files: File[]) => void
+  /** 排队的插话条（输入卡上方，busy 期间的消息先排队再发）。 */
+  queue?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const canSend = !disabled && !pending && value.trim() !== ""
@@ -75,6 +78,7 @@ export function Composer({
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
       <div className="absolute inset-x-0 -top-8 bottom-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
       <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 lg:px-6">
+        {queue}
         {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。 */}
         <div className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/80 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-border dark:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.06),0_8px_32px_rgba(0,0,0,0.35)]">
           {menuOpen ? (

@@ -79,7 +79,38 @@ export function SessionChat() {
     setDraft("")
     setImages([])
     setFiles([])
-    void chat.send(input)
+    // 一轮进行中：插话不直接发，先排队浮在输入框上方，轮次结束自动发出；
+    // 排队条上可「调整方向」立即插入当前轮，或撤回回填输入框。
+    if (chat.busy) {
+      chat.enqueue(input)
+    } else {
+      void chat.send(input)
+    }
+  }
+
+  /** 撤回一条排队插话：从队列移除并回填输入框与附件托盘。 */
+  function recallQueued(id: number) {
+    const item = chat.queued.find((q) => q.id === id)
+    if (!item) return
+    chat.removeQueued(id)
+    const { content, images: qImages, files: qFiles } = item.input
+    if (content) {
+      setDraft((prev) => (prev ? `${prev}\n${content}` : content))
+    }
+    if (qImages?.length) {
+      setImages((prev) => [...prev, ...qImages])
+    }
+    if (qFiles?.length) {
+      setFiles((prev) => [...prev, ...qFiles.filter((f) => !prev.includes(f))])
+    }
+  }
+
+  /** 「调整方向」：把排队插话立即发出，插进正在跑的轮（steering）。 */
+  function steerQueued(id: number) {
+    const item = chat.queued.find((q) => q.id === id)
+    if (!item) return
+    chat.removeQueued(id)
+    void chat.send(item.input)
   }
 
   /** 空态建议芯片：草稿态直接开会话，老会话正常发。 */
@@ -134,6 +165,8 @@ export function SessionChat() {
     addImages: (picked) => void addImages(picked),
     submit,
     sendSuggestion,
+    recallQueued,
+    steerQueued,
     openImagePicker: () => imageInputRef.current?.click(),
     openFilePicker: () => setFilePickerOpen(true),
     openCwdPicker: () => setCwdPickerOpen(true),

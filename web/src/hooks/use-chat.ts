@@ -35,6 +35,12 @@ export interface ContextUsage {
   size: number
 }
 
+/** 一轮进行中用户插话的排队条目：发出（被使用）前随时可撤回。 */
+export interface QueuedMessage {
+  id: number
+  input: SendInput
+}
+
 /** 一次已裁决的权限请求（当前轮内展示用）。 */
 export interface ResolvedPermission {
   id: string
@@ -77,6 +83,8 @@ export interface ChatState {
   plan: PlanEntry[] | null
   /** 当前轮内已裁决的权限请求。 */
   permissions: ResolvedPermission[]
+  /** busy 期间排队的插话，轮次自然结束后合并发出；中止后保留等用户处置。 */
+  queued: QueuedMessage[]
 }
 
 /**
@@ -105,6 +113,7 @@ const INITIAL: ChatState = {
   permission: null,
   plan: null,
   permissions: [],
+  queued: [],
 }
 
 /** 把 elicitation 事件解析成结构化提问。 */
@@ -131,6 +140,11 @@ export function useChat(sessionId: number) {
     lastSeq.current = ev.seq
 
     setState((prev) => {
+      // 一轮只由 user_message 开启、由 turn_done/error 关闭。turn_done 之后
+      // 迟到的本轮残余（中止后 agent 的收尾 chunk/tool_call）若被当作
+      // "轮子在跑"会把 busy 永久卡死（还会进重放缓冲毒化每次刷新），
+      // 这里在轮窗口外一律丢弃——权威内容反正在转录里。
+      const inTurn = prev.busy
       switch (ev.kind) {
         case "user_message":
           if (!ev.message) return prev
@@ -142,23 +156,23 @@ export function useChat(sessionId: number) {
           }
 
         case "message_chunk":
+          if (!inTurn) return prev
           return {
             ...prev,
-            busy: true,
             streamingText: prev.streamingText + (ev.text ?? ""),
           }
 
         case "thought_chunk":
+          if (!inTurn) return prev
           return {
             ...prev,
-            busy: true,
             streamingThought: prev.streamingThought + (ev.text ?? ""),
           }
 
         case "tool_call":
+          if (!inTurn) return prev
           return {
             ...prev,
-            busy: true,
             liveTools: mergeTool(prev.liveTools, ev),
           }
 
@@ -184,18 +198,19 @@ export function useChat(sessionId: number) {
 
         case "plan": {
           // 计划整体替换；保留到下一轮开始，让用户能回看最终完成状态。
+          if (!inTurn) return prev
           const entries = Array.isArray(ev.rawInput)
             ? (ev.rawInput as PlanEntry[])
             : null
           if (!entries) return prev
-          return { ...prev, busy: true, plan: entries }
+          return { ...prev, plan: entries }
         }
 
         case "permission":
+          if (!inTurn) return prev
           if (!ev.permissionId || !ev.options?.length) return prev
           return {
             ...prev,
-            busy: true,
             permission: {
               id: ev.permissionId,
               toolCallId: ev.toolCallId,
@@ -216,6 +231,7 @@ export function useChat(sessionId: number) {
           return { ...prev, permission: null }
 
         case "elicitation":
+          if (!inTurn) return prev
           return {
             ...prev,
             elicitation: parseElicitation(ev) ?? prev.elicitation,
@@ -288,6 +304,10 @@ export function useChat(sessionId: number) {
           commands: session.commands ?? [],
           messages: history.items,
           hasEarlier: history.items.length < history.total,
+          // busy 以后端权威状态起步：active 表示这一轮还在跑（刷新页面时
+          // SSE 重放会接上流式），其余状态一律静止——别把 UI 卡在假 busy 上。
+          // SSE 若已推进过状态（lastSeq>0），以事件流为准，不许旧快照回拨。
+          busy: lastSeq.current === 0 ? session.state === "active" : prev.busy,
           loading: false,
         }))
       } catch (err) {
@@ -387,8 +407,13 @@ export function useChat(sessionId: number) {
     return () => source.close()
   }, [sessionId, applyEvent, refreshMessages])
 
+  // 用户刚中止过：轮次停下后排队的插话不自动发出（中止=都停下），
+  // 保留在排队条里等用户撤回或手动发送。下一次 send 复位。
+  const cancelling = useRef(false)
+
   const send = useCallback(
     async (input: SendInput) => {
+      cancelling.current = false
       setState((prev) => ({ ...prev, busy: true, error: null }))
       try {
         await api.sessions.send(sessionId, input)
@@ -403,7 +428,33 @@ export function useChat(sessionId: number) {
     [sessionId]
   )
 
+  /** busy 期间的插话入队：不直接发，浮在输入框上方，发出前可撤回。 */
+  const queueSeq = useRef(0)
+  const enqueue = useCallback((input: SendInput) => {
+    queueSeq.current += 1
+    const item = { id: queueSeq.current, input }
+    setState((prev) => ({ ...prev, queued: [...prev.queued, item] }))
+  }, [])
+
+  /** 从排队里移除一条（撤回或转为立即发送时调用）。 */
+  const removeQueued = useCallback((id: number) => {
+    setState((prev) => ({
+      ...prev,
+      queued: prev.queued.filter((q) => q.id !== id),
+    }))
+  }, [])
+
+  // 轮次自然结束（busy 落回 false）时把排队的插话合并成一轮发出。
+  useEffect(() => {
+    if (state.busy || state.queued.length === 0) return
+    if (cancelling.current) return
+    const inputs = state.queued.map((q) => q.input)
+    setState((prev) => ({ ...prev, queued: [] }))
+    void send(mergeInputs(inputs))
+  }, [state.busy, state.queued, send])
+
   const cancel = useCallback(async () => {
+    cancelling.current = true
     try {
       await api.sessions.cancel(sessionId)
     } catch (err) {
@@ -496,11 +547,25 @@ export function useChat(sessionId: number) {
   return {
     ...state,
     send,
+    enqueue,
+    removeQueued,
     cancel,
     applySettings,
     resolvePermission,
     resolveElicitation,
     loadEarlier,
+  }
+}
+
+/** 把排队的多条插话合并成一轮的入参：文本空行连接，附件串联去重。 */
+function mergeInputs(inputs: SendInput[]): SendInput {
+  return {
+    content: inputs
+      .map((i) => i.content)
+      .filter(Boolean)
+      .join("\n\n"),
+    images: inputs.flatMap((i) => i.images ?? []),
+    files: [...new Set(inputs.flatMap((i) => i.files ?? []))],
   }
 }
 

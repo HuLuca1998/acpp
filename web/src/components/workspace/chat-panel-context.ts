@@ -21,6 +21,10 @@ export interface ChatPanelData {
   addImages: (picked: File[]) => void
   submit: () => void
   sendSuggestion: (text: string) => void
+  /** 撤回一条排队插话：回填输入框与附件。 */
+  recallQueued: (id: number) => void
+  /** 把一条排队插话立即插进当前轮（steering）。 */
+  steerQueued: (id: number) => void
   openImagePicker: () => void
   openFilePicker: () => void
   openCwdPicker: () => void
