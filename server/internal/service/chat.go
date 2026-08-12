@@ -161,6 +161,38 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 	}
 	key := sessionKey(sessionID)
 	if _, ok := s.manager.Get(key); !ok {
+		// 进程不在也要给出可用的设置视图：模型清单与斜杠命令来自 agent
+		// 探测缓存，不需要连接就能展示、选择（应用时会幂等拉起进程）。
+		// Current* 留空——运行时之外没人知道当前值，前端显示占位符。
+		var agent model.Agent
+		if err := s.db.WithContext(ctx).First(&agent, view.AgentID).Error; err == nil {
+			// 切片必须给空值而不是 nil——JSON null 会让前端 .length 直接崩。
+			settings := acp.Settings{
+				Flavor:  acp.Flavor(agent.Flavor),
+				Models:  []acp.Model{},
+				Efforts: []acp.Effort{},
+				Levels:  []acp.AccessLevel{},
+			}
+			for _, m := range agent.Models {
+				if m.Disabled {
+					continue
+				}
+				settings.Models = append(settings.Models, acp.Model{
+					ID: m.ID, Name: m.Name, Description: m.Description,
+				})
+			}
+			if len(settings.Models) > 0 {
+				view.Settings = &settings
+			}
+			for _, c := range agent.Commands {
+				if c.Disabled {
+					continue
+				}
+				view.Commands = append(view.Commands, acp.Command{
+					Name: c.Name, Description: c.Description,
+				})
+			}
+		}
 		return view, nil
 	}
 	view.Running = true
@@ -249,6 +281,11 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 
 // ApplySettings 逐项应用统一设置变更并广播最新视图（多标签页保持同步）。
 func (s *ChatService) ApplySettings(ctx context.Context, sessionID uint, patch acp.SettingsPatch) (*acp.Settings, error) {
+	// 老会话未连接时也允许直接改设置——先幂等拉起进程再应用，
+	// 用户不需要「先发一条消息」才能换模型。
+	if _, err := s.Open(ctx, sessionID); err != nil {
+		return nil, err
+	}
 	settings, err := s.manager.Apply(ctx, sessionKey(sessionID), patch)
 	if err != nil {
 		return nil, translateNoSession(sessionID, err)
