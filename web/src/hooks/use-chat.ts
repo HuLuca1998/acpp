@@ -146,14 +146,27 @@ export function useChat(sessionId: number) {
       // 这里在轮窗口外一律丢弃——权威内容反正在转录里。
       const inTurn = prev.busy
       switch (ev.kind) {
-        case "user_message":
+        case "user_message": {
           if (!ev.message) return prev
+          // 草稿跳转/刷新的竞态：bootstrap 拉到的重建列表可能已含本轮
+          // user 消息（重建 id 是小行号），SSE 重放又送来同内容的临时消息
+          // （毫秒时间戳 id）——若列表末尾已是同内容的权威 user 消息，
+          // 丢掉临时那条，否则同一句话显示两个气泡。
+          const last = prev.messages[prev.messages.length - 1]
+          const isDupOfRebuilt =
+            ev.message.id > 1e12 &&
+            last?.role === "user" &&
+            last.id < 1e12 &&
+            last.content === ev.message.content
           return {
             ...prev,
             busy: true,
             stopReason: null,
-            messages: upsert(prev.messages, ev.message),
+            messages: isDupOfRebuilt
+              ? prev.messages
+              : upsert(prev.messages, ev.message),
           }
+        }
 
         case "message_chunk":
           if (!inTurn) return prev
