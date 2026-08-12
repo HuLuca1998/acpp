@@ -30,6 +30,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	sessions := sessionHandler{sessions: sessionService, chat: chatService}
 	chat := chatHandler{chat: chatService}
 	system := systemHandler{system: service.NewSystemService(gdb, cfg)}
+	skills := skillHandler{skills: service.NewSkillService(cfg.DataDir)}
 
 	api := http.NewServeMux()
 
@@ -54,6 +55,21 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	// 系统配置：数据目录查看 / 迁移（拷贝式，重启后生效）。
 	api.HandleFunc("GET /api/system", system.get)
 	api.HandleFunc("PUT /api/system/data-dir", system.migrate)
+
+	// 技能库：磁盘为事实源（~/.acpp/skills + skillpack 分发链接），无数据库表。
+	api.HandleFunc("GET /api/skills", skills.list)
+	api.HandleFunc("POST /api/skills", skills.create)
+	api.HandleFunc("GET /api/skills/{name}", skills.get)
+	api.HandleFunc("PUT /api/skills/{name}", skills.update)
+	api.HandleFunc("DELETE /api/skills/{name}", skills.remove)
+	// 技能附属文件（references/ scripts/ 等）：文本文件可读写，二进制只列出。
+	// 脚本头部元信息（desc/usage/arg/opt/env 注释键值）驱动前端控件与试运行。
+	api.HandleFunc("GET /api/skills/{name}/scripts", skills.listScripts)
+	api.HandleFunc("POST /api/skills/{name}/scripts/run", skills.runScript)
+	api.HandleFunc("GET /api/skills/{name}/files", skills.listFiles)
+	api.HandleFunc("GET /api/skills/{name}/files/{path...}", skills.getFile)
+	api.HandleFunc("PUT /api/skills/{name}/files/{path...}", skills.putFile)
+	api.HandleFunc("DELETE /api/skills/{name}/files/{path...}", skills.removeFile)
 
 	api.HandleFunc("GET /api/agents", agents.list)
 	api.HandleFunc("POST /api/agents", agents.create)
