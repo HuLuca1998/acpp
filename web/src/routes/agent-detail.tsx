@@ -75,6 +75,31 @@ export function AgentDetail() {
     }
   }
 
+  /** 保存模型别名：必须带上当前 disabled，后端按整条覆盖。 */
+  async function renameModel(id: string, disabled: boolean, alias: string) {
+    try {
+      setAgent(
+        await api.agents.updateCatalog(agentId, {
+          models: [{ key: id, disabled, alias }],
+        })
+      )
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  async function setFastPolicy(on: boolean) {
+    try {
+      setAgent(
+        await api.agents.updateCatalog(agentId, {
+          fastPolicy: on ? "on" : "off",
+        })
+      )
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
   async function toggleCommand(name: string, disabled: boolean) {
     try {
       setAgent(
@@ -180,6 +205,27 @@ export function AgentDetail() {
         ) : null}
       </Card>
 
+      {/* 功能开关：agent 级取舍（如是否允许快速模式）。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t("agents.detail.features")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <label className="flex cursor-default items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
+            <Checkbox
+              checked={agent.fastPolicy !== "off"}
+              onCheckedChange={(checked) => void setFastPolicy(checked === true)}
+            />
+            <span className="text-sm">{t("agents.detail.fastPolicy")}</span>
+            <span className="ml-auto max-w-80 truncate text-xs text-muted-foreground">
+              {t("agents.detail.fastPolicyHint")}
+            </span>
+          </label>
+        </CardContent>
+      </Card>
+
       {/* 模型勾选：决定哪些出现在模型下拉里。 */}
       <Card>
         <CardHeader>
@@ -214,11 +260,19 @@ export function AgentDetail() {
                 <span className="font-mono text-xs text-muted-foreground">
                   {m.id}
                 </span>
-                {m.description ? (
-                  <span className="ml-auto max-w-64 truncate text-xs text-muted-foreground">
-                    {m.description}
-                  </span>
-                ) : null}
+                {/* 别名：显示在所有模型下拉里，留空用原名。失焦保存。 */}
+                <Input
+                  defaultValue={m.alias ?? ""}
+                  placeholder={t("agents.detail.aliasPlaceholder")}
+                  className="ml-auto h-7 w-36 text-xs"
+                  onClick={(e) => e.preventDefault()}
+                  onBlur={(e) => {
+                    const alias = e.target.value.trim()
+                    if (alias !== (m.alias ?? "")) {
+                      void renameModel(m.id, m.disabled ?? false, alias)
+                    }
+                  }}
+                />
               </label>
             ))
           )}

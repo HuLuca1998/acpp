@@ -58,7 +58,8 @@ function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
     key: `${agent.id}:${m.id}`,
     agentId: agent.id,
     modelId: m.id,
-    label: m.name,
+    // 配置页起过别名就用别名——runtime 原名往往太长。
+    label: m.alias || m.name,
     description: m.description,
   }))
 }
@@ -151,7 +152,8 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
       currentLevel: draftPatch.level,
       planSupported: sk?.planSupported ?? false,
       planOn: draftPatch.plan ?? false,
-      fastSupported: sk?.fastSupported ?? false,
+      fastSupported:
+        (sk?.fastSupported ?? false) && selectedAgent.fastPolicy !== "off",
       fastOn: draftPatch.fast ?? false,
     }
   }, [selectedAgent, draftPatch])

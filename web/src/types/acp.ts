@@ -12,8 +12,10 @@ export interface SlashCommand {
 
 /** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
 export interface CatalogInput {
-  models?: { key: string; disabled: boolean }[]
+  models?: { key: string; disabled: boolean; alias?: string }[]
   commands?: { key: string; disabled: boolean }[]
+  /** 快速模式取舍；缺省不动。 */
+  fastPolicy?: "on" | "off"
 }
 
 /** runtime 方言，由后端从 agent 身份识别；generic 表示未知 runtime。 */
@@ -26,6 +28,8 @@ export interface UnifiedModel {
   description?: string
   /** 配置页的取舍：true 表示不在本软件里使用（缺省启用）。 */
   disabled?: boolean
+  /** 用户在配置页起的显示别名，空则用原名。 */
+  alias?: string
 }
 
 export interface Agent {
@@ -49,6 +53,8 @@ export interface Agent {
     planSupported?: boolean
     fastSupported?: boolean
   }
+  /** 快速模式取舍：off 时快速开关不出现（空=未定，探测按 flavor 落默认）。 */
+  fastPolicy?: "on" | "off" | ""
   createdAt: string
   updatedAt: string
 }

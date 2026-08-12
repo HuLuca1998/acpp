@@ -121,15 +121,21 @@ func (s *AgentService) Update(ctx context.Context, id uint, in AgentInput) (*mod
 type CatalogItem struct {
 	Key      string `json:"key"`
 	Disabled bool   `json:"disabled"`
+	// Alias 是模型的显示别名（只对 models 有意义），指针区分
+	// 「不动」（nil）与「清空回原名」（空串）。
+	Alias *string `json:"alias,omitempty"`
 }
 
 // CatalogInput 更新探测缓存条目的启用状态；nil 切片表示这一类不动。
 type CatalogInput struct {
 	Models   []CatalogItem `json:"models"`
 	Commands []CatalogItem `json:"commands"`
+	// FastPolicy 更新快速模式取舍（"on"/"off"），nil 不动。
+	FastPolicy *string `json:"fastPolicy,omitempty"`
 }
 
-// UpdateCatalog 应用配置页的勾选：只改 disabled 标记，清单本身由探测维护。
+// UpdateCatalog 应用配置页的勾选：只改 disabled/alias 标记与快速模式
+// 取舍，清单本身由探测维护。
 func (s *AgentService) UpdateCatalog(ctx context.Context, id uint, in CatalogInput) (*model.Agent, error) {
 	agent, err := s.Get(ctx, id)
 	if err != nil {
@@ -137,14 +143,27 @@ func (s *AgentService) UpdateCatalog(ctx context.Context, id uint, in CatalogInp
 	}
 
 	if in.Models != nil {
-		disabled := make(map[string]bool, len(in.Models))
+		items := make(map[string]CatalogItem, len(in.Models))
 		for _, item := range in.Models {
-			disabled[item.Key] = item.Disabled
+			items[item.Key] = item
 		}
 		for i := range agent.Models {
-			if v, ok := disabled[agent.Models[i].ID]; ok {
-				agent.Models[i].Disabled = v
+			item, ok := items[agent.Models[i].ID]
+			if !ok {
+				continue
 			}
+			agent.Models[i].Disabled = item.Disabled
+			if item.Alias != nil {
+				agent.Models[i].Alias = strings.TrimSpace(*item.Alias)
+			}
+		}
+	}
+	if in.FastPolicy != nil {
+		switch *in.FastPolicy {
+		case "on", "off":
+			agent.FastPolicy = *in.FastPolicy
+		default:
+			return nil, fmt.Errorf("%w: fastPolicy must be on or off", ErrInvalid)
 		}
 	}
 	if in.Commands != nil {

@@ -60,6 +60,9 @@ type AgentModel struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Disabled    bool   `json:"disabled,omitempty"`
+	// Alias 是用户在配置页起的显示名（runtime 原名往往太长），
+	// 空值即用原名；重探不清空。
+	Alias string `json:"alias,omitempty"`
 }
 
 // AgentModelSlice 以 JSON 文本形式存进 sqlite 的模型清单。

@@ -103,6 +103,10 @@ export default {
       enableAll: "全部启用",
       disableAll: "全部禁用",
       noData: "还没有数据，先探测一次。",
+      aliasPlaceholder: "别名（选填）",
+      features: "功能开关",
+      fastPolicy: "允许快速模式",
+      fastPolicyHint: "关闭后「快速」按钮不再出现；claude 的快速模式额外计费，默认关闭。",
     },
   },
   sessions: {

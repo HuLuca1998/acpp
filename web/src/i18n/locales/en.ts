@@ -106,6 +106,11 @@ export default {
       enableAll: "Enable all",
       disableAll: "Disable all",
       noData: "No data yet — run a probe first.",
+      aliasPlaceholder: "Alias (optional)",
+      features: "Feature toggles",
+      fastPolicy: "Allow fast mode",
+      fastPolicyHint:
+        "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
     },
   },
   sessions: {
