@@ -76,10 +76,13 @@ func (h skillHandler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h skillHandler) remove(w http.ResponseWriter, r *http.Request) {
-	if err := h.skills.Delete(r.PathValue("name")); err != nil {
+	name := r.PathValue("name")
+	if err := h.skills.Delete(name); err != nil {
 		writeError(w, err)
 		return
 	}
+	// 技能没了，使用计数也清掉——否则概览统计会残留指向已删技能的行。
+	_ = h.usage.Delete(name)
 	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 

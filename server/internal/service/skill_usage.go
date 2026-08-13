@@ -70,6 +70,15 @@ func (s *SkillUsageService) Observe(ev acp.Event) {
 	}
 }
 
+// Delete 清掉一个技能的使用计数，随技能删除一起调用——否则概览的技能
+// 使用卡片会显示已不存在的技能、点进去 404。也清进程内的去重记忆。
+func (s *SkillUsageService) Delete(name string) error {
+	if err := s.db.Where("name = ?", name).Delete(&model.SkillUsage{}).Error; err != nil {
+		return fmt.Errorf("delete skill usage %s: %w", name, err)
+	}
+	return nil
+}
+
 // Top 返回使用最多的技能，count 降序。
 func (s *SkillUsageService) Top(ctx context.Context, limit int) ([]model.SkillUsage, error) {
 	if limit <= 0 {

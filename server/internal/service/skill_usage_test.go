@@ -165,6 +165,24 @@ func TestSkillUsage_Observe_AccumulatesAndRanks(t *testing.T) {
 	}
 }
 
+// 契约：删除技能的计数后，概览统计不再返回它（否则会指向已删技能）。
+func TestSkillUsage_Delete_RemovesCount(t *testing.T) {
+	dataDir := withSkillDir(t, "pirate-greeting")
+	svc := NewSkillUsageService(usageDB(t), dataDir)
+	svc.Observe(toolCall("a", "other", `{"skill":"acpp:pirate-greeting"}`, "", ""))
+
+	if err := svc.Delete("pirate-greeting"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	counts, err := svc.CountsByName(context.Background())
+	if err != nil {
+		t.Fatalf("counts: %v", err)
+	}
+	if len(counts) != 0 {
+		t.Fatalf("counts = %v, want empty after delete", counts)
+	}
+}
+
 // 契约：非技能事件不落任何计数行。
 func TestSkillUsage_Observe_IgnoresNonSkill(t *testing.T) {
 	svc := NewSkillUsageService(usageDB(t), t.TempDir())
