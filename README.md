@@ -14,63 +14,61 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 ```
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
-├── Makefile                    # 常用命令入口，make help 查看
-├── docs/                       # 决策记录（adr-001：codex/claude 差异收敛；adr-002：会话工作区多面板）
-├── scripts/                    # 开发辅助脚本（acp-probe.py：协议探针）
+├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役）
+├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针）
+├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server，不入库
 ├── web/                        # 前端
 │   ├── AGENTS.md               # 前端规范 + 设计规范
 │   ├── src/
 │   │   ├── main.tsx            # 入口：Theme + Tooltip + i18n + Router
 │   │   ├── App.tsx             # 路由表
-│   │   ├── routes/
-│   │   │   ├── dashboard-layout.tsx  # dashboard-01 外壳（侧边栏 + 顶栏 + Outlet）
-│   │   │   ├── overview.tsx          # 概览（真实指标卡 + 最近会话 + agent 状态）
-│   │   │   ├── agents.tsx            # agent 列表
-│   │   │   ├── sessions.tsx          # 会话列表
-│   │   │   ├── agent-detail.tsx      # agent 配置页（探测信息 + models/commands 勾选）
-│   │   │   ├── session-chat.tsx      # 会话工作区宿主页（流式对话 + dockview 多面板，草稿态共用）
-│   │   │   ├── placeholder.tsx       # 未实现页面的占位
-│   │   │   └── not-found.tsx
-│   │   ├── hooks/use-chat.ts   # SSE 订阅 + 流式状态机
-│   │   ├── i18n/               # 语言资源与配置
-│   │   │   ├── index.ts        # i18next 初始化（localStorage 记住选择）
-│   │   │   ├── i18next.d.ts    # 让 t("chat.send") 受类型检查
-│   │   │   └── locales/{zh,en}.ts
+│   │   ├── routes/             # 页面，与路由表一一对应：overview / agents / agent-detail /
+│   │   │                       #   sessions / session-chat（工作区宿主，草稿态共用）/ skills /
+│   │   │                       #   skill-detail / settings / dashboard-layout / placeholder / not-found
+│   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session / use-async-data / use-mobile
+│   │   ├── i18n/               # i18next 初始化 + 类型增强 + locales/{zh,en}.ts
 │   │   ├── components/
-│   │   │   ├── ui/             # shadcn 组件（生成为起点，可直改；升级走 --diff 合并）
-│   │   │   ├── app-sidebar.tsx # 侧边栏导航
-│   │   │   ├── language-switcher.tsx
-│   │   │   ├── chat/           # 聊天专用：markdown/工具调用/计划卡/思考块/复制
-│   │   │   ├── workspace/      # 会话工作区（adr-002）：dockview 编排、命令总线、六类面板
-│   │   │   └── ...             # 状态点、后端状态、新建会话弹窗、切换器等
-│   │   ├── lib/api.ts          # 后端 API 客户端
+│   │   │   ├── ui/             # shadcn 组件（CLI 托管区，目录级 AGENTS.md）
+│   │   │   ├── shell/          # 应用外壳：侧边栏、顶栏、导航、主题/语言切换
+│   │   │   ├── chat/           # 消息渲染；composer/ 输入域；cards/ 权限、计划审批、提问卡
+│   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 七类面板
+│   │   │   ├── overview/       # 概览页四张卡
+│   │   │   └── *.tsx           # 跨域小组件：status-dot / diff-view / dir-picker / agent-icon / list-page-states
+│   │   ├── lib/                # 纯函数与客户端；README.md 是工具索引（脚本对账）
 │   │   ├── types/acp.ts        # 领域类型，与 server/internal/model 对齐
-│   │   └── index.css           # Tailwind v4 主题变量
-│   └── vite.config.ts          # /api 代理到 127.0.0.1:48080
+│   │   └── index.css           # Tailwind v4 主题变量 + 视觉深度层
+│   └── vite.config.ts          # /api 代理到 127.0.0.1:48080；outDir 指向 ../build/web
 └── server/
     ├── AGENTS.md               # 后端规范
-    ├── cmd/server/main.go      # 启动、优雅关闭、回收 agent 子进程
-    └── internal/
-        ├── acp/                # ACP 客户端
-        │   ├── protocol.go     # JSON-RPC 与 ACP 类型
-        │   ├── conn.go         # stdio 连接：ndjson 读写、请求关联、反向调用
-        │   ├── runtime.go      # runtime 注册表 + 嵌套环境变量清理
-        │   ├── adapter.go      # 统一词汇表（模型/思考深度/权限档/plan/fast）+ Adapter 接口
-        │   ├── adapter_*.go    # claude / codex / generic 三个实现，差异全部住在这里
-        │   ├── isolation.go    # 技能隔离注入（各 adapter 的 Isolation：机器级屏蔽/技能包/项目级）
-        │   └── manager.go      # 会话池、握手、turn 调度、统一设置、权限与 fs 代理
-        ├── config/             # 环境变量配置
+    ├── cmd/server/main.go      # 装配层：连库、构建全部 service、挂路由、优雅关闭
+    └── internal/               # README.md 是包地图与跨包工具索引（脚本对账）
+        ├── acp/                # ACP 客户端（目录级 AGENTS.md：铁律 / 文件地图 / runtime 差异表）
+        │   ├── protocol.go     #   JSON-RPC 与 ACP 线级类型
+        │   ├── conn.go         #   stdio 连接：ndjson 读写、请求关联、反向调用路由
+        │   ├── runtime.go      #   runtime 注册表 + 嵌套环境变量清理
+        │   ├── event.go        #   归一化事件模型（推给上层的唯一形状）
+        │   ├── session.go      #   会话状态体 + 协议原语 + prompt/steering 裸调用
+        │   ├── manager.go      #   会话池：Open 并发去重、握手（load 恢复优先）、回收
+        │   ├── turn.go         #   轮次执行：Prompt/Interject/Cancel + 设置门面
+        │   ├── updates.go      #   反向调用：update 归一化、权限与 elicitation 挂起
+        │   ├── fsproxy.go      #   fs 代理（路径限制在会话 cwd）
+        │   ├── adapter*.go     #   统一词汇表 + claude/codex/generic 三实现
+        │   └── isolation.go    #   技能隔离注入
+        ├── config/             # 环境变量配置、数据目录准备与迁移、路径工具
         ├── db/                 # GORM 连接 + AutoMigrate
-        ├── model/              # Agent / Session / Message
+        ├── model/              # Agent / Session / Message(重建 DTO) / SkillUsage
+        ├── transcript/         # 会话转录 JSONL（对话内容唯一的持久化）
         ├── service/
-        │   ├── agent.go
-        │   ├── session.go
-        │   ├── chat.go         # ACP 事件 → 持久化 + 广播
-        │   ├── broker.go       # SSE 广播器与本轮内容累积
-        │   ├── skill.go        # 技能库：结构化 SKILL.md + skillpack 分发链接
-        │   ├── skill_files.go  # 技能附属文件（references/ assets/）读写
-        │   └── skill_scripts.go # 脚本头部元信息解析 + 传参试运行
-        └── httpapi/            # 路由、handler、中间件、统一响应
+        │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
+        │   ├── chat.go         #   服务骨架与生命周期（Peek/Open/Close/回收）
+        │   ├── chat_stream.go  #   SSE 契约 + ACP 事件映射
+        │   ├── chat_turn.go    #   发送、内容块组装、轮次执行
+        │   ├── chat_settings.go#   配置页取舍过滤 + 统一设置
+        │   ├── chat_messages.go#   转录重建读路径；rebuild.go 是重建器
+        │   ├── probe.go        #   agent 能力探测
+        │   └── skill*.go       #   技能库、附属文件、脚本试运行、使用统计
+        └── httpapi/            # 路由、handler、中间件、统一响应（服务由装配层传入）
 ```
 
 ## 快速开始
@@ -158,7 +156,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 - **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。`flavor` / `models` / `commands` / `skeleton` 是注册/更新后自动探测的缓存（拉临时会话读能力）：模型与命令供草稿态展示与 `/` 补全（条目带 `disabled` 标记，重探不清空取舍）；`skeleton` 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），与模型清单一起构成未连接会话的完整降级设置视图。模型条目支持 `alias`（配置页起显示别名，所有模型下拉优先显示）；`fastPolicy` 是快速模式取舍（首探按 flavor 落默认：claude 因额外计费默认 off，其余 on；off 时快速开关不出现在任何界面）。
 - **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`lastSettings` 是最后一次生效的统一设置当前值快照（设置视图每次变化时写回），恢复会话的工具栏靠它显示与断开前一致的当前值。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
-- **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。
+- **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
 
 ## 安全姿态
 
