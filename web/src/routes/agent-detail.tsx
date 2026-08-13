@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useParams } from "react-router"
 
 import { api } from "@/lib/api"
-import type { Agent } from "@/types/acp"
+import type { Agent, CatalogInput } from "@/types/acp"
 import { StatusDot } from "@/components/status-dot"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -63,61 +63,10 @@ export function AgentDetail() {
     }
   }
 
-  async function toggleModel(id: string, disabled: boolean) {
+  /** 全部配置页取舍走同一条通道：提交补丁、整体替换 agent、统一报错。 */
+  async function mutateCatalog(input: CatalogInput) {
     try {
-      setAgent(
-        await api.agents.updateCatalog(agentId, {
-          models: [{ key: id, disabled }],
-        })
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  /** 保存模型别名：必须带上当前 disabled，后端按整条覆盖。 */
-  async function renameModel(id: string, disabled: boolean, alias: string) {
-    try {
-      setAgent(
-        await api.agents.updateCatalog(agentId, {
-          models: [{ key: id, disabled, alias }],
-        })
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  async function setFastPolicy(on: boolean) {
-    try {
-      setAgent(
-        await api.agents.updateCatalog(agentId, {
-          fastPolicy: on ? "on" : "off",
-        })
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  async function toggleCommand(name: string, disabled: boolean) {
-    try {
-      setAgent(
-        await api.agents.updateCatalog(agentId, {
-          commands: [{ key: name, disabled }],
-        })
-      )
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  /** 全启用 / 全禁用当前过滤出的命令。 */
-  async function bulkCommands(disabled: boolean) {
-    if (!agent) return
-    const targets = filteredCommands.map((c) => ({ key: c.name, disabled }))
-    try {
-      setAgent(await api.agents.updateCatalog(agentId, { commands: targets }))
+      setAgent(await api.agents.updateCatalog(agentId, input))
     } catch (err) {
       setError((err as Error).message)
     }
@@ -210,7 +159,11 @@ export function AgentDetail() {
           <label className="flex cursor-default items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
             <Checkbox
               checked={agent.fastPolicy !== "off"}
-              onCheckedChange={(checked) => void setFastPolicy(checked === true)}
+              onCheckedChange={(checked) =>
+                void mutateCatalog({
+                  fastPolicy: checked === true ? "on" : "off",
+                })
+              }
             />
             <span className="text-sm">{t("agents.detail.fastPolicy")}</span>
             <span className="ml-auto max-w-80 truncate text-xs text-muted-foreground">
@@ -247,7 +200,9 @@ export function AgentDetail() {
                 <Checkbox
                   checked={!m.disabled}
                   onCheckedChange={(checked) =>
-                    void toggleModel(m.id, checked !== true)
+                    void mutateCatalog({
+                      models: [{ key: m.id, disabled: checked !== true }],
+                    })
                   }
                 />
                 <span className="text-sm">{m.name}</span>
@@ -263,7 +218,12 @@ export function AgentDetail() {
                   onBlur={(e) => {
                     const alias = e.target.value.trim()
                     if (alias !== (m.alias ?? "")) {
-                      void renameModel(m.id, m.disabled ?? false, alias)
+                      void mutateCatalog({
+                        // 必须带上当前 disabled,后端按整条覆盖。
+                        models: [
+                          { key: m.id, disabled: m.disabled ?? false, alias },
+                        ],
+                      })
                     }
                   }}
                 />
@@ -300,14 +260,28 @@ export function AgentDetail() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void bulkCommands(false)}
+              onClick={() =>
+                void mutateCatalog({
+                  commands: filteredCommands.map((c) => ({
+                    key: c.name,
+                    disabled: false,
+                  })),
+                })
+              }
             >
               {t("agents.detail.enableAll")}
             </Button>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => void bulkCommands(true)}
+              onClick={() =>
+                void mutateCatalog({
+                  commands: filteredCommands.map((c) => ({
+                    key: c.name,
+                    disabled: true,
+                  })),
+                })
+              }
             >
               {t("agents.detail.disableAll")}
             </Button>
@@ -327,7 +301,9 @@ export function AgentDetail() {
                 <Checkbox
                   checked={!c.disabled}
                   onCheckedChange={(checked) =>
-                    void toggleCommand(c.name, checked !== true)
+                    void mutateCatalog({
+                      commands: [{ key: c.name, disabled: checked !== true }],
+                    })
                   }
                 />
                 <span className="shrink-0 font-mono text-sm">/{c.name}</span>

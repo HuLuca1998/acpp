@@ -1,12 +1,8 @@
-import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
-import { api } from "@/lib/api"
-import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Agent } from "@/types/acp"
+import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
-import { AGENT_STATUS_TONE } from "@/lib/status-tone"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -17,15 +13,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
   Table,
   TableBody,
   TableCell,
@@ -33,27 +20,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAsyncData } from "@/hooks/use-async-data"
+import { api } from "@/lib/api"
+import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
+import { AGENT_STATUS_TONE } from "@/lib/status-tone"
 import { BotIcon, PlusIcon } from "lucide-react"
 
 export function Agents() {
   const { t, i18n } = useTranslation()
-  const [agents, setAgents] = useState<Agent[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    api.agents
-      .list()
-      .then((res) => {
-        if (!cancelled) setAgents(res.items)
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const { data: agents, error } = useAsyncData(
+    () => api.agents.list().then((res) => res.items),
+    []
+  )
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -70,38 +48,20 @@ export function Agents() {
             </CardAction>
           </CardHeader>
           <CardContent>
-            {error ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <BotIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("common.loadFailed")}</EmptyTitle>
-                  <EmptyDescription>{error}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : agents === null ? (
-              <div className="flex flex-col gap-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : agents.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <BotIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("agents.empty")}</EmptyTitle>
-                  <EmptyDescription>{t("agents.emptyHint")}</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
+            {error || agents === null || agents.length === 0 ? (
+              <ListPageStates
+                icon={<BotIcon />}
+                error={error}
+                loading={agents === null}
+                emptyTitle={t("agents.empty")}
+                emptyHint={t("agents.emptyHint")}
+                emptyAction={
                   <Button size="sm" render={<Link to="/agents/new" />}>
                     <PlusIcon data-icon="inline-start" />
                     {t("agents.add")}
                   </Button>
-                </EmptyContent>
-              </Empty>
+                }
+              />
             ) : (
               <Table>
                 <TableHeader>

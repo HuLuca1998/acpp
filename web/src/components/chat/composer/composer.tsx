@@ -99,7 +99,10 @@ export function Composer({
       <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 lg:px-6">
         {queue}
         {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。 */}
-        <div className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/80 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-border dark:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.06),0_8px_32px_rgba(0,0,0,0.35)]">
+        <div
+          data-slot="composer-shell"
+          className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl dark:border-border"
+        >
           {menuOpen ? (
             <div className="absolute inset-x-2 bottom-[calc(100%+0.5rem)] max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
               {matches.map((cmd, index) => (

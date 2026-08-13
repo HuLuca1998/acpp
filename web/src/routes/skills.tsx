@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 import { toast } from "sonner"
+
+import { ListPageStates } from "@/components/list-page-states"
+import { useAsyncData } from "@/hooks/use-async-data"
 
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
@@ -25,15 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -47,18 +41,12 @@ import { InfoIcon, PlusIcon, PuzzleIcon, Trash2Icon } from "lucide-react"
 
 export function Skills() {
   const { t, i18n } = useTranslation()
-  const [skills, setSkills] = useState<Skill[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    data: skills,
+    error,
+    setData: setSkills,
+  } = useAsyncData(() => api.skills.list().then((res) => res.items), [])
   const [deleting, setDeleting] = useState<Skill | null>(null)
-
-  const reload = useCallback(() => {
-    api.skills
-      .list()
-      .then((res) => setSkills(res.items))
-      .catch((err: Error) => setError(err.message))
-  }, [])
-
-  useEffect(reload, [reload])
 
   async function toggle(skill: Skill, enabled: boolean) {
     // 乐观更新：符号链接切换基本不会失败，失败时回滚并提示。
@@ -111,38 +99,20 @@ export function Skills() {
             </CardAction>
           </CardHeader>
           <CardContent>
-            {error ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <PuzzleIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("common.loadFailed")}</EmptyTitle>
-                  <EmptyDescription>{error}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : skills === null ? (
-              <div className="flex flex-col gap-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : skills.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <PuzzleIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("skills.empty")}</EmptyTitle>
-                  <EmptyDescription>{t("skills.emptyHint")}</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
+            {error || skills === null || skills.length === 0 ? (
+              <ListPageStates
+                icon={<PuzzleIcon />}
+                error={error}
+                loading={skills === null}
+                emptyTitle={t("skills.empty")}
+                emptyHint={t("skills.emptyHint")}
+                emptyAction={
                   <Button size="sm" render={<Link to="/skills/new" />}>
                     <PlusIcon data-icon="inline-start" />
                     {t("skills.add")}
                   </Button>
-                </EmptyContent>
-              </Empty>
+                }
+              />
             ) : (
               <>
                 <Table>

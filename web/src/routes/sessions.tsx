@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
+import { ListPageStates } from "@/components/list-page-states"
+import { useAsyncData } from "@/hooks/use-async-data"
 import { api } from "@/lib/api"
 import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Session } from "@/types/acp"
@@ -28,15 +30,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import { Skeleton } from "@/components/ui/skeleton"
-import {
   Table,
   TableBody,
   TableCell,
@@ -50,21 +43,12 @@ const PAGE_SIZE = 50
 
 export function Sessions() {
   const { t, i18n } = useTranslation()
-  const [sessions, setSessions] = useState<Session[] | null>(null)
-  const [total, setTotal] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(() => {
-    api.sessions
-      .list({ pageSize: PAGE_SIZE })
-      .then((res) => {
-        setSessions(res.items)
-        setTotal(res.total)
-      })
-      .catch((err: Error) => setError(err.message))
-  }, [])
-
-  useEffect(load, [load])
+  const { data, error, setData, setError } = useAsyncData(
+    () => api.sessions.list({ pageSize: PAGE_SIZE }),
+    []
+  )
+  const sessions = data?.items ?? null
+  const total = data?.total ?? 0
 
   /** 追加下一页：以已加载条数推算页码，避免维护独立游标。 */
   const loadMore = useCallback(() => {
@@ -72,19 +56,26 @@ export function Sessions() {
     api.sessions
       .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
       .then((res) => {
-        setSessions((prev) => {
-          const seen = new Set((prev ?? []).map((s) => s.id))
-          return [...(prev ?? []), ...res.items.filter((s) => !seen.has(s.id))]
+        setData((prev) => {
+          const seen = new Set((prev?.items ?? []).map((s) => s.id))
+          return {
+            ...res,
+            items: [
+              ...(prev?.items ?? []),
+              ...res.items.filter((s) => !seen.has(s.id)),
+            ],
+          }
         })
-        setTotal(res.total)
       })
       .catch((err: Error) => setError(err.message))
-  }, [sessions])
+  }, [sessions, setData, setError])
 
   async function remove(id: number) {
     try {
       await api.sessions.remove(id)
-      setSessions((prev) => prev?.filter((s) => s.id !== id) ?? null)
+      setData((prev) =>
+        prev ? { ...prev, items: prev.items.filter((s) => s.id !== id) } : prev
+      )
     } catch (err) {
       setError((err as Error).message)
     }
@@ -130,38 +121,20 @@ export function Sessions() {
             </CardAction>
           </CardHeader>
           <CardContent>
-            {error ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MessagesSquareIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("common.loadFailed")}</EmptyTitle>
-                  <EmptyDescription>{error}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : sessions === null ? (
-              <div className="flex flex-col gap-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : sessions.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MessagesSquareIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("sessions.empty")}</EmptyTitle>
-                  <EmptyDescription>{t("sessions.emptyHint")}</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
+            {error || sessions === null || sessions.length === 0 ? (
+              <ListPageStates
+                icon={<MessagesSquareIcon />}
+                error={error}
+                loading={sessions === null}
+                emptyTitle={t("sessions.empty")}
+                emptyHint={t("sessions.emptyHint")}
+                emptyAction={
                   <Button size="sm" render={<Link to="/sessions/new" />}>
                     <PlusIcon data-icon="inline-start" />
                     {t("sessions.create")}
                   </Button>
-                </EmptyContent>
-              </Empty>
+                }
+              />
             ) : (
               <Table>
                 <TableHeader>
