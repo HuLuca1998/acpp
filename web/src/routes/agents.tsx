@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { api } from "@/lib/api"
-import { formatDateTime, formatRelativeTime } from "@/lib/format"
+import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Agent } from "@/types/acp"
 import { StatusDot } from "@/components/status-dot"
 import { AGENT_STATUS_TONE } from "@/lib/status-tone"
@@ -160,6 +160,3 @@ export function Agents() {
   )
 }
 
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1)
-}

@@ -35,3 +35,8 @@ export function formatTokens(n: number): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
   return String(n)
 }
+
+/** 首字母大写：动态拼 i18n key（"idle" → "statusIdle"）用。 */
+export function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}

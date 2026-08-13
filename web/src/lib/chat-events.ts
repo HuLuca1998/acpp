@@ -197,8 +197,8 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
     case "plan": {
       // 计划整体替换；保留到下一轮开始，让用户能回看最终完成状态。
       if (!inTurn) return prev
-      const entries = Array.isArray(ev.rawInput)
-        ? (ev.rawInput as PlanEntry[])
+      const entries = Array.isArray(ev.entries)
+        ? (ev.entries as PlanEntry[])
         : null
       if (!entries) return prev
       return { ...prev, plan: entries }

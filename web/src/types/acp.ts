@@ -10,7 +10,6 @@ export interface SlashCommand {
   disabled?: boolean
 }
 
-/** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
 /** 系统配置：数据目录状态（设置面板用）。 */
 export interface SystemInfo {
   /** 当前进程实际使用的数据目录。 */
@@ -21,6 +20,7 @@ export interface SystemInfo {
   pendingDir?: string
 }
 
+/** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
 export interface CatalogInput {
   models?: { key: string; disabled: boolean; alias?: string }[]
   commands?: { key: string; disabled: boolean }[]
@@ -311,7 +311,8 @@ export interface StreamEvent {
   rawOutput?: unknown
   /** tool_call 的内容块（diff 等），流式期间即可渲染。 */
   content?: unknown
-  locations?: unknown
+  /** plan 事件：任务条目数组。 */
+  entries?: unknown
   /** agent 自行切档/改配置后的最新统一设置视图。 */
   settings?: SessionSettings
   /** usage 事件：上下文用量（按占比展示）。 */

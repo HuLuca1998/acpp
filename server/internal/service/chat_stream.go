@@ -23,6 +23,8 @@ type StreamEvent struct {
 	RawOutput     json.RawMessage `json:"rawOutput,omitempty"`
 	Content       json.RawMessage `json:"content,omitempty"`
 	Locations     json.RawMessage `json:"locations,omitempty"`
+	// Entries 是 plan 事件的任务条目数组。
+	Entries       json.RawMessage `json:"entries,omitempty"`
 	Settings      *acp.Settings   `json:"settings,omitempty"`
 	Used          int64           `json:"used,omitempty"`
 	Size          int64           `json:"size,omitempty"`
@@ -111,7 +113,7 @@ func (s *ChatService) handleEvent(sessionID uint, br *broker, ev acp.Event) {
 		br.publish(StreamEvent{Kind: "elicitation_done", ElicitationID: ev.ElicitationID})
 
 	case acp.EventPlan:
-		br.publish(StreamEvent{Kind: "plan", RawInput: ev.Entries})
+		br.publish(StreamEvent{Kind: "plan", Entries: ev.Entries})
 
 	case acp.EventTurnEnd:
 		br.publish(StreamEvent{Kind: "turn_end", StopReason: string(ev.StopReason), Usage: ev.Usage})
