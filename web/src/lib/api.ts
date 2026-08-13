@@ -20,6 +20,7 @@ import type {
   SkillScriptRunInput,
   SkillScriptRunResult,
   SkillUpdateInput,
+  SkillUsage,
   SystemInfo,
   TerminalInfo,
   TreeListing,
@@ -264,6 +265,8 @@ export const api = {
       request<{ deleted: boolean }>(`/skills/${name}/files/${path}`, {
         method: "DELETE",
       }),
+
+    usage: () => request<Paged<SkillUsage>>("/skills/usage"),
 
     scripts: (name: string) =>
       request<Paged<SkillScript>>(`/skills/${name}/scripts`),

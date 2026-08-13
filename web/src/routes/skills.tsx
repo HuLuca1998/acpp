@@ -151,6 +151,9 @@ export function Skills() {
                       <TableHead>{t("skills.name")}</TableHead>
                       <TableHead>{t("skills.colDescription")}</TableHead>
                       <TableHead className="text-right">
+                        {t("skills.usage")}
+                      </TableHead>
+                      <TableHead className="text-right">
                         {t("skills.updated")}
                       </TableHead>
                       <TableHead className="w-24 text-right">
@@ -173,6 +176,15 @@ export function Skills() {
                         </TableCell>
                         <TableCell className="max-w-96 truncate text-muted-foreground">
                           {skill.description || t("common.none")}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {skill.usageCount > 0 ? (
+                            skill.usageCount.toLocaleString()
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {t("common.none")}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell
                           className="text-right text-muted-foreground tabular-nums"

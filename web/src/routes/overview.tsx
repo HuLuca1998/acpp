@@ -4,7 +4,7 @@ import { Link } from "react-router"
 
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Agent, Session, SessionState } from "@/types/acp"
+import type { Agent, Session, SessionState, SkillUsage } from "@/types/acp"
 import { StatusDot, type StatusTone } from "@/components/status-dot"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,6 +32,7 @@ import {
   MessageSquareTextIcon,
   MessagesSquareIcon,
   PlusIcon,
+  PuzzleIcon,
 } from "lucide-react"
 
 const RECENT_LIMIT = 6
@@ -56,6 +57,7 @@ export function Overview() {
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [sessionTotal, setSessionTotal] = useState(0)
+  const [skillUsage, setSkillUsage] = useState<SkillUsage[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -74,6 +76,13 @@ export function Overview() {
       .catch((err: Error) => {
         if (!cancelled) setError(err.message)
       })
+    // 技能使用统计独立取，失败不拖累概览主体。
+    api.skills
+      .usage()
+      .then((res) => {
+        if (!cancelled) setSkillUsage(res.items)
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -356,6 +365,66 @@ export function Overview() {
               {t("overview.addAgent")}
             </Button>
           </CardFooter>
+        </Card>
+      </div>
+
+      {/* 技能使用统计：被 AI 调用最多的技能。 */}
+      <div className="px-4 lg:px-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("overview.skillUsageTitle")}</CardTitle>
+            <CardDescription>
+              {t("overview.skillUsageDescription")}
+            </CardDescription>
+            <CardAction>
+              <Button size="sm" variant="ghost" render={<Link to="/skills" />}>
+                {t("nav.viewAll")}
+                <ArrowRightIcon data-icon="inline-end" />
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {skillUsage.length === 0 ? (
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <PuzzleIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>{t("overview.skillUsageEmpty")}</EmptyTitle>
+                  <EmptyDescription>
+                    {t("overview.skillUsageEmptyHint")}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {(() => {
+                  const max = Math.max(...skillUsage.map((s) => s.count))
+                  return skillUsage.map((s) => (
+                    <Link
+                      key={s.name}
+                      to={`/skills/${s.name}`}
+                      className="group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-150 ease-snappy hover:bg-muted/60"
+                    >
+                      <span className="w-40 shrink-0 truncate font-mono text-xs">
+                        {s.name}
+                      </span>
+                      {/* 次数条：相对最高值的占比，纯视觉参照。 */}
+                      <span className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="h-full rounded-full bg-primary/70"
+                          style={{ width: `${(s.count / max) * 100}%` }}
+                        />
+                      </span>
+                      <span className="w-10 shrink-0 text-right text-sm tabular-nums">
+                        {s.count.toLocaleString()}
+                      </span>
+                    </Link>
+                  ))
+                })()}
+              </div>
+            )}
+          </CardContent>
         </Card>
       </div>
     </PageShell>

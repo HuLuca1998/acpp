@@ -43,6 +43,11 @@ export default {
     messagesHint: "Across all sessions",
     recentTitle: "Recent sessions",
     recentDescription: "Recently updated conversations. Click to resume.",
+    skillUsageTitle: "Skill usage",
+    skillUsageDescription: "The skills the AI invokes most.",
+    skillUsageEmpty: "No skills invoked yet",
+    skillUsageEmptyHint:
+      "Once a skill is enabled, uses in conversations show up here.",
     agentsTitle: "Agents",
     agentsDescription: "Registered runtimes and their connection state.",
     manageAgents: "Manage",
@@ -124,6 +129,7 @@ export default {
       "Create a skill, or drop a skill directory into skills/ under the data directory.",
     name: "Name",
     colDescription: "Description",
+    usage: "Invocations",
     enabled: "Enabled",
     updated: "Updated",
     effectNote:

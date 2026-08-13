@@ -389,6 +389,14 @@ export interface Skill {
   description: string
   enabled: boolean
   updatedAt: string
+  /** 被 AI 调用的累计次数（后端从 tool_call 信号统计）。 */
+  usageCount: number
+}
+
+export interface SkillUsage {
+  name: string
+  count: number
+  lastUsedAt: string
 }
 
 export interface SkillDetail extends Skill {
