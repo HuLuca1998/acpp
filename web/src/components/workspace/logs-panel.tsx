@@ -63,8 +63,13 @@ export const LogsPanel = memo(function LogsPanel() {
   useEffect(() => {
     if (!ws.sessionId) return
     let cancelled = false
+    // 防并发重入：首次全量拉取慢于轮询间隔时，interval 会用同一个 offset
+    // 再发一次，两个响应各自 append 同一段内容——日志整段翻倍。
+    let pulling = false
 
     async function pull() {
+      if (pulling) return
+      pulling = true
       try {
         const res = await api.sessions.transcriptChunk(
           ws.sessionId,
@@ -89,6 +94,8 @@ export const LogsPanel = memo(function LogsPanel() {
         })
       } catch {
         // 拉不到就等下一轮；logs 是旁路调试窗口，不打扰主流程。
+      } finally {
+        pulling = false
       }
     }
 
