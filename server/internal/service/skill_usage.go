@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,12 +67,13 @@ func (s *SkillUsageService) Observe(ev acp.Event) {
 		}),
 	}).Create(&usage).Error; err != nil {
 		// 计数是尽力而为的观测数据，失败不该影响对话，记日志即可。
-		return
+		slog.Warn("skill usage upsert", "skill", name, "err", err)
 	}
 }
 
 // Delete 清掉一个技能的使用计数，随技能删除一起调用——否则概览的技能
-// 使用卡片会显示已不存在的技能、点进去 404。也清进程内的去重记忆。
+// 使用卡片会显示已不存在的技能、点进去 404。进程内的 seen 不用清：
+// 它按一次性的 toolCallId 去重，同名新技能的调用自带新 id，不受影响。
 func (s *SkillUsageService) Delete(name string) error {
 	if err := s.db.Where("name = ?", name).Delete(&model.SkillUsage{}).Error; err != nil {
 		return fmt.Errorf("delete skill usage %s: %w", name, err)

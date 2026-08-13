@@ -81,8 +81,6 @@ func (h skillHandler) remove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	// 技能没了，使用计数也清掉——否则概览统计会残留指向已删技能的行。
-	_ = h.usage.Delete(name)
 	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 

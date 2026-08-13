@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,12 +25,15 @@ type SkillService struct {
 	mu      sync.Mutex
 	srcDir  string
 	packDir string
+	// usage 用于删除技能时连带清掉使用计数，可为 nil（测试场景）。
+	usage *SkillUsageService
 }
 
-func NewSkillService(dataDir string) *SkillService {
+func NewSkillService(dataDir string, usage *SkillUsageService) *SkillService {
 	return &SkillService{
 		srcDir:  filepath.Join(dataDir, "skills"),
 		packDir: filepath.Join(dataDir, "skillpack"),
+		usage:   usage,
 	}
 }
 
@@ -226,6 +230,13 @@ func (s *SkillService) Delete(name string) error {
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("delete skill %s: %w", name, err)
+	}
+	// 技能没了，使用计数也清掉——否则概览统计会残留指向已删技能的行。
+	// 计数是观测数据，清理失败不该让删除半途而废，记日志即可。
+	if s.usage != nil {
+		if err := s.usage.Delete(name); err != nil {
+			slog.Warn("clear skill usage after delete", "skill", name, "err", err)
+		}
 	}
 	return nil
 }

@@ -25,17 +25,17 @@ func newBroker() *broker {
 // 这样中途刷新页面也能看到正在跑的这一轮。
 func (b *broker) subscribe() (<-chan StreamEvent, func()) {
 	b.mu.Lock()
-	backlog := make([]StreamEvent, len(b.replay))
-	copy(backlog, b.replay)
 	// 容量必须装得下整个 backlog：长轮的事件数可以超过 subscriberBuffer，
 	// 非阻塞补发会把尾部（含 turn_done）静默丢掉，前端 busy 就永久卡死。
-	ch := make(chan StreamEvent, max(subscriberBuffer, len(backlog)+subscriberBuffer))
-	b.subs[ch] = struct{}{}
-	b.mu.Unlock()
-
-	for _, ev := range backlog {
+	ch := make(chan StreamEvent, max(subscriberBuffer, len(b.replay)+subscriberBuffer))
+	// 补发必须在临界区内完成：一旦注册进 subs，并发 publish 就会向 ch 直投，
+	// 锁外补发会让新事件抢在 backlog 前面，订阅者看到 Seq 乱序、chunk 错拼。
+	// 容量已保证装得下全部 backlog，持锁 send 不会阻塞。
+	for _, ev := range b.replay {
 		ch <- ev
 	}
+	b.subs[ch] = struct{}{}
+	b.mu.Unlock()
 
 	var once sync.Once
 	cancel := func() {
@@ -51,16 +51,14 @@ func (b *broker) subscribe() (<-chan StreamEvent, func()) {
 
 func (b *broker) publish(ev StreamEvent) {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.seq++
 	ev.Seq = b.seq
 	b.replay = append(b.replay, ev)
-	subs := make([]chan StreamEvent, 0, len(b.subs))
+	// 投递也留在临界区内：并发 publish 各自锁外投递会彼此交错，订阅者
+	// 收到的顺序就不再等于 Seq 顺序。channel 有缓冲、满了走 default 丢弃，
+	// 持锁 send 不会阻塞。
 	for ch := range b.subs {
-		subs = append(subs, ch)
-	}
-	b.mu.Unlock()
-
-	for _, ch := range subs {
 		select {
 		case ch <- ev:
 		default:

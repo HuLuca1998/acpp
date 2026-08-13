@@ -643,12 +643,30 @@ func (m *Manager) Interject(ctx context.Context, key string, blocks []ContentBlo
 
 	result, followUp, err := sess.adapter.Interject(ctx, sess, blocks)
 	if err != nil {
+		// 与 Prompt 的归一同理：用户中止会让在途的 steering/排队 prompt 报错，
+		// 而 codex 只给一个 "...canceled" 错误字符串、不按 ACP 规范返回
+		// stopReason=cancelled。字符串嗅探是对该协议缺陷的补偿，集中在协议层
+		// 这一处；上层只认 StopReason，不碰错误文本。
+		if errors.Is(ctx.Err(), context.Canceled) || isCancelledErr(err) {
+			sess.emit(Event{Kind: EventTurnEnd, StopReason: StopCancelled})
+			return PromptResult{StopReason: StopCancelled}, true, nil
+		}
 		return PromptResult{}, false, err
 	}
 	if followUp {
 		sess.emit(Event{Kind: EventTurnEnd, StopReason: result.StopReason, Usage: result.Usage})
 	}
 	return result, followUp, nil
+}
+
+// isCancelledErr 识别「远端把取消表达成错误」的两种形态：包装过的
+// context.Canceled，或 JSON-RPC 错误文本里的 cancel 字样。
+func isCancelledErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) ||
+		strings.Contains(strings.ToLower(err.Error()), "cancel")
 }
 
 // Cancel 中止会话上正在跑的 turn。

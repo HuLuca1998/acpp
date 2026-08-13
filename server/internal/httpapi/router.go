@@ -31,7 +31,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	sessions := sessionHandler{sessions: sessionService, chat: chatService}
 	chat := chatHandler{chat: chatService}
 	system := systemHandler{system: service.NewSystemService(gdb, cfg)}
-	skills := skillHandler{skills: service.NewSkillService(cfg.DataDir), usage: skillUsage}
+	skills := skillHandler{skills: service.NewSkillService(cfg.DataDir, skillUsage), usage: skillUsage}
 
 	api := http.NewServeMux()
 

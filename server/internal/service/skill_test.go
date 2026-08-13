@@ -19,7 +19,7 @@ var commitStyle = SkillCreateInput{
 func newSkillService(t *testing.T) (*SkillService, string) {
 	t.Helper()
 	dataDir := t.TempDir()
-	return NewSkillService(dataDir), dataDir
+	return NewSkillService(dataDir, nil), dataDir
 }
 
 // 契约：Create 落盘 SKILL.md（frontmatter 由服务端组装）、默认启用，
