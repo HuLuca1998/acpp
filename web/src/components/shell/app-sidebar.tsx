@@ -88,13 +88,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="h-auto data-[slot=sidebar-menu-button]:p-1.5!"
               render={<Link to="/" />}
             >
-              {/* 品牌徽标：光感样式在 index.css 视觉深度层，palette 切换自动跟随。 */}
-              <span
-                data-slot="brand-mark"
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-primary-foreground"
-              >
-                <PlugZapIcon className="size-4!" />
-              </span>
+              {/* 品牌徽标：app 图标（public/app-icon.svg，与桌面版图标同源）。 */}
+              <img src="/app-icon.svg" alt="" className="size-7 shrink-0" />
               <span className="text-base font-semibold tracking-tight">
                 {t("common.appName")}
               </span>

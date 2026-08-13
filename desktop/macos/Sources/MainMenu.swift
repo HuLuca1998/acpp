@@ -11,11 +11,11 @@ enum MainMenu {
         let appMenu = NSMenu()
         appItem.submenu = appMenu
         appMenu.addItem(
-            withTitle: "关于 ACP Console",
+            withTitle: "关于 ACPP",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(
-            withTitle: "隐藏 ACP Console",
+            withTitle: "隐藏 ACPP",
             action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         // Cmd+Q 会被 AppDelegate 拦截成「隐藏窗口」，真退出只在菜单栏右键——标题如实描述行为。
         appMenu.addItem(

@@ -23,7 +23,7 @@ final class MainWindowController: NSObject, NSWindowDelegate, WKNavigationDelega
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = "ACP Console"
+        window.title = "ACPP"
         window.minSize = NSSize(width: 900, height: 600)
         window.center()
         // 记住上次的窗口位置与大小；orderOut 隐藏而非 close，所以关掉释放也要禁
@@ -64,7 +64,7 @@ final class MainWindowController: NSObject, NSWindowDelegate, WKNavigationDelega
     }
 
     func showLoading() {
-        webView.loadHTMLString(Self.page(mark: "❯_", markPulse: true, title: "正在启动 ACP Console 服务…", detail: ""), baseURL: nil)
+        webView.loadHTMLString(Self.page(mark: "❯_", markPulse: true, title: "正在启动 ACPP 服务…", detail: ""), baseURL: nil)
     }
 
     func showFailure(logPath: String) {

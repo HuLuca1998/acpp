@@ -4,7 +4,7 @@
 
 ## 背景
 
-web 端基本成型后，需要把 ACP Console 打包成 macOS 桌面应用。产品要求：有 Dock 图标与菜单栏图标；关闭窗口不退出（常驻菜单栏，右键才是真退出）；能一键跳到浏览器用 web 端；支持局域网共享链接给其他设备。根 AGENTS.md 原本为 `desktop/` 预留的方向是 tauri/electron。
+web 端基本成型后，需要把 ACPP 打包成 macOS 桌面应用。产品要求：有 Dock 图标与菜单栏图标；关闭窗口不退出（常驻菜单栏，右键才是真退出）；能一键跳到浏览器用 web 端；支持局域网共享链接给其他设备。根 AGENTS.md 原本为 `desktop/` 预留的方向是 tauri/electron。
 
 ## 决策
 
@@ -29,7 +29,7 @@ web 端基本成型后，需要把 ACP Console 打包成 macOS 桌面应用。�
 
 ### 图标即代码
 
-App 图标与菜单栏模板图由 `desktop/macos/IconGen/icongen.swift` 用 CoreGraphics 逐尺寸矢量绘制，打包时现生成 iconset → icns，仓库不存二进制图片。设计语言：终端提示符 `❯` + 光标下划线，绿色取自 web 主题 primary。
+App 图标与菜单栏模板图由 `desktop/macos/IconGen/icongen.swift` 用 CoreGraphics 逐尺寸矢量绘制，打包时现生成 iconset → icns，仓库不存二进制图片。设计语言：对话气泡内嵌提示符 `❯_`（用户从五个概念稿中选定），绿色取自 web 主题 primary；web 端 `public/app-icon.svg`（侧边栏品牌位与 favicon）与之同源，改任一侧要对齐。
 
 ### 已知边界
 

@@ -1,4 +1,4 @@
-# ACP Console
+# ACPP
 
 Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 agent 连续对话，实时看到回复、思考与工具调用。
 
@@ -97,15 +97,15 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 
 ## macOS 桌面版
 
-`make app` 一键打包出 `build/app/ACP Console.app`：Swift/AppKit 菜单栏壳 + 捆绑 acp-server + 前端产物，图标全部由脚本程序化绘制（仓库不存二进制），ad-hoc 签名本机直接用。选型与行为决策见 [docs/adr-004](docs/adr-004-macos-桌面壳.md)。
+`make app` 一键打包出 `build/app/ACPP.app`：Swift/AppKit 菜单栏壳 + 捆绑 acp-server + 前端产物，图标全部由脚本程序化绘制（仓库不存二进制），ad-hoc 签名本机直接用。选型与行为决策见 [docs/adr-004](docs/adr-004-macos-桌面壳.md)。
 
 行为约定：
 
-- **关闭 ≠ 退出**：关闭按钮 / Cmd+W / Cmd+Q / Dock 退出都只是隐藏窗口，服务常驻菜单栏；**真退出只有菜单栏图标右键 → 「退出 ACP Console」**（系统注销/关机也会放行，并回收全部子进程）。
+- **关闭 ≠ 退出**：关闭按钮 / Cmd+W / Cmd+Q / Dock 退出都只是隐藏窗口，服务常驻菜单栏；**真退出只有菜单栏图标右键 → 「退出 ACPP」**（系统注销/关机也会放行，并回收全部子进程）。
 - **菜单栏图标**：左键切换主窗口显隐；右键菜单：打开主窗口 / 在浏览器中打开 / 允许局域网访问 / 复制局域网链接 / 重启服务 / 打开服务日志 / 退出。
 - **端口固定 `48090`**，与开发态 48080 隔离——`make dev` 与桌面版互不误杀，可同时运行；数据共用 `~/.acpp`，桌面版和 dev 看到同样的会话。
 - **局域网共享默认关**（工作区终端是任意命令执行面，见 §安全姿态）。菜单栏开启后服务监听 `0.0.0.0`，「复制局域网链接」得到 `http://<局域网IP>:48090/`，发给局域网内其他设备即可在浏览器使用完整 web 端。切换开关会重启后台服务（agent 上下文在 runtime 侧持久化，续聊自动恢复）。
-- 服务日志：`~/Library/Logs/ACP Console/server.log`。agent 子进程的 PATH 取自登录 shell——GUI app 默认拿不到 Homebrew 路径，壳启动时注入，否则拉不起 `codex-acp` / `claude-agent-acp`。
+- 服务日志：`~/Library/Logs/ACPP/server.log`。agent 子进程的 PATH 取自登录 shell——GUI app 默认拿不到 Homebrew 路径，壳启动时注入，否则拉不起 `codex-acp` / `claude-agent-acp`。
 
 打包脚本 [scripts/build-macos-app.sh](scripts/build-macos-app.sh)（`--skip-web` 复用已有前端产物提速，`APP_VERSION` 覆盖版本号）；壳源码在 [desktop/macos/](desktop/macos/)。
 

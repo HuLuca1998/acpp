@@ -1,6 +1,6 @@
 export default {
   common: {
-    appName: "ACP 控制台",
+    appName: "ACPP",
     loadFailed: "加载失败",
     save: "保存",
     cancel: "取消",
@@ -50,7 +50,7 @@ export default {
     noSessionsHint: "选择一个 agent 发起第一段对话。",
     newSession: "新建会话",
     addAgent: "添加 agent",
-    onboardTitle: "欢迎使用 ACP 控制台",
+    onboardTitle: "欢迎使用 ACPP",
     onboardHint:
       "先注册一个 ACP agent（如 codex-acp），再从它发起会话，对话流会实时出现在这里。",
     messagesCount: "{{count}} 条消息",

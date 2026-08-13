@@ -1,4 +1,4 @@
-# ACP Console 工程规范（根）
+# ACPP 工程规范（根）
 
 本文件是本项目所有开发者——包括 Claude、Codex 等 AI 协作者——共同遵守的**通用规范**。
 项目背景、架构、API、数据流见 [README.md](README.md)，动手前先读它。

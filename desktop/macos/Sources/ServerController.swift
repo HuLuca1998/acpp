@@ -21,7 +21,7 @@ final class ServerController {
         return "http://\(ip):\(Self.port)/"
     }
 
-    let logPath = ("~/Library/Logs/ACP Console/server.log" as NSString).expandingTildeInPath
+    let logPath = ("~/Library/Logs/ACPP/server.log" as NSString).expandingTildeInPath
 
     private var process: Process?
     /// stop() 主动停时置真，terminationHandler 据此区分「意外退出」。

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="96 96 832 832">
+  <!-- ACPP 品牌图标（E 款「对话气泡+提示符」），与 desktop/macos/IconGen/icongen.swift 同源；改任一侧要对齐。 -->
+  <title>ACPP</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20302A"/>
+      <stop offset="1" stop-color="#0A100D"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.48" cy="0.52" r="0.52">
+      <stop offset="0" stop-color="#22C55E" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#22C55E" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#34D399" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="186" fill="url(#bg)"/>
+  <rect x="96" y="96" width="832" height="832" rx="186" fill="url(#halo)"/>
+  <g filter="url(#glow)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="307" y="328" width="410" height="287" rx="92" stroke="#4ADE80" stroke-width="46"/>
+    <path d="M394 614 L353 707 L476 614" stroke="#4ADE80" stroke-width="46"/>
+    <path d="M415 410 L481 471 L415 533" stroke="#D1FAE5" stroke-width="41"/>
+    <rect x="522" y="512" width="87" height="41" rx="20.5" fill="#D1FAE5" stroke="none"/>
+  </g>
+  <rect x="98" y="98" width="828" height="828" rx="184" fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="4"/>
+</svg>

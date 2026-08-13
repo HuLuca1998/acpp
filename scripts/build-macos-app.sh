@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 用途：打包 macOS 桌面版——build/app/ACP Console.app（Swift 菜单栏壳 + 捆绑
+# 用途：打包 macOS 桌面版——build/app/ACPP.app（Swift 菜单栏壳 + 捆绑
 #       acp-server + 前端产物 + 程序化生成的图标，ad-hoc 签名）。
 # 用法：scripts/build-macos-app.sh [--skip-web]
 #       --skip-web    跳过前端构建，复用已有 build/web（迭代壳代码时提速）
@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-APP_NAME="ACP Console"
+APP_NAME="ACPP"
 VERSION="${APP_VERSION:-0.1.0}"
 OUT="$ROOT/build/app"
 BUNDLE="$OUT/$APP_NAME.app"

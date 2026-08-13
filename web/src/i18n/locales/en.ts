@@ -1,6 +1,6 @@
 export default {
   common: {
-    appName: "ACP Console",
+    appName: "ACPP",
     loadFailed: "Failed to load",
     save: "Save",
     cancel: "Cancel",
@@ -51,7 +51,7 @@ export default {
     noSessionsHint: "Pick an agent and start your first conversation.",
     newSession: "New session",
     addAgent: "Add agent",
-    onboardTitle: "Welcome to ACP Console",
+    onboardTitle: "Welcome to ACPP",
     onboardHint:
       "Register an ACP agent (e.g. codex-acp), then start a session — the conversation stream shows up here in real time.",
     messagesCount: "{{count}} messages",

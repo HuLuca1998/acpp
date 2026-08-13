@@ -56,7 +56,7 @@ final class StatusItemController: NSObject {
         menu.addItem(disabled(status))
         menu.addItem(.separator())
 
-        menu.addItem(item("打开 ACP Console", #selector(showWindow)))
+        menu.addItem(item("打开 ACPP", #selector(showWindow)))
         menu.addItem(item("在浏览器中打开", #selector(openBrowser), enabled: running))
         menu.addItem(.separator())
 
@@ -75,7 +75,7 @@ final class StatusItemController: NSObject {
         menu.addItem(item("打开服务日志", #selector(openLog)))
         menu.addItem(.separator())
 
-        menu.addItem(item("退出 ACP Console", #selector(quit)))
+        menu.addItem(item("退出 ACPP", #selector(quit)))
         return menu
     }
 

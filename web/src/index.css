@@ -568,18 +568,6 @@
     0 8px 32px oklch(0 0 0 / 35%);
 }
 
-/* 品牌徽标：主色渐变方块 + 键帽高光，palette 切换自动跟随。 */
-[data-slot="brand-mark"] {
-  background-image: linear-gradient(
-    to bottom,
-    var(--primary),
-    color-mix(in oklch, var(--primary), black 18%)
-  );
-  box-shadow:
-    inset 0 1px 0 oklch(1 0 0 / 25%),
-    0 1px 2px oklch(0 0 0 / 20%);
-}
-
 /* 实心主按钮 / 危险按钮的「键帽」光感：顶部高光渐变 + 上亮下暗内描边。 */
 [data-slot="button"].bg-primary,
 [data-slot="button"].bg-destructive,
