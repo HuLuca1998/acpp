@@ -213,6 +213,7 @@ export default {
     empty: "开始你的第一句对话",
     emptyHint: "会话上下文由 agent 保持，后续每轮只需要发你这一句。",
     toolCall: "工具调用",
+    exitCode: "退出码 {{code}}",
     activity: "思考与工具调用",
     copy: "复制",
     copied: "已复制",

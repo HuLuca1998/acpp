@@ -23,6 +23,19 @@ const maxLineBytes = 16 << 20
 // 信息只在 stderr 里，ACP 消息流里什么都没有。
 const stderrKeepBytes = 8 << 10
 
+// 关闭子进程的两段宽限：先关 stdin 等自然退出，再 SIGINT，最后 KILL。
+const (
+	closeGraceStdin  = 3 * time.Second
+	closeGraceSignal = 2 * time.Second
+)
+
+// 反向调用的应答时限：普通请求一分钟；交互式提问要等真人作答，
+// 给到和一轮 prompt 同级别的时间。
+const (
+	reverseCallTimeout     = time.Minute
+	elicitationCallTimeout = 10 * time.Minute
+)
+
 // Handler 处理 agent 反向调用。fs 方法只有在 initialize 里声明了对应
 // capability 时才会被调到。
 type Handler interface {
@@ -176,7 +189,7 @@ func (c *Conn) Close() error {
 	select {
 	case <-c.done:
 		return nil
-	case <-time.After(3 * time.Second):
+	case <-time.After(closeGraceStdin):
 	}
 
 	if c.cmd.Process != nil {
@@ -185,7 +198,7 @@ func (c *Conn) Close() error {
 	select {
 	case <-c.done:
 		return nil
-	case <-time.After(2 * time.Second):
+	case <-time.After(closeGraceSignal):
 	}
 
 	if c.cmd.Process != nil {
@@ -288,10 +301,9 @@ func (c *Conn) handleNotification(msg rpcMessage) {
 
 // handleRequest 处理 agent 的反向调用。每个请求都必须回，agent 在阻塞等。
 func (c *Conn) handleRequest(msg rpcMessage) {
-	timeout := 60 * time.Second
-	// 交互式提问要等真人作答，给到和一轮 prompt 同级别的时间。
+	timeout := reverseCallTimeout
 	if msg.Method == "elicitation/create" {
-		timeout = 10 * time.Minute
+		timeout = elicitationCallTimeout
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

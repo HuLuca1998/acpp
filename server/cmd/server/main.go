@@ -16,6 +16,7 @@ import (
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/model"
+	"acpp/server/internal/service"
 	"acpp/server/internal/transcript"
 )
 
@@ -71,9 +72,23 @@ func run() error {
 		slog.Warn("normalize stale sessions", "err", err)
 	}
 
-	handler, chatService, terminalService := httpapi.NewRouter(cfg, gdb, manager, transcripts)
+	// 业务服务全部在装配层构建，HTTP 层只收成品（分层：httpapi 不碰 db）。
+	sessionService := service.NewSessionService(gdb)
+	skillUsage := service.NewSkillUsageService(gdb, cfg.DataDir)
+	chatService := service.NewChatService(gdb, sessionService, manager, transcripts, skillUsage)
+	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
+
+	handler := httpapi.NewRouter(cfg, httpapi.Services{
+		Agents:     service.NewAgentService(gdb),
+		Sessions:   sessionService,
+		Chat:       chatService,
+		Terminals:  terminalService,
+		System:     service.NewSystemService(gdb, cfg),
+		Skills:     service.NewSkillService(cfg.DataDir, skillUsage),
+		SkillUsage: skillUsage,
+	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

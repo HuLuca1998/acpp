@@ -8,30 +8,32 @@ import (
 	"strconv"
 	"strings"
 
-	"gorm.io/gorm"
-
-	"acpp/server/internal/acp"
 	"acpp/server/internal/config"
 	"acpp/server/internal/service"
-	"acpp/server/internal/transcript"
 )
 
 // Version 会随 health 接口返回，方便前端确认后端版本。
 const Version = "0.1.0"
 
-// NewRouter 组装全部路由与中间件。除 handler 外把 ChatService 与
-// TerminalService 一并交回，供装配层挂后台职责（空闲回收、pty 回收）。
-func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcripts *transcript.Store) (http.Handler, *service.ChatService, *service.TerminalService) {
-	sessionService := service.NewSessionService(gdb)
-	skillUsage := service.NewSkillUsageService(gdb, cfg.DataDir)
-	chatService := service.NewChatService(gdb, sessionService, manager, transcripts, skillUsage)
-	terminalService := service.NewTerminalService(cfg.MaxTerminals)
+// Services 是路由需要的全部业务服务，由装配层（cmd/server）构建后传入——
+// HTTP 层只做路由与编解码，不负责连库与组装依赖。
+type Services struct {
+	Agents     *service.AgentService
+	Sessions   *service.SessionService
+	Chat       *service.ChatService
+	Terminals  *service.TerminalService
+	System     *service.SystemService
+	Skills     *service.SkillService
+	SkillUsage *service.SkillUsageService
+}
 
-	agents := agentHandler{agents: service.NewAgentService(gdb), chat: chatService}
-	sessions := sessionHandler{sessions: sessionService, chat: chatService}
-	chat := chatHandler{chat: chatService}
-	system := systemHandler{system: service.NewSystemService(gdb, cfg)}
-	skills := skillHandler{skills: service.NewSkillService(cfg.DataDir, skillUsage), usage: skillUsage}
+// NewRouter 组装全部路由与中间件。
+func NewRouter(cfg config.Config, svcs Services) http.Handler {
+	agents := agentHandler{agents: svcs.Agents, chat: svcs.Chat}
+	sessions := sessionHandler{sessions: svcs.Sessions, chat: svcs.Chat}
+	chat := chatHandler{chat: svcs.Chat}
+	system := systemHandler{system: svcs.System}
+	skills := skillHandler{skills: svcs.Skills, usage: svcs.SkillUsage}
 
 	api := http.NewServeMux()
 
@@ -83,7 +85,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 	// 配置页勾选：更新 models/commands 的启用状态。
 	api.HandleFunc("PUT /api/agents/{id}/catalog", agents.catalog)
 
-	workspace := workspaceHandler{sessions: sessionService}
+	workspace := workspaceHandler{sessions: svcs.Sessions}
 
 	api.HandleFunc("GET /api/sessions", sessions.list)
 	api.HandleFunc("POST /api/sessions", sessions.create)
@@ -102,8 +104,8 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 
 	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
 	terminals := terminalHandler{
-		sessions:       sessionService,
-		terms:          terminalService,
+		sessions:       svcs.Sessions,
+		terms:          svcs.Terminals,
 		originPatterns: corsHosts(cfg.CORSOrigins),
 	}
 	api.HandleFunc("POST /api/sessions/{id}/terminals", terminals.create)
@@ -128,7 +130,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 		root.Handle("/", spaHandler(cfg.WebDir))
 	}
 
-	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root))), chatService, terminalService
+	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root)))
 }
 
 // corsHosts 把 CORS origin 列表转成 ws 升级用的 host pattern

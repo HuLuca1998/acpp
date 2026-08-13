@@ -73,6 +73,7 @@ function TerminalView({
   output?: string
   exitCode?: number
 }) {
+  const { t } = useTranslation()
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       {command ? (
@@ -86,7 +87,7 @@ function TerminalView({
           </span>
           {exitCode !== undefined && exitCode !== 0 ? (
             <Badge variant="destructive" className="ml-auto shrink-0">
-              exit {exitCode}
+              {t("chat.exitCode", { code: exitCode })}
             </Badge>
           ) : null}
         </div>

@@ -228,6 +228,7 @@ export default {
     emptyHint:
       "The agent keeps the context, so every later turn only needs your own line.",
     toolCall: "Tool call",
+    exitCode: "exit {{code}}",
     activity: "Thinking & tool calls",
     copy: "Copy",
     copied: "Copied",
