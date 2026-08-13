@@ -93,6 +93,12 @@ type NewSessionParams struct {
 	Cwd string `json:"cwd"`
 	// MCPServers 必需，可以是空数组。
 	MCPServers []any `json:"mcpServers"`
+	// AdditionalDirectories 是技能隔离注入：codex-acp 把每个目录的
+	// .agents/skills 注册为 skill 根（控制端技能包 + 工作目录）。claude 不认。
+	AdditionalDirectories []string `json:"additionalDirectories,omitempty"`
+	// Meta 是 _meta：claude 的 claudeCode.options 隔离注入入口（settingSources
+	// / plugins / strictMcpConfig）。codex 不认。
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 // NewSessionResult 只收 modes 与 configOptions；codex 顶层的 models
@@ -158,6 +164,9 @@ type LoadSessionParams struct {
 	SessionID  string `json:"sessionId"`
 	Cwd        string `json:"cwd"`
 	MCPServers []any  `json:"mcpServers"`
+	// 恢复路径也要带隔离参数（2026-08-13 实测：不带则退回机器级 skill）。
+	AdditionalDirectories []string       `json:"additionalDirectories,omitempty"`
+	Meta                  map[string]any `json:"_meta,omitempty"`
 }
 
 // ---- session/prompt ----

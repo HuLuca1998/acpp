@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -51,7 +52,8 @@ func run() error {
 	defer sqlDB.Close()
 
 	// 服务退出时必须回收全部 agent 子进程，否则会留下一堆孤儿。
-	manager := acp.NewManager(cfg.MaxSessions, cfg.TurnTimeout)
+	// 每条会话注入控制端技能包（<dataDir>/skillpack），屏蔽机器级 skill。
+	manager := acp.NewManager(cfg.MaxSessions, cfg.TurnTimeout, filepath.Join(cfg.DataDir, "skillpack"))
 	defer manager.CloseAll()
 
 	// 对话内容唯一的持久化：每条会话一个 JSONL 转录文件。

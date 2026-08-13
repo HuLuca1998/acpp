@@ -141,6 +141,12 @@ type Adapter interface {
 	// 结束）；codex 靠 _session/steering 注入当前轮（followUp=false，
 	// 由当前轮统一收尾）。不支持的 runtime 返回 ErrUnsupported。
 	Interject(ctx context.Context, s *Session, blocks []ContentBlock) (PromptResult, bool, error)
+
+	// Isolation 生成该 runtime 的技能隔离注入：屏蔽机器级 skill、加载控制端
+	// 技能包、保留工作目录项目级 skill。两端机制不同（claude 走 session 参数
+	// _meta，codex 走进程环境变量 + additionalDirectories），差异全部在这里。
+	// in.SkillpackDir 为空表示不隔离，返回零值。
+	Isolation(in IsolationInput) Injection
 }
 
 // ---- adapter 共用的取数工具 ----

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,6 +119,11 @@ type Session struct {
 
 	// replaying 在 session/load 重放历史期间为真，内容事件被抑制。
 	replaying bool
+
+	// injMeta / injDirs 是技能隔离注入的会话参数，session/new 与 session/load
+	// 都要带（恢复路径不带会退回机器级 skill）。spawn 前算好，只读。
+	injMeta map[string]any
+	injDirs []string
 }
 
 func (s *Session) setReplaying(v bool) {
@@ -181,11 +187,15 @@ type Manager struct {
 	opening       map[string]chan struct{}
 	max           int
 	promptTimeout time.Duration
+	// skillpackDir 是控制端技能包目录（<dataDir>/skillpack）。非空时每条会话
+	// 注入技能隔离：屏蔽机器级 skill、加载技能包、保留项目级 skill。
+	skillpackDir string
 }
 
 // NewManager 构造会话池。turnTimeout 是单轮硬上限，<=0 表示不限时
 // （默认）——空闲回收以在途调用计数为准，turn 跑多久都不会被误收。
-func NewManager(max int, turnTimeout time.Duration) *Manager {
+// skillpackDir 为空时不做技能隔离（会话沿用机器级 skill）。
+func NewManager(max int, turnTimeout time.Duration, skillpackDir string) *Manager {
 	if max <= 0 {
 		max = 8
 	}
@@ -194,6 +204,7 @@ func NewManager(max int, turnTimeout time.Duration) *Manager {
 		opening:       make(map[string]chan struct{}),
 		max:           max,
 		promptTimeout: turnTimeout,
+		skillpackDir:  skillpackDir,
 	}
 }
 
@@ -270,6 +281,25 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 	sess.lastDone.Store(time.Now().UnixNano())
 	handler := &sessionHandler{session: sess}
 
+	// 技能隔离在 spawn 前算一次：进程级 env 只能在启动时注入，且方言此刻只
+	// 能按命令名判断（agentInfo 要 initialize 后才有，但命令名足以分 claude/
+	// codex）。Meta/AdditionalDirs 留给 handshake 的 session/new 与 load 用。
+	if m.skillpackDir != "" {
+		inj := adapterFor(flavorOf("", opts.Runtime.Command)).Isolation(IsolationInput{
+			SkillpackDir: m.skillpackDir,
+			Cwd:          opts.Cwd,
+			Home:         os.Getenv("HOME"),
+		})
+		if len(inj.Env) > 0 {
+			env := make(map[string]string, len(opts.Runtime.Env)+len(inj.Env))
+			maps.Copy(env, opts.Runtime.Env)
+			maps.Copy(env, inj.Env)
+			opts.Runtime.Env = env
+		}
+		sess.injMeta = inj.Meta
+		sess.injDirs = inj.AdditionalDirs
+	}
+
 	conn, err := Spawn(ctx, opts.Runtime, handler, opts.WireTap)
 	if err != nil {
 		return nil, err
@@ -336,9 +366,11 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 		sess.setReplaying(true)
 		var loaded NewSessionResult
 		err := conn.Call(ctx, "session/load", LoadSessionParams{
-			SessionID:  resumeID,
-			Cwd:        sess.cwd,
-			MCPServers: []any{},
+			SessionID:             resumeID,
+			Cwd:                   sess.cwd,
+			MCPServers:            []any{},
+			AdditionalDirectories: sess.injDirs,
+			Meta:                  sess.injMeta,
 		}, &loaded)
 		sess.setReplaying(false)
 		if err == nil {
@@ -359,8 +391,10 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 
 	var created NewSessionResult
 	err = conn.Call(ctx, "session/new", NewSessionParams{
-		Cwd:        sess.cwd,
-		MCPServers: []any{},
+		Cwd:                   sess.cwd,
+		MCPServers:            []any{},
+		AdditionalDirectories: sess.injDirs,
+		Meta:                  sess.injMeta,
 	}, &created)
 	if err != nil {
 		return fmt.Errorf("session/new: %w", err)
