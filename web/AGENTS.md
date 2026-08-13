@@ -8,15 +8,17 @@
 | --- | --- | --- |
 | `src/routes/` | 页面，与路由表（`App.tsx`）一一对应 | 不放可复用组件 |
 | `src/components/` | 跨页面复用的组件；同一功能域 ≥3 个时建子目录 | 不放页面 |
-| `src/components/ui/` | shadcn 组件（CLI 生成为起点，**允许直改**打磨细节） | 升级用 `npx shadcn add <c> --diff` 对比后手动合并，禁止盲目 `--overwrite` |
+| `src/components/shell/` | 应用外壳：侧边栏、顶栏、导航、主题/语言切换 | — |
+| `src/components/chat/` | 聊天消息渲染；`composer/` 收输入域、`cards/` 收交互卡片 | — |
+| `src/components/workspace/` | 会话工作区编排（dock/menu/provider）；面板全在 `panels/` | — |
+| `src/components/overview/` | 概览页专用卡片 | — |
+| `src/components/ui/` | shadcn 组件（CLI 托管，目录级规范见其 AGENTS.md） | 升级用 `--diff` 手动合并，禁止盲目 `--overwrite` |
 | `src/hooks/` | 自定义 hooks | 不放纯函数（那是 `lib/`） |
-| `src/lib/` | 纯函数与客户端（`api.ts`、`utils.ts`） | 不出现 JSX、不依赖组件 |
+| `src/lib/` | 纯函数与客户端；**索引在 [src/lib/README.md](src/lib/README.md)** | 不出现 JSX、不依赖组件 |
 | `src/types/` | 领域类型，`acp.ts` 与 `server/internal/model` 字段对齐 | 组件 props 类型不放这里，跟组件走 |
 | `src/i18n/` | 语言配置与资源 | — |
 
-依赖方向：`routes → components → ui`；`hooks / lib / types` 被上层引用，不反向 import 组件。路径别名统一 `@/`。
-
-反平铺示范：聊天专用组件已收拢进 `components/chat/`（markdown / tool-call / plan-card / thought-block / copy-button），新的聊天组件继续放这里。`components/` 其余平铺是历史包袱——新文件按新规则放，旧文件顺路触碰时迁移。
+依赖方向：`routes → components → ui`；`hooks / lib / types` 被上层引用，不反向 import 组件。路径别名统一 `@/`。`components/` 根只留真正跨域的小组件（status-dot / diff-view / dir-picker / agent-icon / list-page-states），新组件优先归入功能域子目录。
 
 ## 2. 命名
 
@@ -38,7 +40,8 @@
 ## 4. 硬规则
 
 - **所有用户可见文案必须走 `t()`**，key 同时加进 `i18n/locales/zh.ts` 和 `en.ts`（zh 是兜底；`i18next.d.ts` 的类型增强会在编译期抓漏写的 key）。JSX 里出现中文/英文字面量即违规。
-- **后端请求只走 `lib/api.ts`**，组件内禁止裸 `fetch`。新端点：先在 `api.ts` 加方法、`types/acp.ts` 补类型，再在组件用。
+- **后端请求只走 `lib/api.ts`**，组件内禁止裸 `fetch`（`make check-structure` 强制）。新端点：先在 `api.ts` 加方法、`types/acp.ts` 补类型，再在组件用。
+- **写逻辑前先查工具索引 [src/lib/README.md](src/lib/README.md)**：同类工具已有就复用；≥2 处需要的逻辑进 `lib/`（纯函数）或 `hooks/`（React 逻辑），并同步索引（脚本对账）。列表页三态用 `ListPageStates`，一次性加载用 `useAsyncData`，状态色调用 `lib/status-tone.ts`。
 - 格式化交给 Prettier（`npm run format`），不手动调格式、不在 code review 里争格式。
 - 若确需把新的生成文件加入 lint 豁免，同步维护 `eslint.config.js` 里的豁免清单。
 - 状态管理：优先组件局部 state 与自定义 hook（参考 `use-chat.ts`）。**不引入**全局状态库（redux/zustand 等），确有跨页面共享需求先在任务里讨论。
@@ -100,7 +103,7 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 
 ### 5.5 交互模式
 
-- **创建核心对象走"进入即用"（draft-first），不走表单**：像 ChatGPT/Claude 的新建会话——直接进入空白目标页，参数（agent/工作目录）在输入框旁用胶囊控件就地选、可不选用默认，**首次实质动作才真正创建**（参考 `routes/session-new.tsx`：首条消息落地才建会话，标题由后端从首条消息自动简写）。不要让用户在见到东西之前先填表。
+- **创建核心对象走"进入即用"（draft-first），不走表单**：像 ChatGPT/Claude 的新建会话——直接进入空白目标页，参数（agent/工作目录）在输入框旁用胶囊控件就地选、可不选用默认，**首次实质动作才真正创建**（参考 `routes/session-chat.tsx` 的草稿态：首条消息落地才建会话，标题由后端从首条消息自动简写）。不要让用户在见到东西之前先填表。
 - **轻量配置操作才用 `Dialog`**：需要几个字段确认、且完成后要回到原地的操作（改名、危险确认等）原地弹出；内容本身是"一整页"（对话流、详情、列表）才配路由。
 - **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`；行内次级操作（删除等）默认 `opacity-0`，`group-hover` / `focus-visible` 浮现，并保证键盘可达。
 - **危险操作**：一律 `AlertDialog` 确认，确认按钮 `variant="destructive"`，文案讲清后果（如"子进程会一并回收，记录不可恢复"）。

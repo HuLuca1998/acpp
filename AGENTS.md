@@ -29,11 +29,14 @@ acpp/
 ├── Makefile           # 所有常用命令的唯一入口，make help 查看
 ├── skills-lock.json   # skills CLI 锁文件，与 .claude/skills/ 同步提交
 ├── .claude/skills/    # 第三方 skill 知识库，CLI 管理，禁止手改（§3.3）
+├── docs/              # 决策记录（ADR）与专题文档（§3.1）
+├── scripts/           # 开发辅助脚本：dev.sh、check-structure.sh 等（§3.2）
+├── build/             # 前后端编译产物（build/web + build/server），不入库
 ├── web/               # 前端（Vite + React 19 + TS），规范见 web/AGENTS.md
 └── server/            # 后端（Go），规范见 server/AGENTS.md
 ```
 
-`docs/` 与 `scripts/` 目前不存在，**不预建空目录**；首次需要时按 §3 的规则创建，并在 README 目录结构中登记。除此之外新增顶层目录需要充分理由。
+预留命名（**不预建空目录**，首次需要时按此落位并更新本表）：`desktop/` —— 将来打包桌面壳（tauri/electron）的位置。除上表与预留之外新增顶层目录需要充分理由；根目录不允许出现游离文件（`check-structure` 强制，白名单在脚本里）。
 
 ### 1.2 分包原则：按用途分，不按类型堆
 
@@ -45,17 +48,29 @@ acpp/
 
 包内依赖方向必须单向，具体见各子规范。
 
-### 1.3 反平铺规则
+### 1.3 反平铺规则（`make check-structure` 强制）
 
-单个目录不应变成几十个文件的平面列表。硬性阈值：
+单个目录不应变成几十个文件的平面列表。阈值分两级，脚本执行：
 
-- 同一目录下属于**同一功能域**的文件达到 **3 个**时，建子目录收拢。
-- 目录的直接子文件超过 **8 个**时，审视是否能按功能域分组（CLI 托管目录如 `web/src/components/ui/` 除外）。
+- **硬线（fail）**：目录直接源文件 > **20 个**必须按相关性分包（`_test.go` 跟随实现不计；CLI 托管的 `web/src/components/ui/` 豁免）。
+- **审视线（warn）**：> **8 个**时审视能否按功能域分组；同一功能域文件达 **3 个**即建子目录收拢。
 - 现状即历史包袱的，**新文件按新规则放**，旧文件在顺路触碰时迁移，不专门发起大搬家。
 
-### 1.4 文件拆分
+### 1.4 文件拆分（`make check-structure` 强制）
 
-一个文件只放一个主题。行数阈值见各子规范；通用原则：拆出去的文件必须有独立可命名的职责，拆出 `xxx-part2` 这种没有语义的碎片不如不拆。
+一个文件只放一个主题。阈值分两级：
+
+- **硬线（fail）**：任何源文件 > **800 行**必须拆分。
+- **拆分信号（warn）**：Go > 400 行、TS/TSX > 300 行时审视拆分（`ui/` 与语言文件豁免软线）。
+- 拆出去的文件必须有独立可命名的职责，拆出 `xxx-part2` 这种没有语义的碎片不如不拆。
+
+### 1.5 工具包与索引（防重复造轮子）
+
+可复用逻辑有唯一的家与唯一的索引，AI 协作者写逻辑前**必须先查索引**：
+
+- **前端工具区**：纯函数进 `web/src/lib/`，React 逻辑进 `web/src/hooks/`；索引是 [web/src/lib/README.md](web/src/lib/README.md)。
+- **后端工具区**：不设 utils 杂物包；通用函数就近放使用它的包里，被 ≥2 个包需要时提为具名叶子包；包地图与跨包工具索引是 [server/internal/README.md](server/internal/README.md)。
+- 三条铁律：写逻辑前先查索引；≥2 处需要的逻辑必须进工具区；**动工具必须同步索引**（`check-structure` 对账，缺条目 fail）。
 
 ## 2. 跨端契约命名
 
@@ -110,15 +125,13 @@ acpp/
 
 ### 4.1 验证清单
 
-改动涉及哪端，就跑哪端；提交前在仓库根目录：
+提交前在仓库根目录跑一条命令：
 
 ```bash
-make lint        # 前端 eslint + 后端 go vet
-make typecheck   # 前端 tsc --noEmit
-make test        # 后端 go test ./...
+make check       # lint + typecheck + test + check-structure，全绿才算过
 ```
 
-改了前端构建相关配置（vite / tsconfig / 依赖）再跑 `make build-web` 确认能出产物。
+改动小且明确只涉及一端时，可单跑 `make lint` / `make typecheck`（tsc -b）/ `make test` / `make check-structure`。改了前端构建相关配置（vite / tsconfig / 依赖）再跑 `make build-web` 确认能出产物。
 
 ### 4.2 提交规范
 
@@ -130,7 +143,9 @@ make test        # 后端 go test ./...
 
 ## 5. AI 协作者须知
 
-- Claude 通过各级 `CLAUDE.md` 引用同级 `AGENTS.md`，Codex 直接读 `AGENTS.md`——**每份规范只维护 AGENTS.md 这一份**，不要往 CLAUDE.md 里写内容。
+本项目的日常开发全部由 AI 协作者（Claude Code、Codex）完成，规范就是为此设计的：规则可执行、验证可一键、越界有脚本兜底。
+
+- Claude 通过各级 `CLAUDE.md` 引用同级 `AGENTS.md`，Codex 直接读 `AGENTS.md`——**每份规范只维护 AGENTS.md 这一份**，不要往 CLAUDE.md 里写内容。深层规范同理：`server/internal/acp/`、`web/src/components/ui/` 各有一份目录级 AGENTS.md，动那里先读。
 - 会话开始时先读 README 的架构与数据流小节，再定位代码。README 中「尚未实现」一节列出了已知空白，别把占位页当成 bug。
 - 拿不准的产品决策（新增依赖、改 API 形状、改数据模型、跨层重构）：停下来向用户确认，不自作主张。
 - 大改动前先陈述计划（动哪些文件、为什么），小改动直接做。

@@ -5,14 +5,18 @@
 ## 1. 分层与依赖方向
 
 ```
-cmd/server   → 只做装配：读配置、连库、构建 service、挂路由、优雅关闭
-httpapi      → HTTP 层：路由、handler、中间件、统一响应。不写业务逻辑
+cmd/server   → 只做装配：读配置、连库、构建全部 service、挂路由、优雅关闭
+httpapi      → HTTP 层：路由、handler、中间件、统一响应。不写业务逻辑，
+               不 import gorm——服务经 httpapi.Services 结构体由装配层传入
 service      → 业务层：所有业务规则、事务、对 acp 的编排
 db / model   → GORM 连接与数据模型
-acp          → 独立的 ACP 协议客户端，不 import 本项目其他包（标准库除外）
+acp          → 独立的 ACP 协议客户端，不 import 本项目其他包（标准库除外）；
+               包内规范见 internal/acp/AGENTS.md
 ```
 
-依赖只允许自上而下：`httpapi → service → {db, model, acp}`。**禁止**反向依赖（如 service import httpapi）、跨层捷径（如 httpapi 直接摸 db）。
+依赖只允许自上而下：`httpapi → service → {db, model, acp}`。**禁止**反向依赖（如 service import httpapi）、跨层捷径（如 httpapi 直接摸 db）。裁决一条常见纠结：httpapi **可以**使用 service 方法签名暴露的 `model.*` / `acp.*` 类型（如 `model.Message`、`acp.Settings`）——那是契约的一部分，不算越层。
+
+包地图与跨包工具索引维护在 [internal/README.md](internal/README.md)，新增包或跨包工具必须同步登记（`make check-structure` 对账）。
 
 新代码先找同层邻居照着写：新 handler 照 `internal/httpapi/agent.go`，新业务照 `internal/service/agent.go`。
 
@@ -30,9 +34,9 @@ acp          → 独立的 ACP 协议客户端，不 import 本项目其他包�
 
 ## 3. 文件组织
 
-- 按资源/职责拆同包多文件（参考 `service/` 拆为 `agent.go` / `session.go` / `chat.go` / `broker.go`）。
-- 单文件超过 ~400 行是拆分信号；拆出的文件必须有独立可命名的职责。
-- 新建包的门槛：有明确单一职责，且不是 `utils` / `common` 杂物包（见根规范 §1.2）。
+- 按资源/职责拆同包多文件（参考 `service/` 的 `chat*.go` 一族与 `acp/` 的 `manager/session/turn/updates` 拆法）。
+- 行数与目录阈值见根规范 §1.3–1.4（400 行拆分信号、800 行硬线，`make check-structure` 强制）；拆出的文件必须有独立可命名的职责。
+- 新建包的门槛：有明确单一职责，且不是 `utils` / `common` 杂物包（见根规范 §1.2）；建包同步登记 [internal/README.md](internal/README.md)。
 
 ## 4. HTTP 层铁律
 
