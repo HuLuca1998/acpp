@@ -1,16 +1,15 @@
 package acp
 
 import (
-	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // 技能隔离：把机器级 skill 换成控制端自管的一套，工作目录项目级 skill 照常。
 // 只作用于我们 spawn 的子进程与这条会话，不写 ~/.codex、~/.claude 一个字节。
 // 两端机制不同——claude 走 session 参数 _meta，codex 走进程环境变量
-// CODEX_CONFIG + additionalDirectories——差异全部收在各 adapter 的 Isolation。
+// CODEX_HOME 重定向——差异全部收在各 adapter 的 Isolation。
 
 // IsolationInput 是生成隔离注入的输入。
 type IsolationInput struct {
@@ -18,7 +17,7 @@ type IsolationInput struct {
 	SkillpackDir string
 	// Cwd 是会话工作目录，用于保留项目级 skill。
 	Cwd string
-	// Home 是用户家目录，用于枚举机器级 skill 逐个禁用（codex）。
+	// Home 是用户家目录，用于定位系统 codex 的 auth/config（codex 隔离）。
 	Home string
 }
 
@@ -48,20 +47,27 @@ func (claudeAdapter) Isolation(in IsolationInput) Injection {
 	}
 }
 
-// Isolation（codex）：进程环境变量 CODEX_CONFIG 枚举 ~/.codex/skills 逐个
-// 禁用（实测只有 frontmatter name 选择器有效，会话级覆盖不落地文件）；
-// additionalDirectories 让 codex-acp 把技能包与工作目录的 .agents/skills
-// 注册为 skill 根。技能隔离不碰 MCP，mcp_servers 给空对象。
+// Isolation（codex）：进程环境变量 CODEX_HOME 把 codex 的家目录整体重定向到
+// <dataDir>/codex-home。机器级技能住在系统 ~/.codex/skills，换掉 home 后它们
+// 彻底不在 codex 视野——连 /skills 命令都不再列出（会话级禁用做不到这点，
+// CODEX_CONFIG 的 enabled=false 只挡使用不挡显示）。控制端技能包软链进
+// codex-home/skills，项目级仍由会话 cwd 的 additionalDirectories 保留。
+// 认证与 provider 配置软链/复制自系统 ~/.codex（见 ensureCodexHome）。
 func (codexAdapter) Isolation(in IsolationInput) Injection {
 	if in.SkillpackDir == "" {
 		return Injection{}
 	}
-	dirs := []string{in.SkillpackDir}
+	codexHome := filepath.Join(filepath.Dir(in.SkillpackDir), "codex-home")
+	if err := ensureCodexHome(codexHome, in.SkillpackDir, in.Home); err != nil {
+		// 搭 home 失败宁可不隔离，也不让会话起不来。
+		return Injection{}
+	}
+	var dirs []string
 	if in.Cwd != "" {
-		dirs = append(dirs, in.Cwd)
+		dirs = []string{in.Cwd}
 	}
 	return Injection{
-		Env:            map[string]string{"CODEX_CONFIG": codexDisableMachineSkills(in.Home)},
+		Env:            map[string]string{"CODEX_HOME": codexHome},
 		AdditionalDirs: dirs,
 	}
 }
@@ -69,41 +75,44 @@ func (codexAdapter) Isolation(in IsolationInput) Injection {
 // Isolation（generic）：认不出方言的 runtime 没有可靠的隔离注入口，不猜。
 func (genericAdapter) Isolation(IsolationInput) Injection { return Injection{} }
 
-// codexDisableMachineSkills 生成 CODEX_CONFIG 的 JSON：枚举 <home>/.codex/skills
-// 下每个技能的 frontmatter name，逐个 enabled=false。读不到目录时返回只含空
-// 清单的配置（仍是合法覆盖，不报错）。
-func codexDisableMachineSkills(home string) string {
-	entries := []map[string]any{}
-	root := filepath.Join(home, ".codex", "skills")
-	if dirs, err := os.ReadDir(root); err == nil {
-		for _, d := range dirs {
-			if !d.IsDir() || strings.HasPrefix(d.Name(), ".") {
-				continue
-			}
-			entries = append(entries, map[string]any{
-				"name":    skillFrontmatterName(filepath.Join(root, d.Name())),
-				"enabled": false,
-			})
-		}
+// ensureCodexHome 幂等搭好隔离用的 codex 家目录：
+//   - auth.json 软链系统的（codex 用静态 OPENAI_API_KEY，不改写它，软链跟随
+//     系统登录态、不复制密钥）；
+//   - config.toml 复制系统副本（codex 会往 config 写 trust_level 等，复制而非
+//     软链，避免污染系统 config；已存在就不覆盖，保留 codex 写入的会话态）；
+//   - skills 软链到 skillpack/skills（codex 只从这里发现技能，机器级不在视野）。
+//
+// 系统 ~/.codex 缺 auth/config 时对应步骤跳过——未登录不是搭建失败。
+func ensureCodexHome(codexHome, skillpackDir, sysHome string) error {
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		return err
 	}
-	cfg, _ := json.Marshal(map[string]any{
-		"skills":      map[string]any{"config": entries},
-		"mcp_servers": map[string]any{},
-	})
-	return string(cfg)
-}
 
-// skillFrontmatterName 读 SKILL.md frontmatter 的 name（禁用选择器按它匹配，
-// 不是目录名）。读不到就退回目录名。
-func skillFrontmatterName(dir string) string {
-	raw, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
-	if err != nil {
-		return filepath.Base(dir)
-	}
-	for line := range strings.SplitSeq(string(raw), "\n") {
-		if after, ok := strings.CutPrefix(strings.TrimSpace(line), "name:"); ok {
-			return strings.Trim(strings.TrimSpace(after), `"'`)
+	authLink := filepath.Join(codexHome, "auth.json")
+	sysAuth := filepath.Join(sysHome, ".codex", "auth.json")
+	if _, err := os.Lstat(sysAuth); err == nil {
+		_ = os.Remove(authLink)
+		if err := os.Symlink(sysAuth, authLink); err != nil {
+			return err
 		}
 	}
-	return filepath.Base(dir)
+
+	cfgCopy := filepath.Join(codexHome, "config.toml")
+	if _, err := os.Stat(cfgCopy); errors.Is(err, os.ErrNotExist) {
+		if raw, err := os.ReadFile(filepath.Join(sysHome, ".codex", "config.toml")); err == nil {
+			if err := os.WriteFile(cfgCopy, raw, 0o600); err != nil {
+				return err
+			}
+		}
+	}
+
+	skillsLink := filepath.Join(codexHome, "skills")
+	target := filepath.Join(skillpackDir, "skills")
+	if cur, err := os.Readlink(skillsLink); err != nil || cur != target {
+		_ = os.Remove(skillsLink)
+		if err := os.Symlink(target, skillsLink); err != nil {
+			return err
+		}
+	}
+	return nil
 }

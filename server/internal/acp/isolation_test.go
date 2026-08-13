@@ -1,7 +1,6 @@
 package acp
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -38,63 +37,81 @@ func TestClaudeAdapter_Isolation_MetaShape(t *testing.T) {
 	}
 }
 
-// 契约：codex 的隔离走进程环境变量 CODEX_CONFIG（枚举机器级 skill 按
-// frontmatter name 逐个禁用）+ additionalDirectories（技能包 + 工作目录）。
+// 契约：codex 的隔离用 CODEX_HOME 把家目录重定向到 <dataDir>/codex-home，
+// 让机器级技能彻底不在视野（连 /skills 都不列）；家目录里 auth.json 软链
+// 系统的、config.toml 复制系统副本、skills 软链到 skillpack/skills。
+// additionalDirectories 只保留工作目录（项目级），控制端技能走 codex-home。
 // 不产生 _meta。
-func TestCodexAdapter_Isolation_DisablesMachineSkillsByFrontmatterName(t *testing.T) {
-	home := t.TempDir()
-	// 机器级 skill：目录名与 frontmatter name 故意不同——禁用选择器必须
-	// 用 frontmatter name，不是目录名。
-	dir := filepath.Join(home, ".codex", "skills", "some-dir")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+func TestCodexAdapter_Isolation_RedirectsCodexHome(t *testing.T) {
+	dataDir := t.TempDir()
+	skillpack := filepath.Join(dataDir, "skillpack")
+	if err := os.MkdirAll(filepath.Join(skillpack, "skills"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	md := "---\nname: brainstorming\ndescription: 机器级技能。\n---\n"
-	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(md), 0o644); err != nil {
+	// 系统 ~/.codex 的 auth/config，供软链与复制。
+	sysHome := t.TempDir()
+	sysCodex := filepath.Join(sysHome, ".codex")
+	if err := os.MkdirAll(sysCodex, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sysCodex, "auth.json"), []byte(`{"OPENAI_API_KEY":"sk-x"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sysCodex, "config.toml"), []byte("model = \"x\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	inj := codexAdapter{}.Isolation(IsolationInput{
-		SkillpackDir: "/data/skillpack",
+		SkillpackDir: skillpack,
 		Cwd:          "/work/proj",
-		Home:         home,
+		Home:         sysHome,
 	})
 
 	if inj.Meta != nil {
 		t.Fatalf("codex must not use _meta, got %v", inj.Meta)
 	}
-	if !reflect.DeepEqual(inj.AdditionalDirs, []string{"/data/skillpack", "/work/proj"}) {
-		t.Fatalf("additionalDirs = %v, want [skillpack, cwd]", inj.AdditionalDirs)
+	// 只保留项目级 cwd；控制端技能不再走 additionalDirectories。
+	if !reflect.DeepEqual(inj.AdditionalDirs, []string{"/work/proj"}) {
+		t.Fatalf("additionalDirs = %v, want [cwd] only", inj.AdditionalDirs)
 	}
 
-	var cfg struct {
-		Skills struct {
-			Config []struct {
-				Name    string `json:"name"`
-				Enabled bool   `json:"enabled"`
-			} `json:"config"`
-		} `json:"skills"`
-		MCPServers map[string]any `json:"mcp_servers"`
+	codexHome := filepath.Join(dataDir, "codex-home")
+	if inj.Env["CODEX_HOME"] != codexHome {
+		t.Fatalf("CODEX_HOME = %q, want %q", inj.Env["CODEX_HOME"], codexHome)
 	}
-	if err := json.Unmarshal([]byte(inj.Env["CODEX_CONFIG"]), &cfg); err != nil {
-		t.Fatalf("CODEX_CONFIG not valid json: %v", err)
+
+	// auth.json 软链系统的（不复制密钥）。
+	authTarget, err := os.Readlink(filepath.Join(codexHome, "auth.json"))
+	if err != nil || authTarget != filepath.Join(sysCodex, "auth.json") {
+		t.Fatalf("auth.json link = %q (err %v), want symlink to system auth", authTarget, err)
 	}
-	if len(cfg.Skills.Config) != 1 || cfg.Skills.Config[0].Name != "brainstorming" || cfg.Skills.Config[0].Enabled {
-		t.Fatalf("skills.config = %+v, want brainstorming disabled by frontmatter name", cfg.Skills.Config)
+	// config.toml 复制成独立副本（不是软链——避免 codex 写回污染系统）。
+	if fi, err := os.Lstat(filepath.Join(codexHome, "config.toml")); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("config.toml must be a real copy, not a symlink (err %v)", err)
 	}
-	if cfg.MCPServers == nil {
-		t.Fatal("mcp_servers must be present (empty object), skill isolation must not drop the key")
+	// skills 软链到 skillpack/skills（codex 只从这里发现技能）。
+	skillsTarget, err := os.Readlink(filepath.Join(codexHome, "skills"))
+	if err != nil || skillsTarget != filepath.Join(skillpack, "skills") {
+		t.Fatalf("skills link = %q (err %v), want symlink to skillpack/skills", skillsTarget, err)
 	}
 }
 
-// 契约：codex 缺 cwd 时 additionalDirectories 只有技能包，不塞空串。
+// 契约：codex 缺 cwd 时 additionalDirectories 为空（不塞空串），隔离仍靠 CODEX_HOME。
 func TestCodexAdapter_Isolation_OmitsEmptyCwd(t *testing.T) {
+	dataDir := t.TempDir()
+	skillpack := filepath.Join(dataDir, "skillpack")
+	if err := os.MkdirAll(filepath.Join(skillpack, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	inj := codexAdapter{}.Isolation(IsolationInput{
-		SkillpackDir: "/data/skillpack",
+		SkillpackDir: skillpack,
 		Home:         t.TempDir(),
 	})
-	if !reflect.DeepEqual(inj.AdditionalDirs, []string{"/data/skillpack"}) {
-		t.Fatalf("additionalDirs = %v, want [skillpack] only", inj.AdditionalDirs)
+	if len(inj.AdditionalDirs) != 0 {
+		t.Fatalf("additionalDirs = %v, want empty", inj.AdditionalDirs)
+	}
+	if inj.Env["CODEX_HOME"] == "" {
+		t.Fatal("CODEX_HOME must be set even without cwd")
 	}
 }
 

@@ -77,11 +77,14 @@ frontmatter 只写 `name` 与 `description`：
 
 | | claude（claude-agent-acp） | codex（codex-acp） |
 | --- | --- | --- |
-| 注入 skillpack | `_meta.claudeCode.options.plugins: [{type:"local", path:<skillpack>}]` | `additionalDirectories: [<skillpack>, cwd]`（对每个目录注册 `<dir>/.agents/skills`） |
-| 屏蔽机器级 | `settingSources: ["project"]`——不开 user 档 | 环境变量 `CODEX_CONFIG`：枚举 `~/.codex/skills` 按 frontmatter name 逐个 `enabled:false`（path 选择器无效） |
-| 附带 | `strictMcpConfig: true` + env `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | session 级 `mcpServers` 非空会整体覆盖 config 的 mcp_servers 键，控制端 MCP 必须走 CODEX_CONFIG |
+| 注入 skillpack | `_meta.claudeCode.options.plugins: [{type:"local", path:<skillpack>}]` | `<codex-home>/skills` 软链到 `<skillpack>/skills`（codex 从家目录发现技能） |
+| 屏蔽机器级 | `settingSources: ["project"]`——不开 user 档 | 环境变量 `CODEX_HOME=<dataDir>/codex-home`——机器级 `~/.codex/skills` 换掉家目录后彻底不在视野，连 `/skills` 都不列 |
+| 保留项目级 | project 档保住 cwd 的 `.claude/skills` | cwd 进 `additionalDirectories` |
+| 附带 | `strictMcpConfig: true` + env `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | `<codex-home>` 里 auth.json 软链系统的、config.toml 复制系统副本（见 isolation.go ensureCodexHome） |
 
-`_meta` 会整体覆盖 adapter 硬编码的 settingSources，这是 claude 侧唯一注入口。两端实测版本：claude-agent-acp 0.63.0 / codex-acp 1.1.7 / codex 0.145.0（2026-08-12 复验）。
+`_meta` 会整体覆盖 adapter 硬编码的 settingSources，这是 claude 侧唯一注入口。
+
+codex 曾用 `CODEX_CONFIG` 的 `skills.config enabled:false` 逐个禁用机器级——但那只挡「模型能否加载使用」，**不挡显示**：被禁的技能仍出现在 `/skills` 与 `available_commands`（反映「发现」不反映「启用」）。要连显示都干净，改用 `CODEX_HOME` 整体重定向（2026-08-13 实测：机器级从命令列表彻底消失，codex 往新 home 只写几 MB，二重软链 `codex-home/skills → skillpack/skills/<name> → ../../skills/<name>` codex 能跟随）。claude 的 `available_commands` 本就反映真实启用，无此问题。两端实测版本：claude-agent-acp 0.63.0 / codex-acp 1.1.7 / codex 0.145.0。
 
 ## 验证
 

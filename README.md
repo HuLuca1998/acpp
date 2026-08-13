@@ -212,12 +212,14 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 | | claude | codex |
 | --- | --- | --- |
-| 加载技能包 | `_meta.claudeCode.options.plugins`(本地插件) | `additionalDirectories`(注册 `.agents/skills`) |
-| 屏蔽机器级 | `settingSources:["project"]`(不开 user 档)+ `strictMcpConfig` | 进程 env `CODEX_CONFIG` 枚举 `~/.codex/skills` 按 frontmatter name 逐个禁用 |
-| 保留项目级 | project 档保住 cwd 的 `.claude/skills` | cwd 一并进 `additionalDirectories` |
-| 附加 | env `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | — |
+| 加载技能包 | `_meta.claudeCode.options.plugins`(本地插件) | `<codex-home>/skills` 软链到 `skillpack/skills` |
+| 屏蔽机器级 | `settingSources:["project"]`(不开 user 档)+ `strictMcpConfig` | 进程 env `CODEX_HOME` 重定向到 `<dataDir>/codex-home`——机器级 `~/.codex/skills` 彻底不在视野 |
+| 保留项目级 | project 档保住 cwd 的 `.claude/skills` | cwd 进 `additionalDirectories` |
+| 附加 | env `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | 认证软链、配置复制自系统 `~/.codex` |
 
-不写 `~/.codex`、`~/.claude` 一个字节。generic runtime 无可靠注入口,不隔离。`CODEX_CONFIG` 禁用的 skill 仍出现在 codex 的 `available_commands`(反映"发现"不反映"禁用"),真隔离以模型自报为准。认证不隔离:claude 用系统钥匙串登录态、codex 用系统 `~/.codex` 登录态。
+不写 `~/.codex`、`~/.claude` 一个字节。generic runtime 无可靠注入口,不隔离。
+
+codex 的 `CODEX_HOME` 隔离把家目录整体重定向到 `<dataDir>/codex-home`(codex 运行数据写这里,几 MB 量级),机器级技能连 `/skills` 都不再列出——比会话级禁用(`CODEX_CONFIG` 的 `enabled=false` 只挡使用不挡显示)彻底。家目录里 `auth.json` 软链系统的(静态 key、跟随登录态、不复制密钥),`config.toml` 复制系统副本(避免 codex 写回污染系统 config),`skills` 软链技能包。副作用:切换到本方案后,旧 codex 会话的 thread 存在系统 `~/.codex`、新 home 找不到,首次恢复会回退 `session/new`(丢一次上下文),之后正常。认证不隔离:claude 用系统钥匙串登录态、codex 用系统 `~/.codex` 的 auth/config。
 
 ## 多语言
 
