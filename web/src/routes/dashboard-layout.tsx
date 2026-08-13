@@ -8,6 +8,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 /** 路径前缀 → 标题的翻译 key。最长前缀优先。 */
 const TITLE_KEYS = [
   ["/agents", "nav.agents"],
+  ["/skills", "nav.skills"],
   ["/sessions", "nav.sessions"],
   ["/tools", "nav.tools"],
   ["/logs", "nav.logs"],
