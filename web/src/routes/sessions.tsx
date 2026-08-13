@@ -4,8 +4,9 @@ import { Link } from "react-router"
 
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Session, SessionState } from "@/types/acp"
-import { StatusDot, type StatusTone } from "@/components/status-dot"
+import type { Session } from "@/types/acp"
+import { StatusDot } from "@/components/status-dot"
+import { SESSION_STATE_TONE } from "@/lib/status-tone"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,13 +45,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { MessagesSquareIcon, PlusIcon, Trash2Icon } from "lucide-react"
-
-const STATE_TONE: Record<SessionState, StatusTone> = {
-  active: "success",
-  idle: "muted",
-  ended: "muted",
-  error: "destructive",
-}
 
 const PAGE_SIZE = 50
 
@@ -113,7 +107,7 @@ export function Sessions() {
       }
     }
     return {
-      tone: STATE_TONE[session.state],
+      tone: SESSION_STATE_TONE[session.state],
       pulse: false,
       text: t(`sessions.state${capitalize(session.state)}` as never, {
         defaultValue: session.state,

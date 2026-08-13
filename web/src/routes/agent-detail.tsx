@@ -165,13 +165,7 @@ export function AgentDetail() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <StatusDot
-              tone={
-                agent.status === "error"
-                  ? "destructive"
-                  : agent.status === "connected"
-                    ? "success"
-                    : "muted"
-              }
+              tone={agent.status === "error" ? "destructive" : "muted"}
             />
             <CardTitle>{agent.name}</CardTitle>
             {agent.flavor ? (

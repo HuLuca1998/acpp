@@ -1,6 +1,6 @@
 // ACP (Agent Client Protocol) 领域类型，与 server/internal/model 保持一致。
 
-export type AgentStatus = "idle" | "connected" | "error" | "disabled"
+export type AgentStatus = "idle" | "error"
 
 /** agent 暴露的一条斜杠命令；发送时就是普通文本（"/plan …"）。 */
 export interface SlashCommand {

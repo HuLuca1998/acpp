@@ -4,8 +4,9 @@ import { Link } from "react-router"
 
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Agent, AgentStatus } from "@/types/acp"
-import { StatusDot, type StatusTone } from "@/components/status-dot"
+import type { Agent } from "@/types/acp"
+import { StatusDot } from "@/components/status-dot"
+import { AGENT_STATUS_TONE } from "@/lib/status-tone"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -33,13 +34,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { BotIcon, PlusIcon } from "lucide-react"
-
-const STATUS_TONE: Record<AgentStatus, StatusTone> = {
-  connected: "success",
-  idle: "muted",
-  disabled: "muted",
-  error: "destructive",
-}
 
 export function Agents() {
   const { t, i18n } = useTranslation()
@@ -141,8 +135,7 @@ export function Agents() {
                       </TableCell>
                       <TableCell>
                         <StatusDot
-                          tone={STATUS_TONE[agent.status]}
-                          pulse={agent.status === "connected"}
+                          tone={AGENT_STATUS_TONE[agent.status]}
                           label={t(
                             `agents.status${capitalize(agent.status)}` as never,
                             { defaultValue: agent.status }

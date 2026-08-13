@@ -93,9 +93,7 @@ export default {
     cwd: "Working dir",
     status: "Status",
     statusIdle: "Idle",
-    statusConnected: "Connected",
     statusError: "Error",
-    statusDisabled: "Disabled",
     updated: "Updated",
     detail: {
       probe: "Re-probe",

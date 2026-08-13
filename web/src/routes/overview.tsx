@@ -2,20 +2,12 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
-import { api } from "@/lib/api"
-import { formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Agent, Session, SessionState, SkillUsage } from "@/types/acp"
-import { StatusDot, type StatusTone } from "@/components/status-dot"
+import { AgentsCard } from "@/components/overview/agents-card"
+import { RecentSessionsCard } from "@/components/overview/recent-sessions-card"
+import { SkillUsageCard } from "@/components/overview/skill-usage-card"
+import { StatCards } from "@/components/overview/stat-cards"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -25,35 +17,14 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  ActivityIcon,
-  ArrowRightIcon,
-  BotIcon,
-  MessageSquareTextIcon,
-  MessagesSquareIcon,
-  PlusIcon,
-  PuzzleIcon,
-} from "lucide-react"
+import { api } from "@/lib/api"
+import type { Agent, Session, SkillUsage } from "@/types/acp"
+import { ActivityIcon, BotIcon, PlusIcon } from "lucide-react"
 
 const RECENT_LIMIT = 6
-const AGENT_LIMIT = 4
-
-const SESSION_TONE: Record<SessionState, StatusTone> = {
-  active: "success",
-  idle: "muted",
-  ended: "muted",
-  error: "destructive",
-}
-
-const AGENT_TONE: Record<Agent["status"], StatusTone> = {
-  connected: "success",
-  idle: "muted",
-  disabled: "muted",
-  error: "destructive",
-}
 
 export function Overview() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [sessionTotal, setSessionTotal] = useState(0)
@@ -152,280 +123,19 @@ export function Overview() {
     )
   }
 
-  const connectedCount = agents.filter((a) => a.status === "connected").length
-  const activeCount = sessions.filter((s) => s.state === "active").length
-  const runningCount = sessions.filter((s) => s.running).length
-  const messageCount = sessions.reduce((sum, s) => sum + s.messageCount, 0)
-  const recent = sessions.slice(0, RECENT_LIMIT)
-
-  const stats: {
-    key: string
-    icon: React.ReactNode
-    label: string
-    value: number
-    hint: React.ReactNode
-  }[] = [
-    {
-      key: "agents",
-      icon: <BotIcon />,
-      label: t("overview.statAgents"),
-      value: agents.length,
-      hint:
-        connectedCount > 0 ? (
-          <StatusDot
-            tone="success"
-            label={t("overview.connectedCount", { count: connectedCount })}
-          />
-        ) : (
-          <StatusDot tone="muted" label={t("overview.noneConnected")} />
-        ),
-    },
-    {
-      key: "sessions",
-      icon: <MessagesSquareIcon />,
-      label: t("overview.statSessions"),
-      value: sessionTotal,
-      hint:
-        activeCount > 0 ? (
-          <StatusDot
-            tone="success"
-            label={t("overview.activeCount", { count: activeCount })}
-          />
-        ) : (
-          <span>{t("overview.noneActive")}</span>
-        ),
-    },
-    {
-      key: "running",
-      icon: <ActivityIcon />,
-      label: t("overview.statRunning"),
-      value: runningCount,
-      hint: <span>{t("overview.runningHint")}</span>,
-    },
-    {
-      key: "messages",
-      icon: <MessageSquareTextIcon />,
-      label: t("overview.statMessages"),
-      value: messageCount,
-      hint: <span>{t("overview.messagesHint")}</span>,
-    },
-  ]
-
   return (
     <PageShell>
-      {/* 指标卡：入场从下轻浮起 + 逐卡 45ms stagger，仅首次挂载可见。 */}
-      <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-        {stats.map((stat, i) => (
-          <Card
-            key={stat.key}
-            className="@container/card transition-[opacity,translate] duration-300 ease-snappy starting:translate-y-2 starting:opacity-0 motion-reduce:starting:translate-y-0"
-            style={{ transitionDelay: `${i * 45}ms` }}
-          >
-            <CardHeader>
-              <CardDescription>{stat.label}</CardDescription>
-              <CardTitle className="text-3xl font-semibold tracking-tight tabular-nums">
-                {stat.value.toLocaleString()}
-              </CardTitle>
-              <CardAction>
-                {/* 图标芯片：主色轻染的圆角方块，给指标卡一个视觉锚点。 */}
-                <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">
-                  {stat.icon}
-                </span>
-              </CardAction>
-            </CardHeader>
-            <CardFooter className="text-xs text-muted-foreground">
-              {stat.hint}
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-
+      <StatCards
+        agents={agents}
+        sessions={sessions}
+        sessionTotal={sessionTotal}
+      />
       <div className="grid grid-cols-1 items-start gap-4 px-4 md:gap-6 lg:px-6 @4xl/main:grid-cols-[2fr_1fr]">
-        {/* 最近会话 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("overview.recentTitle")}</CardTitle>
-            <CardDescription>{t("overview.recentDescription")}</CardDescription>
-            <CardAction>
-              <Button
-                size="sm"
-                variant="ghost"
-                render={<Link to="/sessions" />}
-              >
-                {t("nav.viewAll")}
-                <ArrowRightIcon data-icon="inline-end" />
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            {recent.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <MessagesSquareIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("overview.noSessions")}</EmptyTitle>
-                  <EmptyDescription>
-                    {t("overview.noSessionsHint")}
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button size="sm" render={<Link to="/sessions/new" />}>
-                    <PlusIcon data-icon="inline-start" />
-                    {t("overview.newSession")}
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            ) : (
-              <div className="-mx-2 flex flex-col">
-                {recent.map((session) => (
-                  <Link
-                    key={session.id}
-                    to={`/sessions/${session.id}`}
-                    className="group flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 ease-snappy hover:bg-muted/60"
-                  >
-                    <StatusDot
-                      tone={
-                        session.running
-                          ? "success"
-                          : SESSION_TONE[session.state]
-                      }
-                      pulse={session.running}
-                    />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">
-                        {session.title ||
-                          `${t("common.unnamed")} #${session.id}`}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {session.agentName} ·{" "}
-                        {t("overview.messagesCount", {
-                          count: session.messageCount,
-                        })}
-                      </span>
-                    </span>
-                    <span
-                      className="shrink-0 text-xs text-muted-foreground tabular-nums"
-                      title={formatDateTime(session.updatedAt, i18n.language)}
-                    >
-                      {formatRelativeTime(session.updatedAt, i18n.language)}
-                    </span>
-                    <ArrowRightIcon className="size-3.5 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-[opacity,translate] duration-150 ease-snappy group-hover:translate-x-0 group-hover:opacity-100" />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Agent 状态 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("overview.agentsTitle")}</CardTitle>
-            <CardDescription>{t("overview.agentsDescription")}</CardDescription>
-            <CardAction>
-              <Button size="sm" variant="ghost" render={<Link to="/agents" />}>
-                {t("overview.manageAgents")}
-                <ArrowRightIcon data-icon="inline-end" />
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <div className="-mx-2 flex flex-col">
-              {agents.slice(0, AGENT_LIMIT).map((agent) => (
-                <Link
-                  key={agent.id}
-                  to={`/agents/${agent.id}`}
-                  className="group flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 ease-snappy hover:bg-muted/60"
-                >
-                  <StatusDot
-                    tone={AGENT_TONE[agent.status]}
-                    pulse={agent.status === "connected"}
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">
-                      {agent.name}
-                    </span>
-                    <span className="truncate font-mono text-xs text-muted-foreground">
-                      {[agent.command, ...agent.args].join(" ")}
-                    </span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full"
-              render={<Link to="/agents/new" />}
-            >
-              <PlusIcon data-icon="inline-start" />
-              {t("overview.addAgent")}
-            </Button>
-          </CardFooter>
-        </Card>
+        <RecentSessionsCard sessions={sessions.slice(0, RECENT_LIMIT)} />
+        <AgentsCard agents={agents} />
       </div>
-
-      {/* 技能使用统计：被 AI 调用最多的技能。 */}
       <div className="px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("overview.skillUsageTitle")}</CardTitle>
-            <CardDescription>
-              {t("overview.skillUsageDescription")}
-            </CardDescription>
-            <CardAction>
-              <Button size="sm" variant="ghost" render={<Link to="/skills" />}>
-                {t("nav.viewAll")}
-                <ArrowRightIcon data-icon="inline-end" />
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            {skillUsage.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <PuzzleIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("overview.skillUsageEmpty")}</EmptyTitle>
-                  <EmptyDescription>
-                    {t("overview.skillUsageEmptyHint")}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {(() => {
-                  const max = Math.max(...skillUsage.map((s) => s.count))
-                  return skillUsage.map((s) => (
-                    <Link
-                      key={s.name}
-                      to={`/skills/${s.name}`}
-                      className="group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-150 ease-snappy hover:bg-muted/60"
-                    >
-                      <span className="w-40 shrink-0 truncate font-mono text-xs">
-                        {s.name}
-                      </span>
-                      {/* 次数条：相对最高值的占比，纯视觉参照。 */}
-                      <span className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                        <span
-                          className="h-full rounded-full bg-primary/70"
-                          style={{ width: `${(s.count / max) * 100}%` }}
-                        />
-                      </span>
-                      <span className="w-10 shrink-0 text-right text-sm tabular-nums">
-                        {s.count.toLocaleString()}
-                      </span>
-                    </Link>
-                  ))
-                })()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <SkillUsageCard usage={skillUsage} />
       </div>
     </PageShell>
   )

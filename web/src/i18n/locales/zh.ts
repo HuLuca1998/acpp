@@ -90,9 +90,7 @@ export default {
     cwd: "工作目录",
     status: "状态",
     statusIdle: "空闲",
-    statusConnected: "已连接",
     statusError: "错误",
-    statusDisabled: "已禁用",
     updated: "更新时间",
     detail: {
       probe: "重新探测",

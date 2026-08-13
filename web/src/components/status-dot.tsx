@@ -1,6 +1,7 @@
+import type { StatusTone } from "@/lib/status-tone"
 import { cn } from "@/lib/utils"
 
-export type StatusTone = "success" | "warning" | "destructive" | "muted"
+export type { StatusTone } from "@/lib/status-tone"
 
 /**
  * 状态点 + 文字标签：列表页与概览统一的状态语言。

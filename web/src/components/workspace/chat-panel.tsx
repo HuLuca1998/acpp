@@ -1,65 +1,48 @@
 import { memo, useContext } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AttachmentTray } from "@/components/chat/attachment-tray"
+import { ChatEmptyState } from "@/components/chat/chat-empty-state"
+import { ChatStream } from "@/components/chat/chat-stream"
+import { Composer } from "@/components/chat/composer"
+import { ComposerStatus } from "@/components/chat/composer-status"
+import { DraftControls } from "@/components/chat/draft-controls"
+import { QueuedMessages } from "@/components/chat/queued-messages"
+import { SettingsSelectors } from "@/components/chat/settings-selectors"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   ChatPanelContext,
   type ChatPanelData,
 } from "@/components/workspace/chat-panel-context"
 import { cn } from "@/lib/utils"
-import { AttachmentTray } from "@/components/chat/attachment-tray"
-import {
-  ActivityMessage,
-  ActivitySection,
-  ChatMessage,
-  EarlierSentinel,
-  LiveToolMarker,
-} from "@/components/chat/chat-messages"
-import { groupMessages } from "@/lib/message-blocks"
-import { Composer } from "@/components/chat/composer"
-import { ComposerStatus } from "@/components/chat/composer-status"
-import { DraftControls } from "@/components/chat/draft-controls"
-import { ElicitationCard } from "@/components/chat/elicitation-card"
-import { FileEditCard } from "@/components/chat/file-edit-card"
-import type { ToolCallPayload } from "@/components/chat/tool-call"
-import { MarkdownContent } from "@/components/chat/markdown"
-import { PermissionCard } from "@/components/chat/permission-card"
-import { PlanCard } from "@/components/chat/plan-card"
-import { PlanReviewCard } from "@/components/chat/plan-review-card"
-import { QueuedMessages } from "@/components/chat/queued-messages"
-import { SettingsSelectors } from "@/components/chat/settings-selectors"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from "@/components/ui/message-scroller"
-import { Spinner } from "@/components/ui/spinner"
-import {
-  AtSignIcon,
-  BrainIcon,
-  CircleAlertIcon,
-  ImageIcon,
-  MessagesSquareIcon,
-  ShieldCheckIcon,
-} from "lucide-react"
+import { AtSignIcon, ImageIcon } from "lucide-react"
 
 function useChatPanel(): ChatPanelData {
   const value = useContext(ChatPanelContext)
   if (!value) throw new Error("ChatPanel must be used within ChatPanelContext")
   return value
+}
+
+/** composer 里的附件圆钮（图片上传 / @ 文件引用共用）。 */
+function AttachmentButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
 }
 
 /** 对话面板：消息流 + composer。工作区里唯一不可关闭的面板。 */
@@ -86,16 +69,12 @@ export const ChatPanel = memo(function ChatPanel() {
     draftCwd,
   } = useChatPanel()
 
-  // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
-  const liveEdits = chat.liveTools.filter((tool) => tool.kind === "edit")
-  const liveOthers = chat.liveTools.filter((tool) => tool.kind !== "edit")
-  const liveActivityCount =
-    (chat.streamingThought ? 1 : 0) + liveOthers.length + chat.permissions.length
   const hasContent =
     chat.messages.length > 0 ||
     chat.streamingText !== "" ||
-    liveActivityCount > 0 ||
-    liveEdits.length > 0 ||
+    chat.streamingThought !== "" ||
+    chat.liveTools.length > 0 ||
+    chat.permissions.length > 0 ||
     (chat.plan?.length ?? 0) > 0
 
   return (
@@ -140,246 +119,14 @@ export const ChatPanel = memo(function ChatPanel() {
       {/* 消息流：底部 padding 给悬浮输入让位。 */}
       <div className="min-h-0 flex-1 overflow-hidden">
         {!hasContent ? (
-          <Empty className="h-full justify-center">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <MessagesSquareIcon />
-              </EmptyMedia>
-              <EmptyTitle>{t("chat.empty")}</EmptyTitle>
-              <EmptyDescription>{t("chat.emptyHint")}</EmptyDescription>
-            </EmptyHeader>
-            {/* 建议芯片：给第一句一个起点，点击即发送。 */}
-            <EmptyContent>
-              <div className="flex flex-wrap justify-center gap-2">
-                {(["intro", "changes", "help"] as const).map((key) => (
-                  <Button
-                    key={key}
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                    disabled={
-                      isNew
-                        ? newSession.creating || !newSession.selected
-                        : chat.busy
-                    }
-                    onClick={() => sendSuggestion(t(`chat.suggestions.${key}`))}
-                  >
-                    {t(`chat.suggestions.${key}`)}
-                  </Button>
-                ))}
-              </div>
-            </EmptyContent>
-          </Empty>
+          <ChatEmptyState
+            disabled={
+              isNew ? newSession.creating || !newSession.selected : chat.busy
+            }
+            onSuggestion={sendSuggestion}
+          />
         ) : (
-          // 打开即定位到底部看最新内容（不是先渲染顶部再跳）；
-          // autoScroll 让流式输出贴底跟随（用户上翻自动暂停、滚回底部恢复），
-          // 「加载更早」prepend 时保持视口位置不跳。
-          <MessageScrollerProvider defaultScrollPosition="end" autoScroll>
-            <MessageScroller>
-              <MessageScrollerViewport preserveScrollOnPrepend>
-                <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
-                  {chat.hasEarlier ? (
-                    <MessageScrollerItem scrollAnchor={false}>
-                      <EarlierSentinel
-                        onVisible={() => void chat.loadEarlier()}
-                      />
-                    </MessageScrollerItem>
-                  ) : null}
-                  {groupMessages(chat.messages).map((block) =>
-                    block.type === "chat" ? (
-                      // 不设 scrollAnchor：锚定会把新用户消息滚到视口顶并
-                      // 打断贴底跟随，与 autoScroll 的跟随体验相互矛盾。
-                      <MessageScrollerItem
-                        key={block.message.id}
-                        messageId={String(block.message.id)}
-                      >
-                        <ChatMessage message={block.message} />
-                      </MessageScrollerItem>
-                    ) : block.type === "edit" ? (
-                      <MessageScrollerItem
-                        key={block.message.id}
-                        messageId={String(block.message.id)}
-                      >
-                        <FileEditCard
-                          payload={
-                            (block.message.payload ?? {}) as ToolCallPayload
-                          }
-                          status={
-                            (block.message.payload as ToolCallPayload | null)
-                              ?.status
-                          }
-                        />
-                      </MessageScrollerItem>
-                    ) : (
-                      <MessageScrollerItem key={block.key} scrollAnchor={false}>
-                        <ActivitySection count={block.items.length}>
-                          {block.items.map((item) => (
-                            <ActivityMessage key={item.id} message={item} />
-                          ))}
-                        </ActivitySection>
-                      </MessageScrollerItem>
-                    )
-                  )}
-
-                  {/* 任务计划：随 plan 事件实时更新，轮次结束保留最终状态。 */}
-                  {chat.plan && chat.plan.length > 0 ? (
-                    <MessageScrollerItem scrollAnchor={false}>
-                      <PlanCard entries={chat.plan} />
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {liveActivityCount > 0 ? (
-                    <MessageScrollerItem scrollAnchor={false}>
-                      <ActivitySection
-                        count={liveActivityCount}
-                        busy={chat.busy}
-                      >
-                        {chat.streamingThought ? (
-                          <Marker>
-                            <MarkerIcon>
-                              <BrainIcon />
-                            </MarkerIcon>
-                            <MarkerContent>
-                              <span className="text-shimmer">
-                                {t("chat.thinking")}
-                              </span>
-                              {/* 只看思考的"最新进展"：截尾 + 行数钳制，不淹没界面。 */}
-                              <div className="mt-1 line-clamp-3 whitespace-pre-wrap">
-                                {chat.streamingThought.slice(-600)}
-                              </div>
-                            </MarkerContent>
-                          </Marker>
-                        ) : null}
-                        {chat.permissions.map((perm) => (
-                          <Marker key={perm.id}>
-                            <MarkerIcon>
-                              <ShieldCheckIcon />
-                            </MarkerIcon>
-                            <MarkerContent>
-                              {t("chat.permission.resolved", {
-                                title: perm.title,
-                                choice:
-                                  perm.choice || t("chat.permission.cancelled"),
-                              })}
-                            </MarkerContent>
-                          </Marker>
-                        ))}
-                        {liveOthers.map((tool) => (
-                          <LiveToolMarker key={tool.id} tool={tool} />
-                        ))}
-                      </ActivitySection>
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {/* 进行中的文件编辑：独立消息条实时更新，diff 随改随看。 */}
-                  {liveEdits.map((tool) => (
-                    <MessageScrollerItem key={tool.id} scrollAnchor={false}>
-                      <FileEditCard
-                        payload={
-                          {
-                            kind: tool.kind,
-                            rawInput: tool.rawInput,
-                            rawOutput: tool.rawOutput,
-                            content: tool.content,
-                          } as ToolCallPayload
-                        }
-                        status={tool.status}
-                      />
-                    </MessageScrollerItem>
-                  ))}
-
-                  {chat.streamingText ? (
-                    <MessageScrollerItem scrollAnchor={false}>
-                      <MarkdownContent>{chat.streamingText}</MarkdownContent>
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {chat.permission ? (
-                    <MessageScrollerItem
-                      key={chat.permission.id}
-                      scrollAnchor={false}
-                    >
-                      {chat.permission.planReview ? (
-                        <PlanReviewCard
-                          permission={chat.permission}
-                          onResolve={(optionId, choiceName) =>
-                            void chat.resolvePermission(
-                              chat.permission!.id,
-                              optionId,
-                              choiceName
-                            )
-                          }
-                        />
-                      ) : (
-                        <PermissionCard
-                          permission={chat.permission}
-                          onResolve={(optionId, choiceName) =>
-                            void chat.resolvePermission(
-                              chat.permission!.id,
-                              optionId,
-                              choiceName
-                            )
-                          }
-                        />
-                      )}
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {chat.elicitation ? (
-                    <MessageScrollerItem
-                      key={chat.elicitation.id}
-                      scrollAnchor={false}
-                    >
-                      <ElicitationCard
-                        elicitation={chat.elicitation}
-                        onResolve={(action, content) =>
-                          void chat.resolveElicitation(
-                            chat.elicitation!.id,
-                            action,
-                            content
-                          )
-                        }
-                      />
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {chat.busy &&
-                  !chat.streamingText &&
-                  liveActivityCount === 0 &&
-                  !chat.elicitation &&
-                  !chat.permission ? (
-                    <MessageScrollerItem scrollAnchor={false}>
-                      <Marker role="status">
-                        <MarkerIcon>
-                          <Spinner />
-                        </MarkerIcon>
-                        <MarkerContent className="text-shimmer">
-                          {t("chat.thinking")}
-                        </MarkerContent>
-                      </Marker>
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {/* 非正常结束原因内联在消息流末尾，紧跟被截断的回答。 */}
-                  {chat.stopReason ? (
-                    <MessageScrollerItem scrollAnchor={false}>
-                      <Marker>
-                        <MarkerIcon>
-                          <CircleAlertIcon className="text-warning" />
-                        </MarkerIcon>
-                        <MarkerContent>
-                          {t(`chat.stopReason.${chat.stopReason}` as never, {
-                            defaultValue: chat.stopReason,
-                          })}
-                        </MarkerContent>
-                      </Marker>
-                    </MessageScrollerItem>
-                  ) : null}
-                </MessageScrollerContent>
-              </MessageScrollerViewport>
-              <MessageScrollerButton className="data-[direction=end]:bottom-40" />
-            </MessageScroller>
-          </MessageScrollerProvider>
+          <ChatStream chat={chat} />
         )}
       </div>
 
@@ -444,22 +191,18 @@ export const ChatPanel = memo(function ChatPanel() {
         )}
 
         {/* 附件：图片上传与 @ 文件引用，两种态都可用。 */}
-        <button
-          type="button"
-          aria-label={t("chat.attachments.image")}
-          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+        <AttachmentButton
+          label={t("chat.attachments.image")}
           onClick={openImagePicker}
         >
           <ImageIcon className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          aria-label={t("chat.attachments.file")}
-          className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+        </AttachmentButton>
+        <AttachmentButton
+          label={t("chat.attachments.file")}
           onClick={openFilePicker}
         >
           <AtSignIcon className="size-3.5" />
-        </button>
+        </AttachmentButton>
       </Composer>
     </div>
   )
