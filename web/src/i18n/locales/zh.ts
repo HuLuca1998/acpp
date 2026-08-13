@@ -1,15 +1,11 @@
 export default {
   common: {
     appName: "ACP 控制台",
-    loading: "加载中…",
     loadFailed: "加载失败",
     save: "保存",
     cancel: "取消",
     delete: "删除",
-    confirm: "确定",
-    back: "返回",
     retry: "重试",
-    optional: "可选",
     unnamed: "未命名",
     none: "—",
   },
@@ -185,7 +181,6 @@ export default {
     state: "状态",
     updated: "更新时间",
     running: "运行中",
-    stopped: "已停止",
     stateActive: "进行中",
     stateIdle: "空闲",
     stateEnded: "已结束",
@@ -194,13 +189,9 @@ export default {
     deleteTitle: "删除会话",
     deleteConfirm: "删除这条会话？agent 子进程会一并回收，聊天记录不可恢复。",
     form: {
-      agentLabel: "Agent",
-      agentPlaceholder: "选择一个 agent",
-      agentHint: "没有可选项？先到 Agent 页面添加一个。",
       modelLabel: "模型",
       modelPlaceholder: "选择模型",
       defaultModel: "默认模型",
-      cwdLabel: "工作目录",
       cwdPlaceholder: "~/acpp",
       cwdHint:
         "必须是绝对路径，不存在会自动创建。留空依次用 agent 默认目录、~/acpp。",
@@ -209,7 +200,6 @@ export default {
   dirPicker: {
     title: "选择工作目录",
     fileTitle: "选择要引用的文件",
-    browse: "浏览目录",
     up: "上级目录",
     select: "选择此目录",
     cancel: "取消",
@@ -220,13 +210,10 @@ export default {
     send: "发送",
     stop: "中止",
     thinking: "正在思考…",
-    connecting: "正在连接 agent…",
     connected: "已连接",
     disconnected: "连接已断开",
-    reconnecting: "正在重连…",
     empty: "开始你的第一句对话",
     emptyHint: "会话上下文由 agent 保持，后续每轮只需要发你这一句。",
-    thought: "思考过程",
     toolCall: "工具调用",
     activity: "思考与工具调用",
     copy: "复制",
@@ -299,7 +286,6 @@ export default {
     },
     elicitation: {
       title: "Agent 请求你的输入",
-      otherLabel: "其他",
       otherPlaceholder: "输入自定义回答，Enter 确认…",
       submit: "提交",
       skip: "跳过",
@@ -308,13 +294,11 @@ export default {
       skipped: "已跳过",
     },
     stopReason: {
-      end_turn: "",
       max_tokens: "回答因触达 token 上限被截断",
       max_turn_requests: "回答因触达单轮请求次数上限被截断",
       refusal: "agent 拒绝继续",
       cancelled: "已被取消",
     },
-    busy: "上一轮还没结束，请等它跑完或点中止。",
   },
   workspace: {
     panels: {
@@ -362,11 +346,6 @@ export default {
       emptyHint: "在文件树中点击文件即可预览。",
       binary: "二进制文件，无法预览。",
       truncated: "内容过长，已截断显示。",
-    },
-    comingSoon: {
-      diff: "开发中——这里将展示工作目录的未提交变更。",
-      commits: "开发中——这里将列出本地领先远端的提交。",
-      terminal: "开发中——这里将提供工作目录里的真实终端。",
     },
     refMenu: {
       addReference: "添加到对话引用",
@@ -417,12 +396,10 @@ export default {
   placeholderPage: {
     tools: "agent 暴露的工具与调用统计。",
     logs: "JSON-RPC 原始收发日志。",
-    settings: "默认工作目录、权限策略与数据库位置。",
     connections: "当前活跃的 stdio 连接与握手状态。",
     help: "ACP 协议文档与常见问题。",
     search: "跨会话与消息的全文检索。",
     agentNew: "配置 agent 的启动命令、参数与工作目录。",
-    agentDetail: "展示 initialize 返回的能力集与最近会话。",
   },
   notFound: {
     title: "404 — 页面不存在",

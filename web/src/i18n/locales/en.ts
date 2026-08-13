@@ -1,15 +1,11 @@
 export default {
   common: {
     appName: "ACP Console",
-    loading: "Loading…",
     loadFailed: "Failed to load",
     save: "Save",
     cancel: "Cancel",
     delete: "Delete",
-    confirm: "Confirm",
-    back: "Back",
     retry: "Retry",
-    optional: "optional",
     unnamed: "Untitled",
     none: "—",
   },
@@ -198,7 +194,6 @@ export default {
     state: "State",
     updated: "Updated",
     running: "Running",
-    stopped: "Stopped",
     stateActive: "Active",
     stateIdle: "Idle",
     stateEnded: "Ended",
@@ -208,13 +203,9 @@ export default {
     deleteConfirm:
       "Delete this session? The agent subprocess is reclaimed and the transcript cannot be recovered.",
     form: {
-      agentLabel: "Agent",
-      agentPlaceholder: "Select an agent",
-      agentHint: "Nothing to pick? Add one on the Agents page first.",
       modelLabel: "Model",
       modelPlaceholder: "Select a model",
       defaultModel: "Default model",
-      cwdLabel: "Working directory",
       cwdPlaceholder: "~/acpp",
       cwdHint:
         "Must be an absolute path; it is created if missing. Leave empty to fall back to the agent's default, then ~/acpp.",
@@ -223,7 +214,6 @@ export default {
   dirPicker: {
     title: "Choose a working directory",
     fileTitle: "Choose a file to reference",
-    browse: "Browse directories",
     up: "Parent directory",
     select: "Use this directory",
     cancel: "Cancel",
@@ -234,14 +224,11 @@ export default {
     send: "Send",
     stop: "Stop",
     thinking: "Thinking…",
-    connecting: "Connecting to the agent…",
     connected: "Connected",
     disconnected: "Disconnected",
-    reconnecting: "Reconnecting…",
     empty: "Start the conversation",
     emptyHint:
       "The agent keeps the context, so every later turn only needs your own line.",
-    thought: "Thinking",
     toolCall: "Tool call",
     activity: "Thinking & tool calls",
     copy: "Copy",
@@ -314,7 +301,6 @@ export default {
     },
     elicitation: {
       title: "The agent needs your input",
-      otherLabel: "Other",
       otherPlaceholder: "Type your own answer, Enter to confirm…",
       submit: "Submit",
       skip: "Skip",
@@ -323,13 +309,11 @@ export default {
       skipped: "Skipped",
     },
     stopReason: {
-      end_turn: "",
       max_tokens: "Answer was truncated by the token limit",
       max_turn_requests: "Answer was truncated by the per-turn request limit",
       refusal: "The agent refused to continue",
       cancelled: "Cancelled",
     },
-    busy: "The previous turn is still running — wait for it or hit stop.",
   },
   workspace: {
     logs: {
@@ -380,11 +364,6 @@ export default {
       binary: "Binary file, cannot preview.",
       truncated: "Content too long, display truncated.",
     },
-    comingSoon: {
-      diff: "Coming soon — uncommitted changes of the working directory.",
-      commits: "Coming soon — local commits ahead of the remote.",
-      terminal: "Coming soon — a real terminal in the working directory.",
-    },
     refMenu: {
       addReference: "Add to chat references",
       openPreview: "Preview",
@@ -434,12 +413,10 @@ export default {
   placeholderPage: {
     tools: "Tools exposed by the agent and their call statistics.",
     logs: "Raw JSON-RPC traffic.",
-    settings: "Default working directory, permission policy and database path.",
     connections: "Live stdio connections and handshake state.",
     help: "ACP protocol docs and FAQ.",
     search: "Full-text search across sessions and messages.",
     agentNew: "Configure the agent's command, arguments and working directory.",
-    agentDetail: "Capabilities returned by initialize, plus recent sessions.",
   },
   notFound: {
     title: "404 — Page not found",
