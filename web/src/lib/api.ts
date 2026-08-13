@@ -165,13 +165,18 @@ export const api = {
     /**
      * 增量读转录 JSONL（logs 面板轮询用）：转录 append-only，用 Range
      * 字节偏移续读。返回新增文本与下一次的偏移；无新内容返回 null。
+     * reset=true 表示拿到的是全量而非增量，调用方必须整体替换而不是追加。
      */
     transcriptChunk: async (
       id: number,
       offset: number
-    ): Promise<{ chunk: string; nextOffset: number } | null> => {
+    ): Promise<{ chunk: string; nextOffset: number; reset: boolean } | null> => {
+      // no-store 是必须的：ServeFile 带 Last-Modified，浏览器会把首个 200
+      // 全量缓存起来，之后带 Range 的请求被缓存直接用 200 全量应答——
+      // 前端把全量当增量追加，日志每轮翻倍。
       const res = await fetch(`${BASE}/sessions/${id}/transcript`, {
         headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+        cache: "no-store",
       })
       // 416：偏移已到文件末尾，没有新内容。
       if (res.status === 416) return null
@@ -180,7 +185,9 @@ export const api = {
       if (chunk === "") return null
       // 偏移按字节推进（JSONL 里的中文是多字节，不能用字符数）。
       const bytes = new TextEncoder().encode(chunk).length
-      return { chunk, nextOffset: offset + bytes }
+      // 防御：请求了 Range 却收到 200（中间层没执行 Range），这是全量。
+      const reset = offset > 0 && res.status === 200
+      return { chunk, nextOffset: reset ? bytes : offset + bytes, reset }
     },
 
     /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */

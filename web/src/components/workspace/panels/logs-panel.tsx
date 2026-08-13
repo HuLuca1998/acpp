@@ -78,7 +78,7 @@ export const LogsPanel = memo(function LogsPanel() {
         if (cancelled || !res) return
         offsetRef.current = res.nextOffset
         // 末尾可能是正在写入的半行，攒到下一轮补全再解析。
-        const text = bufferRef.current + res.chunk
+        const text = (res.reset ? "" : bufferRef.current) + res.chunk
         const parts = text.split("\n")
         bufferRef.current = parts.pop() ?? ""
         const parsed = parts
@@ -87,7 +87,8 @@ export const LogsPanel = memo(function LogsPanel() {
           .filter((l): l is WireLine => l !== null)
         if (parsed.length === 0) return
         setLines((prev) => {
-          const merged = [...prev, ...parsed]
+          // reset：拿到的是全量（中间层没执行 Range），整体替换防止叠加。
+          const merged = res.reset ? parsed : [...prev, ...parsed]
           return merged.length > MAX_LINES
             ? merged.slice(merged.length - MAX_LINES)
             : merged
