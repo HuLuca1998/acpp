@@ -13,14 +13,14 @@ import {
 import "dockview/dist/styles/dockview.css"
 import { XIcon } from "lucide-react"
 
-import { ChatPanel } from "@/components/workspace/chat-panel"
+import { ChatPanel } from "@/components/workspace/panels/chat-panel"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
-import { CommitsPanel } from "@/components/workspace/commits-panel"
-import { DiffPanel } from "@/components/workspace/diff-panel"
-import { FilePreviewPanel } from "@/components/workspace/file-preview-panel"
-import { FileTreePanel } from "@/components/workspace/file-tree-panel"
-import { LogsPanel } from "@/components/workspace/logs-panel"
-import { TerminalPanel } from "@/components/workspace/terminal-panel"
+import { CommitsPanel } from "@/components/workspace/panels/commits-panel"
+import { DiffPanel } from "@/components/workspace/panels/diff-panel"
+import { FilePreviewPanel } from "@/components/workspace/panels/file-preview-panel"
+import { FileTreePanel } from "@/components/workspace/panels/file-tree-panel"
+import { LogsPanel } from "@/components/workspace/panels/logs-panel"
+import { TerminalPanel } from "@/components/workspace/panels/terminal-panel"
 import {
   useGitOverview,
   useWorkspace,

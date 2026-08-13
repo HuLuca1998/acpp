@@ -4,13 +4,13 @@ import {
   ChevronRightIcon,
   FileIcon,
   FolderIcon,
-  FolderTreeIcon,
   RotateCwIcon,
 } from "lucide-react"
 
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { TreeEntry } from "@/types/acp"
+import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,13 +19,6 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 
 /**
@@ -262,31 +255,5 @@ function TreeNode({
         </div>
       ) : null}
     </>
-  )
-}
-
-/** 面板内空态：树/预览共用的轻量壳。 */
-export function PanelEmptyState({
-  title,
-  description,
-  action,
-}: {
-  title: string
-  description?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <Empty className="h-full justify-center">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <FolderTreeIcon />
-        </EmptyMedia>
-        <EmptyTitle className="text-sm">{title}</EmptyTitle>
-        {description ? (
-          <EmptyDescription className="text-xs">{description}</EmptyDescription>
-        ) : null}
-      </EmptyHeader>
-      {action}
-    </Empty>
   )
 }

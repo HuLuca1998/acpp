@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { PanelEmptyState } from "@/components/workspace/file-tree-panel"
+import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 
 /** 渲染上限：logs 是调试窗口，只保留最近这么多帧，太早的丢弃。 */

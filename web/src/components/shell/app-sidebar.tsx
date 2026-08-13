@@ -2,13 +2,13 @@ import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
 
-import { AppearanceSwitcher } from "@/components/appearance-switcher"
-import { BackendStatus } from "@/components/backend-status"
-import { LanguageSwitcher } from "@/components/language-switcher"
-import { NavMain } from "@/components/nav-main"
+import { AppearanceSwitcher } from "@/components/shell/appearance-switcher"
+import { BackendStatus } from "@/components/shell/backend-status"
+import { LanguageSwitcher } from "@/components/shell/language-switcher"
+import { NavMain } from "@/components/shell/nav-main"
 import { AgentIcon } from "@/components/agent-icon"
-import { NavRecent } from "@/components/nav-recent"
-import { NavSecondary } from "@/components/nav-secondary"
+import { NavRecent } from "@/components/shell/nav-recent"
+import { NavSecondary } from "@/components/shell/nav-secondary"
 import {
   Sidebar,
   SidebarContent,

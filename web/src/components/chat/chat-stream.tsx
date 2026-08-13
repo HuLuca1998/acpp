@@ -7,12 +7,12 @@ import {
   EarlierSentinel,
   LiveToolMarker,
 } from "@/components/chat/chat-messages"
-import { ElicitationCard } from "@/components/chat/elicitation-card"
+import { ElicitationCard } from "@/components/chat/cards/elicitation-card"
 import { FileEditCard } from "@/components/chat/file-edit-card"
 import { MarkdownContent } from "@/components/chat/markdown"
-import { PermissionCard } from "@/components/chat/permission-card"
+import { PermissionCard } from "@/components/chat/cards/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
-import { PlanReviewCard } from "@/components/chat/plan-review-card"
+import { PlanReviewCard } from "@/components/chat/cards/plan-review-card"
 import type { ToolCallPayload } from "@/components/chat/tool-call"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import {

@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next"
 import { Outlet, useLocation } from "react-router"
 
-import { AppSidebar } from "@/components/app-sidebar"
-import { SiteHeader } from "@/components/site-header"
+import { AppSidebar } from "@/components/shell/app-sidebar"
+import { SiteHeader } from "@/components/shell/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 /** 路径前缀 → 标题的翻译 key。最长前缀优先。 */

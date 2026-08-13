@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { useTheme } from "@/components/theme-provider"
+import { useTheme } from "@/components/shell/theme-provider"
 import {
   DropdownMenu,
   DropdownMenuContent,

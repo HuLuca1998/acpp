@@ -6,7 +6,7 @@ import type { LiveToolCall } from "@/hooks/use-chat"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/format"
 import { CopyButton } from "@/components/chat/copy-button"
-import { ElicitationAnsweredCard } from "@/components/chat/elicitation-card"
+import { ElicitationAnsweredCard } from "@/components/chat/cards/elicitation-card"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { ThoughtBlock } from "@/components/chat/thought-block"
 import {

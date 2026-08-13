@@ -1,12 +1,13 @@
 import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronRightIcon, GitBranchIcon, RotateCwIcon } from "lucide-react"
+import { ChevronRightIcon } from "lucide-react"
 
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GitDiffView, GitFileChange, GitOverview } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
-import { PanelEmptyState } from "@/components/workspace/file-tree-panel"
+import { ChangeStat, GitPanelHeader, StatusLetter } from "@/components/workspace/panels/git-parts"
+import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import {
   useGitOverview,
   useWorkspace,
@@ -93,41 +94,6 @@ export const DiffPanel = memo(function DiffPanel() {
   )
 })
 
-/** diff / commit 面板共用的头部：分支、领先/落后、刷新。 */
-export function GitPanelHeader({
-  overview,
-  loading,
-  onRefresh,
-}: {
-  overview: GitOverview
-  loading: boolean
-  onRefresh: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-xs text-muted-foreground">
-      <GitBranchIcon className="size-3.5 shrink-0" />
-      <span className="truncate font-mono">{overview.branch}</span>
-      {overview.ahead > 0 ? (
-        <span className="shrink-0 tabular-nums">↑{overview.ahead}</span>
-      ) : null}
-      {overview.behind > 0 ? (
-        <span className="shrink-0 tabular-nums">↓{overview.behind}</span>
-      ) : null}
-      <span className="flex-1" />
-      {loading ? <Spinner className="size-3" /> : null}
-      <button
-        type="button"
-        aria-label={t("workspace.git.refresh")}
-        className="flex size-6 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-        onClick={onRefresh}
-      >
-        <RotateCwIcon className="size-3.5" />
-      </button>
-    </div>
-  )
-}
-
 /** 一个文件的变更行：状态字母 + 路径 + 行数统计；展开时懒加载 diff。 */
 function DiffFileRow({
   sessionId,
@@ -206,39 +172,5 @@ function DiffFileRow({
         </div>
       ) : null}
     </div>
-  )
-}
-
-/** 变更类型字母：A 新增 / D 删除 / 其余修改类，色调与 DiffView 呼应。 */
-export function StatusLetter({ status }: { status: string }) {
-  return (
-    <span
-      className={cn(
-        "w-3 shrink-0 text-center",
-        status === "A" && "text-primary",
-        status === "D" && "text-destructive",
-        status !== "A" && status !== "D" && "text-muted-foreground"
-      )}
-    >
-      {status}
-    </span>
-  )
-}
-
-/** +n -m 行数统计；-1（二进制等）不显示。 */
-export function ChangeStat({
-  added,
-  deleted,
-}: {
-  added: number
-  deleted: number
-}) {
-  return (
-    <span className="shrink-0 tabular-nums">
-      {added >= 0 ? <span className="text-primary">+{added}</span> : null}{" "}
-      {deleted >= 0 ? (
-        <span className="text-destructive">-{deleted}</span>
-      ) : null}
-    </span>
   )
 }

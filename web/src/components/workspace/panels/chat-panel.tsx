@@ -1,14 +1,14 @@
 import { memo, useContext } from "react"
 import { useTranslation } from "react-i18next"
 
-import { AttachmentTray } from "@/components/chat/attachment-tray"
+import { AttachmentTray } from "@/components/chat/composer/attachment-tray"
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
 import { ChatStream } from "@/components/chat/chat-stream"
-import { Composer } from "@/components/chat/composer"
-import { ComposerStatus } from "@/components/chat/composer-status"
-import { DraftControls } from "@/components/chat/draft-controls"
-import { QueuedMessages } from "@/components/chat/queued-messages"
-import { SettingsSelectors } from "@/components/chat/settings-selectors"
+import { Composer } from "@/components/chat/composer/composer"
+import { ComposerStatus } from "@/components/chat/composer/composer-status"
+import { DraftControls } from "@/components/chat/composer/draft-controls"
+import { QueuedMessages } from "@/components/chat/composer/queued-messages"
+import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   ChatPanelContext,

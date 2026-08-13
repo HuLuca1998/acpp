@@ -16,8 +16,8 @@ import {
   ChangeStat,
   GitPanelHeader,
   StatusLetter,
-} from "@/components/workspace/diff-panel"
-import { PanelEmptyState } from "@/components/workspace/file-tree-panel"
+} from "@/components/workspace/panels/git-parts"
+import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import {
   useGitOverview,
   useWorkspace,
