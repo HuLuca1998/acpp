@@ -84,10 +84,12 @@ export const TerminalPanel = memo(function TerminalPanel(
       cursorBlink: true,
       scrollback: 5000,
       theme: {
-        background: resolveColor("--card", "#1e1e1e"),
-        foreground: resolveColor("--foreground", "#d4d4d4"),
-        cursor: resolveColor("--primary", "#7aa2f7"),
-        selectionBackground: "rgba(128, 128, 128, 0.35)",
+        // xterm 用 canvas 渲染，不认 CSS 变量；运行时解析 token，hex 只是解析失败的兜底。
+        background: resolveColor("--card", "#1e1e1e"), // check-ignore: xterm canvas 兜底色
+        foreground: resolveColor("--foreground", "#d4d4d4"), // check-ignore: xterm canvas 兜底色
+        cursor: resolveColor("--primary", "#7aa2f7"), // check-ignore: xterm canvas 兜底色
+        // 选区要半透明，token 是实色，只能用中性灰罩层。
+        selectionBackground: "rgba(128, 128, 128, 0.35)", // check-ignore: xterm 选区罩层
       },
     })
     const fit = new FitAddon()

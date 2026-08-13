@@ -47,6 +47,13 @@ build-server: ## 构建后端到 build/server/acp-server
 serve: build-web build-server ## 由后端单进程托管前端产物
 	ACP_WEB_DIR=build/web ./build/server/acp-server
 
+.PHONY: check
+check: lint typecheck test check-structure ## 全部验证：lint + typecheck + test + 结构检查
+
+.PHONY: check-structure
+check-structure: ## 结构检查：行数/目录文件数硬线、禁止模式、工具索引对账
+	scripts/check-structure.sh
+
 .PHONY: lint
 lint: ## 前端 eslint + 后端 go vet
 	cd $(WEB_DIR) && npm run lint

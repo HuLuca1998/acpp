@@ -1,0 +1,31 @@
+# 前端工具索引（lib/ + hooks/）
+
+本文件是前端可复用逻辑的**唯一索引**。写任何新逻辑之前先查这里——同类工具已存在就复用；
+新增/删除 lib/ 或 hooks/ 下的文件**必须同步更新本表**（`make check-structure` 会对账，缺条目直接 fail）。
+
+收录规则见 [web/AGENTS.md](../../AGENTS.md) §1：纯函数进 `lib/`，React 逻辑进 `hooks/`，
+≥2 处需要的逻辑必须沉淀到这里，不许在组件里复制。
+
+## lib/ — 纯函数与客户端（无 JSX、不依赖组件）
+
+| 文件 | 职责 | 关键导出 |
+| --- | --- | --- |
+| api.ts | 后端 API 客户端，全部 HTTP/SSE/ws 地址的唯一出口；组件禁止裸 fetch | `api`、`ApiError`、`Paged` |
+| chat-events.ts | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs` |
+| elicitation.ts | elicitation JSON Schema 解析成结构化问题与作答收集 | `parseElicitationSchema`、`answerFor` |
+| files.ts | 浏览器文件 → base64 图片附件、剪贴板取图 | `fileToImageAttachment`、`imagesFromClipboard` |
+| format.ts | 时间/数字/字符串格式化纯函数 | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`capitalize` |
+| line-diff.ts | 行级 diff（LCS 对齐，大文件退化保护） | `lineDiff` |
+| message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠） | `groupMessages` |
+| palette.ts | 主题方案的注册、读写与应用（token 定义在 index.css） | `PALETTES`、`loadPalette`、`applyPalette` |
+| status-tone.ts | 会话/agent 状态 → StatusDot 色调的统一映射 | `SESSION_STATE_TONE`、`AGENT_STATUS_TONE`、`StatusTone` |
+| utils.ts | 类名合并（shadcn 标配） | `cn` |
+
+## hooks/ — 可复用 React 逻辑
+
+| 文件 | 职责 | 关键导出 |
+| --- | --- | --- |
+| use-async-data.ts | 「进页面拉一次」的加载样板：cancelled 守卫 + data/error；轮询和分页不适用 | `useAsyncData` |
+| use-chat.ts | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决 | `useChat` |
+| use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话 | `useDraftSession` |
+| use-mobile.ts | 移动端断点判断（shadcn 生成） | `useIsMobile` |
