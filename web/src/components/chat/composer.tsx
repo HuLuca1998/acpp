@@ -8,6 +8,17 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowUpIcon, SlashIcon, SquareIcon } from "lucide-react"
 
+/** 模糊匹配：query 的字符按顺序在 text 里出现即命中（子序列，不必连续）。 */
+function fuzzyMatch(text: string, query: string): boolean {
+  let ti = 0
+  for (const qc of query) {
+    ti = text.indexOf(qc, ti)
+    if (ti === -1) return false
+    ti++
+  }
+  return true
+}
+
 /**
  * 聊天输入卡：吸底渐变 + 毛玻璃材质，左下角放上下文控件（children），
  * 右下角按状态切换 发送 / 中止 / 创建中。会话页与草稿页共用。
@@ -63,12 +74,13 @@ export function Composer({
           .filter((c) => {
             const name = c.name.toLowerCase()
             const q = slashQuery.toLowerCase()
-            // 技能命令名带 runtime 前缀：codex 给技能加 $（$my-issues），
-            // claude 给插件技能加 <plugin>:（acpp:my-issues）。用户按技能真名
-            // 搜也要匹配到，所以剥掉 $ 与冒号前缀后一并比。
+            // 命令名带 runtime 前缀：codex 给技能加 $（$my-issues），claude 给
+            // 插件技能加 <plugin>:（acpp:my-issues）。剥掉前缀后按技能真名匹配。
             let bare = name.startsWith("$") ? name.slice(1) : name
             if (bare.includes(":")) bare = bare.slice(bare.lastIndexOf(":") + 1)
-            return name.startsWith(q) || bare.startsWith(q)
+            // 模糊匹配：query 的字符按顺序出现即命中（不必连续、不必开头），
+            // 命令多也能快速搜到——/mi 命中 my-issues，/rvb 命中 review-branch。
+            return q === "" || fuzzyMatch(bare, q) || fuzzyMatch(name, q)
           })
           .slice(0, 8)
       : []
