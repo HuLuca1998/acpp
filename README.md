@@ -57,6 +57,7 @@ acpp/
         │   ├── runtime.go      # runtime 注册表 + 嵌套环境变量清理
         │   ├── adapter.go      # 统一词汇表（模型/思考深度/权限档/plan/fast）+ Adapter 接口
         │   ├── adapter_*.go    # claude / codex / generic 三个实现，差异全部住在这里
+        │   ├── isolation.go    # 技能隔离注入（各 adapter 的 Isolation：机器级屏蔽/技能包/项目级）
         │   └── manager.go      # 会话池、握手、turn 调度、统一设置、权限与 fs 代理
         ├── config/             # 环境变量配置
         ├── db/                 # GORM 连接 + AutoMigrate
@@ -207,7 +208,16 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - **脚本头部规范**：`scripts/` 下脚本用注释键值声明元信息（`desc` / `usage` / `arg` / `opt` / `env`），页面据此渲染参数控件并支持传参试运行（以技能目录为 cwd、60s 超时、非零退出码是结果不是错误）。规范细则见 [.claude/skills/skills-manage](.claude/skills/skills-manage/SKILL.md)。
 - 一切变更**只对新会话生效**——agent 在 `session/new` 时读取一次，进行中的会话不重载。
 
-> 会话注入（隔离机器级 + 加载 skillpack + 项目级照常）与助理协作尚未接线，见「尚未实现」。
+**会话注入(已落地)**:每条会话在 `session/new` 与 `session/load` 都注入技能隔离,差异全部在 adapter 的 `Isolation` 里:
+
+| | claude | codex |
+| --- | --- | --- |
+| 加载技能包 | `_meta.claudeCode.options.plugins`(本地插件) | `additionalDirectories`(注册 `.agents/skills`) |
+| 屏蔽机器级 | `settingSources:["project"]`(不开 user 档)+ `strictMcpConfig` | 进程 env `CODEX_CONFIG` 枚举 `~/.codex/skills` 按 frontmatter name 逐个禁用 |
+| 保留项目级 | project 档保住 cwd 的 `.claude/skills` | cwd 一并进 `additionalDirectories` |
+| 附加 | env `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | — |
+
+不写 `~/.codex`、`~/.claude` 一个字节。generic runtime 无可靠注入口,不隔离。`CODEX_CONFIG` 禁用的 skill 仍出现在 codex 的 `available_commands`(反映"发现"不反映"禁用"),真隔离以模型自报为准。认证不隔离:claude 用系统钥匙串登录态、codex 用系统 `~/.codex` 登录态。
 
 ## 多语言
 
@@ -224,7 +234,7 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
-- **技能会话注入**：管理页面（增删改查、附属文件、脚本试运行）已落地，但 skillpack 尚未接进 `session/new`——隔离机器级 skill（claude `settingSources` + codex `CODEX_CONFIG`）、加载 skillpack（claude plugin + codex `additionalDirectories`）、项目级照常这三件事的接线待做。机制已在 claude-agent-acp 0.63.0 / codex-acp 1.1.7 实测验证，细则见 [.claude/skills/skills-manage](.claude/skills/skills-manage/SKILL.md)。之后才是「技能助理」（复用对话面板、工作目录固定到技能源目录）。
+- **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M3 已落地：dockview 骨架、文件树/预览、diff / 未推送 commit、多实例 PTY 终端与引用联动。剩 M4 打磨（布局预设、diff 虚拟滚动、压力验收）。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。

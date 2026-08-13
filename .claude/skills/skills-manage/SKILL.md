@@ -73,7 +73,7 @@ frontmatter 只写 `name` 与 `description`：
 
 ## 会话注入速查
 
-隔离手段只有两类载体：spawn 时的进程环境变量 + `session/new` 协议参数。不写 `~/.claude`、`~/.codex` 一个字节。
+已落地在 `server/internal/acp/isolation.go`(各 adapter 的 `Isolation`)+ `manager.go`(spawn 前算注入、session/new 与 session/load 都带)。Manager 构造注入 `<dataDir>/skillpack`,为空则不隔离。隔离手段只有两类载体：spawn 时的进程环境变量 + `session/new`/`session/load` 协议参数。不写 `~/.claude`、`~/.codex` 一个字节。
 
 | | claude（claude-agent-acp） | codex（codex-acp） |
 | --- | --- | --- |
