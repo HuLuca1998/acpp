@@ -43,18 +43,6 @@
       "skillPath": "skills/improve-animations/SKILL.md",
       "computedHash": "eeb219a407e325b687af88db25771cc3018e3148245604112f5ac6990b6fd79c"
     },
-    "migrate-radix-to-base": {
-      "source": "shadcn/ui",
-      "sourceType": "github",
-      "skillPath": "skills/migrate-radix-to-base/SKILL.md",
-      "computedHash": "e1f2030ee5059be3dff0812ca0e4b995ee9fa3132176f049ebe6c90346a6755e"
-    },
-    "pick-ui-library": {
-      "source": "emilkowalski/skills",
-      "sourceType": "github",
-      "skillPath": "skills/pick-ui-library/SKILL.md",
-      "computedHash": "f8d4d2cf4677bf54b14f35f62a741add93541bfcb67863315a40164365161b49"
-    },
     "prototype": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
