@@ -47,6 +47,10 @@ build-server: ## 构建后端到 build/server/acp-server
 serve: build-web build-server ## 由后端单进程托管前端产物
 	ACP_WEB_DIR=build/web ./build/server/acp-server
 
+.PHONY: app
+app: ## 打包 macOS 桌面版到 build/app/ACP Console.app
+	scripts/build-macos-app.sh
+
 .PHONY: check
 check: lint typecheck test check-structure ## 全部验证：lint + typecheck + test + 结构检查
 

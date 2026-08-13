@@ -31,12 +31,13 @@ acpp/
 ├── .claude/skills/    # 第三方 skill 知识库，CLI 管理，禁止手改（§3.3）
 ├── docs/              # 决策记录（ADR）与专题文档（§3.1）
 ├── scripts/           # 开发辅助脚本：dev.sh、check-structure.sh 等（§3.2）
-├── build/             # 前后端编译产物（build/web + build/server），不入库
+├── build/             # 编译产物（build/web + build/server + build/app），不入库
+├── desktop/           # macOS 桌面壳（Swift/AppKit 菜单栏应用，选型见 docs/adr-004），打包走 scripts/build-macos-app.sh
 ├── web/               # 前端（Vite + React 19 + TS），规范见 web/AGENTS.md
 └── server/            # 后端（Go），规范见 server/AGENTS.md
 ```
 
-预留命名（**不预建空目录**，首次需要时按此落位并更新本表）：`desktop/` —— 将来打包桌面壳（tauri/electron）的位置。除上表与预留之外新增顶层目录需要充分理由；根目录不允许出现游离文件（`check-structure` 强制，白名单在脚本里）。
+除上表之外新增顶层目录需要充分理由（**不预建空目录**，首次需要时落位并更新本表）；根目录不允许出现游离文件（`check-structure` 强制，白名单在脚本里）。
 
 ### 1.2 分包原则：按用途分，不按类型堆
 

@@ -15,9 +15,11 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役）
-├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针）
-├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server，不入库
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳）
+├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
+├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
+├── desktop/                    # macOS 桌面壳
+│   └── macos/                  # Sources/ Swift/AppKit 壳源码；IconGen/ 图标绘制脚本；Info.plist.in
 ├── web/                        # 前端
 │   ├── AGENTS.md               # 前端规范 + 设计规范
 │   ├── src/
@@ -91,7 +93,21 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 
 输入框支持：**粘贴/上传图片**、**@ 引用文件**（后端读内容嵌入 prompt；文件树右键与预览面板也可添加引用，**文件夹引用嵌入两层目录清单**而非全文）、**`/` 斜杠命令补全**（清单来自 agent），以及 **turn 进行中直接插话**（不用等上一轮结束）。
 
-单进程部署（后端托管前端产物）：`make serve`。
+单进程部署（后端托管前端产物）：`make serve`；macOS 桌面版打包：`make app`（见下节）。
+
+## macOS 桌面版
+
+`make app` 一键打包出 `build/app/ACP Console.app`：Swift/AppKit 菜单栏壳 + 捆绑 acp-server + 前端产物，图标全部由脚本程序化绘制（仓库不存二进制），ad-hoc 签名本机直接用。选型与行为决策见 [docs/adr-004](docs/adr-004-macos-桌面壳.md)。
+
+行为约定：
+
+- **关闭 ≠ 退出**：关闭按钮 / Cmd+W / Cmd+Q / Dock 退出都只是隐藏窗口，服务常驻菜单栏；**真退出只有菜单栏图标右键 → 「退出 ACP Console」**（系统注销/关机也会放行，并回收全部子进程）。
+- **菜单栏图标**：左键切换主窗口显隐；右键菜单：打开主窗口 / 在浏览器中打开 / 允许局域网访问 / 复制局域网链接 / 重启服务 / 打开服务日志 / 退出。
+- **端口固定 `48090`**，与开发态 48080 隔离——`make dev` 与桌面版互不误杀，可同时运行；数据共用 `~/.acpp`，桌面版和 dev 看到同样的会话。
+- **局域网共享默认关**（工作区终端是任意命令执行面，见 §安全姿态）。菜单栏开启后服务监听 `0.0.0.0`，「复制局域网链接」得到 `http://<局域网IP>:48090/`，发给局域网内其他设备即可在浏览器使用完整 web 端。切换开关会重启后台服务（agent 上下文在 runtime 侧持久化，续聊自动恢复）。
+- 服务日志：`~/Library/Logs/ACP Console/server.log`。agent 子进程的 PATH 取自登录 shell——GUI app 默认拿不到 Homebrew 路径，壳启动时注入，否则拉不起 `codex-acp` / `claude-agent-acp`。
+
+打包脚本 [scripts/build-macos-app.sh](scripts/build-macos-app.sh)（`--skip-web` 复用已有前端产物提速，`APP_VERSION` 覆盖版本号）；壳源码在 [desktop/macos/](desktop/macos/)。
 
 ## 对话是怎么流起来的
 
@@ -166,7 +182,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 2. **fs 代理 path guard** — 声明了 `fs` capability，agent 的 `fs/read_text_file` / `fs/write_text_file` 会走到我们进程里，路径解析成 canonical 形式后必须落在 cwd 内。**注意这条不是可靠拦截点**：codex 用自带 shell 完全不走 fs 代理，claude 0.63 实测权限批准后也由 SDK 自行落盘。它只是纵深防御的一层，真正的隔离靠第 3 条之外的 runtime 沙箱档 + OS 兜底。
 3. **权限裁决** — `session/request_permission` 挂起交给用户在界面上点选（批准/拒绝），拒绝真实生效（实测文件不会被创建）。runtime 只在当前权限档认为需要时才会问，所以它仍是策略层不是安全边界——真正的隔离要靠 runtime 自身的沙箱档位 + OS 级兜底。
 
-**工作区终端是本机任意命令执行面**：`/terminals` 端点在会话 cwd 起真实交互 shell（用户显式操作才创建），与 agent 已有的命令执行权限面同级。服务只监听 127.0.0.1；若把 `ACP_ADDR` 改成对外地址，这个面会随之暴露，必须配合网络层访问控制。
+**工作区终端是本机任意命令执行面**：`/terminals` 端点在会话 cwd 起真实交互 shell（用户显式操作才创建），与 agent 已有的命令执行权限面同级。服务只监听 127.0.0.1；若把 `ACP_ADDR` 改成对外地址，这个面会随之暴露，必须配合网络层访问控制。macOS 桌面版的「允许局域网访问」开关就是这个暴露面，因此默认关闭，只应在可信局域网内开启。
 
 另外启动 agent 前会摘掉嵌套会话标记（`CLAUDECODE`、`CODEX_SANDBOX` 等）。不摘的话，从 Claude Code 终端启动本服务时 agent 会误判自己跑在另一个 agent 内部而拒绝服务——这个坑只在那种场景复现，本机开发时碰不到。
 
@@ -174,7 +190,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ACP_ADDR` | `127.0.0.1:48080` | 监听地址 |
+| `ACP_ADDR` | `127.0.0.1:48080` | 监听地址（macOS 桌面版由壳固定传 `48090`，局域网开关切换 host） |
 | `ACP_DATA_DIR` | `~/.acpp` | 数据根目录（db 与转录都派生于它）。优先级：本变量 > `~/.acpp/config.json` 里设置面板选定的目录 > 默认。首次启动自动创建；旧版 `server/data` 的存量数据自动迁入（拷贝，原数据保留） |
 | `ACP_DSN` | `<dataDir>/acp.db` | SQLite 文件路径（显式设置时覆盖派生值） |
 | `ACP_CORS_ORIGINS` | `http://localhost:45173` | 允许的跨域来源，逗号分隔 |
