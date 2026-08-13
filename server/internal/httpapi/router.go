@@ -23,14 +23,15 @@ const Version = "0.1.0"
 // TerminalService 一并交回，供装配层挂后台职责（空闲回收、pty 回收）。
 func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcripts *transcript.Store) (http.Handler, *service.ChatService, *service.TerminalService) {
 	sessionService := service.NewSessionService(gdb)
-	chatService := service.NewChatService(gdb, sessionService, manager, transcripts)
+	skillUsage := service.NewSkillUsageService(gdb, cfg.DataDir)
+	chatService := service.NewChatService(gdb, sessionService, manager, transcripts, skillUsage)
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 
 	agents := agentHandler{agents: service.NewAgentService(gdb), chat: chatService}
 	sessions := sessionHandler{sessions: sessionService, chat: chatService}
 	chat := chatHandler{chat: chatService}
 	system := systemHandler{system: service.NewSystemService(gdb, cfg)}
-	skills := skillHandler{skills: service.NewSkillService(cfg.DataDir)}
+	skills := skillHandler{skills: service.NewSkillService(cfg.DataDir), usage: skillUsage}
 
 	api := http.NewServeMux()
 
@@ -58,6 +59,7 @@ func NewRouter(cfg config.Config, gdb *gorm.DB, manager *acp.Manager, transcript
 
 	// 技能库：磁盘为事实源（~/.acpp/skills + skillpack 分发链接），无数据库表。
 	api.HandleFunc("GET /api/skills", skills.list)
+	api.HandleFunc("GET /api/skills/usage", skills.usageTop)
 	api.HandleFunc("POST /api/skills", skills.create)
 	api.HandleFunc("GET /api/skills/{name}", skills.get)
 	api.HandleFunc("PUT /api/skills/{name}", skills.update)

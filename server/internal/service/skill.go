@@ -39,6 +39,8 @@ type Skill struct {
 	Description string    `json:"description"`
 	Enabled     bool      `json:"enabled"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+	// UsageCount 是被 AI 调用的累计次数，由 handler 从 SkillUsageService 合入。
+	UsageCount int64 `json:"usageCount"`
 }
 
 // SkillDetail 追加 frontmatter 之后的 markdown 正文。

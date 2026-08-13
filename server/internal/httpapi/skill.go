@@ -8,15 +8,32 @@ import (
 
 type skillHandler struct {
 	skills *service.SkillService
+	usage  *service.SkillUsageService
 }
 
-func (h skillHandler) list(w http.ResponseWriter, _ *http.Request) {
+func (h skillHandler) list(w http.ResponseWriter, r *http.Request) {
 	skills, err := h.skills.List()
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	// 把使用次数合进列表，省一次往返；统计失败不影响列表本身。
+	if counts, err := h.usage.CountsByName(r.Context()); err == nil {
+		for i := range skills {
+			skills[i].UsageCount = counts[skills[i].Name]
+		}
+	}
 	writeData(w, http.StatusOK, newPage(skills))
+}
+
+// usageTop 返回使用最多的技能，供概览页统计。
+func (h skillHandler) usageTop(w http.ResponseWriter, r *http.Request) {
+	top, err := h.usage.Top(r.Context(), 10)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, newPage(top))
 }
 
 func (h skillHandler) get(w http.ResponseWriter, r *http.Request) {

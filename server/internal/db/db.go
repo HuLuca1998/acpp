@@ -47,7 +47,7 @@ func Open(cfg config.Config) (*gorm.DB, error) {
 
 // Migrate 建表并补齐字段。
 func Migrate(gdb *gorm.DB) error {
-	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.Message{}); err != nil {
+	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.Message{}, &model.SkillUsage{}); err != nil {
 		return fmt.Errorf("automigrate: %w", err)
 	}
 	return nil

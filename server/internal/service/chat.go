@@ -77,17 +77,21 @@ type ChatService struct {
 	sessions    *SessionService
 	manager     *acp.Manager
 	transcripts *transcript.Store
+	// skillUsage 记录技能被 AI 调用的次数，从 tool_call 事件计。可为 nil
+	//（不启用统计）。
+	skillUsage *SkillUsageService
 
 	mu      sync.Mutex
 	brokers map[uint]*broker
 }
 
-func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store) *ChatService {
+func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
 	return &ChatService{
 		db:          db,
 		sessions:    sessions,
 		manager:     manager,
 		transcripts: transcripts,
+		skillUsage:  skillUsage,
 		brokers:     make(map[uint]*broker),
 	}
 }
@@ -804,6 +808,10 @@ func (s *ChatService) handleEvent(sessionID uint, br *broker, ev acp.Event) {
 		br.publish(StreamEvent{Kind: "thought_chunk", Text: ev.Text})
 
 	case acp.EventToolCall:
+		// 技能调用统计：从 tool_call 信号识别并计数（按 toolCallId 去重）。
+		if s.skillUsage != nil {
+			s.skillUsage.Observe(ev)
+		}
 		// tool_call_update 除 toolCallId 外全是可选，只带变了的字段，前端按 id 合并。
 		br.publish(StreamEvent{
 			Kind:       "tool_call",
