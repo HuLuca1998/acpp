@@ -34,6 +34,5 @@ type Session struct {
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `gorm:"index" json:"updatedAt"`
 
-	Agent    *Agent    `gorm:"foreignKey:AgentID" json:"-"`
-	Messages []Message `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+	Agent *Agent `gorm:"foreignKey:AgentID" json:"-"`
 }
