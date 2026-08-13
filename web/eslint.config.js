@@ -21,12 +21,7 @@ export default defineConfig([
   },
   {
     // 以下文件由 shadcn CLI 生成，升级时会被整体覆盖，不适用本项目的 lint 约定。
-    files: [
-      'src/components/ui/**/*.tsx',
-      'src/components/chart-area-interactive.tsx',
-      'src/components/data-table.tsx',
-      'src/hooks/use-mobile.ts',
-    ],
+    files: ['src/components/ui/**/*.tsx', 'src/hooks/use-mobile.ts'],
     rules: {
       'react-refresh/only-export-components': 'off',
       'react-hooks/set-state-in-effect': 'off',
