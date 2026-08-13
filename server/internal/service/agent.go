@@ -91,6 +91,36 @@ func (s *AgentService) Create(ctx context.Context, in AgentInput) (*model.Agent,
 	return &agent, nil
 }
 
+// DefaultAgents 是产品内置的两个工具（runtime）。产品形态上它们不是开放
+// 注册的 agent 列表，而是设置页里固定的 claude / codex 两个分区（adr-005）。
+var DefaultAgents = []AgentInput{
+	{Name: "claude", Command: "claude-agent-acp"},
+	{Name: "codex", Command: "codex-acp"},
+}
+
+// EnsureDefaults 为缺失的内置工具补建记录：清库或全新安装后开箱即有。
+// 按 name 判存，绝不覆盖已有配置（用户改过的命令/参数原样保留）。
+// 返回本次新建的 id，供调用方后台探测能力。
+func (s *AgentService) EnsureDefaults(ctx context.Context) ([]uint, error) {
+	var created []uint
+	for _, in := range DefaultAgents {
+		var count int64
+		if err := s.db.WithContext(ctx).Model(&model.Agent{}).
+			Where("name = ?", in.Name).Count(&count).Error; err != nil {
+			return created, fmt.Errorf("check default agent %s: %w", in.Name, err)
+		}
+		if count > 0 {
+			continue
+		}
+		agent, err := s.Create(ctx, in)
+		if err != nil {
+			return created, fmt.Errorf("seed default agent %s: %w", in.Name, err)
+		}
+		created = append(created, agent.ID)
+	}
+	return created, nil
+}
+
 func (s *AgentService) Update(ctx context.Context, id uint, in AgentInput) (*model.Agent, error) {
 	if err := in.validate(); err != nil {
 		return nil, err

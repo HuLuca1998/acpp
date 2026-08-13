@@ -1,8 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Route, Routes } from "react-router"
 
-import { AgentDetail } from "@/routes/agent-detail"
-import { Agents } from "@/routes/agents"
 import { DashboardLayout } from "@/routes/dashboard-layout"
 import { NotFound } from "@/routes/not-found"
 import { Overview } from "@/routes/overview"
@@ -24,11 +22,6 @@ const PLACEHOLDERS = [
   },
   { path: "help", titleKey: "nav.help", descKey: "placeholderPage.help" },
   { path: "search", titleKey: "nav.search", descKey: "placeholderPage.search" },
-  {
-    path: "agents/new",
-    titleKey: "agents.add",
-    descKey: "placeholderPage.agentNew",
-  },
 ] as const
 
 export function App() {
@@ -38,8 +31,6 @@ export function App() {
     <Routes>
       <Route element={<DashboardLayout />}>
         <Route index element={<Overview />} />
-        <Route path="agents" element={<Agents />} />
-        <Route path="agents/:id" element={<AgentDetail />} />
         <Route path="skills" element={<Skills />} />
         {/* draft-first：新建直接进空白详情页，首条保存才创建（无 name 参数）。 */}
         <Route path="skills/new" element={<SkillDetail />} />

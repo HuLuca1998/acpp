@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useParams } from "react-router"
+import { toast } from "sonner"
 
 import { api } from "@/lib/api"
 import type { Agent, CatalogInput } from "@/types/acp"
@@ -22,51 +22,92 @@ import { Spinner } from "@/components/ui/spinner"
 import { RefreshCwIcon, SearchIcon } from "lucide-react"
 
 /**
- * agent 配置页：展示探测到的基础信息，models / commands 逐条勾选
- * 「是否在本软件里使用」。清单由探测维护，勾选即保存；被禁用的条目
- * 不再出现在模型下拉与 "/" 补全里，agent 侧能力本身不受影响。
+ * 内置工具（claude / codex）的配置面，住在设置页对应分区里。
+ * 记录由后端启动时预置，这里按 name 定位；配置项分四块：
+ * 启动命令（可改，保存后自动重探）、功能开关、模型与 "/" 命令的启停取舍。
  */
-export function AgentDetail() {
+export function AgentToolConfig({ name }: { name: string }) {
   const { t } = useTranslation()
-  const params = useParams()
-  const agentId = Number(params.id)
 
   const [agent, setAgent] = useState<Agent | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [probing, setProbing] = useState(false)
   const [commandQuery, setCommandQuery] = useState("")
+  // 命令编辑是显式保存（其余取舍都是即点即存），草稿独立于 agent 状态。
+  const [commandDraft, setCommandDraft] = useState("")
+  const [argsDraft, setArgsDraft] = useState("")
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    api.agents
-      .get(agentId)
-      .then((a) => {
-        if (!cancelled) setAgent(a)
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message)
-      })
+    // 放进微任务，避免在 effect 内同步 setState 触发级联渲染。
+    queueMicrotask(() => {
+      if (cancelled) return
+      setAgent(null)
+      setError(null)
+      api.agents
+        .list()
+        .then((res) => {
+          if (cancelled) return
+          const hit = res.items.find((a) => a.name === name)
+          if (!hit) {
+            setError(t("settingsPage.tool.missing"))
+            return
+          }
+          setAgent(hit)
+          setCommandDraft(hit.command)
+          setArgsDraft(hit.args.join(" "))
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setError(err.message)
+        })
+    })
     return () => {
       cancelled = true
     }
-  }, [agentId])
+  }, [name, t])
 
-  async function probe() {
-    setProbing(true)
+  const probe = useCallback(
+    async (id: number) => {
+      setProbing(true)
+      setError(null)
+      try {
+        setAgent(await api.agents.probe(id))
+      } catch (err) {
+        setError((err as Error).message)
+      } finally {
+        setProbing(false)
+      }
+    },
+    []
+  )
+
+  /** 命令/参数保存后自动重探：能力清单跟着新命令走，不留旧缓存。 */
+  async function saveCommand() {
+    if (!agent) return
+    setSaving(true)
     setError(null)
     try {
-      setAgent(await api.agents.probe(agentId))
+      const updated = await api.agents.update(agent.id, {
+        ...agent,
+        command: commandDraft.trim(),
+        args: argsDraft.trim() === "" ? [] : argsDraft.trim().split(/\s+/),
+      })
+      setAgent(updated)
+      toast.success(t("settingsPage.tool.saved"))
+      void probe(updated.id)
     } catch (err) {
       setError((err as Error).message)
     } finally {
-      setProbing(false)
+      setSaving(false)
     }
   }
 
-  /** 全部配置页取舍走同一条通道：提交补丁、整体替换 agent、统一报错。 */
+  /** 全部配置取舍走同一条通道：提交补丁、整体替换 agent、统一报错。 */
   async function mutateCatalog(input: CatalogInput) {
+    if (!agent) return
     try {
-      setAgent(await api.agents.updateCatalog(agentId, input))
+      setAgent(await api.agents.updateCatalog(agent.id, input))
     } catch (err) {
       setError((err as Error).message)
     }
@@ -83,7 +124,7 @@ export function AgentDetail() {
 
   if (!agent) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 lg:p-6">
+      <div className="flex flex-col gap-4">
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -100,16 +141,19 @@ export function AgentDetail() {
 
   const enabledModels = agent.models.filter((m) => !m.disabled).length
   const enabledCommands = agent.commands.filter((c) => !c.disabled).length
+  const commandDirty =
+    commandDraft.trim() !== agent.command ||
+    argsDraft.trim() !== agent.args.join(" ")
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 lg:p-6">
+    <div className="flex flex-col gap-4">
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
-      {/* 基础信息：探测所得的身份与状态。 */}
+      {/* 启动命令：身份状态 + 可编辑的命令与参数。 */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -127,7 +171,7 @@ export function AgentDetail() {
               variant="outline"
               className="ml-auto"
               disabled={probing}
-              onClick={() => void probe()}
+              onClick={() => void probe(agent.id)}
             >
               {probing ? (
                 <Spinner className="size-3.5" data-icon="inline-start" />
@@ -137,18 +181,42 @@ export function AgentDetail() {
               {t("agents.detail.probe")}
             </Button>
           </div>
-          <CardDescription className="font-mono">
-            {agent.command} {agent.args.join(" ")}
+          <CardDescription>
+            {t("settingsPage.tool.commandHint")}
           </CardDescription>
         </CardHeader>
-        {agent.lastError ? (
-          <CardContent className="text-sm text-destructive">
-            {agent.lastError}
-          </CardContent>
-        ) : null}
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Input
+              value={commandDraft}
+              onChange={(e) => setCommandDraft(e.target.value)}
+              placeholder={t("settingsPage.tool.commandPlaceholder")}
+              className="font-mono text-sm"
+            />
+            <Input
+              value={argsDraft}
+              onChange={(e) => setArgsDraft(e.target.value)}
+              placeholder={t("settingsPage.tool.argsPlaceholder")}
+              className="w-56 font-mono text-sm"
+            />
+            <Button
+              size="sm"
+              disabled={saving || !commandDirty || commandDraft.trim() === ""}
+              onClick={() => void saveCommand()}
+            >
+              {saving ? (
+                <Spinner className="size-3.5" data-icon="inline-start" />
+              ) : null}
+              {t("settingsPage.tool.save")}
+            </Button>
+          </div>
+          {agent.lastError ? (
+            <p className="text-sm text-destructive">{agent.lastError}</p>
+          ) : null}
+        </CardContent>
       </Card>
 
-      {/* 功能开关：agent 级取舍（如是否允许快速模式）。 */}
+      {/* 功能开关：工具级取舍（如是否允许快速模式）。 */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
@@ -219,7 +287,7 @@ export function AgentDetail() {
                     const alias = e.target.value.trim()
                     if (alias !== (m.alias ?? "")) {
                       void mutateCatalog({
-                        // 必须带上当前 disabled,后端按整条覆盖。
+                        // 必须带上当前 disabled，后端按整条覆盖。
                         models: [
                           { key: m.id, disabled: m.disabled ?? false, alias },
                         ],

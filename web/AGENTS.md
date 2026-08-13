@@ -12,6 +12,7 @@
 | `src/components/chat/` | 聊天消息渲染；`composer/` 收输入域、`cards/` 收交互卡片 | — |
 | `src/components/workspace/` | 会话工作区编排（dock/menu/provider）；面板全在 `panels/` | — |
 | `src/components/overview/` | 概览页专用卡片 | — |
+| `src/components/settings/` | 设置页分区面板（内置工具 claude/codex 的配置面） | — |
 | `src/components/ui/` | shadcn 组件（CLI 托管，目录级规范见其 AGENTS.md） | 升级用 `--diff` 手动合并，禁止盲目 `--overwrite` |
 | `src/hooks/` | 自定义 hooks | 不放纯函数（那是 `lib/`） |
 | `src/lib/` | 纯函数与客户端；**索引在 [src/lib/README.md](src/lib/README.md)** | 不出现 JSX、不依赖组件 |

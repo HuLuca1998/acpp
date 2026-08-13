@@ -11,7 +11,6 @@ export default {
   },
   nav: {
     overview: "概览",
-    agents: "Agent",
     skills: "技能",
     sessions: "会话",
     tools: "工具",
@@ -27,7 +26,7 @@ export default {
     export: "导出",
   },
   overview: {
-    statAgents: "Agent",
+    statAgents: "工具",
     statSessions: "会话",
     statRunning: "运行中进程",
     statMessages: "消息总量",
@@ -43,16 +42,16 @@ export default {
     skillUsageDescription: "被 AI 调用最多的技能。",
     skillUsageEmpty: "还没有技能被调用",
     skillUsageEmptyHint: "启用技能后，AI 在对话里用到它就会计入这里。",
-    agentsTitle: "Agent",
-    agentsDescription: "已注册的 runtime 与连接状态。",
-    manageAgents: "管理",
+    agentsTitle: "工具",
+    agentsDescription: "内置的 runtime 与连接状态。",
+    manageAgents: "配置",
     noSessions: "还没有会话",
     noSessionsHint: "选择一个 agent 发起第一段对话。",
     newSession: "新建会话",
-    addAgent: "添加 agent",
+    configureTools: "配置工具",
     onboardTitle: "欢迎使用 ACPP",
     onboardHint:
-      "先注册一个 ACP agent（如 codex-acp），再从它发起会话，对话流会实时出现在这里。",
+      "claude 与 codex 已内置，在设置里确认命令可用后发起会话，对话流会实时出现在这里。",
     messagesCount: "{{count}} 条消息",
   },
   backend: {
@@ -80,18 +79,6 @@ export default {
     },
   },
   agents: {
-    title: "Agent",
-    description: "已注册的 ACP agent，通过 stdio 启动并完成 initialize 握手。",
-    add: "添加 agent",
-    empty: "还没有 agent",
-    emptyHint: "添加一个可执行命令（如 codex-acp）来接入第一个 agent。",
-    name: "名称",
-    command: "命令",
-    cwd: "工作目录",
-    status: "状态",
-    statusIdle: "空闲",
-    statusError: "错误",
-    updated: "更新时间",
     detail: {
       probe: "重新探测",
       models: "模型",
@@ -376,6 +363,16 @@ export default {
   settingsPage: {
     menu: {
       system: "系统",
+      claude: "Claude",
+      codex: "Codex",
+    },
+    tool: {
+      commandHint: "启动命令与参数。保存后自动重新探测能力清单。",
+      commandPlaceholder: "命令，如 claude-agent-acp",
+      argsPlaceholder: "参数，空格分隔",
+      save: "保存",
+      saved: "已保存，正在重新探测",
+      missing: "内置工具记录缺失，重启后端会自动补建。",
     },
     system: {
       title: "数据目录",
@@ -401,7 +398,6 @@ export default {
     connections: "当前活跃的 stdio 连接与握手状态。",
     help: "ACP 协议文档与常见问题。",
     search: "跨会话与消息的全文检索。",
-    agentNew: "配置 agent 的启动命令、参数与工作目录。",
   },
   notFound: {
     title: "404 — 页面不存在",

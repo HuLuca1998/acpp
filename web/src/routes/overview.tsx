@@ -19,7 +19,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/lib/api"
 import type { Agent, Session, SkillUsage } from "@/types/acp"
-import { ActivityIcon, BotIcon, PlusIcon } from "lucide-react"
+import { ActivityIcon, BotIcon } from "lucide-react"
 
 const RECENT_LIMIT = 6
 
@@ -110,9 +110,8 @@ export function Overview() {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button render={<Link to="/agents/new" />}>
-                    <PlusIcon data-icon="inline-start" />
-                    {t("overview.addAgent")}
+                  <Button render={<Link to="/settings?section=claude" />}>
+                    {t("overview.configureTools")}
                   </Button>
                 </EmptyContent>
               </Empty>

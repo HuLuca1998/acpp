@@ -14,11 +14,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import type { Agent } from "@/types/acp"
-import { ArrowRightIcon, PlusIcon } from "lucide-react"
+import { ArrowRightIcon } from "lucide-react"
 
 const AGENT_LIMIT = 4
 
-/** Agent 状态卡：前几个 agent 的健康状况，整行可点进配置页。 */
+/** 工具状态卡：内置 runtime 的健康状况，整行可点进设置页对应分区。 */
 export function AgentsCard({ agents }: { agents: Agent[] }) {
   const { t } = useTranslation()
 
@@ -28,7 +28,7 @@ export function AgentsCard({ agents }: { agents: Agent[] }) {
         <CardTitle>{t("overview.agentsTitle")}</CardTitle>
         <CardDescription>{t("overview.agentsDescription")}</CardDescription>
         <CardAction>
-          <Button size="sm" variant="ghost" render={<Link to="/agents" />}>
+          <Button size="sm" variant="ghost" render={<Link to="/settings?section=claude" />}>
             {t("overview.manageAgents")}
             <ArrowRightIcon data-icon="inline-end" />
           </Button>
@@ -39,7 +39,7 @@ export function AgentsCard({ agents }: { agents: Agent[] }) {
           {agents.slice(0, AGENT_LIMIT).map((agent) => (
             <Link
               key={agent.id}
-              to={`/agents/${agent.id}`}
+              to={`/settings?section=${agent.name}`}
               className="group flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors duration-150 ease-snappy hover:bg-muted/60"
             >
               <StatusDot tone={AGENT_STATUS_TONE[agent.status]} />
@@ -60,10 +60,9 @@ export function AgentsCard({ agents }: { agents: Agent[] }) {
           size="sm"
           variant="outline"
           className="w-full"
-          render={<Link to="/agents/new" />}
+          render={<Link to="/settings?section=claude" />}
         >
-          <PlusIcon data-icon="inline-start" />
-          {t("overview.addAgent")}
+          {t("overview.configureTools")}
         </Button>
       </CardFooter>
     </Card>

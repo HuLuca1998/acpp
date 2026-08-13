@@ -21,7 +21,6 @@ import {
 import { api } from "@/lib/api"
 import type { Session } from "@/types/acp"
 import {
-  BotIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
   PlugZapIcon,
@@ -56,7 +55,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const navMain = [
     { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },
-    { title: t("nav.agents"), url: "/agents", icon: <BotIcon /> },
     { title: t("nav.skills"), url: "/skills", icon: <PuzzleIcon /> },
     {
       title: t("nav.sessions"),

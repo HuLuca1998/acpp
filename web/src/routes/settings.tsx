@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
 import type { SystemInfo } from "@/types/acp"
 import { cn } from "@/lib/utils"
+import { AgentIcon } from "@/components/agent-icon"
 import { DirPicker } from "@/components/dir-picker"
+import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -30,18 +33,30 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FolderCogIcon, FolderOpenIcon, SettingsIcon } from "lucide-react"
 
-/** 设置分区；目前只有「系统」，结构留给后续分区扩展。 */
-const SECTIONS = [{ key: "system", icon: SettingsIcon }] as const
+/** 设置分区：系统 + 两个内置工具（claude/codex 是产品固定形态，见 adr-005）。 */
+const SECTIONS = [
+  { key: "system", icon: <SettingsIcon className="size-4" /> },
+  { key: "claude", icon: <AgentIcon flavor="claude" className="size-4" /> },
+  { key: "codex", icon: <AgentIcon flavor="codex" className="size-4" /> },
+] as const
+
+type SectionKey = (typeof SECTIONS)[number]["key"]
+
+const isSection = (v: string | null): v is SectionKey =>
+  SECTIONS.some((s) => s.key === v)
 
 /**
  * 设置面板：左侧分区菜单 + 右侧内容。
- * 系统分区管数据目录：展示当前位置、迁移到新目录（拷贝式，重启生效）。
+ * 系统分区管数据目录；claude/codex 分区是内置工具的配置面（命令、模型、
+ * "/" 命令、功能开关）。?section= 支持深链，站内入口（概览卡等）直达分区。
  */
 export function Settings() {
   const { t } = useTranslation()
-  const [section, setSection] = useState<(typeof SECTIONS)[number]["key"]>(
-    "system"
-  )
+  const [searchParams, setSearchParams] = useSearchParams()
+  const paramSection = searchParams.get("section")
+  const section: SectionKey = isSection(paramSection) ? paramSection : "system"
+  const setSection = (key: SectionKey) =>
+    setSearchParams(key === "system" ? {} : { section: key }, { replace: true })
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [target, setTarget] = useState("")
@@ -84,7 +99,7 @@ export function Settings() {
     <div className="mx-auto flex w-full max-w-4xl gap-6 p-4 lg:p-6">
       {/* 分区菜单 */}
       <nav className="flex w-40 shrink-0 flex-col gap-1">
-        {SECTIONS.map(({ key, icon: Icon }) => (
+        {SECTIONS.map(({ key, icon }) => (
           <button
             key={key}
             type="button"
@@ -96,13 +111,18 @@ export function Settings() {
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <Icon className="size-4" />
+            {icon}
             {t(`settingsPage.menu.${key}`)}
           </button>
         ))}
       </nav>
 
-      {/* 系统分区 */}
+      {/* 工具分区：内置 claude / codex 的配置面。 */}
+      {section !== "system" ? (
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AgentToolConfig name={section} />
+        </div>
+      ) : (
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {error ? (
           <Alert variant="destructive">
@@ -176,6 +196,7 @@ export function Settings() {
           </Card>
         )}
       </div>
+      )}
 
       <DirPicker
         open={pickerOpen}

@@ -73,15 +73,32 @@ func run() error {
 	}
 
 	// 业务服务全部在装配层构建，HTTP 层只收成品（分层：httpapi 不碰 db）。
+	agentService := service.NewAgentService(gdb)
 	sessionService := service.NewSessionService(gdb)
 	skillUsage := service.NewSkillUsageService(gdb, cfg.DataDir)
 	chatService := service.NewChatService(gdb, sessionService, manager, transcripts, skillUsage)
+
+	// 内置工具（claude/codex）缺失时补建：清库/全新安装后开箱即有，
+	// 设置页的两个分区始终有对象可配。新建的后台探测一次能力缓存。
+	if created, err := agentService.EnsureDefaults(context.Background()); err != nil {
+		slog.Warn("ensure default agents", "err", err)
+	} else {
+		for _, id := range created {
+			go func(id uint) {
+				probeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				if _, err := chatService.ProbeAgent(probeCtx, id); err != nil {
+					slog.Warn("probe default agent", "id", id, "err", err)
+				}
+			}(id)
+		}
+	}
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
 
 	handler := httpapi.NewRouter(cfg, httpapi.Services{
-		Agents:     service.NewAgentService(gdb),
+		Agents:     agentService,
 		Sessions:   sessionService,
 		Chat:       chatService,
 		Terminals:  terminalService,

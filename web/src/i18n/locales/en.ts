@@ -11,7 +11,6 @@ export default {
   },
   nav: {
     overview: "Overview",
-    agents: "Agents",
     skills: "Skills",
     sessions: "Sessions",
     tools: "Tools",
@@ -27,7 +26,7 @@ export default {
     export: "Export",
   },
   overview: {
-    statAgents: "Agents",
+    statAgents: "Tools",
     statSessions: "Sessions",
     statRunning: "Live processes",
     statMessages: "Messages",
@@ -44,16 +43,16 @@ export default {
     skillUsageEmpty: "No skills invoked yet",
     skillUsageEmptyHint:
       "Once a skill is enabled, uses in conversations show up here.",
-    agentsTitle: "Agents",
-    agentsDescription: "Registered runtimes and their connection state.",
-    manageAgents: "Manage",
+    agentsTitle: "Tools",
+    agentsDescription: "Built-in runtimes and their connection state.",
+    manageAgents: "Configure",
     noSessions: "No sessions yet",
     noSessionsHint: "Pick an agent and start your first conversation.",
     newSession: "New session",
-    addAgent: "Add agent",
+    configureTools: "Configure tools",
     onboardTitle: "Welcome to ACPP",
     onboardHint:
-      "Register an ACP agent (e.g. codex-acp), then start a session — the conversation stream shows up here in real time.",
+      "claude and codex are built in — check their commands in Settings, then start a session and the conversation stream shows up here in real time.",
     messagesCount: "{{count}} messages",
   },
   backend: {
@@ -81,20 +80,6 @@ export default {
     },
   },
   agents: {
-    title: "Agents",
-    description:
-      "Registered ACP agents, launched over stdio and handshaked with initialize.",
-    add: "Add agent",
-    empty: "No agents yet",
-    emptyHint:
-      "Add an executable command (e.g. codex-acp) to connect your first agent.",
-    name: "Name",
-    command: "Command",
-    cwd: "Working dir",
-    status: "Status",
-    statusIdle: "Idle",
-    statusError: "Error",
-    updated: "Updated",
     detail: {
       probe: "Re-probe",
       models: "Models",
@@ -393,6 +378,17 @@ export default {
   settingsPage: {
     menu: {
       system: "System",
+      claude: "Claude",
+      codex: "Codex",
+    },
+    tool: {
+      commandHint:
+        "Launch command and arguments. Saving re-probes the capability catalog.",
+      commandPlaceholder: "Command, e.g. claude-agent-acp",
+      argsPlaceholder: "Arguments, space-separated",
+      save: "Save",
+      saved: "Saved — re-probing",
+      missing: "Built-in tool record missing; restarting the server recreates it.",
     },
     system: {
       title: "Data directory",
@@ -418,7 +414,6 @@ export default {
     connections: "Live stdio connections and handshake state.",
     help: "ACP protocol docs and FAQ.",
     search: "Full-text search across sessions and messages.",
-    agentNew: "Configure the agent's command, arguments and working directory.",
   },
   notFound: {
     title: "404 — Page not found",
