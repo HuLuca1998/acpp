@@ -113,7 +113,7 @@ acpp/
 - 目录内全部是第三方 skill，由 skills CLI 管理（`npx skills add/update`，锁文件是根目录 `skills-lock.json`）。**禁止手改**其中任何文件——升级会整体覆盖；增删改一律走 CLI，且改动必须连同 `skills-lock.json` 一起提交。
 - skill 是 Claude Code 的按需加载机制，**Codex 不会自动读取**。因此人人必须遵守的规则永远写在 AGENTS.md，skill 里只放按需查阅的操作手册与长参考；需要时 AGENTS.md 可直接链接 skill 内的 md 文件（就是普通 markdown，Codex 也能当文档读）。
 - 自建项目专属 skill 的门槛：同一工作流重复做过 ≥2 次、且步骤长到不适合塞进 AGENTS.md，才值得沉淀。结构照现有 skill：`<name>/SKILL.md` + frontmatter（`name`、`description`，description 写清触发场景），放 `.claude/skills/` 下并与第三方 skill 区分命名。
-- 现有自建 skill：[skills-manage](.claude/skills/skills-manage/SKILL.md)——acpp 技能库的管理操作与 SKILL.md 写作规范，涉及技能管理功能（页面、API、注入）时先读它（Codex 直接当文档读）。
+- 现有自建 skill：[skills-manage](.claude/skills/skills-manage/SKILL.md)——acpp 技能库的管理操作与 SKILL.md 写作规范，涉及技能管理功能（页面、API、注入）时先读它；[acp-debug](.claude/skills/acp-debug/SKILL.md)——ACP 协议排障手册（转录读法、probe、故障排查表）。Codex 都可直接当文档读。
 
 ## 4. 验证与提交
 
