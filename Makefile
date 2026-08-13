@@ -36,16 +36,16 @@ dev-server: ## 前台启动后端开发服务器 (http://127.0.0.1:48080)
 build: build-web build-server ## 构建前后端
 
 .PHONY: build-web
-build-web: ## 构建前端到 web/dist
+build-web: ## 构建前端到 build/web
 	cd $(WEB_DIR) && npm run build
 
 .PHONY: build-server
-build-server: ## 构建后端到 server/bin/acp-server
-	cd $(SERVER_DIR) && go build -o bin/acp-server ./cmd/server
+build-server: ## 构建后端到 build/server/acp-server
+	cd $(SERVER_DIR) && go build -o ../build/server/acp-server ./cmd/server
 
 .PHONY: serve
 serve: build-web build-server ## 由后端单进程托管前端产物
-	cd $(SERVER_DIR) && ACP_WEB_DIR=../$(WEB_DIR)/dist ./bin/acp-server
+	ACP_WEB_DIR=build/web ./build/server/acp-server
 
 .PHONY: lint
 lint: ## 前端 eslint + 后端 go vet
@@ -62,4 +62,4 @@ typecheck: ## 前端类型检查
 
 .PHONY: clean
 clean: ## 清理构建产物与本地数据库
-	rm -rf $(WEB_DIR)/dist $(SERVER_DIR)/bin $(SERVER_DIR)/data/*.db
+	rm -rf build $(SERVER_DIR)/data/*.db

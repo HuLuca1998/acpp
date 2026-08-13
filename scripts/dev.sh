@@ -48,12 +48,12 @@ wait_http() {
 
 start_server() {
   kill_port "$SERVER_PORT"
-  # 每次启动前重新编译：restart 即更新，跑的永远是当前代码。
+  # 每次启动前重新编译：restart 即更新，跑的永远是当前代码。产物统一进顶层 build/。
   echo "编译后端…"
-  (cd "$ROOT/server" && go build -o bin/acp-server ./cmd/server)
+  (cd "$ROOT/server" && go build -o ../build/server/acp-server ./cmd/server)
   echo "启动后端 :$SERVER_PORT（日志 $LOG_DIR/server.log）"
   # </dev/null 切断与调用方 stdio 的关联，否则 make dev | tail 这类管道会被挂住。
-  (cd "$ROOT/server" && ACP_DEBUG=1 nohup ./bin/acp-server >"$LOG_DIR/server.log" 2>&1 </dev/null &)
+  (cd "$ROOT/server" && ACP_DEBUG=1 nohup ../build/server/acp-server >"$LOG_DIR/server.log" 2>&1 </dev/null &)
   wait_http "http://127.0.0.1:$SERVER_PORT/api/health" "后端"
 }
 

@@ -5,6 +5,11 @@ import { defineConfig } from "vite"
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    // 产物统一进顶层 build/（根 AGENTS.md §1.1），与后端二进制并列。
+    outDir: "../build/web",
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,

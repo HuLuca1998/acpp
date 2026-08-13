@@ -1,9 +1,8 @@
 # 依赖
 node_modules/
 
-# 构建产物
-web/dist/
-server/bin/
+# 构建产物（前后端统一进顶层 build/）
+build/
 
 # 本地数据（数据库 + transcripts）
 server/data/
