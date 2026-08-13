@@ -33,6 +33,27 @@ type DirListing struct {
 	Files  []DirEntry `json:"files,omitempty"`
 }
 
+// CreateDir 在 parent 下新建一个子目录，供工作目录选择器就地开新目录。
+// name 只允许单层目录名：路径分隔符与 "."/".." 一律拒绝（防目录逃逸）；
+// 隐藏名也拒绝——列目录不展示隐藏项，建出来看不见只会造成困惑。
+func CreateDir(parent, name string) (*DirEntry, error) {
+	if !filepath.IsAbs(parent) {
+		return nil, fmt.Errorf("%w: parent must be absolute", ErrInvalid)
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+		return nil, fmt.Errorf("%w: invalid directory name", ErrInvalid)
+	}
+	if strings.HasPrefix(name, ".") {
+		return nil, fmt.Errorf("%w: hidden directory not allowed", ErrInvalid)
+	}
+	path := filepath.Join(filepath.Clean(parent), name)
+	if err := os.Mkdir(path, 0o755); err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return &DirEntry{Name: name, Path: path}, nil
+}
+
 // ListDirs 列出指定目录的子目录（withFiles 时连同文件），供前端的
 // 目录/文件选择器导航。浏览器拿不到本地路径（File System Access API
 // 只给 handle），选择只能由后端代劳。path 为空从家目录开始；隐藏项不列。

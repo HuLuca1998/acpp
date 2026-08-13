@@ -1,6 +1,7 @@
 import type {
   Agent,
   CatalogInput,
+  DirEntry,
   DirListing,
   GitCommitDetail,
   GitDiffView,
@@ -293,5 +294,11 @@ export const api = {
       const qs = params.toString()
       return request<DirListing>(`/fs/dirs${qs ? `?${qs}` : ""}`)
     },
+    /** 在 path 下新建单层子目录，返回新目录条目（工作目录选择器就地建目录）。 */
+    createDir: (path: string, name: string) =>
+      request<DirEntry>("/fs/dirs", {
+        method: "POST",
+        body: JSON.stringify({ path, name }),
+      }),
   },
 }

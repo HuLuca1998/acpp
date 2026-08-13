@@ -216,6 +216,9 @@ export default {
     select: "Use this directory",
     cancel: "Cancel",
     empty: "No subdirectories",
+    newFolder: "New folder",
+    newFolderName: "New folder name",
+    create: "Create",
   },
   chat: {
     placeholder: "Type a message. Enter to send, Shift+Enter for a new line",

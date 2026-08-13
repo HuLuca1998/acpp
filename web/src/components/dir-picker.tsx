@@ -12,8 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowUpIcon, FileIcon, FolderIcon } from "lucide-react"
+import { ArrowUpIcon, FileIcon, FolderIcon, FolderPlusIcon } from "lucide-react"
 
 /**
  * 目录/文件选择器：后端代劳列目录的导航弹窗。
@@ -39,11 +40,18 @@ export function DirPicker({
   const [listing, setListing] = useState<DirListing | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const load = useCallback(
     async (path?: string) => {
       setLoading(true)
       setError(null)
+      // 导航时收起新建输入行，避免残留在与之无关的目录上
+      setCreating(false)
+      setNewName("")
+      setCreateError(null)
       try {
         setListing(await api.fs.dirs(path, mode === "file"))
       } catch (err) {
@@ -54,6 +62,19 @@ export function DirPicker({
     },
     [mode]
   )
+
+  const createFolder = useCallback(async () => {
+    const name = newName.trim()
+    if (!listing || !name) return
+    setCreateError(null)
+    try {
+      // 建完直接进入新目录，底部「选择此目录」即可选中
+      const entry = await api.fs.createDir(listing.path, name)
+      await load(entry.path)
+    } catch (err) {
+      setCreateError((err as Error).message)
+    }
+  }, [listing, newName, load])
 
   // 每次打开都从起始目录重新进入，上一次的浏览位置不残留。
   // 放进微任务，避免在 effect 内同步 setState 触发级联渲染。
@@ -81,10 +102,60 @@ export function DirPicker({
           >
             <ArrowUpIcon className="size-3.5" />
           </Button>
-          <span className="min-w-0 truncate font-mono" title={listing?.path}>
+          <span className="min-w-0 flex-1 truncate font-mono" title={listing?.path}>
             {listing?.path ?? ""}
           </span>
+          {mode === "dir" ? (
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label={t("dirPicker.newFolder")}
+              disabled={loading || !listing}
+              onClick={() => {
+                setCreating(true)
+                setCreateError(null)
+              }}
+            >
+              <FolderPlusIcon className="size-3.5" />
+            </Button>
+          ) : null}
         </div>
+
+        {creating ? (
+          // 真表单：回车创建走浏览器原生的隐式提交，不手拦 keydown
+          <form
+            className="flex flex-col gap-1"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void createFolder()
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <Input
+                autoFocus
+                value={newName}
+                placeholder={t("dirPicker.newFolderName")}
+                className="h-8 text-sm"
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    // 只收起输入行，不让 Esc 冒泡关掉整个弹窗
+                    e.stopPropagation()
+                    setCreating(false)
+                    setNewName("")
+                    setCreateError(null)
+                  }
+                }}
+              />
+              <Button type="submit" size="sm" disabled={!newName.trim()}>
+                {t("dirPicker.create")}
+              </Button>
+            </div>
+            {createError ? (
+              <p className="text-xs text-destructive">{createError}</p>
+            ) : null}
+          </form>
+        ) : null}
 
         <div className="h-64 overflow-y-auto rounded-lg border border-border">
           {loading ? (

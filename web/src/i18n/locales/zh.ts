@@ -202,6 +202,9 @@ export default {
     select: "选择此目录",
     cancel: "取消",
     empty: "没有子目录",
+    newFolder: "新建文件夹",
+    newFolderName: "新文件夹名称",
+    create: "创建",
   },
   chat: {
     placeholder: "输入消息，Enter 发送，Shift+Enter 换行",

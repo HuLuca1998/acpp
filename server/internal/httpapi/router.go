@@ -55,6 +55,24 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		writeData(w, http.StatusOK, listing)
 	})
 
+	// 就地新建子目录：给新会话开工作目录时不用离开选择器。
+	api.HandleFunc("POST /api/fs/dirs", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Path string `json:"path"`
+			Name string `json:"name"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, err)
+			return
+		}
+		entry, err := service.CreateDir(req.Path, req.Name)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeData(w, http.StatusCreated, entry)
+	})
+
 	// 系统配置：数据目录查看 / 迁移（拷贝式，重启后生效）。
 	api.HandleFunc("GET /api/system", system.get)
 	api.HandleFunc("PUT /api/system/data-dir", system.migrate)

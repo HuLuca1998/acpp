@@ -135,6 +135,7 @@ make dev          # 一键启动/重启前后端（后端 :48080，前端 :45173
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
+| POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
 | GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型与命令清单） |
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
 | POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor、模型与命令清单），同步返回 |
