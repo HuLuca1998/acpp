@@ -233,7 +233,7 @@ export function Skills() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t("skills.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("skills.deleteBody", { name: deleting?.name })}
+              {t("skills.deleteBody", { name: deleting?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

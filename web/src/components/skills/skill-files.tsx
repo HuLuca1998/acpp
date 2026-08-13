@@ -154,7 +154,7 @@ export function SkillFiles({
               {t("skills.detail.fileDeleteTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("skills.detail.fileDeleteBody", { path: deleting })}
+              {t("skills.detail.fileDeleteBody", { path: deleting ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
