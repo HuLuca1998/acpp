@@ -68,7 +68,7 @@ func PrepareData(cfg Config) error {
 	}
 
 	const legacyDSN = "data/acp.db"
-	if sameFile(cfg.DSN, legacyDSN) {
+	if SamePath(cfg.DSN, legacyDSN) {
 		return nil
 	}
 	if _, err := os.Stat(cfg.DSN); err == nil {
@@ -89,7 +89,8 @@ func PrepareData(cfg Config) error {
 	return nil
 }
 
-func sameFile(a, b string) bool {
+// SamePath 判断两个路径解析为绝对路径后是否指向同一位置。
+func SamePath(a, b string) bool {
 	aa, err1 := filepath.Abs(a)
 	bb, err2 := filepath.Abs(b)
 	return err1 == nil && err2 == nil && aa == bb

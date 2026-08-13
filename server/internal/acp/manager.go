@@ -92,7 +92,6 @@ type Session struct {
 
 	turnMu     sync.Mutex
 	mu         sync.Mutex
-	turns      int
 	cancelTurn context.CancelFunc
 
 	// caps 是 session/new 返回的能力快照，set_* 成功与 agent 主动通知时更新。
@@ -147,13 +146,6 @@ type Caps struct {
 
 // ACPSessionID 是 agent 侧返回的会话标识。
 func (s *Session) ACPSessionID() string { return s.acpSessionID }
-
-// Turns 是这条会话已经跑完的轮数。
-func (s *Session) Turns() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.turns
-}
 
 // Caps 返回能力快照的深拷贝，调用方可以随意持有。
 func (s *Session) Caps() Caps {
@@ -552,7 +544,6 @@ func (m *Manager) Prompt(ctx context.Context, key string, blocks []ContentBlock)
 	defer func() {
 		sess.mu.Lock()
 		sess.cancelTurn = nil
-		sess.turns++
 		sess.mu.Unlock()
 	}()
 

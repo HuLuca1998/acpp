@@ -84,11 +84,7 @@ func (s *SessionService) List(ctx context.Context, agentID uint, page, pageSize 
 
 	views := make([]SessionView, 0, len(sessions))
 	for i := range sessions {
-		view, err := s.toView(ctx, &sessions[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		views = append(views, *view)
+		views = append(views, *s.toView(&sessions[i]))
 	}
 	return views, total, nil
 }
@@ -102,7 +98,7 @@ func (s *SessionService) Get(ctx context.Context, id uint) (*SessionView, error)
 	if err != nil {
 		return nil, fmt.Errorf("get session %d: %w", id, err)
 	}
-	return s.toView(ctx, &session)
+	return s.toView(&session), nil
 }
 
 func (s *SessionService) Create(ctx context.Context, in SessionInput) (*SessionView, error) {
@@ -138,7 +134,7 @@ func (s *SessionService) Create(ctx context.Context, in SessionInput) (*SessionV
 	}
 
 	session.Agent = &agent
-	return s.toView(ctx, &session)
+	return s.toView(&session), nil
 }
 
 func (s *SessionService) Delete(ctx context.Context, id uint) error {
@@ -152,7 +148,7 @@ func (s *SessionService) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
-func (s *SessionService) toView(_ context.Context, session *model.Session) (*SessionView, error) {
+func (s *SessionService) toView(session *model.Session) *SessionView {
 	// MessageCount 由 HTTP 层从转录重建结果填充，消息本身不进库。
 	view := SessionView{Session: *session}
 	if session.Agent != nil {
@@ -160,7 +156,7 @@ func (s *SessionService) toView(_ context.Context, session *model.Session) (*Ses
 		view.AgentFlavor = session.Agent.Flavor
 	}
 	view.GitBranch = gitBranch(view.Cwd)
-	return &view, nil
+	return &view
 }
 
 // gitBranch 读工作目录的当前分支。只读文件不 exec git：

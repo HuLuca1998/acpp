@@ -6,21 +6,17 @@ import "time"
 type MessageRole string
 
 const (
-	RoleUser   MessageRole = "user"
-	RoleAgent  MessageRole = "agent"
-	RoleSystem MessageRole = "system"
+	RoleUser  MessageRole = "user"
+	RoleAgent MessageRole = "agent"
 )
 
 // MessageKind 对应 ACP session/update 推送的各类内容块。
 type MessageKind string
 
 const (
-	KindText              MessageKind = "text"
-	KindThought           MessageKind = "thought"
-	KindToolCall          MessageKind = "tool_call"
-	KindToolResult        MessageKind = "tool_result"
-	KindPermissionRequest MessageKind = "permission_request"
-	KindPlan              MessageKind = "plan"
+	KindText     MessageKind = "text"
+	KindThought  MessageKind = "thought"
+	KindToolCall MessageKind = "tool_call"
 	// KindElicitation 是一次已完成的交互式提问：问题 schema + 用户作答。
 	KindElicitation MessageKind = "elicitation"
 )

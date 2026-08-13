@@ -6,10 +6,8 @@ import "time"
 type AgentStatus string
 
 const (
-	AgentIdle      AgentStatus = "idle"
-	AgentConnected AgentStatus = "connected"
-	AgentError     AgentStatus = "error"
-	AgentDisabled  AgentStatus = "disabled"
+	AgentIdle  AgentStatus = "idle"
+	AgentError AgentStatus = "error"
 )
 
 // Agent 是一个可通过 stdio 启动、并完成 ACP initialize 握手的进程配置。

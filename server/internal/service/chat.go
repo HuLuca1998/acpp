@@ -20,9 +20,6 @@ import (
 	"acpp/server/internal/transcript"
 )
 
-// ErrBusy 表示该会话上还有一轮没结束，由 HTTP 层翻译成 409。
-var ErrBusy = errors.New("session is busy with another turn")
-
 // deriveTitle 从首条消息取首行并截短，作为会话的自动标题。
 func deriveTitle(text string) string {
 	line := strings.TrimSpace(text)
@@ -886,10 +883,7 @@ func (s *ChatService) Subscribe(sessionID uint) (<-chan StreamEvent, func()) {
 // Cancel 中止会话上正在跑的一轮。
 func (s *ChatService) Cancel(sessionID uint) error {
 	if err := s.manager.Cancel(sessionKey(sessionID)); err != nil {
-		if errors.Is(err, acp.ErrNoSession) {
-			return fmt.Errorf("session %d: %w", sessionID, ErrNotFound)
-		}
-		return err
+		return translateNoSession(sessionID, err)
 	}
 	return nil
 }

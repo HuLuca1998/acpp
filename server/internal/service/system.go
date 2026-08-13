@@ -36,7 +36,7 @@ func (s *SystemService) Info() SystemInfo {
 		DataDir:    s.cfg.DataDir,
 		DefaultDir: config.ConfigHome(),
 	}
-	if saved := config.SavedDataDir(); saved != "" && !samePath(saved, s.cfg.DataDir) {
+	if saved := config.SavedDataDir(); saved != "" && !config.SamePath(saved, s.cfg.DataDir) {
 		info.PendingDir = saved
 	}
 	return info
@@ -50,7 +50,7 @@ func (s *SystemService) MigrateDataDir(ctx context.Context, target string) (Syst
 	if !filepath.IsAbs(target) {
 		return SystemInfo{}, fmt.Errorf("%w: data dir must be an absolute path", ErrInvalid)
 	}
-	if samePath(target, s.cfg.DataDir) {
+	if config.SamePath(target, s.cfg.DataDir) {
 		return SystemInfo{}, fmt.Errorf("%w: already using this directory", ErrInvalid)
 	}
 	if err := os.MkdirAll(target, 0o755); err != nil {
@@ -76,8 +76,3 @@ func (s *SystemService) MigrateDataDir(ctx context.Context, target string) (Syst
 	return info, nil
 }
 
-func samePath(a, b string) bool {
-	aa, err1 := filepath.Abs(a)
-	bb, err2 := filepath.Abs(b)
-	return err1 == nil && err2 == nil && aa == bb
-}
