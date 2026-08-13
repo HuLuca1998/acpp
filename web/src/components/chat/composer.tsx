@@ -60,9 +60,16 @@ export function Composer({
   const matches =
     slashQuery !== null && commands && commands.length > 0
       ? commands
-          .filter((c) =>
-            c.name.toLowerCase().startsWith(slashQuery.toLowerCase())
-          )
+          .filter((c) => {
+            const name = c.name.toLowerCase()
+            const q = slashQuery.toLowerCase()
+            // 注入技能的命令名带 plugin 前缀（acpp:my-issues）。用户按技能
+            // 真名搜也要匹配到，所以去前缀后一并比。
+            const bare = name.includes(":")
+              ? name.slice(name.lastIndexOf(":") + 1)
+              : name
+            return name.startsWith(q) || bare.startsWith(q)
+          })
           .slice(0, 8)
       : []
   const [activeIndex, setActiveIndex] = useState(0)
