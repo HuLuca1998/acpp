@@ -63,11 +63,11 @@ export function Composer({
           .filter((c) => {
             const name = c.name.toLowerCase()
             const q = slashQuery.toLowerCase()
-            // 注入技能的命令名带 plugin 前缀（acpp:my-issues）。用户按技能
-            // 真名搜也要匹配到，所以去前缀后一并比。
-            const bare = name.includes(":")
-              ? name.slice(name.lastIndexOf(":") + 1)
-              : name
+            // 技能命令名带 runtime 前缀：codex 给技能加 $（$my-issues），
+            // claude 给插件技能加 <plugin>:（acpp:my-issues）。用户按技能真名
+            // 搜也要匹配到，所以剥掉 $ 与冒号前缀后一并比。
+            let bare = name.startsWith("$") ? name.slice(1) : name
+            if (bare.includes(":")) bare = bare.slice(bare.lastIndexOf(":") + 1)
             return name.startsWith(q) || bare.startsWith(q)
           })
           .slice(0, 8)
