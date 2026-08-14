@@ -85,7 +85,7 @@ func TestService_HandleMCP_Protocol(t *testing.T) {
 	if err := json.Unmarshal(raw, &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(list.Result.Tools) != 1 || list.Result.Tools[0].Name != "spawn_agent" {
+	if len(list.Result.Tools) != 1 || list.Result.Tools[0].Name != "hire_role" {
 		t.Fatalf("tools = %s", raw)
 	}
 
@@ -114,7 +114,7 @@ func TestService_HandleMCP_SpawnToolErrors(t *testing.T) {
 	ctx := context.Background()
 
 	resp, _ := svc.HandleMCP(ctx, orch.MCPToken,
-		[]byte(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"spawn_agent","arguments":{"role":"不存在的角色","task":"做点事"}}}`))
+		[]byte(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"hire_role","arguments":{"role":"不存在的角色","task":"做点事"}}}`))
 	raw, _ := json.Marshal(resp)
 	var call struct {
 		Result struct {

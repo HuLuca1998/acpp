@@ -209,13 +209,13 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 ## 编排：外化子代理
 
-agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排（adr-006）把这条通道外化：主控会话挂载我方 MCP server 并被注入调度提示词（含角色雇佣目录），需要帮手时调用 `spawn_agent(role, task)`——后端拉起一条**真实的 ACP 子会话**（按角色注入人格/模型/权限档），同步跑完任务后把子代理的最终结论作为工具结果还给主控。派了什么、子代理每一步做了什么、返回了什么，全部可观察。
+agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排（adr-006）把这条通道外化：主控会话挂载我方 MCP server 并被注入调度提示词（含角色雇佣目录），需要帮手时调用 `hire_role(role, task)`——后端拉起一条**真实的 ACP 子会话**（按角色注入人格/模型/权限档），同步跑完任务后把子代理的最终结论作为工具结果还给主控。派了什么、子代理每一步做了什么、返回了什么，全部可观察。
 
 关键机制（全部实测）：
 
 - **同步 spawn**：MCP 工具调用挂起到子会话 turn 结束。claude 默认约 2 分钟超时，经进程 env `MCP_TOOL_TIMEOUT` 放大；codex 在专属 CODEX_HOME 的 config.toml 里配 `tool_timeout_sec`。我方另有 30 分钟任务硬超时先行了断。
 - **注入口两端不同**：claude 走 `session/new` 的 `_meta`（`systemPrompt.append` 调度提示词/persona + `disallowedTools:["Task"]` 收内部子代理 + `allowedTools` 预批派发工具）；codex 走编排专属 CODEX_HOME（config.toml 定义 MCP server，AGENTS.md 承载提示词/persona）。
-- **自家工具的权限自动放行**：spawn_agent 的权限请求（claude）与 MCP 批准提问（codex 的 elicitation 通道）由事件层自动放行，不弹卡。
+- **自家工具的权限自动放行**：hire_role 的权限请求（claude）与 MCP 批准提问（codex 的 elicitation 通道）由事件层自动放行，不弹卡。
 - **护栏**：并发子任务上限 4；spawn 深度硬性 1（子会话不挂 MCP）；急停一键中止全部；累计 token 用量展示。
 - **界面**：编排页 dockview 布局——主控对话 + 常驻任务列表 + 普通会话的全部工作区面板（文件树/预览/diff/commits/日志/终端，⋯ 菜单开启）；任务子会话面板不自动弹出，从列表点开/拖动布局/关闭不影响任务运行。composer 同样支持图片、@ 文件引用、斜杠命令与 busy 排队插话。
 

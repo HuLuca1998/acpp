@@ -138,13 +138,13 @@ func (s *Service) publishTaskUpdate(orchID uint, task *model.OrchTask) {
 	s.brokerFor(orchKey(orchID)).Publish(stream.Event{Kind: "task_update", Task: task})
 }
 
-// isSpawnPermission 识别「批准调用我们自己的 spawn_agent」的权限请求
-// （claude 通道）。识别保守：标题或输入里必须出现 spawn_agent。
+// isSpawnPermission 识别「批准调用我们自己的 hire_role」的权限请求
+// （claude 通道）。识别保守：标题或输入里必须出现 hire_role。
 func isSpawnPermission(ev acp.Event) bool {
-	if strings.Contains(ev.Title, "spawn_agent") {
+	if strings.Contains(ev.Title, "hire_role") {
 		return true
 	}
-	return strings.Contains(string(ev.RawInput), "spawn_agent")
+	return strings.Contains(string(ev.RawInput), "hire_role")
 }
 
 // allowOption 从权限选项里挑放行项：优先一次性放行（allow_always 会把
@@ -165,5 +165,5 @@ func allowOption(options []acp.PermissionOption) string {
 
 // isSpawnElicitation 识别 codex 的 MCP 工具批准提问。
 func isSpawnElicitation(ev acp.Event) bool {
-	return strings.Contains(ev.Text, "acpp") && strings.Contains(ev.Text, "spawn_agent")
+	return strings.Contains(ev.Text, "acpp") && strings.Contains(ev.Text, "hire_role")
 }

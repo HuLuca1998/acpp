@@ -36,10 +36,12 @@ type mcpError struct {
 	Message string `json:"message"`
 }
 
-// spawnAgentTool 是 spawn_agent 的 MCP 工具声明。描述写给主会话的
-// 模型看——它是「什么时候会被调用」的真正开关。
+// spawnAgentTool 是 hire_role 的 MCP 工具声明。描述写给主会话的模型看
+// ——它是「什么时候会被调用」的真正开关。名字刻意避开 codex 内部
+// collaboration 工具族（spawn_agent/wait/close_agent…）：撞名时模型会
+// 优先调内部工具，派发悄悄流进黑盒子代理（实测踩坑）。
 var spawnAgentTool = map[string]any{
-	"name": "spawn_agent",
+	"name": "hire_role",
 	"description": "雇佣一个角色子代理完成子任务。会阻塞直到子代理完成并返回其最终结论，" +
 		"耗时可能较长，属正常。task 必须自包含（背景/目标/涉及路径/验收标准），" +
 		"子代理看不到你的对话上下文。需要并行时在同一条消息里发多个调用。",
@@ -125,7 +127,7 @@ func (s *Service) mcpToolCall(ctx context.Context, orch *model.OrchSession, req 
 		return mcpResponse{JSONRPC: "2.0", ID: req.ID,
 			Error: &mcpError{Code: -32602, Message: "bad tools/call params"}}
 	}
-	if params.Name != "spawn_agent" {
+	if params.Name != "hire_role" {
 		return mcpResponse{JSONRPC: "2.0", ID: req.ID,
 			Error: &mcpError{Code: -32602, Message: fmt.Sprintf("unknown tool %q", params.Name)}}
 	}

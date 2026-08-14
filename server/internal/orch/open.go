@@ -39,10 +39,10 @@ func buildOrchPrompt(roles []model.Role) string {
 	b.WriteString("\n# 编排模式\n\n")
 	b.WriteString("你是编排主控（协调者）。你的默认工作方式是**委派**：" +
 		"实质性工作交给角色子代理完成，你负责拆解任务、选择角色、把关结果、向用户汇总。" +
-		"通过 acpp 提供的 MCP 工具 `spawn_agent(role, task)` 雇佣子代理。\n\n")
+		"通过 acpp 提供的 MCP 工具 `hire_role(role, task)` 雇佣子代理。\n\n")
 	b.WriteString("## 可用角色（role 参数填名字）\n\n")
 	if len(roles) == 0 {
-		b.WriteString("（当前没有可用角色，spawn_agent 不可用——自己完成任务。）\n")
+		b.WriteString("（当前没有可用角色，hire_role 不可用——自己完成任务。）\n")
 	}
 	for _, r := range roles {
 		fmt.Fprintf(&b, "- **%s**：%s\n", r.Name, r.Description)
@@ -50,18 +50,19 @@ func buildOrchPrompt(roles []model.Role) string {
 	b.WriteString(`
 ## 何时委派（不要等用户点名）
 
-- 用户提出的任何需要读代码、写代码、审查或验证的实质性任务，主动拆解并派给上面职责匹配的角色——用户不会（也不需要）提到 spawn_agent 或角色名。
+- 用户提出的任何需要读代码、写代码、审查或验证的实质性任务，主动拆解并派给上面职责匹配的角色——用户不会（也不需要）提到 hire_role 或角色名。
 - 多阶段任务按流水线推进，例如实现类需求：先派调研角色摸清现状 → 派实现角色改代码 → 派审查角色把关 → 派验证角色跑测试，每一步的产出喂给下一步的 task。
-- 相互独立的子任务并行派发（同一条消息里发多个 spawn_agent 调用）。
+- 相互独立的子任务并行派发（同一条消息里发多个 hire_role 调用）。
 - 复杂的调研/分析/审查任务，把**同一个问题按不同视角拆开并行**（每个 task 写明专属视角，如正确性/安全/性能/边界条件，同一角色可雇佣多份），全部返回后对比、去重、汇总成一份结论——多视角交叉比单份分析更可信。
 - 只有纯聊天、一句话能答的问题、或对子代理结果的追问才自己直接回答。
 
 ## 委派规则
 
 - task 必须自包含：写清背景、目标、涉及路径与验收标准——子代理看不到你的对话上下文。
-- spawn_agent 会阻塞到子代理完成并返回其最终结论，耗时长属正常，不要中途放弃。
+- hire_role 会阻塞到子代理完成并返回其最终结论，耗时长属正常，不要中途放弃。
 - 子代理彼此独立、不共享记忆，跨子任务的协调与结果整合由你负责。
 - 调用失败会返回错误文本：可以重试、换角色或自己处理，不要静默放弃任务。
+- **只用 acpp 的 hire_role 委派**：不要使用运行时内置的 spawn_agent/collaboration 等内部多代理工具——那些子代理对用户不可见，违背编排的目的。
 - 子代理的结论要经你判断后再采信：结果可疑就换个角色复核或自己抽查。
 `)
 	return b.String()
@@ -79,11 +80,18 @@ type orchInjection struct {
 //   - claude：session/new 传 MCP server + _meta（调度提示词 append、
 //     disallowedTools 收掉内部 Task 子代理）+ 进程 env 放大 MCP 工具超时
 //     （默认约 2 分钟，实测扛不住长子任务）。
-//   - codex：一切走专属 CODEX_HOME——config.toml 定义 MCP server（含
-//     tool_timeout_sec），AGENTS.md 承载调度提示词；session/new 不传
-//     mcpServers（config 已定义，传两遍会重名）。
+//   - codex：MCP 同样走 session/new 传入——config.toml 定义的 http MCP
+//     是懒连接（启动不 tools/list，模型工具清单里看不到 spawn_agent，
+//     实测主控会直接编造结果而不调用）；session/new 注入的会立即连接
+//     列出。专属 CODEX_HOME 只承载 AGENTS.md 调度提示词与隔离。
 func (s *Service) mainInjection(orch *model.OrchSession, agent *model.Agent, prompt string) (orchInjection, error) {
 	mcpURL := s.mcpBase + orch.MCPToken
+	mcpServers := []any{map[string]any{
+		"type":    "http",
+		"name":    "acpp",
+		"url":     mcpURL,
+		"headers": []any{},
+	}}
 	switch flavorOfAgent(agent) {
 	case "claude":
 		return orchInjection{
@@ -96,23 +104,21 @@ func (s *Service) mainInjection(orch *model.OrchSession, agent *model.Agent, pro
 					// 收内部 Task 子代理，预批我们自己的派发工具——
 					// 每次 spawn 都弹权限卡没有意义（事件层另有自动放行兜底）。
 					"disallowedTools": []string{"Task"},
-					"allowedTools":    []string{"mcp__acpp__spawn_agent"},
+					"allowedTools":    []string{"mcp__acpp__hire_role"},
 				}},
 			},
-			MCPServers: []any{map[string]any{
-				"type":    "http",
-				"name":    "acpp",
-				"url":     mcpURL,
-				"headers": []any{},
-			}},
+			MCPServers: mcpServers,
 		}, nil
 	case "codex":
 		home := filepath.Join(s.dataDir, "orch", fmt.Sprintf("home-%d", orch.ID))
-		if err := s.ensureOrchCodexHome(home, prompt, &mcpURL); err != nil {
+		// config.toml 不写 acpp 段：与 session/new 注入的同名 server
+		// 冲突会让会话建不起来。
+		if err := s.ensureOrchCodexHome(home, prompt, nil); err != nil {
 			return orchInjection{}, fmt.Errorf("build orch codex home: %w", err)
 		}
 		return orchInjection{
-			ExtraEnv: map[string]string{"CODEX_HOME": home},
+			ExtraEnv:   map[string]string{"CODEX_HOME": home},
+			MCPServers: mcpServers,
 		}, nil
 	}
 	// generic runtime 没有可靠的注入口：不挂 MCP、不注提示词，
