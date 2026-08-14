@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -11,10 +11,11 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
+	"acpp/server/internal/service"
 	"acpp/server/internal/transcript"
 )
 
-func orchTestService(t *testing.T) (*OrchService, *model.OrchSession) {
+func orchTestService(t *testing.T) (*Service, *model.OrchSession) {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "orch.db")), &gorm.Config{})
 	if err != nil {
@@ -23,18 +24,18 @@ func orchTestService(t *testing.T) (*OrchService, *model.OrchSession) {
 	if err := gdb.AutoMigrate(&model.Agent{}, &model.Role{}, &model.OrchSession{}, &model.OrchTask{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if _, err := NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
+	if _, err := service.NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
 		t.Fatalf("seed agents: %v", err)
 	}
 	store, err := transcript.NewStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("transcript store: %v", err)
 	}
-	svc := NewOrchService(gdb, NewRoleService(gdb), acp.NewManager(2, 0, ""),
+	svc := NewService(gdb, NewRoleService(gdb), acp.NewManager(2, 0, ""),
 		store, nil, t.TempDir(), "", "127.0.0.1:48080")
 
-	agents, _ := NewAgentService(gdb).List(context.Background())
-	orch, err := svc.Create(context.Background(), OrchSessionInput{AgentID: agents[0].ID})
+	agents, _ := service.NewAgentService(gdb).List(context.Background())
+	orch, err := svc.Create(context.Background(), SessionInput{AgentID: agents[0].ID})
 	if err != nil {
 		t.Fatalf("create orch session: %v", err)
 	}
@@ -43,7 +44,7 @@ func orchTestService(t *testing.T) (*OrchService, *model.OrchSession) {
 
 // 契约：MCP 端点的 JSON-RPC 面——initialize 回显协议版本并报 tools 能力，
 // tools/list 只有 spawn_agent，通知无响应，未知 token 一律报错。
-func TestOrchService_HandleMCP_Protocol(t *testing.T) {
+func TestService_HandleMCP_Protocol(t *testing.T) {
 	svc, orch := orchTestService(t)
 	ctx := context.Background()
 
@@ -108,7 +109,7 @@ func TestOrchService_HandleMCP_Protocol(t *testing.T) {
 
 // 契约：spawn_agent 的入参失败（未知角色、空任务）走工具级错误
 // （isError:true 的文本），不是 JSON-RPC error——模型读得到才能自行决策。
-func TestOrchService_HandleMCP_SpawnToolErrors(t *testing.T) {
+func TestService_HandleMCP_SpawnToolErrors(t *testing.T) {
 	svc, orch := orchTestService(t)
 	ctx := context.Background()
 

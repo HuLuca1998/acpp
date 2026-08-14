@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -62,7 +62,7 @@ var spawnAgentTool = map[string]any{
 // HandleMCP 处理一条发到 /api/mcp/{token} 的 JSON-RPC 消息。
 // 返回 (响应对象, 是否有响应)：通知类消息无响应（HTTP 202）。
 // token 即凭证——解析不到就报错，不区分「不存在」与「无权」。
-func (s *OrchService) HandleMCP(ctx context.Context, token string, raw []byte) (any, bool) {
+func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any, bool) {
 	var req mcpRequest
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return mcpResponse{JSONRPC: "2.0", Error: &mcpError{Code: -32700, Message: "parse error"}}, true
@@ -113,7 +113,7 @@ func (s *OrchService) HandleMCP(ctx context.Context, token string, raw []byte) (
 // mcpToolCall 执行工具调用。错误走 MCP 的工具级错误（isError:true 的
 // 文本内容）而不是 JSON-RPC error——模型能读到并自行决策，协议错误
 // 它反而处理不了。
-func (s *OrchService) mcpToolCall(ctx context.Context, orch *model.OrchSession, req mcpRequest) mcpResponse {
+func (s *Service) mcpToolCall(ctx context.Context, orch *model.OrchSession, req mcpRequest) mcpResponse {
 	var params struct {
 		Name      string `json:"name"`
 		Arguments struct {

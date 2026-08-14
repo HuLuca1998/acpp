@@ -12,10 +12,11 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
+	"acpp/server/internal/stream"
 )
 
-// deriveTitle 从首条消息取首行并截短，作为会话的自动标题。
-func deriveTitle(text string) string {
+// DeriveTitle 从首条消息取首行并截短，作为会话的自动标题。
+func DeriveTitle(text string) string {
 	line := strings.TrimSpace(text)
 	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
 		line = strings.TrimSpace(line[:i])
@@ -65,7 +66,7 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	// 无标题的会话用首条消息的简写自动命名（对齐主流 AI 聊天应用）。
 	// 在返回 202 之前同步落库，前端跳转后立刻能看到新标题。
 	if view.Title == "" {
-		if title := deriveTitle(text); title != "" {
+		if title := DeriveTitle(text); title != "" {
 			if err := s.db.WithContext(ctx).Model(&model.Session{}).
 				Where("id = ?", sessionID).Update("title", title).Error; err != nil {
 				slog.Warn("auto title", "session", sessionID, "err", err)
@@ -89,9 +90,9 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	// 一轮进行中的插话（steering）并入当前轮，不能清当前轮的重放缓冲；
 	// 只有真正开新轮才重置。
 	if !s.manager.TurnActive(sessionKey(sessionID)) {
-		br.startTurn()
+		br.StartTurn()
 	}
-	br.publish(StreamEvent{Kind: "user_message", Message: msg})
+	br.Publish(StreamEvent{Kind: "user_message", Message: msg})
 
 	go s.runTurn(sessionID, br, blocks)
 
@@ -153,7 +154,7 @@ func (s *ChatService) buildBlocks(cwd string, in SendInput) ([]acp.ContentBlock,
 
 // runTurn 跑完一轮。它在自己的 goroutine 里，
 // 用 context.Background 是因为发起请求的 HTTP 连接早就返回了。
-func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBlock) {
+func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.ContentBlock) {
 	ctx := context.Background()
 
 	// active 的语义是「有一轮正在跑」，只在这里出现，结束时归 idle/error。
@@ -175,11 +176,11 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBl
 	if err != nil {
 		// 用户主动中止在 acp 层已归一成 StopCancelled 正常返回（Prompt 与
 		// Interject 各自处理），走到这里的都是真实故障。
-		br.publish(StreamEvent{Kind: "error", Error: err.Error()})
+		br.Publish(StreamEvent{Kind: "error", Error: err.Error()})
 		s.markSessionError(sessionID, err)
 		// 与正常收尾同理：还有别的轮在途时不发 turn_done。
 		if !s.manager.TurnActive(sessionKey(sessionID)) {
-			br.endTurn()
+			br.EndTurn()
 		}
 		return
 	}
@@ -206,7 +207,7 @@ func (s *ChatService) runTurn(sessionID uint, br *broker, blocks []acp.ContentBl
 	if s.manager.TurnActive(sessionKey(sessionID)) {
 		return
 	}
-	br.endTurn()
+	br.EndTurn()
 }
 
 // Cancel 中止会话上正在跑的一轮。

@@ -16,6 +16,7 @@ import (
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/model"
+	"acpp/server/internal/orch"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
 	"acpp/server/internal/transcript"
@@ -94,6 +95,26 @@ func run() error {
 			}(id)
 		}
 	}
+	// 编排（adr-006）：角色 + 主会话 + spawn 子会话。启动时预置内置角色
+	// 模板（一次性，删除不复活）。
+	roleService := orch.NewRoleService(gdb)
+	if err := roleService.EnsureDefaults(context.Background()); err != nil {
+		slog.Warn("ensure default roles", "err", err)
+	}
+	orchService := orch.NewService(gdb, roleService, manager, transcripts,
+		skillUsage, cfg.DataDir, filepath.Join(cfg.DataDir, "skillpack"), cfg.Addr)
+	// 编排会话的遗留 active 同样归一。
+	if err := gdb.Model(&model.OrchSession{}).
+		Where("state = ?", model.SessionActive).
+		Update("state", model.SessionIdle).Error; err != nil {
+		slog.Warn("normalize stale orch sessions", "err", err)
+	}
+	if err := gdb.Model(&model.OrchTask{}).
+		Where("state = ?", model.OrchTaskRunning).
+		Updates(map[string]any{"state": model.OrchTaskFailed, "result": "服务重启，任务中断"}).Error; err != nil {
+		slog.Warn("normalize stale orch tasks", "err", err)
+	}
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -111,6 +132,8 @@ func run() error {
 		Skills:     service.NewSkillService(cfg.DataDir, skillUsage),
 		SkillUsage: skillUsage,
 		Update:     updateService,
+		Roles:      roleService,
+		Orch:       orchService,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

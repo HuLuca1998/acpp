@@ -88,9 +88,9 @@ func (cat agentCatalog) filterCommands(commands []acp.Command) []acp.Command {
 	return kept
 }
 
-// degradedSettings 用 agent 探测缓存与会话最后设置快照拼出未连接时的
+// DegradedSettings 用 agent 探测缓存与会话最后设置快照拼出未连接时的
 // 设置视图。切片给空值而不是 nil——JSON null 会让前端 .length 直接崩。
-func degradedSettings(agent *model.Agent, last model.JSONMap) *acp.Settings {
+func DegradedSettings(agent *model.Agent, last model.JSONMap) *acp.Settings {
 	settings := &acp.Settings{
 		Flavor:        acp.Flavor(agent.Flavor),
 		Models:        []acp.Model{},
@@ -162,7 +162,7 @@ func (s *ChatService) ApplySettings(ctx context.Context, sessionID uint, patch a
 	}
 	s.catalogFor(ctx, sessionID).filterSettings(&settings)
 	s.saveSettingsSnapshot(sessionID, &settings)
-	s.brokerFor(sessionID).publish(StreamEvent{Kind: "settings", Settings: &settings})
+	s.brokerFor(sessionID).Publish(StreamEvent{Kind: "settings", Settings: &settings})
 	return &settings, nil
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
+	"acpp/server/internal/stream"
 	"acpp/server/internal/transcript"
 )
 
@@ -28,7 +29,7 @@ type ChatService struct {
 	skillUsage *SkillUsageService
 
 	mu      sync.Mutex
-	brokers map[uint]*broker
+	brokers map[uint]*stream.Broker
 }
 
 func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
@@ -38,7 +39,7 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 		manager:     manager,
 		transcripts: transcripts,
 		skillUsage:  skillUsage,
-		brokers:     make(map[uint]*broker),
+		brokers:     make(map[uint]*stream.Broker),
 	}
 }
 
@@ -56,7 +57,7 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 		// 恢复会话的工具栏因此与进行中的会话显示一致。
 		var agent model.Agent
 		if err := s.db.WithContext(ctx).First(&agent, view.AgentID).Error; err == nil {
-			settings := degradedSettings(&agent, view.LastSettings)
+			settings := DegradedSettings(&agent, view.LastSettings)
 			if len(settings.Models) > 0 {
 				view.Settings = settings
 			}
@@ -148,11 +149,11 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		s.saveSettingsSnapshot(sessionID, &settings)
 		// 懒连接下 Open 多由 Send 顺路触发，前端不会拿到这份 HTTP 响应——
 		// 统一视图与命令清单同时走 SSE 广播一份。
-		br.publish(StreamEvent{Kind: "settings", Settings: &settings})
+		br.Publish(StreamEvent{Kind: "settings", Settings: &settings})
 	}
 	view.Commands = cat.filterCommands(s.manager.Commands(key))
 	if len(view.Commands) > 0 {
-		br.publish(StreamEvent{Kind: "commands", Commands: view.Commands})
+		br.Publish(StreamEvent{Kind: "commands", Commands: view.Commands})
 	}
 	return view, nil
 }
@@ -241,27 +242,27 @@ func (s *ChatService) Running(sessionID uint) bool {
 func (s *ChatService) markSessionError(sessionID uint, cause error) {
 	err := s.db.Model(&model.Session{}).Where("id = ?", sessionID).Updates(map[string]any{
 		"state":       model.SessionError,
-		"stop_reason": truncateError(cause.Error()),
+		"stop_reason": TruncateError(cause.Error()),
 	}).Error
 	if err != nil {
 		slog.Error("mark session error", "session", sessionID, "err", err)
 	}
 }
 
-func (s *ChatService) brokerFor(sessionID uint) *broker {
+func (s *ChatService) brokerFor(sessionID uint) *stream.Broker {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if br, ok := s.brokers[sessionID]; ok {
 		return br
 	}
-	br := newBroker()
+	br := stream.NewBroker()
 	s.brokers[sessionID] = br
 	return br
 }
 
 func sessionKey(id uint) string { return strconv.FormatUint(uint64(id), 10) }
 
-func truncateError(s string) string {
+func TruncateError(s string) string {
 	const max = 512
 	if len(s) <= max {
 		return s

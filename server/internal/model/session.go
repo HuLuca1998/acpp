@@ -30,7 +30,7 @@ type Session struct {
 	// LastSettings 是最后一次生效的统一设置当前值快照
 	// （model/effort/level/plan/fast），恢复会话的降级视图用它填 Current*，
 	// 让三种状态（新建/进行中/恢复）的设置控件显示一致。
-	LastSettings JSONMap `gorm:"type:text" json:"lastSettings,omitempty"`
+	LastSettings JSONMap   `gorm:"type:text" json:"lastSettings,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `gorm:"index" json:"updatedAt"`
 

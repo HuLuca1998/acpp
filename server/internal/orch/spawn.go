@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -10,15 +10,17 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
+	"acpp/server/internal/service"
+	"acpp/server/internal/stream"
 )
 
 // SpawnAgent 是 spawn_agent 工具的实现：按角色拉起一条真实的 ACP 子会话，
 // 同步跑完任务并返回其最终结论——外化 subagent 的核心（adr-006）。
 // 调用方（MCP handler）阻塞在这里，主会话的工具调用因此挂起等待，
 // 语义与 claude 内部 Task 一致，只是全过程可观察。
-func (s *OrchService) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleName, taskText string) (string, error) {
+func (s *Service) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleName, taskText string) (string, error) {
 	if strings.TrimSpace(taskText) == "" {
-		return "", fmt.Errorf("%w: task is required", ErrInvalid)
+		return "", fmt.Errorf("%w: task is required", service.ErrInvalid)
 	}
 	if s.isStopped(orch.ID) {
 		return "", fmt.Errorf("orchestration stopped by user")
@@ -67,7 +69,7 @@ func (s *OrchService) SpawnAgent(ctx context.Context, orch *model.OrchSession, r
 	task.DurationMS = time.Since(started).Milliseconds()
 	if runErr != nil {
 		task.State = model.OrchTaskFailed
-		task.Result = truncateError(runErr.Error())
+		task.Result = service.TruncateError(runErr.Error())
 	} else {
 		task.State = model.OrchTaskDone
 		task.Result = result
@@ -89,7 +91,7 @@ func (s *OrchService) SpawnAgent(ctx context.Context, orch *model.OrchSession, r
 // runTask 打开角色子会话并跑完这一轮任务。子会话用完即收进程
 // （记录与转录保留，可追溯可续看）；上下文在 agent 侧，之后想续问
 // 可以按 acpSessionId 恢复（暂未开放）。
-func (s *OrchService) runTask(ctx context.Context, orch *model.OrchSession, role *model.Role, agent *model.Agent, task *model.OrchTask) (string, error) {
+func (s *Service) runTask(ctx context.Context, orch *model.OrchSession, role *model.Role, agent *model.Agent, task *model.OrchTask) (string, error) {
 	inj, err := s.roleInjection(role, agent)
 	if err != nil {
 		return "", err
@@ -155,8 +157,8 @@ func (s *OrchService) runTask(ctx context.Context, orch *model.OrchSession, role
 		}
 	}
 
-	br.startTurn()
-	br.publish(StreamEvent{Kind: "user_message", Message: &model.Message{
+	br.StartTurn()
+	br.Publish(stream.Event{Kind: "user_message", Message: &model.Message{
 		ID:        uint(time.Now().UnixMilli()),
 		SessionID: task.ID,
 		Role:      model.RoleUser,
@@ -166,7 +168,7 @@ func (s *OrchService) runTask(ctx context.Context, orch *model.OrchSession, role
 	}})
 
 	result, err := s.manager.Prompt(taskCtx, key, []acp.ContentBlock{acp.TextBlock(task.Task)})
-	br.endTurn()
+	br.EndTurn()
 	if err != nil {
 		if taskCtx.Err() != nil {
 			return "", fmt.Errorf("task timed out after %d minutes", orchTaskTimeoutMinutes)
@@ -188,7 +190,7 @@ func (s *OrchService) runTask(ctx context.Context, orch *model.OrchSession, role
 	if !result.StopReason.OK() {
 		// 非正常收尾（cancelled/max_tokens/refusal）：把状态如实告诉
 		// 主会话，让它决定重试还是换路子。
-		return "", fmt.Errorf("task ended with %s: %s", result.StopReason, truncateError(answer))
+		return "", fmt.Errorf("task ended with %s: %s", result.StopReason, service.TruncateError(answer))
 	}
 	if answer == "" {
 		answer = "(子代理没有产出文本回复)"
@@ -197,7 +199,7 @@ func (s *OrchService) runTask(ctx context.Context, orch *model.OrchSession, role
 }
 
 // lastAgentText 从任务转录重建消息，取最后一条 agent 正文。
-func (s *OrchService) lastAgentText(taskID uint) string {
+func (s *Service) lastAgentText(taskID uint) string {
 	all, _, err := s.TaskMessages(taskID, 0, 0)
 	if err != nil {
 		return ""

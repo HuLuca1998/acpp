@@ -45,7 +45,7 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 		updates["commands"] = model.AgentCommandSlice{}
 		updates["skeleton"] = model.AgentSkeleton{}
 		updates["status"] = model.AgentError
-		updates["last_error"] = truncateError(err.Error())
+		updates["last_error"] = TruncateError(err.Error())
 	} else {
 		settings, serr := s.manager.Settings(key)
 		// 斜杠命令清单以通知形式在会话建立后异步推到，等它一小会——

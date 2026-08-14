@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"acpp/server/internal/config"
+	"acpp/server/internal/orch"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
 )
@@ -24,6 +25,8 @@ type Services struct {
 	Skills     *service.SkillService
 	SkillUsage *service.SkillUsageService
 	Update     *system.Updater
+	Roles      *orch.RoleService
+	Orch       *orch.Service
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -136,6 +139,37 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/terminals", terminals.list)
 	api.HandleFunc("DELETE /api/sessions/{id}/terminals/{tid}", terminals.remove)
 	api.HandleFunc("GET /api/sessions/{id}/terminals/{tid}/ws", terminals.attach)
+
+	// 角色：编排里可雇佣的子代理定义（adr-006）。
+	roles := roleHandler{roles: svcs.Roles}
+	api.HandleFunc("GET /api/roles", roles.list)
+	api.HandleFunc("POST /api/roles", roles.create)
+	api.HandleFunc("GET /api/roles/{id}", roles.get)
+	api.HandleFunc("PUT /api/roles/{id}", roles.update)
+	api.HandleFunc("DELETE /api/roles/{id}", roles.remove)
+
+	// 编排：主会话 + spawn 的任务子会话 + agent 回连的 MCP 端点（adr-006）。
+	orch := orchHandler{orch: svcs.Orch}
+	api.HandleFunc("GET /api/orchestrator/sessions", orch.list)
+	api.HandleFunc("POST /api/orchestrator/sessions", orch.create)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}", orch.get)
+	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}", orch.remove)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/send", orch.send)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/events", orch.events)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/messages", orch.messages)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/cancel", orch.cancel)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/stop", orch.stop)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/settings", orch.getSettings)
+	api.HandleFunc("PUT /api/orchestrator/sessions/{id}/settings", orch.settings)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/permission", orch.permission)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/elicitation", orch.elicitation)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/tasks", orch.tasks)
+	api.HandleFunc("GET /api/orchestrator/tasks/{tid}/events", orch.taskEvents)
+	api.HandleFunc("GET /api/orchestrator/tasks/{tid}/messages", orch.taskMessages)
+	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/cancel", orch.taskCancel)
+	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/permission", orch.taskPermission)
+	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/elicitation", orch.taskElicitation)
+	api.HandleFunc("/api/mcp/{token}", orch.mcp)
 
 	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)

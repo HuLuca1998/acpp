@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"acpp/server/internal/model"
+	"acpp/server/internal/service"
 )
 
 // RoleService 负责编排角色的读写与内置模板预置（adr-006）。
@@ -33,10 +34,10 @@ type RoleInput struct {
 
 func (in RoleInput) validate() error {
 	if strings.TrimSpace(in.Name) == "" {
-		return fmt.Errorf("%w: name is required", ErrInvalid)
+		return fmt.Errorf("%w: name is required", service.ErrInvalid)
 	}
 	if in.AgentID == 0 {
-		return fmt.Errorf("%w: agentId is required", ErrInvalid)
+		return fmt.Errorf("%w: agentId is required", service.ErrInvalid)
 	}
 	return nil
 }
@@ -53,7 +54,7 @@ func (s *RoleService) Get(ctx context.Context, id uint) (*model.Role, error) {
 	var role model.Role
 	err := s.db.WithContext(ctx).First(&role, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("role %d: %w", id, ErrNotFound)
+		return nil, fmt.Errorf("role %d: %w", id, service.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get role %d: %w", id, err)
@@ -67,7 +68,7 @@ func (s *RoleService) GetByName(ctx context.Context, name string) (*model.Role, 
 	var role model.Role
 	err := s.db.WithContext(ctx).Where("name = ?", strings.TrimSpace(name)).First(&role).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("role %q: %w", name, ErrNotFound)
+		return nil, fmt.Errorf("role %q: %w", name, service.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get role %q: %w", name, err)
@@ -121,7 +122,7 @@ func (s *RoleService) Delete(ctx context.Context, id uint) error {
 		return fmt.Errorf("delete role %d: %w", id, res.Error)
 	}
 	if res.RowsAffected == 0 {
-		return fmt.Errorf("role %d: %w", id, ErrNotFound)
+		return fmt.Errorf("role %d: %w", id, service.ErrNotFound)
 	}
 	return nil
 }

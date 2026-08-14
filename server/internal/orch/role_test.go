@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"acpp/server/internal/model"
+	"acpp/server/internal/service"
 )
 
 func roleDB(t *testing.T) *gorm.DB {
@@ -28,7 +29,7 @@ func roleDB(t *testing.T) *gorm.DB {
 // 标记且 persona/description 非空（分别喂子会话与主会话的雇佣目录）。
 func TestRoleService_EnsureDefaults_SeedsPipelineRoles(t *testing.T) {
 	gdb := roleDB(t)
-	if _, err := NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
+	if _, err := service.NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
 		t.Fatalf("seed agents: %v", err)
 	}
 	svc := NewRoleService(gdb)
@@ -61,7 +62,7 @@ func TestRoleService_EnsureDefaults_SeedsPipelineRoles(t *testing.T) {
 // 自己的角色，就不再整批预置。
 func TestRoleService_EnsureDefaults_DoesNotResurrect(t *testing.T) {
 	gdb := roleDB(t)
-	if _, err := NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
+	if _, err := service.NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
 		t.Fatalf("seed agents: %v", err)
 	}
 	svc := NewRoleService(gdb)
@@ -76,7 +77,7 @@ func TestRoleService_EnsureDefaults_DoesNotResurrect(t *testing.T) {
 		}
 	}
 	// 用户自建一个，模拟「删光内置、只留自己的」库。
-	agents, _ := NewAgentService(gdb).List(context.Background())
+	agents, _ := service.NewAgentService(gdb).List(context.Background())
 	if _, err := svc.Create(context.Background(), RoleInput{
 		Name: "我的角色", AgentID: agents[0].ID,
 	}); err != nil {
@@ -95,18 +96,18 @@ func TestRoleService_EnsureDefaults_DoesNotResurrect(t *testing.T) {
 // 契约：CRUD 基本行为——名字必填、agentId 必填、按名字查得到、删除后 404。
 func TestRoleService_CRUD(t *testing.T) {
 	gdb := roleDB(t)
-	if _, err := NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
+	if _, err := service.NewAgentService(gdb).EnsureDefaults(context.Background()); err != nil {
 		t.Fatalf("seed agents: %v", err)
 	}
-	agents, _ := NewAgentService(gdb).List(context.Background())
+	agents, _ := service.NewAgentService(gdb).List(context.Background())
 	svc := NewRoleService(gdb)
 	ctx := context.Background()
 
-	if _, err := svc.Create(ctx, RoleInput{AgentID: agents[0].ID}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("空名字应 ErrInvalid，got %v", err)
+	if _, err := svc.Create(ctx, RoleInput{AgentID: agents[0].ID}); !errors.Is(err, service.ErrInvalid) {
+		t.Fatalf("空名字应 service.ErrInvalid，got %v", err)
 	}
-	if _, err := svc.Create(ctx, RoleInput{Name: "r"}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("缺 agentId 应 ErrInvalid，got %v", err)
+	if _, err := svc.Create(ctx, RoleInput{Name: "r"}); !errors.Is(err, service.ErrInvalid) {
+		t.Fatalf("缺 agentId 应 service.ErrInvalid，got %v", err)
 	}
 
 	role, err := svc.Create(ctx, RoleInput{
@@ -132,7 +133,7 @@ func TestRoleService_CRUD(t *testing.T) {
 	if err := svc.Delete(ctx, role.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := svc.Get(ctx, role.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("删除后应 ErrNotFound，got %v", err)
+	if _, err := svc.Get(ctx, role.ID); !errors.Is(err, service.ErrNotFound) {
+		t.Fatalf("删除后应 service.ErrNotFound，got %v", err)
 	}
 }

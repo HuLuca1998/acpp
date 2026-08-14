@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
+	"acpp/server/internal/stream"
 )
 
 // flavorOfAgent 判断 runtime 方言：优先探测缓存，缺失时按命令名兜底。
@@ -69,7 +70,7 @@ type orchInjection struct {
 //   - codex：一切走专属 CODEX_HOME——config.toml 定义 MCP server（含
 //     tool_timeout_sec），AGENTS.md 承载调度提示词；session/new 不传
 //     mcpServers（config 已定义，传两遍会重名）。
-func (s *OrchService) mainInjection(orch *model.OrchSession, agent *model.Agent, prompt string) (orchInjection, error) {
+func (s *Service) mainInjection(orch *model.OrchSession, agent *model.Agent, prompt string) (orchInjection, error) {
 	mcpURL := s.mcpBase + orch.MCPToken
 	switch flavorOfAgent(agent) {
 	case "claude":
@@ -107,7 +108,7 @@ func (s *OrchService) mainInjection(orch *model.OrchSession, agent *model.Agent,
 // roleInjection 组装角色子会话注入：persona 进 claude 的 systemPrompt
 // append / codex 角色专属 home 的 AGENTS.md。子会话不挂 MCP——spawn
 // 深度硬性为 1，防递归失控。
-func (s *OrchService) roleInjection(role *model.Role, agent *model.Agent) (orchInjection, error) {
+func (s *Service) roleInjection(role *model.Role, agent *model.Agent) (orchInjection, error) {
 	switch flavorOfAgent(agent) {
 	case "claude":
 		meta := map[string]any{}
@@ -140,7 +141,7 @@ func (s *OrchService) roleInjection(role *model.Role, agent *model.Agent) (orchI
 // 专属内容——AGENTS.md（调度提示词或角色 persona，用户改了角色要生效，
 // 每次重写）与 config.toml 尾部的 acpp MCP 段（mcpURL 非 nil 时；端口
 // 随部署形态变，同样每次重写）。
-func (s *OrchService) ensureOrchCodexHome(home, agentsMD string, mcpURL *string) error {
+func (s *Service) ensureOrchCodexHome(home, agentsMD string, mcpURL *string) error {
 	if err := acp.EnsureCodexHome(home, s.skillpackDir, os.Getenv("HOME")); err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func (s *OrchService) ensureOrchCodexHome(home, agentsMD string, mcpURL *string)
 }
 
 // ensureOpen 幂等拉起编排主会话（懒连接，语义对齐 ChatService.Open）。
-func (s *OrchService) ensureOpen(ctx context.Context, orch *model.OrchSession) error {
+func (s *Service) ensureOpen(ctx context.Context, orch *model.OrchSession) error {
 	key := orchKey(orch.ID)
 	if _, ok := s.manager.Get(key); ok {
 		return nil
@@ -224,10 +225,10 @@ func (s *OrchService) ensureOpen(ctx context.Context, orch *model.OrchSession) e
 
 	if settings, err := s.manager.Settings(key); err == nil {
 		s.saveOrchSettingsSnapshot(orch.ID, &settings)
-		br.publish(StreamEvent{Kind: "settings", Settings: &settings})
+		br.Publish(stream.Event{Kind: "settings", Settings: &settings})
 	}
 	if commands := s.manager.Commands(key); len(commands) > 0 {
-		br.publish(StreamEvent{Kind: "commands", Commands: commands})
+		br.Publish(stream.Event{Kind: "commands", Commands: commands})
 	}
 	return nil
 }

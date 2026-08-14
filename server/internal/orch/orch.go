@@ -1,4 +1,4 @@
-package service
+package orch
 
 import (
 	"context"
@@ -13,19 +13,21 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
+	"acpp/server/internal/service"
+	"acpp/server/internal/stream"
 	"acpp/server/internal/transcript"
 )
 
-// OrchService 是编排功能的业务核心（adr-006）：主会话挂载系统 MCP、
+// Service 是编排功能的业务核心（adr-006）：主会话挂载系统 MCP、
 // 经 spawn_agent 雇佣角色子会话并同步等结果。与 ChatService 刻意分离
 // ——隔离契约要求编排整体可删而不影响普通会话；broker/重建器/acp 层
 // 这些无会话业务语义的构件按包内共享复用。
-type OrchService struct {
+type Service struct {
 	db          *gorm.DB
 	roles       *RoleService
 	manager     *acp.Manager
 	transcripts *transcript.Store
-	skillUsage  *SkillUsageService
+	skillUsage  *service.SkillUsageService
 
 	// dataDir 派生编排专属的 codex home（<dataDir>/orch/...）；
 	// skillpackDir 让编排会话保持与普通会话相同的技能隔离基座。
@@ -37,7 +39,7 @@ type OrchService struct {
 
 	mu sync.Mutex
 	// brokers 按流 key 索引：主会话 orchKey(id)、任务 orchTaskKey(id)。
-	brokers map[string]*broker
+	brokers map[string]*stream.Broker
 	// runningTasks 记录每条主会话在跑的任务数（并发护栏）。
 	runningTasks map[uint]int
 	// stopped 标记被急停的主会话：在途 spawn 返回错误，不再接受新 spawn。
@@ -55,8 +57,8 @@ const (
 	mcpToolTimeoutMS = 3600_000
 )
 
-func NewOrchService(db *gorm.DB, roles *RoleService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService, dataDir, skillpackDir, addr string) *OrchService {
-	return &OrchService{
+func NewService(db *gorm.DB, roles *RoleService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *service.SkillUsageService, dataDir, skillpackDir, addr string) *Service {
+	return &Service{
 		db:           db,
 		roles:        roles,
 		manager:      manager,
@@ -65,7 +67,7 @@ func NewOrchService(db *gorm.DB, roles *RoleService, manager *acp.Manager, trans
 		dataDir:      dataDir,
 		skillpackDir: skillpackDir,
 		mcpBase:      mcpBaseURL(addr),
-		brokers:      make(map[string]*broker),
+		brokers:      make(map[string]*stream.Broker),
 		runningTasks: make(map[uint]int),
 		stopped:      make(map[uint]bool),
 	}
@@ -86,8 +88,8 @@ func mcpBaseURL(addr string) string {
 func orchKey(id uint) string     { return fmt.Sprintf("orch-%d", id) }
 func orchTaskKey(id uint) string { return fmt.Sprintf("orchtask-%d", id) }
 
-// OrchSessionInput 是创建编排会话的入参。
-type OrchSessionInput struct {
+// SessionInput 是创建编排会话的入参。
+type SessionInput struct {
 	AgentID uint   `json:"agentId"`
 	Cwd     string `json:"cwd"`
 	Title   string `json:"title"`
@@ -95,13 +97,13 @@ type OrchSessionInput struct {
 
 // Create 新建编排主会话：生成专属 MCP token，进程与握手推迟到首次发送
 // （与普通会话的懒连接一致）。
-func (s *OrchService) Create(ctx context.Context, in OrchSessionInput) (*model.OrchSession, error) {
+func (s *Service) Create(ctx context.Context, in SessionInput) (*model.OrchSession, error) {
 	if in.AgentID == 0 {
-		return nil, fmt.Errorf("%w: agentId is required", ErrInvalid)
+		return nil, fmt.Errorf("%w: agentId is required", service.ErrInvalid)
 	}
 	var agent model.Agent
 	if err := s.db.WithContext(ctx).First(&agent, in.AgentID).Error; err != nil {
-		return nil, fmt.Errorf("%w: agent %d", ErrInvalid, in.AgentID)
+		return nil, fmt.Errorf("%w: agent %d", service.ErrInvalid, in.AgentID)
 	}
 
 	token := make([]byte, 24)
@@ -122,7 +124,7 @@ func (s *OrchService) Create(ctx context.Context, in OrchSessionInput) (*model.O
 	return &orch, nil
 }
 
-func (s *OrchService) List(ctx context.Context, page, pageSize int) ([]model.OrchSession, int64, error) {
+func (s *Service) List(ctx context.Context, page, pageSize int) ([]model.OrchSession, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -142,11 +144,11 @@ func (s *OrchService) List(ctx context.Context, page, pageSize int) ([]model.Orc
 	return items, total, nil
 }
 
-func (s *OrchService) Get(ctx context.Context, id uint) (*model.OrchSession, error) {
+func (s *Service) Get(ctx context.Context, id uint) (*model.OrchSession, error) {
 	var orch model.OrchSession
 	err := s.db.WithContext(ctx).First(&orch, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("orch session %d: %w", id, ErrNotFound)
+		return nil, fmt.Errorf("orch session %d: %w", id, service.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get orch session %d: %w", id, err)
@@ -155,14 +157,14 @@ func (s *OrchService) Get(ctx context.Context, id uint) (*model.OrchSession, err
 }
 
 // byMCPToken 是 MCP 端点的身份解析：token 即凭证。
-func (s *OrchService) byMCPToken(ctx context.Context, token string) (*model.OrchSession, error) {
+func (s *Service) byMCPToken(ctx context.Context, token string) (*model.OrchSession, error) {
 	if token == "" {
-		return nil, fmt.Errorf("orch token: %w", ErrNotFound)
+		return nil, fmt.Errorf("orch token: %w", service.ErrNotFound)
 	}
 	var orch model.OrchSession
 	err := s.db.WithContext(ctx).Where("mcp_token = ?", token).First(&orch).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("orch token: %w", ErrNotFound)
+		return nil, fmt.Errorf("orch token: %w", service.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get orch session by token: %w", err)
@@ -171,7 +173,7 @@ func (s *OrchService) byMCPToken(ctx context.Context, token string) (*model.Orch
 }
 
 // Delete 删除编排会话与其全部任务：先急停在跑的一切，再删记录与转录。
-func (s *OrchService) Delete(ctx context.Context, id uint) error {
+func (s *Service) Delete(ctx context.Context, id uint) error {
 	if _, err := s.Get(ctx, id); err != nil {
 		return err
 	}
@@ -205,7 +207,7 @@ func (s *OrchService) Delete(ctx context.Context, id uint) error {
 
 // Stop 急停：中止主会话 turn 与全部在跑任务的子会话 turn。在途的
 // spawn 调用会以错误返回给主会话（若其 turn 还活着）。
-func (s *OrchService) Stop(ctx context.Context, id uint) {
+func (s *Service) Stop(ctx context.Context, id uint) {
 	s.mu.Lock()
 	s.stopped[id] = true
 	s.mu.Unlock()
@@ -222,48 +224,48 @@ func (s *OrchService) Stop(ctx context.Context, id uint) {
 }
 
 // clearStopped 在新一轮用户消息时解除急停标记——急停针对「当前这摊事」。
-func (s *OrchService) clearStopped(id uint) {
+func (s *Service) clearStopped(id uint) {
 	s.mu.Lock()
 	delete(s.stopped, id)
 	s.mu.Unlock()
 }
 
-func (s *OrchService) isStopped(id uint) bool {
+func (s *Service) isStopped(id uint) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.stopped[id]
 }
 
 // brokerFor 按流 key 取/建广播器（主会话与任务共用一套机制）。
-func (s *OrchService) brokerFor(key string) *broker {
+func (s *Service) brokerFor(key string) *stream.Broker {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if br, ok := s.brokers[key]; ok {
 		return br
 	}
-	br := newBroker()
+	br := stream.NewBroker()
 	s.brokers[key] = br
 	return br
 }
 
-func (s *OrchService) dropBroker(key string) {
+func (s *Service) dropBroker(key string) {
 	s.mu.Lock()
 	delete(s.brokers, key)
 	s.mu.Unlock()
 }
 
 // Subscribe 订阅主会话事件流（含 task_update）。
-func (s *OrchService) Subscribe(id uint) (<-chan StreamEvent, func()) {
-	return s.brokerFor(orchKey(id)).subscribe()
+func (s *Service) Subscribe(id uint) (<-chan stream.Event, func()) {
+	return s.brokerFor(orchKey(id)).Subscribe()
 }
 
 // SubscribeTask 订阅一条任务子会话的事件流（拖出面板时用）。
-func (s *OrchService) SubscribeTask(taskID uint) (<-chan StreamEvent, func()) {
-	return s.brokerFor(orchTaskKey(taskID)).subscribe()
+func (s *Service) SubscribeTask(taskID uint) (<-chan stream.Event, func()) {
+	return s.brokerFor(orchTaskKey(taskID)).Subscribe()
 }
 
 // Tasks 列出一条编排会话的全部任务，老的在前（派发流顺序）。
-func (s *OrchService) Tasks(ctx context.Context, orchID uint) ([]model.OrchTask, error) {
+func (s *Service) Tasks(ctx context.Context, orchID uint) ([]model.OrchTask, error) {
 	var tasks []model.OrchTask
 	err := s.db.WithContext(ctx).Where("orch_session_id = ?", orchID).
 		Order("id asc").Find(&tasks).Error
@@ -273,11 +275,11 @@ func (s *OrchService) Tasks(ctx context.Context, orchID uint) ([]model.OrchTask,
 	return tasks, nil
 }
 
-func (s *OrchService) task(ctx context.Context, taskID uint) (*model.OrchTask, error) {
+func (s *Service) task(ctx context.Context, taskID uint) (*model.OrchTask, error) {
 	var task model.OrchTask
 	err := s.db.WithContext(ctx).First(&task, taskID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("orch task %d: %w", taskID, ErrNotFound)
+		return nil, fmt.Errorf("orch task %d: %w", taskID, service.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get orch task %d: %w", taskID, err)
@@ -286,21 +288,21 @@ func (s *OrchService) task(ctx context.Context, taskID uint) (*model.OrchTask, e
 }
 
 // Messages 从转录重建主会话消息（分页语义与 ChatService.Messages 一致）。
-func (s *OrchService) Messages(id uint, limit int, before uint) ([]model.Message, int, error) {
+func (s *Service) Messages(id uint, limit int, before uint) ([]model.Message, int, error) {
 	return s.rebuildFor(orchKey(id), id, limit, before)
 }
 
 // TaskMessages 重建任务子会话的消息。
-func (s *OrchService) TaskMessages(taskID uint, limit int, before uint) ([]model.Message, int, error) {
+func (s *Service) TaskMessages(taskID uint, limit int, before uint) ([]model.Message, int, error) {
 	return s.rebuildFor(orchTaskKey(taskID), taskID, limit, before)
 }
 
-func (s *OrchService) rebuildFor(key string, id uint, limit int, before uint) ([]model.Message, int, error) {
+func (s *Service) rebuildFor(key string, id uint, limit int, before uint) ([]model.Message, int, error) {
 	entries, err := s.transcripts.Read(key)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read transcript: %w", err)
 	}
-	all := RebuildMessages(id, entries)
+	all := service.RebuildMessages(id, entries)
 	total := len(all)
 	if before > 0 {
 		cut := len(all)
