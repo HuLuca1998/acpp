@@ -2,7 +2,6 @@ import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronRightIcon } from "lucide-react"
 
-import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { formatRelativeTime } from "@/lib/format"
 import type {
@@ -117,6 +116,7 @@ function CommitRow({
   commit: GitCommit
   locale: string
 }) {
+  const ws = useWorkspace()
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState<GitCommitDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -124,7 +124,7 @@ function CommitRow({
   useEffect(() => {
     if (!open || detail !== null) return
     let stale = false
-    api.sessions
+    ws.scope
       .gitCommit(sessionId, commit.sha)
       .then((d) => {
         if (!stale) setDetail(d)
@@ -135,7 +135,7 @@ function CommitRow({
     return () => {
       stale = true
     }
-  }, [open, detail, sessionId, commit.sha])
+  }, [open, detail, sessionId, commit.sha, ws.scope])
 
   return (
     <div>
@@ -200,6 +200,7 @@ function CommitFileRow({
   file: GitFileChange
 }) {
   const { t } = useTranslation()
+  const ws = useWorkspace()
   const [open, setOpen] = useState(false)
   const [diff, setDiff] = useState<GitDiffView | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -207,7 +208,7 @@ function CommitFileRow({
   useEffect(() => {
     if (!open || diff !== null) return
     let stale = false
-    api.sessions
+    ws.scope
       .gitCommitFile(sessionId, sha, file.path)
       .then((view) => {
         if (!stale) setDiff(view)
@@ -218,7 +219,7 @@ function CommitFileRow({
     return () => {
       stale = true
     }
-  }, [open, diff, sessionId, sha, file.path])
+  }, [open, diff, sessionId, sha, file.path, ws.scope])
 
   return (
     <div>

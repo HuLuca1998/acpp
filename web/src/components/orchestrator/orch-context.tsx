@@ -1,8 +1,9 @@
 import { createContext, useContext } from "react"
 
 import type { useOrchChat } from "@/hooks/use-orch-chat"
+import type { ImageAttachment } from "@/types/acp"
 
-/** 编排页共享给各面板的数据与命令。 */
+/** 编排页共享给各面板的数据与命令（与普通会话的 ChatPanelData 对齐）。 */
 export interface OrchChatValue {
   /** 草稿态为 true：会话未创建，首条消息落地才建。 */
   isNew: boolean
@@ -17,6 +18,17 @@ export interface OrchChatValue {
   setAgentId: (id: number) => void
   draftCwd: string
   openCwdPicker: () => void
+  /** 待发送附件：图片与 @ 引用文件。 */
+  images: ImageAttachment[]
+  files: string[]
+  removeImage: (index: number) => void
+  removeFile: (index: number) => void
+  addImages: (picked: File[]) => void
+  openImagePicker: () => void
+  openFilePicker: () => void
+  /** 排队插话：撤回回填 / 立即插入当前轮。 */
+  recallQueued: (id: number) => void
+  steerQueued: (id: number) => void
 }
 
 export const OrchChatContext = createContext<OrchChatValue | null>(null)

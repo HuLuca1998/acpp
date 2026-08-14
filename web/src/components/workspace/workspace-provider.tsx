@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import type { DockviewApi } from "dockview-react"
 
-import { api } from "@/lib/api"
+import { api, type WorkspaceScopeApi } from "@/lib/api"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import {
   useWorkspace,
@@ -18,9 +18,12 @@ import {
 /** 命令总线的宿主：状态全在 ref 里，provider 本身不因命令重渲染。 */
 export function WorkspaceProvider({
   sessionId,
+  scope = api.sessions,
   children,
 }: {
   sessionId: number
+  /** 数据面作用域，默认普通会话；编排页传 api.orchestrator。 */
+  scope?: WorkspaceScopeApi
   children: React.ReactNode
 }) {
   const apiRef = useRef<DockviewApi | null>(null)
@@ -48,6 +51,7 @@ export function WorkspaceProvider({
     }
     return {
       sessionId,
+      scope,
       attachApi: (api) => {
         apiRef.current = api
       },
@@ -69,7 +73,7 @@ export function WorkspaceProvider({
       newTerminal: () => {
         const dock = apiRef.current
         if (!dock || !sessionId) return
-        void api.sessions
+        void scope
           .terminalCreate(sessionId)
           .then((info) => addTerminalPanel(dock, info.id, info.num))
           .catch(() => {})
@@ -119,7 +123,7 @@ export function WorkspaceProvider({
       const notify = () => gitListenersRef.current.forEach((l) => l())
       gitRef.current = { ...gitRef.current, loading: true }
       notify()
-      api.sessions
+      scope
         .gitOverview(sessionId)
         .then((data) => {
           gitRef.current = { data, loading: false, error: null }
@@ -133,7 +137,7 @@ export function WorkspaceProvider({
         })
         .finally(notify)
     }
-  }, [sessionId])
+  }, [sessionId, scope])
 
   return (
     <WorkspaceContext.Provider value={value}>

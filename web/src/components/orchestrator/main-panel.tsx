@@ -1,9 +1,11 @@
 import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AttachmentTray } from "@/components/chat/composer/attachment-tray"
 import { ChatStream } from "@/components/chat/chat-stream"
 import { Composer } from "@/components/chat/composer/composer"
 import { ComposerStatus } from "@/components/chat/composer/composer-status"
+import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
 import { useOrchCtx } from "@/components/orchestrator/orch-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -16,7 +18,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { cn } from "@/lib/utils"
-import { NetworkIcon, OctagonXIcon } from "lucide-react"
+import { AtSignIcon, ImageIcon, NetworkIcon, OctagonXIcon } from "lucide-react"
 
 /**
  * 编排主对话面板：消息流 + composer + 急停。spawn 的过程在主流里就是
@@ -24,8 +26,24 @@ import { NetworkIcon, OctagonXIcon } from "lucide-react"
  */
 export const OrchMainPanel = memo(function OrchMainPanel() {
   const { t } = useTranslation()
-  const { isNew, chat, draft, setDraft, submit, draftCwd, openCwdPicker } =
-    useOrchCtx()
+  const {
+    isNew,
+    chat,
+    draft,
+    setDraft,
+    submit,
+    draftCwd,
+    openCwdPicker,
+    images,
+    files,
+    removeImage,
+    removeFile,
+    addImages,
+    openImagePicker,
+    openFilePicker,
+    recallQueued,
+    steerQueued,
+  } = useOrchCtx()
 
   const hasContent =
     chat.messages.length > 0 ||
@@ -111,6 +129,22 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
         disabled={false}
         placeholder={t("orch.placeholder")}
         commands={chat.commands}
+        attachments={
+          <AttachmentTray
+            images={images}
+            files={files}
+            onRemoveImage={removeImage}
+            onRemoveFile={removeFile}
+          />
+        }
+        onPasteImages={(picked) => addImages(picked)}
+        queue={
+          <QueuedMessages
+            items={chat.queued}
+            onSteer={steerQueued}
+            onRecall={recallQueued}
+          />
+        }
         footer={
           <ComposerStatus
             cwd={isNew ? draftCwd : chat.orchSession?.cwd}
@@ -126,7 +160,41 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
             onApply={chat.applySettings}
           />
         ) : null}
+        <AttachmentButton
+          label={t("chat.attachments.image")}
+          onClick={openImagePicker}
+        >
+          <ImageIcon className="size-3.5" />
+        </AttachmentButton>
+        <AttachmentButton
+          label={t("chat.attachments.file")}
+          onClick={openFilePicker}
+        >
+          <AtSignIcon className="size-3.5" />
+        </AttachmentButton>
       </Composer>
     </div>
   )
 })
+
+/** composer 里的附件圆钮（与普通会话面板同款）。 */
+function AttachmentButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}

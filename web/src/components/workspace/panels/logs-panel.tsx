@@ -1,7 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { useWorkspace } from "@/components/workspace/workspace-context"
@@ -71,7 +70,7 @@ export const LogsPanel = memo(function LogsPanel() {
       if (pulling) return
       pulling = true
       try {
-        const res = await api.sessions.transcriptChunk(
+        const res = await ws.scope.transcriptChunk(
           ws.sessionId,
           offsetRef.current
         )
@@ -106,7 +105,7 @@ export const LogsPanel = memo(function LogsPanel() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [ws.sessionId])
+  }, [ws.sessionId, ws.scope])
 
   // 贴底跟随：内容渲染完成后再滚（在 pull 里滚会拿到旧的 scrollHeight）。
   // 用户上翻查看历史即暂停，滚回底部自动恢复。

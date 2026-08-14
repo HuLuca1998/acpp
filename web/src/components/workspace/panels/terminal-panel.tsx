@@ -99,7 +99,7 @@ export const TerminalPanel = memo(function TerminalPanel(
     termRef.current = term
     fitRef.current = fit
 
-    const sock = new WebSocket(api.sessions.terminalWsUrl(ws.sessionId, termId))
+    const sock = new WebSocket(ws.scope.terminalWsUrl(ws.sessionId, termId))
     sock.binaryType = "arraybuffer"
     sockRef.current = sock
     const encoder = new TextEncoder()
@@ -147,7 +147,7 @@ export const TerminalPanel = memo(function TerminalPanel(
       termRef.current = null
       sockRef.current = null
     }
-  }, [termId, ws.sessionId])
+  }, [termId, ws.sessionId, ws.scope])
 
   // tab 切回来时补一次 fit（隐藏期间的尺寸变化 ResizeObserver 可能测不到）。
   useEffect(() => {

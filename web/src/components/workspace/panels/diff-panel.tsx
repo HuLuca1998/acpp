@@ -2,7 +2,6 @@ import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronRightIcon } from "lucide-react"
 
-import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GitDiffView, GitFileChange, GitOverview } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
@@ -109,6 +108,7 @@ function DiffFileRow({
   /** gitStore 快照引用：刷新后引用变化，展开中的行重新拉取。 */
   version: GitOverview | null
 }) {
+  const ws = useWorkspace()
   const [open, setOpen] = useState(false)
   const [diff, setDiff] = useState<GitDiffView | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -117,7 +117,7 @@ function DiffFileRow({
   useEffect(() => {
     if (!open) return
     let stale = false
-    api.sessions
+    ws.scope
       .gitDiff(sessionId, file.path)
       .then((view) => {
         if (!stale) {
@@ -131,7 +131,7 @@ function DiffFileRow({
     return () => {
       stale = true
     }
-  }, [open, sessionId, file.path, version])
+  }, [open, sessionId, file.path, version, ws.scope])
 
   return (
     <div>

@@ -1,6 +1,7 @@
 import { createContext, useContext, useSyncExternalStore } from "react"
 import type { DockviewApi } from "dockview-react"
 
+import type { WorkspaceScopeApi } from "@/lib/api"
 import type { GitOverview } from "@/types/acp"
 import type { LayoutPreset } from "@/components/workspace/layout-presets"
 import type { WorkspacePanelKind } from "@/components/workspace/workspace-panels"
@@ -21,6 +22,8 @@ export interface GitStoreState {
 export interface WorkspaceValue {
   /** 草稿态（会话未创建）为 0，面板据此显示「创建后可用」空态。 */
   sessionId: number
+  /** 工作区数据面的作用域 API：普通会话与编排主会话只差路径前缀。 */
+  scope: WorkspaceScopeApi
   /** dock ready 时注入 dockview api；卸载时传 null。 */
   attachApi: (api: DockviewApi | null) => void
   getApi: () => DockviewApi | null

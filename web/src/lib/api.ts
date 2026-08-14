@@ -66,6 +66,102 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body?.data as T
 }
 
+/**
+ * 工作区数据面的作用域 API：普通会话与编排主会话的端点形状完全一致，
+ * 只差路径前缀。面板组件经 WorkspaceProvider 拿到对应作用域实例。
+ */
+export function workspaceScopeApi(prefix: string) {
+  return {
+    /**
+     * 增量读转录 JSONL（logs 面板轮询用）：转录 append-only，用 Range
+     * 字节偏移续读。返回新增文本与下一次的偏移；无新内容返回 null。
+     * reset=true 表示拿到的是全量而非增量，调用方必须整体替换而不是追加。
+     */
+    transcriptChunk: async (
+      id: number,
+      offset: number
+    ): Promise<{
+      chunk: string
+      nextOffset: number
+      reset: boolean
+    } | null> => {
+      // no-store 是必须的：ServeFile 带 Last-Modified，浏览器会把首个 200
+      // 全量缓存起来，之后带 Range 的请求被缓存直接用 200 全量应答——
+      // 前端把全量当增量追加，日志每轮翻倍。
+      const res = await fetch(`${BASE}${prefix}/${id}/transcript`, {
+        headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+        cache: "no-store",
+      })
+      // 416：偏移已到文件末尾，没有新内容。
+      if (res.status === 416) return null
+      if (!res.ok) throw new ApiError(res.status, res.statusText)
+      const chunk = await res.text()
+      if (chunk === "") return null
+      // 偏移按字节推进（JSONL 里的中文是多字节，不能用字符数）。
+      const bytes = new TextEncoder().encode(chunk).length
+      // 防御：请求了 Range 却收到 200（中间层没执行 Range），这是全量。
+      const reset = offset > 0 && res.status === 200
+      return { chunk, nextOffset: reset ? bytes : offset + bytes, reset }
+    },
+
+    /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
+    workspaceTree: (id: number, params?: { path?: string; depth?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.path) qs.set("path", params.path)
+      if (params?.depth) qs.set("depth", String(params.depth))
+      const s = qs.toString()
+      return request<TreeListing>(
+        `${prefix}/${id}/fs/entries${s ? `?${s}` : ""}`
+      )
+    },
+    /** 工作区文件内容（预览用，路径限制在会话 cwd 内）。 */
+    workspaceFile: (id: number, path: string) =>
+      request<WorkspaceFile>(
+        `${prefix}/${id}/fs/file?path=${encodeURIComponent(path)}`
+      ),
+
+    /** git 汇总：分支/领先落后/变更文件/未推送 commit，diff 与 commit 面板共享。 */
+    gitOverview: (id: number) =>
+      request<GitOverview>(`${prefix}/${id}/git/overview`),
+    /** 工作区单文件 diff（HEAD 版对工作区版的两端全文）。 */
+    gitDiff: (id: number, path: string) =>
+      request<GitDiffView>(
+        `${prefix}/${id}/git/diff?path=${encodeURIComponent(path)}`
+      ),
+    /** 提交详情（文件清单）。 */
+    gitCommit: (id: number, sha: string) =>
+      request<GitCommitDetail>(`${prefix}/${id}/git/commits/${sha}`),
+    /** 某文件在一条提交前后的全文。 */
+    gitCommitFile: (id: number, sha: string, path: string) =>
+      request<GitDiffView>(
+        `${prefix}/${id}/git/commits/${sha}?path=${encodeURIComponent(path)}`
+      ),
+
+    /** 工作区终端：REST 管生命周期，ws 走 terminalWsUrl。 */
+    terminalCreate: (id: number) =>
+      request<TerminalInfo>(`${prefix}/${id}/terminals`, { method: "POST" }),
+    terminalList: (id: number) =>
+      request<TerminalInfo[]>(`${prefix}/${id}/terminals`),
+    terminalRemove: (id: number, tid: string) =>
+      request<null>(`${prefix}/${id}/terminals/${tid}`, { method: "DELETE" }),
+    terminalWsUrl: (id: number, tid: string) => {
+      // 开发态直连后端：vite 的 ws 代理在 HMR/重启后会僵死（输入静默丢失），
+      // 端口是项目固定约定（根 AGENTS.md §4.0），后端 ws 升级已放行本源。
+      if (import.meta.env.DEV && !BASE.startsWith("http")) {
+        return `ws://127.0.0.1:48080/api${prefix}/${id}/terminals/${tid}/ws`
+      }
+      const proto = location.protocol === "https:" ? "wss" : "ws"
+      const base = BASE.startsWith("http")
+        ? BASE.replace(/^http/, "ws")
+        : `${proto}://${location.host}${BASE}`
+      return `${base}${prefix}/${id}/terminals/${tid}/ws`
+    },
+  }
+}
+
+/** 工作区作用域 API 的类型（面板与 provider 消费）。 */
+export type WorkspaceScopeApi = ReturnType<typeof workspaceScopeApi>
+
 export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
 
@@ -184,90 +280,8 @@ export const api = {
     /** SSE 事件流地址。 */
     eventsUrl: (id: number) => `${BASE}/sessions/${id}/events`,
 
-    /**
-     * 增量读转录 JSONL（logs 面板轮询用）：转录 append-only，用 Range
-     * 字节偏移续读。返回新增文本与下一次的偏移；无新内容返回 null。
-     * reset=true 表示拿到的是全量而非增量，调用方必须整体替换而不是追加。
-     */
-    transcriptChunk: async (
-      id: number,
-      offset: number
-    ): Promise<{
-      chunk: string
-      nextOffset: number
-      reset: boolean
-    } | null> => {
-      // no-store 是必须的：ServeFile 带 Last-Modified，浏览器会把首个 200
-      // 全量缓存起来，之后带 Range 的请求被缓存直接用 200 全量应答——
-      // 前端把全量当增量追加，日志每轮翻倍。
-      const res = await fetch(`${BASE}/sessions/${id}/transcript`, {
-        headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
-        cache: "no-store",
-      })
-      // 416：偏移已到文件末尾，没有新内容。
-      if (res.status === 416) return null
-      if (!res.ok) throw new ApiError(res.status, res.statusText)
-      const chunk = await res.text()
-      if (chunk === "") return null
-      // 偏移按字节推进（JSONL 里的中文是多字节，不能用字符数）。
-      const bytes = new TextEncoder().encode(chunk).length
-      // 防御：请求了 Range 却收到 200（中间层没执行 Range），这是全量。
-      const reset = offset > 0 && res.status === 200
-      return { chunk, nextOffset: reset ? bytes : offset + bytes, reset }
-    },
-
-    /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
-    workspaceTree: (id: number, params?: { path?: string; depth?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.path) qs.set("path", params.path)
-      if (params?.depth) qs.set("depth", String(params.depth))
-      const s = qs.toString()
-      return request<TreeListing>(
-        `/sessions/${id}/fs/entries${s ? `?${s}` : ""}`
-      )
-    },
-    /** 工作区文件内容（预览用，路径限制在会话 cwd 内）。 */
-    workspaceFile: (id: number, path: string) =>
-      request<WorkspaceFile>(
-        `/sessions/${id}/fs/file?path=${encodeURIComponent(path)}`
-      ),
-
-    /** git 汇总：分支/领先落后/变更文件/未推送 commit，diff 与 commit 面板共享。 */
-    gitOverview: (id: number) =>
-      request<GitOverview>(`/sessions/${id}/git/overview`),
-    /** 工作区单文件 diff（HEAD 版对工作区版的两端全文）。 */
-    gitDiff: (id: number, path: string) =>
-      request<GitDiffView>(
-        `/sessions/${id}/git/diff?path=${encodeURIComponent(path)}`
-      ),
-    /** 提交详情（文件清单）。 */
-    gitCommit: (id: number, sha: string) =>
-      request<GitCommitDetail>(`/sessions/${id}/git/commits/${sha}`),
-    /** 某文件在一条提交前后的全文。 */
-    gitCommitFile: (id: number, sha: string, path: string) =>
-      request<GitDiffView>(
-        `/sessions/${id}/git/commits/${sha}?path=${encodeURIComponent(path)}`
-      ),
-
-    /** 工作区终端：REST 管生命周期，ws 走 terminalWsUrl。 */
-    terminalCreate: (id: number) =>
-      request<TerminalInfo>(`/sessions/${id}/terminals`, { method: "POST" }),
-    terminalList: (id: number) =>
-      request<TerminalInfo[]>(`/sessions/${id}/terminals`),
-    terminalRemove: (id: number, tid: string) =>
-      request<null>(`/sessions/${id}/terminals/${tid}`, { method: "DELETE" }),
-    terminalWsUrl: (id: number, tid: string) => {
-      // 开发态直连后端：vite 的 ws 代理在 HMR/重启后会僵死（输入静默丢失），
-      // 端口是项目固定约定（根 AGENTS.md §4.0），后端 ws 升级已放行本源。
-      if (import.meta.env.DEV && !BASE.startsWith("http")) {
-        return `ws://127.0.0.1:48080/api/sessions/${id}/terminals/${tid}/ws`
-      }
-      const proto = location.protocol === "https:" ? "wss" : "ws"
-      const base = BASE.startsWith("http")
-        ? BASE.replace(/^http/, "ws")
-        : `${proto}://${location.host}${BASE}`
-      return `${base}/sessions/${id}/terminals/${tid}/ws`
-    },
+    /** 工作区数据面（文件树/预览/git/终端/转录）——见 workspaceScopeApi。 */
+    ...workspaceScopeApi("/sessions"),
   },
 
   skills: {
@@ -341,10 +355,10 @@ export const api = {
       }),
     remove: (id: number) =>
       request<null>(`/orchestrator/sessions/${id}`, { method: "DELETE" }),
-    send: (id: number, content: string) =>
+    send: (id: number, input: SendInput) =>
       request<Message>(`/orchestrator/sessions/${id}/send`, {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(input),
       }),
     cancel: (id: number) =>
       request<null>(`/orchestrator/sessions/${id}/cancel`, { method: "POST" }),
@@ -410,6 +424,9 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ permissionId, optionId }),
       }),
+    /** 编排主会话的工作区数据面（与普通会话同形状，见 workspaceScopeApi）。 */
+    ...workspaceScopeApi("/orchestrator/sessions"),
+
     taskResolveElicitation: (
       tid: number,
       elicitationId: string,

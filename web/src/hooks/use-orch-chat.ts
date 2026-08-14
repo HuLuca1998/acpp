@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { api, ApiError } from "@/lib/api"
 import {
   INITIAL_CHAT_STATE,
+  mergeInputs,
   reduceChatEvent,
   type ChatState,
 } from "@/lib/chat-events"
@@ -171,11 +172,15 @@ export function useOrchChat(orchId: number) {
     return () => source.close()
   }, [orchId, applyEvent, refreshMessages])
 
+  // 用户刚中止过：轮次停下后排队的插话不自动发出（中止=都停下）。
+  const cancelling = useRef(false)
+
   const send = useCallback(
     async (input: SendInput) => {
+      cancelling.current = false
       setState((prev) => ({ ...prev, busy: true, error: null }))
       try {
-        await api.orchestrator.send(orchId, input.content)
+        await api.orchestrator.send(orchId, input)
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -187,7 +192,33 @@ export function useOrchChat(orchId: number) {
     [orchId]
   )
 
+  /** busy 期间的插话入队：不直接发，浮在输入框上方，发出前可撤回。 */
+  const queueSeq = useRef(0)
+  const enqueue = useCallback((input: SendInput) => {
+    queueSeq.current += 1
+    const item = { id: queueSeq.current, input }
+    setState((prev) => ({ ...prev, queued: [...prev.queued, item] }))
+  }, [])
+
+  /** 从排队里移除一条（撤回或转为立即发送时调用）。 */
+  const removeQueued = useCallback((id: number) => {
+    setState((prev) => ({
+      ...prev,
+      queued: prev.queued.filter((q) => q.id !== id),
+    }))
+  }, [])
+
+  // 轮次自然结束（busy 落回 false）时把排队的插话合并成一轮发出。
+  useEffect(() => {
+    if (state.busy || state.queued.length === 0) return
+    if (cancelling.current) return
+    const inputs = state.queued.map((q) => q.input)
+    setState((prev) => ({ ...prev, queued: [] }))
+    void send(mergeInputs(inputs))
+  }, [state.busy, state.queued, send])
+
   const cancel = useCallback(async () => {
+    cancelling.current = true
     try {
       await api.orchestrator.cancel(orchId)
     } catch (err) {
@@ -272,6 +303,8 @@ export function useOrchChat(orchId: number) {
     orchSession,
     tasks,
     send,
+    enqueue,
+    removeQueued,
     cancel,
     stopAll,
     applySettings,

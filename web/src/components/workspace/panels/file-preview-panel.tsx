@@ -2,7 +2,6 @@ import { memo, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AtSignIcon, FileTextIcon } from "lucide-react"
 
-import { api } from "@/lib/api"
 import type { WorkspaceFile } from "@/types/acp"
 import {
   usePreviewPath,
@@ -37,7 +36,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     let stale = false
     setLoading(true)
     setError(null)
-    api.sessions
+    ws.scope
       .workspaceFile(ws.sessionId, path)
       .then((view) => {
         if (!stale) setFile(view)
@@ -51,7 +50,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     return () => {
       stale = true
     }
-  }, [path, ws.sessionId])
+  }, [path, ws.sessionId, ws.scope])
 
   const { lines, clipped } = useMemo(() => {
     if (!file || file.binary) return { lines: [], clipped: false }
