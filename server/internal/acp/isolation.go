@@ -2,6 +2,7 @@ package acp
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 )
@@ -74,6 +75,26 @@ func (codexAdapter) Isolation(in IsolationInput) Injection {
 
 // Isolation（generic）：认不出方言的 runtime 没有可靠的隔离注入口，不猜。
 func (genericAdapter) Isolation(IsolationInput) Injection { return Injection{} }
+
+// mergeMeta 把 extra 深合并进 base（map 递归合并，其余类型 extra 覆盖），
+// 返回新 map，不改动入参——base 是会话间共享的隔离注入，改它会串会话。
+func mergeMeta(base, extra map[string]any) map[string]any {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(base)+len(extra))
+	maps.Copy(out, base)
+	for k, v := range extra {
+		bm, bok := out[k].(map[string]any)
+		em, eok := v.(map[string]any)
+		if bok && eok {
+			out[k] = mergeMeta(bm, em)
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
 
 // ensureCodexHome 幂等搭好隔离用的 codex 家目录：
 //   - auth.json 软链系统的（codex 用静态 OPENAI_API_KEY，不改写它，软链跟随

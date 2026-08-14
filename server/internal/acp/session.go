@@ -56,8 +56,21 @@ type Session struct {
 
 	// injMeta / injDirs 是技能隔离注入的会话参数，session/new 与 session/load
 	// 都要带（恢复路径不带会退回机器级 skill）。spawn 前算好，只读。
+	// injMeta 已含上层 MetaExtra 的深合并结果。
 	injMeta map[string]any
 	injDirs []string
+	// mcpServers 是上层要求挂载的 MCP server 清单（编排会话的系统能力
+	// 注入口），session/new 与 session/load 都要带。
+	mcpServers []any
+}
+
+// mcpList 给协议调用返回 mcpServers 字段的值：该字段是必填项，
+// 未挂载时必须是空数组而不是 null。
+func (s *Session) mcpList() []any {
+	if s.mcpServers == nil {
+		return []any{}
+	}
+	return s.mcpServers
 }
 
 func (s *Session) setReplaying(v bool) {

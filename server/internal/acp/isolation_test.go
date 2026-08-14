@@ -143,3 +143,86 @@ func TestGenericAdapter_Isolation_AlwaysEmpty(t *testing.T) {
 		t.Fatalf("generic must never inject, got %+v", inj)
 	}
 }
+
+// 契约：mergeMeta 递归合并 map、其余类型上层覆盖、不改动入参——
+// 编排会话把 systemPrompt/disallowedTools 合并进技能隔离 Meta 全靠它。
+func TestMergeMeta(t *testing.T) {
+	cases := []struct {
+		name        string
+		base, extra map[string]any
+		want        map[string]any
+	}{
+		{
+			name: "都为空返回 nil",
+			want: nil,
+		},
+		{
+			name:  "base 为空取 extra",
+			extra: map[string]any{"systemPrompt": map[string]any{"append": "p"}},
+			want:  map[string]any{"systemPrompt": map[string]any{"append": "p"}},
+		},
+		{
+			name: "不同键并存",
+			base: map[string]any{"claudeCode": map[string]any{"options": map[string]any{"strictMcpConfig": true}}},
+			extra: map[string]any{
+				"systemPrompt": map[string]any{"append": "p"},
+			},
+			want: map[string]any{
+				"claudeCode":   map[string]any{"options": map[string]any{"strictMcpConfig": true}},
+				"systemPrompt": map[string]any{"append": "p"},
+			},
+		},
+		{
+			name: "嵌套 map 递归合并且同键上层覆盖",
+			base: map[string]any{"claudeCode": map[string]any{"options": map[string]any{
+				"strictMcpConfig": true,
+				"settingSources":  []string{"project"},
+			}}},
+			extra: map[string]any{"claudeCode": map[string]any{"options": map[string]any{
+				"disallowedTools": []string{"Task"},
+				"strictMcpConfig": false,
+			}}},
+			want: map[string]any{"claudeCode": map[string]any{"options": map[string]any{
+				"strictMcpConfig": false,
+				"settingSources":  []string{"project"},
+				"disallowedTools": []string{"Task"},
+			}}},
+		},
+		{
+			name: "map 与非 map 冲突时上层覆盖",
+			base: map[string]any{"systemPrompt": map[string]any{"append": "p"}},
+			extra: map[string]any{
+				"systemPrompt": "replace",
+			},
+			want: map[string]any{"systemPrompt": "replace"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			baseCopy := fmtMeta(tc.base)
+			got := mergeMeta(tc.base, tc.extra)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("mergeMeta = %#v, want %#v", got, tc.want)
+			}
+			if !reflect.DeepEqual(fmtMeta(tc.base), baseCopy) {
+				t.Fatalf("base 被改动：%#v", tc.base)
+			}
+		})
+	}
+}
+
+// fmtMeta 深拷贝断言快照用（只覆盖测试里用到的形状）。
+func fmtMeta(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if mv, ok := v.(map[string]any); ok {
+			out[k] = fmtMeta(mv)
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
