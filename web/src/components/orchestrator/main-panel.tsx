@@ -17,6 +17,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { StatusDot } from "@/components/status-dot"
 import { cn } from "@/lib/utils"
 import { AtSignIcon, ImageIcon, NetworkIcon, OctagonXIcon } from "lucide-react"
 
@@ -43,6 +44,7 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
     openFilePicker,
     recallQueued,
     steerQueued,
+    openTaskPanel,
   } = useOrchCtx()
 
   const hasContent =
@@ -52,7 +54,8 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
     chat.liveTools.length > 0 ||
     (chat.plan?.length ?? 0) > 0
 
-  const runningTasks = chat.tasks.filter((t) => t.state === "running").length
+  const runningList = chat.tasks.filter((task) => task.state === "running")
+  const runningTasks = runningList.length
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
@@ -103,6 +106,39 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
           </Alert>
         ) : null}
       </div>
+
+      {/* 活动条：任何时刻回答「系统是否在干活」。spawn 挂起时工具卡收在
+          折叠区里不显眼，这里常驻显示在跑的任务（点击直达任务面板）；
+          主控自己在跑而无任务时显示思考中。 */}
+      {runningList.length > 0 || chat.busy ? (
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-1 px-4 pt-2 lg:px-6">
+          {runningList.map((task) => (
+            <button
+              key={task.id}
+              type="button"
+              onClick={() => openTaskPanel(task.id)}
+              className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-3 py-1.5 text-left text-xs transition-colors duration-150 ease-snappy hover:bg-accent"
+            >
+              <StatusDot tone="success" pulse />
+              <span className="font-medium">
+                {t("orch.working", { role: task.roleName })}
+              </span>
+              <span className="truncate text-muted-foreground">
+                {task.task}
+              </span>
+              <span className="ml-auto shrink-0 text-muted-foreground">
+                {t("orch.viewTask")}
+              </span>
+            </button>
+          ))}
+          {runningList.length === 0 && chat.busy ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground">
+              <StatusDot tone="success" pulse />
+              <span className="text-shimmer">{t("orch.conductorWorking")}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-hidden">
         {!hasContent ? (

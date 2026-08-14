@@ -53,10 +53,13 @@ export function EarlierSentinel({ onVisible }: { onVisible: () => void }) {
 export function ActivitySection({
   count,
   busy = false,
+  activeLabel,
   children,
 }: {
   count: number
   busy?: boolean
+  /** 进行中的那件事（当前工具名等）：busy 时显示在折叠头，收起也能看见系统在干什么。 */
+  activeLabel?: string
   children: React.ReactNode
 }) {
   const { t } = useTranslation()
@@ -80,6 +83,11 @@ export function ActivitySection({
         )}
         <span>{t("chat.activity")}</span>
         <Badge variant="secondary">{count}</Badge>
+        {busy && activeLabel ? (
+          <span className="max-w-64 text-shimmer truncate font-mono text-xs">
+            {activeLabel}
+          </span>
+        ) : null}
       </button>
       {open ? (
         <div className="ml-2 flex flex-col gap-2 border-l border-border pl-4 transition-[opacity,translate] duration-200 ease-snappy starting:-translate-y-0.5 starting:opacity-0 motion-reduce:starting:translate-y-0">

@@ -144,6 +144,9 @@ export default {
     untitled: "未命名编排",
     tokensUsed: "{{count}} tokens",
     stopAll: "急停",
+    working: "{{role}} 正在工作",
+    viewTask: "查看过程",
+    conductorWorking: "主控正在思考与调度…",
     placeholder: "描述要完成的目标，主控会按需雇佣角色子代理…",
     emptyTitle: "编排会话",
     emptyHint:

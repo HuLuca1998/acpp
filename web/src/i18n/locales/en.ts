@@ -151,6 +151,9 @@ export default {
     untitled: "Untitled orchestration",
     tokensUsed: "{{count}} tokens",
     stopAll: "Stop all",
+    working: "{{role}} is working",
+    viewTask: "Watch",
+    conductorWorking: "Conductor is thinking and dispatching…",
     placeholder:
       "Describe the goal; the conductor hires role sub-agents as needed…",
     emptyTitle: "Orchestration",

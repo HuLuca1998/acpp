@@ -61,6 +61,10 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
     (chat.streamingThought ? 1 : 0) +
     liveOthers.length +
     chat.permissions.length
+  // 折叠头上显示「正在干的那件事」：最后一个未完成的工具调用。
+  const activeTool = [...chat.liveTools]
+    .reverse()
+    .find((tool) => tool.status !== "completed" && tool.status !== "failed")
 
   return (
     // 打开即定位到底部看最新内容（不是先渲染顶部再跳）；
@@ -117,7 +121,13 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
 
             {liveActivityCount > 0 ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <ActivitySection count={liveActivityCount} busy={chat.busy}>
+                <ActivitySection
+                  count={liveActivityCount}
+                  busy={chat.busy}
+                  activeLabel={
+                    activeTool ? activeTool.title || activeTool.kind : undefined
+                  }
+                >
                   {chat.streamingThought ? (
                     <Marker>
                       <MarkerIcon>
