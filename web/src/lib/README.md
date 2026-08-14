@@ -29,3 +29,5 @@
 | use-chat.ts | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决 | `useChat` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话 | `useDraftSession` |
 | use-mobile.ts | 移动端断点判断（shadcn 生成） | `useIsMobile` |
+| use-orch-chat.ts | 编排主会话流状态机（adr-006）：复用 chat-events reducer + task_update 任务列表；返回形状与 useChat 结构兼容 | `useOrchChat` |
+| use-task-chat.ts | 编排任务子会话的只读观察流：SSE + 转录重建，权限/提问可裁决，不能发消息 | `useTaskChat` |

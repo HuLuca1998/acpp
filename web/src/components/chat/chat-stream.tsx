@@ -24,22 +24,43 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
-import type { useChat } from "@/hooks/use-chat"
+import type { ChatState } from "@/lib/chat-events"
 import { groupMessages } from "@/lib/message-blocks"
 import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 
 /**
- * 消息流：历史消息块 + 计划卡 + 实时活动区（思考/工具/权限）+ 流式正文
- * + 挂起交互卡片 + 结束原因。只消费 useChat 状态，不持有任何自己的状态。
+ * ChatStream 消费的数据源：聊天状态 + 三个交互回调。结构接口而不是
+ * 绑死 useChat 的返回值——编排的主会话流（use-orch-chat）与任务观察流
+ * （use-task-chat）返回结构兼容的形状，同样可渲染。
  */
-export function ChatStream({ chat }: { chat: ReturnType<typeof useChat> }) {
+export interface ChatStreamSource extends ChatState {
+  loadEarlier: () => Promise<void> | void
+  resolvePermission: (
+    id: string,
+    optionId: string,
+    choiceName: string
+  ) => Promise<void> | void
+  resolveElicitation: (
+    id: string,
+    action: "accept" | "decline" | "cancel",
+    content?: Record<string, string>
+  ) => Promise<void> | void
+}
+
+/**
+ * 消息流：历史消息块 + 计划卡 + 实时活动区（思考/工具/权限）+ 流式正文
+ * + 挂起交互卡片 + 结束原因。只消费传入状态，不持有任何自己的状态。
+ */
+export function ChatStream({ chat }: { chat: ChatStreamSource }) {
   const { t } = useTranslation()
 
   // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
   const liveEdits = chat.liveTools.filter((tool) => tool.kind === "edit")
   const liveOthers = chat.liveTools.filter((tool) => tool.kind !== "edit")
   const liveActivityCount =
-    (chat.streamingThought ? 1 : 0) + liveOthers.length + chat.permissions.length
+    (chat.streamingThought ? 1 : 0) +
+    liveOthers.length +
+    chat.permissions.length
 
   return (
     // 打开即定位到底部看最新内容（不是先渲染顶部再跳）；
@@ -157,7 +178,10 @@ export function ChatStream({ chat }: { chat: ReturnType<typeof useChat> }) {
             ) : null}
 
             {chat.permission ? (
-              <MessageScrollerItem key={chat.permission.id} scrollAnchor={false}>
+              <MessageScrollerItem
+                key={chat.permission.id}
+                scrollAnchor={false}
+              >
                 {chat.permission.planReview ? (
                   <PlanReviewCard
                     permission={chat.permission}

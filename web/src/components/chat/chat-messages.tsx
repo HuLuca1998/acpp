@@ -170,7 +170,7 @@ export const ChatMessage = memo(function ChatMessage({
             />
             {/* 80% 行宽上限放在这层（参照全宽消息行）；Bubble 自带的
                 max-w-[80%] 参照的是本列（内容宽），会把短消息也挤折行。 */}
-            <div className="flex min-w-0 max-w-[80%] flex-col items-end gap-1.5">
+            <div className="flex max-w-[80%] min-w-0 flex-col items-end gap-1.5">
               {payload?.images?.length ? (
                 <div className="flex flex-wrap justify-end gap-1.5">
                   {payload.images.map((img, index) => (

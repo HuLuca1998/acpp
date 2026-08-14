@@ -260,4 +260,3 @@ function DeleteSessionButton({ onConfirm }: { onConfirm: () => void }) {
     </AlertDialog>
   )
 }
-

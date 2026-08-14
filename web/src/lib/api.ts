@@ -9,7 +9,11 @@ import type {
   GitDiffView,
   GitOverview,
   Message,
+  OrchSession,
+  OrchTask,
   Paged,
+  Role,
+  RoleInput,
   SendInput,
   Session,
   SessionSettings,
@@ -188,7 +192,11 @@ export const api = {
     transcriptChunk: async (
       id: number,
       offset: number
-    ): Promise<{ chunk: string; nextOffset: number; reset: boolean } | null> => {
+    ): Promise<{
+      chunk: string
+      nextOffset: number
+      reset: boolean
+    } | null> => {
       // no-store 是必须的：ServeFile 带 Last-Modified，浏览器会把首个 200
       // 全量缓存起来，之后带 Range 的请求被缓存直接用 200 全量应答——
       // 前端把全量当增量追加，日志每轮翻倍。
@@ -299,6 +307,118 @@ export const api = {
       request<SkillScriptRunResult>(`/skills/${name}/scripts/run`, {
         method: "POST",
         body: JSON.stringify(input),
+      }),
+  },
+
+  roles: {
+    list: () => request<Role[]>("/roles"),
+    get: (id: number) => request<Role>(`/roles/${id}`),
+    create: (input: RoleInput) =>
+      request<Role>("/roles", { method: "POST", body: JSON.stringify(input) }),
+    update: (id: number, input: RoleInput) =>
+      request<Role>(`/roles/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    remove: (id: number) => request<null>(`/roles/${id}`, { method: "DELETE" }),
+  },
+
+  orchestrator: {
+    list: (params?: { page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.page) qs.set("page", String(params.page))
+      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
+      const s = qs.toString()
+      return request<Paged<OrchSession>>(
+        `/orchestrator/sessions${s ? `?${s}` : ""}`
+      )
+    },
+    get: (id: number) => request<OrchSession>(`/orchestrator/sessions/${id}`),
+    create: (input: { agentId: number; cwd?: string; title?: string }) =>
+      request<OrchSession>("/orchestrator/sessions", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    remove: (id: number) =>
+      request<null>(`/orchestrator/sessions/${id}`, { method: "DELETE" }),
+    send: (id: number, content: string) =>
+      request<Message>(`/orchestrator/sessions/${id}/send`, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      }),
+    cancel: (id: number) =>
+      request<null>(`/orchestrator/sessions/${id}/cancel`, { method: "POST" }),
+    /** 急停：中止主会话与全部在跑子任务。 */
+    stop: (id: number) =>
+      request<null>(`/orchestrator/sessions/${id}/stop`, { method: "POST" }),
+    settings: (id: number) =>
+      request<SessionSettings>(`/orchestrator/sessions/${id}/settings`),
+    applySettings: (id: number, patch: SettingsPatch) =>
+      request<SessionSettings>(`/orchestrator/sessions/${id}/settings`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    resolvePermission: (id: number, permissionId: string, optionId: string) =>
+      request<null>(`/orchestrator/sessions/${id}/permission`, {
+        method: "POST",
+        body: JSON.stringify({ permissionId, optionId }),
+      }),
+    resolveElicitation: (
+      id: number,
+      elicitationId: string,
+      action: "accept" | "decline" | "cancel",
+      content?: Record<string, string>
+    ) =>
+      request<null>(`/orchestrator/sessions/${id}/elicitation`, {
+        method: "POST",
+        body: JSON.stringify({ elicitationId, action, content }),
+      }),
+    messages: (id: number, params?: { limit?: number; before?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.limit) qs.set("limit", String(params.limit))
+      if (params?.before) qs.set("before", String(params.before))
+      const s = qs.toString()
+      return request<Paged<Message>>(
+        `/orchestrator/sessions/${id}/messages${s ? `?${s}` : ""}`
+      )
+    },
+    eventsUrl: (id: number) => `${BASE}/orchestrator/sessions/${id}/events`,
+
+    tasks: (id: number) =>
+      request<OrchTask[]>(`/orchestrator/sessions/${id}/tasks`),
+    taskMessages: (
+      tid: number,
+      params?: { limit?: number; before?: number }
+    ) => {
+      const qs = new URLSearchParams()
+      if (params?.limit) qs.set("limit", String(params.limit))
+      if (params?.before) qs.set("before", String(params.before))
+      const s = qs.toString()
+      return request<Paged<Message>>(
+        `/orchestrator/tasks/${tid}/messages${s ? `?${s}` : ""}`
+      )
+    },
+    taskEventsUrl: (tid: number) => `${BASE}/orchestrator/tasks/${tid}/events`,
+    taskCancel: (tid: number) =>
+      request<null>(`/orchestrator/tasks/${tid}/cancel`, { method: "POST" }),
+    taskResolvePermission: (
+      tid: number,
+      permissionId: string,
+      optionId: string
+    ) =>
+      request<null>(`/orchestrator/tasks/${tid}/permission`, {
+        method: "POST",
+        body: JSON.stringify({ permissionId, optionId }),
+      }),
+    taskResolveElicitation: (
+      tid: number,
+      elicitationId: string,
+      action: "accept" | "decline" | "cancel",
+      content?: Record<string, string>
+    ) =>
+      request<null>(`/orchestrator/tasks/${tid}/elicitation`, {
+        method: "POST",
+        body: JSON.stringify({ elicitationId, action, content }),
       }),
   },
 

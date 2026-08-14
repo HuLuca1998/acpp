@@ -67,20 +67,17 @@ export function AgentToolConfig({ name }: { name: string }) {
     }
   }, [name, t])
 
-  const probe = useCallback(
-    async (id: number) => {
-      setProbing(true)
-      setError(null)
-      try {
-        setAgent(await api.agents.probe(id))
-      } catch (err) {
-        setError((err as Error).message)
-      } finally {
-        setProbing(false)
-      }
-    },
-    []
-  )
+  const probe = useCallback(async (id: number) => {
+    setProbing(true)
+    setError(null)
+    try {
+      setAgent(await api.agents.probe(id))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setProbing(false)
+    }
+  }, [])
 
   /** 命令/参数保存后自动重探：能力清单跟着新命令走，不留旧缓存。 */
   async function saveCommand() {

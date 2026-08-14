@@ -340,6 +340,7 @@ export type StreamEventKind =
   | "turn_end"
   | "turn_done"
   | "message_saved"
+  | "task_update"
   | "error"
 
 export interface StreamEvent {
@@ -374,6 +375,8 @@ export interface StreamEvent {
   stopReason?: string
   error?: string
   message?: Message
+  /** task_update 事件：编排任务状态快照（普通会话不发）。 */
+  task?: OrchTask
 }
 
 /**
@@ -501,4 +504,71 @@ export interface SkillScriptRunResult {
   durationMs: number
   timedOut: boolean
   truncated: boolean
+}
+
+// ---- 编排（adr-006，与 server/internal/orch 对齐）----
+
+/** 编排里可雇佣的子代理角色。 */
+export interface Role {
+  id: number
+  name: string
+  /** 职责简介：进主会话调度提示词的雇佣目录，写给 AI 看。 */
+  description: string
+  /** 注入子会话的角色设定（claude systemPrompt.append / codex AGENTS.md）。 */
+  persona: string
+  agentId: number
+  model: string
+  effort: string
+  level: string
+  builtin: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RoleInput {
+  name: string
+  description: string
+  persona: string
+  agentId: number
+  model: string
+  effort: string
+  level: string
+}
+
+/** 编排主会话：挂载系统 MCP、可经 spawn_agent 雇佣角色子代理。 */
+export interface OrchSession {
+  id: number
+  agentId: number
+  acpSessionId: string
+  title: string
+  cwd: string
+  state: SessionState
+  stopReason: string
+  messageCount: number
+  /** 累计 token 用量（主会话 + 全部子任务）。 */
+  tokensUsed: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type OrchTaskState = "running" | "done" | "failed"
+
+/** 一次 spawn_agent 派发：一个任务 = 一条角色子会话。 */
+export interface OrchTask {
+  id: number
+  orchSessionId: number
+  roleId: number
+  roleName: string
+  /** 主会话派发的任务原文。 */
+  task: string
+  acpSessionId: string
+  state: OrchTaskState
+  stopReason: string
+  /** 子会话最终回复（返还主会话的工具结果原文）。 */
+  result: string
+  messageCount: number
+  tokensUsed: number
+  durationMs: number
+  createdAt: string
+  updatedAt: string
 }

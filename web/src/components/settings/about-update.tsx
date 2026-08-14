@@ -25,10 +25,11 @@ import { DownloadIcon, RefreshCwIcon } from "lucide-react"
  */
 export function AboutUpdate() {
   const { t, i18n } = useTranslation()
-  const { data: info, error, setData } = useAsyncData(
-    () => api.system.update(),
-    []
-  )
+  const {
+    data: info,
+    error,
+    setData,
+  } = useAsyncData(() => api.system.update(), [])
   const [checking, setChecking] = useState(false)
   const [applying, setApplying] = useState(false)
   const [restarting, setRestarting] = useState<string | null>(null)

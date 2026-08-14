@@ -6,7 +6,10 @@ import { useEffect, useState, type DependencyList } from "react"
  *
  * 只适合「进页面拉一次」的场景；轮询、分页游标、多来源合并请自己写。
  */
-export function useAsyncData<T>(fetcher: () => Promise<T>, deps: DependencyList) {
+export function useAsyncData<T>(
+  fetcher: () => Promise<T>,
+  deps: DependencyList
+) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
 

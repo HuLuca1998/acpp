@@ -157,7 +157,7 @@ export const LogsPanel = memo(function LogsPanel() {
         followRef.current =
           el.scrollHeight - el.scrollTop - el.clientHeight < 48
       }}
-      className="h-full overflow-y-auto scrollbar-thin bg-background p-2 font-mono text-xs leading-5"
+      className="h-full scrollbar-thin overflow-y-auto bg-background p-2 font-mono text-xs leading-5"
     >
       {lines.map((line) => (
         <div key={line.seq}>

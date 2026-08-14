@@ -6,7 +6,11 @@ import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { GitDiffView, GitFileChange, GitOverview } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
-import { ChangeStat, GitPanelHeader, StatusLetter } from "@/components/workspace/panels/git-parts"
+import {
+  ChangeStat,
+  GitPanelHeader,
+  StatusLetter,
+} from "@/components/workspace/panels/git-parts"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import {
   useGitOverview,

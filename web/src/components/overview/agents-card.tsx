@@ -28,7 +28,11 @@ export function AgentsCard({ agents }: { agents: Agent[] }) {
         <CardTitle>{t("overview.agentsTitle")}</CardTitle>
         <CardDescription>{t("overview.agentsDescription")}</CardDescription>
         <CardAction>
-          <Button size="sm" variant="ghost" render={<Link to="/settings?section=claude" />}>
+          <Button
+            size="sm"
+            variant="ghost"
+            render={<Link to="/settings?section=claude" />}
+          >
             {t("overview.manageAgents")}
             <ArrowRightIcon data-icon="inline-end" />
           </Button>

@@ -39,9 +39,10 @@ export function SkillFiles({
 }) {
   const { t, i18n } = useTranslation()
   const [files, setFiles] = useState<SkillFile[] | null>(null)
-  const [editing, setEditing] = useState<{ path: string; isNew: boolean } | null>(
-    null
-  )
+  const [editing, setEditing] = useState<{
+    path: string
+    isNew: boolean
+  } | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const reload = useCallback(() => {
@@ -111,7 +112,7 @@ export function SkillFiles({
               <Button
                 size="icon-sm"
                 variant="ghost"
-                className="text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+                className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
                 aria-label={t("common.delete")}
                 onClick={() => setDeleting(file.path)}
               >

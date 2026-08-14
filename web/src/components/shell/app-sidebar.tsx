@@ -21,8 +21,10 @@ import {
 import { api } from "@/lib/api"
 import type { Session } from "@/types/acp"
 import {
+  DramaIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
+  NetworkIcon,
   PlugZapIcon,
   ScrollTextIcon,
   Settings2Icon,
@@ -61,6 +63,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: "/sessions",
       icon: <MessagesSquareIcon />,
     },
+    {
+      title: t("nav.orchestrator"),
+      url: "/orchestrator",
+      icon: <NetworkIcon />,
+    },
+    { title: t("nav.roles"), url: "/roles", icon: <DramaIcon /> },
     { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
     { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
   ]

@@ -30,10 +30,11 @@ const CONN_TOOLS = ["claude", "codex"] as const
  */
 export function EnvCheck() {
   const { t } = useTranslation()
-  const { data: info, error, setData } = useAsyncData(
-    () => api.system.env(),
-    []
-  )
+  const {
+    data: info,
+    error,
+    setData,
+  } = useAsyncData(() => api.system.env(), [])
   const [installing, setInstalling] = useState<string | null>(null)
   const [failOutput, setFailOutput] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
@@ -51,9 +52,13 @@ export function EnvCheck() {
     try {
       const res = await api.system.envInstall(dep.key)
       if (res.ok) {
-        toast.success(t("settingsPage.env.installDone", { name: depName(dep.key) }))
+        toast.success(
+          t("settingsPage.env.installDone", { name: depName(dep.key) })
+        )
       } else {
-        toast.error(t("settingsPage.env.installFailed", { name: depName(dep.key) }))
+        toast.error(
+          t("settingsPage.env.installFailed", { name: depName(dep.key) })
+        )
         setFailOutput(res.output)
       }
       setData(await api.system.env())
@@ -273,7 +278,9 @@ export function EnvCheck() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          void navigator.clipboard.writeText(d.installHint ?? "")
+                          void navigator.clipboard.writeText(
+                            d.installHint ?? ""
+                          )
                           toast.success(t("settingsPage.env.copied"))
                         }}
                       >

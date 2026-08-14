@@ -143,79 +143,79 @@ export function Settings() {
           <AgentToolConfig name={section} />
         </div>
       ) : (
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-        {info === null ? (
-          <Skeleton className="h-48 w-full" />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FolderCogIcon className="size-4" />
-                {t("settingsPage.system.title")}
-              </CardTitle>
-              <CardDescription>
-                {t("settingsPage.system.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  {t("settingsPage.system.current")}
-                </span>
-                <span className="truncate font-mono text-sm">
-                  {info.dataDir}
-                </span>
-                {info.dataDir === info.defaultDir ? (
-                  <Badge variant="secondary" className="shrink-0">
-                    {t("settingsPage.system.default")}
-                  </Badge>
+          {info === null ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FolderCogIcon className="size-4" />
+                  {t("settingsPage.system.title")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settingsPage.system.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    {t("settingsPage.system.current")}
+                  </span>
+                  <span className="truncate font-mono text-sm">
+                    {info.dataDir}
+                  </span>
+                  {info.dataDir === info.defaultDir ? (
+                    <Badge variant="secondary" className="shrink-0">
+                      {t("settingsPage.system.default")}
+                    </Badge>
+                  ) : null}
+                </div>
+
+                {info.pendingDir ? (
+                  <Alert>
+                    <AlertTitle>
+                      {t("settingsPage.system.pendingTitle")}
+                    </AlertTitle>
+                    <AlertDescription className="font-mono">
+                      {info.pendingDir}
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
-              </div>
 
-              {info.pendingDir ? (
-                <Alert>
-                  <AlertTitle>
-                    {t("settingsPage.system.pendingTitle")}
-                  </AlertTitle>
-                  <AlertDescription className="font-mono">
-                    {info.pendingDir}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              <div className="flex items-center gap-2">
-                <Input
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  placeholder={t("settingsPage.system.targetPlaceholder")}
-                  className="font-mono text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPickerOpen(true)}
-                >
-                  <FolderOpenIcon data-icon="inline-start" />
-                  {t("settingsPage.system.browse")}
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={target.trim() === "" || migrating}
-                  onClick={() => setConfirmOpen(true)}
-                >
-                  {t("settingsPage.system.migrate")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    placeholder={t("settingsPage.system.targetPlaceholder")}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    <FolderOpenIcon data-icon="inline-start" />
+                    {t("settingsPage.system.browse")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={target.trim() === "" || migrating}
+                    onClick={() => setConfirmOpen(true)}
+                  >
+                    {t("settingsPage.system.migrate")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       <DirPicker

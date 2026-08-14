@@ -50,8 +50,10 @@ export function Skills() {
 
   async function toggle(skill: Skill, enabled: boolean) {
     // 乐观更新：符号链接切换基本不会失败，失败时回滚并提示。
-    setSkills((prev) =>
-      prev?.map((s) => (s.name === skill.name ? { ...s, enabled } : s)) ?? null
+    setSkills(
+      (prev) =>
+        prev?.map((s) => (s.name === skill.name ? { ...s, enabled } : s)) ??
+        null
     )
     try {
       await api.skills.update(skill.name, { enabled })
@@ -62,10 +64,11 @@ export function Skills() {
         { description: t("skills.effectNote") }
       )
     } catch (err) {
-      setSkills((prev) =>
-        prev?.map((s) =>
-          s.name === skill.name ? { ...s, enabled: !enabled } : s
-        ) ?? null
+      setSkills(
+        (prev) =>
+          prev?.map((s) =>
+            s.name === skill.name ? { ...s, enabled: !enabled } : s
+          ) ?? null
       )
       toast.error((err as Error).message)
     }
@@ -174,7 +177,7 @@ export function Skills() {
                           <Button
                             size="icon-sm"
                             variant="ghost"
-                            className="relative text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+                            className="relative text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
                             aria-label={t("common.delete")}
                             onClick={() => setDeleting(skill)}
                           >

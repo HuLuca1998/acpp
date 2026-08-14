@@ -48,7 +48,9 @@ export function RecentSessionsCard({ sessions }: { sessions: Session[] }) {
                 <MessagesSquareIcon />
               </EmptyMedia>
               <EmptyTitle>{t("overview.noSessions")}</EmptyTitle>
-              <EmptyDescription>{t("overview.noSessionsHint")}</EmptyDescription>
+              <EmptyDescription>
+                {t("overview.noSessionsHint")}
+              </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button size="sm" render={<Link to="/sessions/new" />}>
