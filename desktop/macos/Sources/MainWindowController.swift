@@ -60,7 +60,11 @@ final class MainWindowController: NSObject, NSWindowDelegate, WKNavigationDelega
     // MARK: - 内容
 
     func loadApp() {
-        webView.load(URLRequest(url: appURL))
+        // 主文档强制条件请求（304 才复用缓存）：更新重启后必须拿到新入口页，
+        // 否则 WKWebView 的启发式缓存会把旧版界面又端出来。
+        var request = URLRequest(url: appURL)
+        request.cachePolicy = .reloadRevalidatingCacheData
+        webView.load(request)
     }
 
     func showLoading() {

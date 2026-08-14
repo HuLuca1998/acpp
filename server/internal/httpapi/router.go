@@ -176,6 +176,14 @@ func spaHandler(dir string) http.Handler {
 	index := filepath.Join(dir, "index.html")
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 缓存策略是版本更新生效的前提：入口 html 必须每次协商（no-cache，
+		// 304 才复用），否则 WKWebView/浏览器按启发式缓存端出旧界面，
+		// 「更新完还要手动刷新」；vite 产物带内容哈希，可放心永久缓存。
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		path := filepath.Join(dir, filepath.Clean(r.URL.Path))
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			files.ServeHTTP(w, r)
