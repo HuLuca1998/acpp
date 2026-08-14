@@ -31,7 +31,17 @@ fi
 [ -f "$ROOT/build/web/index.html" ] || { echo "缺 build/web/index.html，前端构建失败？" >&2; exit 1; }
 
 echo "==> 编译 acp-server"
-(cd server && go build -trimpath -ldflags "-s -w" -o "$STAGE/acp-server" ./cmd/server)
+# 版本与发布仓库经 ldflags 注入 config 包：健康接口与更新检查都读它们。
+UPDATE_REPO="${ACP_UPDATE_REPO:-}"
+if [ -z "$UPDATE_REPO" ]; then
+  ORIGIN="$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)"
+  UPDATE_REPO="$(printf '%s' "$ORIGIN" | sed -nE 's#.*github\.com[:/]([^/]+/[^/]+?)(\.git)?$#\1#p')"
+fi
+LDFLAGS="-s -w -X acpp/server/internal/config.Version=$VERSION"
+if [ -n "$UPDATE_REPO" ]; then
+  LDFLAGS="$LDFLAGS -X acpp/server/internal/config.DefaultUpdateRepo=$UPDATE_REPO"
+fi
+(cd server && go build -trimpath -ldflags "$LDFLAGS" -o "$STAGE/acp-server" ./cmd/server)
 
 echo "==> 生成图标"
 rm -rf "$STAGE/icons"

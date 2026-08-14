@@ -51,6 +51,10 @@ serve: build-web build-server ## 由后端单进程托管前端产物
 app: ## 打包 macOS 桌面版到 build/app/ACPP.app
 	scripts/build-macos-app.sh
 
+.PHONY: release
+release: ## 发布桌面版到 GitHub Releases（make release VERSION=0.2.0）
+	scripts/release-macos.sh $(VERSION)
+
 .PHONY: check
 check: lint typecheck test check-structure ## 全部验证：lint + typecheck + test + 结构检查
 

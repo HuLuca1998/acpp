@@ -109,7 +109,9 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 - **局域网共享默认关**（工作区终端是任意命令执行面，见 §安全姿态）。菜单栏开启后服务监听 `0.0.0.0`，「复制局域网链接」得到 `http://<局域网IP>:48090/`，发给局域网内其他设备即可在浏览器使用完整 web 端。切换开关会重启后台服务（agent 上下文在 runtime 侧持久化，续聊自动恢复）。
 - 服务日志：`~/Library/Logs/ACPP/server.log`。agent 子进程的 PATH 取自登录 shell——GUI app 默认拿不到 Homebrew 路径，壳启动时注入，否则拉不起 `codex-acp` / `claude-agent-acp`。
 
-打包脚本 [scripts/build-macos-app.sh](scripts/build-macos-app.sh)（`--skip-web` 复用已有前端产物提速，`APP_VERSION` 覆盖版本号）；壳源码在 [desktop/macos/](desktop/macos/)。
+打包脚本 [scripts/build-macos-app.sh](scripts/build-macos-app.sh)（`--skip-web` 复用已有前端产物提速，`APP_VERSION` 覆盖版本号，版本与发布仓库经 ldflags 注入后端）；壳源码在 [desktop/macos/](desktop/macos/)。
+
+**版本发布与更新**：`make release VERSION=0.2.0`（[scripts/release-macos.sh](scripts/release-macos.sh)）构建 → zip → git tag → GitHub Release（notes 缺省取上个 tag 以来的提交标题）。App 内 **设置 → 关于与更新** 后台每日自动检查 Releases，显示新版本描述，桌面版可一键「更新并重启」（下载 zip → 原地替换 .app → 壳正常退出回收子进程 → 自动拉起新版）；开发态只提示不安装。
 
 ## 对话是怎么流起来的
 
