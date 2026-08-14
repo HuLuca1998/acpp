@@ -41,6 +41,9 @@ type StreamEvent struct {
 
 	// Message 在一条消息落库后带上完整记录，前端用它替换流式占位。
 	Message *model.Message `json:"message,omitempty"`
+
+	// Task 是编排会话的任务状态快照（kind=task_update），普通会话不发。
+	Task *model.OrchTask `json:"task,omitempty"`
 }
 
 // handleEvent 把 ACP 事件转成 SSE 事件推给浏览器。
