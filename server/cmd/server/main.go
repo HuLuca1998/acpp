@@ -17,6 +17,7 @@ import (
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
+	"acpp/server/internal/system"
 	"acpp/server/internal/transcript"
 )
 
@@ -97,14 +98,19 @@ func run() error {
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
 
+	// 版本检查：启动即查一次，此后每天刷新；结果缓存在内存供设置页读取。
+	updateService := system.NewUpdater(cfg.UpdateRepo)
+	updateService.StartPeriodicCheck(context.Background(), 24*time.Hour)
+
 	handler := httpapi.NewRouter(cfg, httpapi.Services{
 		Agents:     agentService,
 		Sessions:   sessionService,
 		Chat:       chatService,
 		Terminals:  terminalService,
-		System:     service.NewSystemService(gdb, cfg),
+		System:     system.NewService(gdb, cfg),
 		Skills:     service.NewSkillService(cfg.DataDir, skillUsage),
 		SkillUsage: skillUsage,
+		Update:     updateService,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

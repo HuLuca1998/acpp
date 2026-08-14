@@ -1,4 +1,4 @@
-package service
+package system
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"acpp/server/internal/service"
 )
 
 // EnvDependency 是环境体检的一项：依赖是否就位、版本、怎么装。
@@ -67,8 +69,8 @@ var envSpecs = []envSpec{
 }
 
 // EnvCheck 逐项探测依赖：存在性看 PATH 解析，版本用 --version 短超时读取
-//（ACP 适配器是 stdio 服务，不支持 --version 时会挂住，靠超时兜底）。
-func (s *SystemService) EnvCheck(ctx context.Context) EnvInfo {
+// （ACP 适配器是 stdio 服务，不支持 --version 时会挂住，靠超时兜底）。
+func (s *Service) EnvCheck(ctx context.Context) EnvInfo {
 	info := EnvInfo{Deps: make([]EnvDependency, 0, len(envSpecs)), Path: os.Getenv("PATH")}
 	for _, spec := range envSpecs {
 		dep := EnvDependency{
@@ -89,7 +91,7 @@ func (s *SystemService) EnvCheck(ctx context.Context) EnvInfo {
 
 // EnvInstall 一键安装白名单里的依赖。只接受 kind=auto 的 key，安装器
 // 缺位时报清晰的前置错误。安装失败不算协议错误：Ok=false + 输出尾巴。
-func (s *SystemService) EnvInstall(ctx context.Context, key string) (*EnvInstallResult, error) {
+func (s *Service) EnvInstall(ctx context.Context, key string) (*EnvInstallResult, error) {
 	var spec *envSpec
 	for i := range envSpecs {
 		if envSpecs[i].key == key {
@@ -98,14 +100,14 @@ func (s *SystemService) EnvInstall(ctx context.Context, key string) (*EnvInstall
 		}
 	}
 	if spec == nil {
-		return nil, fmt.Errorf("%w: unknown dependency %q", ErrInvalid, key)
+		return nil, fmt.Errorf("%w: unknown dependency %q", service.ErrInvalid, key)
 	}
 	if spec.kind != "auto" {
-		return nil, fmt.Errorf("%w: %s is not one-click installable", ErrInvalid, key)
+		return nil, fmt.Errorf("%w: %s is not one-click installable", service.ErrInvalid, key)
 	}
 	installer, err := exec.LookPath(spec.installer)
 	if err != nil {
-		return nil, fmt.Errorf("%w: install %s first", ErrInvalid, spec.requires)
+		return nil, fmt.Errorf("%w: install %s first", service.ErrInvalid, spec.requires)
 	}
 
 	// brew install node 这类要下载编译产物，给足时间；超时靠 ctx 杀进程。

@@ -1,4 +1,4 @@
-package service
+package system
 
 import (
 	"context"
@@ -9,15 +9,17 @@ import (
 	"testing"
 
 	"acpp/server/internal/config"
+
+	"acpp/server/internal/service"
 )
 
-func envSvc() *SystemService {
-	return NewSystemService(nil, config.Config{})
+func envSvc() *Service {
+	return NewService(nil, config.Config{})
 }
 
 // 契约：PATH 里有的依赖报已安装并带版本与路径，没有的报未安装且
 // manual 项带可复制的安装引导；清单覆盖固定的依赖链且顺序稳定。
-func TestSystemService_EnvCheck_ReportsInstalledAndMissing(t *testing.T) {
+func TestService_EnvCheck_ReportsInstalledAndMissing(t *testing.T) {
 	bin := t.TempDir()
 	fakeNode := filepath.Join(bin, "node")
 	if err := os.WriteFile(fakeNode, []byte("#!/bin/sh\necho v22.17.0\n"), 0o755); err != nil {
@@ -53,8 +55,8 @@ func TestSystemService_EnvCheck_ReportsInstalledAndMissing(t *testing.T) {
 }
 
 // 契约：安装只认白名单——未知 key、manual/bundled 项、前置安装器缺位
-// 一律 ErrInvalid，不执行任何命令。
-func TestSystemService_EnvInstall_RejectsOutsideAllowlist(t *testing.T) {
+// 一律 service.ErrInvalid，不执行任何命令。
+func TestService_EnvInstall_RejectsOutsideAllowlist(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // 空 PATH：连 brew/npm 都不存在
 
 	svc := envSvc()
@@ -69,15 +71,15 @@ func TestSystemService_EnvInstall_RejectsOutsideAllowlist(t *testing.T) {
 		{"前置缺位（brew 不在）", "node"},
 	}
 	for _, tc := range cases {
-		if _, err := svc.EnvInstall(context.Background(), tc.key); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%s: err = %v, want ErrInvalid", tc.label, err)
+		if _, err := svc.EnvInstall(context.Background(), tc.key); !errors.Is(err, service.ErrInvalid) {
+			t.Errorf("%s: err = %v, want service.ErrInvalid", tc.label, err)
 		}
 	}
 }
 
 // 契约：安装器存在时执行对应命令并回传输出；命令失败不是协议错误，
 // Ok=false 且输出可供排查。
-func TestSystemService_EnvInstall_RunsInstallerAndReportsFailure(t *testing.T) {
+func TestService_EnvInstall_RunsInstallerAndReportsFailure(t *testing.T) {
 	bin := t.TempDir()
 	// 伪 npm：把收到的参数回显后失败，验证「命令来自白名单表」与失败通路。
 	fakeNpm := filepath.Join(bin, "npm")

@@ -8,6 +8,7 @@ import type { SystemInfo } from "@/types/acp"
 import { cn } from "@/lib/utils"
 import { AgentIcon } from "@/components/agent-icon"
 import { DirPicker } from "@/components/dir-picker"
+import { AboutUpdate } from "@/components/settings/about-update"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -36,6 +37,7 @@ import {
   ActivityIcon,
   FolderCogIcon,
   FolderOpenIcon,
+  InfoIcon,
   SettingsIcon,
 } from "lucide-react"
 
@@ -45,6 +47,7 @@ const SECTIONS = [
   { key: "env", icon: <ActivityIcon className="size-4" /> },
   { key: "claude", icon: <AgentIcon flavor="claude" className="size-4" /> },
   { key: "codex", icon: <AgentIcon flavor="codex" className="size-4" /> },
+  { key: "about", icon: <InfoIcon className="size-4" /> },
 ] as const
 
 type SectionKey = (typeof SECTIONS)[number]["key"]
@@ -128,6 +131,11 @@ export function Settings() {
       {section === "env" ? (
         <div className="flex min-w-0 flex-1 flex-col">
           <EnvCheck />
+        </div>
+      ) : section === "about" ? (
+        /* 关于与更新：版本、检查更新、一键升级。 */
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AboutUpdate />
         </div>
       ) : section !== "system" ? (
         /* 工具分区：内置 claude / codex 的配置面。 */

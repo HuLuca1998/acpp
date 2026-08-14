@@ -35,6 +35,8 @@ type Config struct {
 	TurnTimeout time.Duration
 	// MaxTerminals 是每个会话的工作区终端实例上限，防止 pty 进程失控。
 	MaxTerminals int
+	// UpdateRepo 是版本发布的 GitHub 公开仓库（owner/repo），更新检查用。
+	UpdateRepo string
 }
 
 // Load 从环境变量与固定配置文件读取配置。
@@ -59,6 +61,7 @@ func Load() Config {
 		IdleTimeout:   envDuration("ACP_IDLE_TIMEOUT", 10*time.Minute),
 		TurnTimeout:   envDuration("ACP_TURN_TIMEOUT", 0),
 		MaxTerminals:  envInt("ACP_MAX_TERMINALS", 5),
+		UpdateRepo:    env("ACP_UPDATE_REPO", DefaultUpdateRepo),
 	}
 }
 

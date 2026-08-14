@@ -138,6 +138,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/health` | 健康检查与版本 |
 | GET | `/api/system/env` | 环境体检：brew/node/npm、CLI 与 ACP 适配器是否就位（含版本与路径） |
 | POST | `/api/system/env/install` | 一键安装缺失依赖（`{key}`，只认后端白名单：brew formula / npm -g） |
+| GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查） |
+| POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版） |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
 | GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型与命令清单） |
@@ -204,6 +206,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 | `ACP_IDLE_TIMEOUT` | `10m` | 空闲会话子进程的回收时限（`0` 关闭）。上下文留在 agent 侧，续聊时 `session/load` 无感恢复 |
 | `ACP_TURN_TIMEOUT` | `0`（不限时） | 单轮硬上限。长程任务跑几个小时是正常使用方式；turn 进行中（含等待权限/提问裁决）不会被空闲回收 |
 | `ACP_MAX_TERMINALS` | `5` | 每会话的工作区终端（pty）实例上限 |
+| `ACP_UPDATE_REPO` | 构建注入（`HuLuca1998/acpp`） | 版本发布的 GitHub 公开仓库（owner/repo），更新检查读它的 Releases |
 | `ACP_DEBUG` | 空 | 非空则打开 SQL 与 debug 日志 |
 
 前端可用 `VITE_API_BASE` 覆盖 API 前缀，默认 `/api`。

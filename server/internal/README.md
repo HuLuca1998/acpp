@@ -15,7 +15,8 @@
 | db | GORM 连接与 AutoMigrate | 基础 |
 | model | 数据模型（Agent / Session / Message / SkillUsage）与 JSON 字段类型 | 基础 |
 | transcript | 会话转录 JSONL 的追加与读取（对话内容唯一的持久化） | 叶子 |
-| service | 全部业务规则：会话/对话/技能/工作区/终端/系统配置 | 业务 |
+| service | 全部业务规则：会话/对话/技能/工作区/终端/agent 配置 | 业务 |
+| system | 系统平台面：数据目录迁移、环境体检与依赖安装、版本检查与自更新。哨兵错误借 service 的（错误映射一套） | 业务 |
 | httpapi | 路由、handler、中间件、统一响应。不碰 db，服务由 cmd/server 装配后传入 | HTTP |
 
 ## 跨包可复用工具

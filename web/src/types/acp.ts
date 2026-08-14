@@ -47,6 +47,23 @@ export interface EnvInstallResult {
   output: string
 }
 
+/** 版本检查结果（GitHub Releases）。 */
+export interface UpdateInfo {
+  currentVersion: string
+  repo: string
+  latestVersion?: string
+  hasUpdate: boolean
+  /** release 描述（markdown 原文，按纯文本展示）。 */
+  notes?: string
+  publishedAt?: string
+  releaseUrl?: string
+  assetName?: string
+  checkedAt?: string
+  checkError?: string
+  /** 是否支持一键更新重启（仅桌面版 .app 内为真）。 */
+  canApply: boolean
+}
+
 /** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
 export interface CatalogInput {
   models?: { key: string; disabled: boolean; alias?: string }[]

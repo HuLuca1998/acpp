@@ -27,6 +27,7 @@ import type {
   SystemInfo,
   TerminalInfo,
   TreeListing,
+  UpdateInfo,
   WorkspaceFile,
 } from "@/types/acp"
 
@@ -106,6 +107,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ key }),
       }),
+    /** 版本检查（缓存结果；force 现查 GitHub Releases）。 */
+    update: (force?: boolean) =>
+      request<UpdateInfo>(`/system/update${force ? "?force=1" : ""}`),
+    /** 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。 */
+    updateApply: () =>
+      request<{ message: string }>("/system/update/apply", { method: "POST" }),
   },
 
   sessions: {

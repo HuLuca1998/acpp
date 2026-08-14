@@ -9,12 +9,14 @@ cmd/server   → 只做装配：读配置、连库、构建全部 service、挂�
 httpapi      → HTTP 层：路由、handler、中间件、统一响应。不写业务逻辑，
                不 import gorm——服务经 httpapi.Services 结构体由装配层传入
 service      → 业务层：所有业务规则、事务、对 acp 的编排
+system       → 系统平台面：数据目录迁移、环境体检、版本自更新；
+               与 service 平级，哨兵错误复用 service 的（映射一套）
 db / model   → GORM 连接与数据模型
 acp          → 独立的 ACP 协议客户端，不 import 本项目其他包（标准库除外）；
                包内规范见 internal/acp/AGENTS.md
 ```
 
-依赖只允许自上而下：`httpapi → service → {db, model, acp}`。**禁止**反向依赖（如 service import httpapi）、跨层捷径（如 httpapi 直接摸 db）。裁决一条常见纠结：httpapi **可以**使用 service 方法签名暴露的 `model.*` / `acp.*` 类型（如 `model.Message`、`acp.Settings`）——那是契约的一部分，不算越层。
+依赖只允许自上而下：`httpapi → {service, system} → {db, model, acp}`（system 可借 service 的哨兵错误，service 不回头 import system）。**禁止**反向依赖（如 service import httpapi）、跨层捷径（如 httpapi 直接摸 db）。裁决一条常见纠结：httpapi **可以**使用 service 方法签名暴露的 `model.*` / `acp.*` 类型（如 `model.Message`、`acp.Settings`）——那是契约的一部分，不算越层。
 
 包地图与跨包工具索引维护在 [internal/README.md](internal/README.md)，新增包或跨包工具必须同步登记（`make check-structure` 对账）。
 

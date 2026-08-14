@@ -381,6 +381,20 @@ export default {
       env: "Environment",
       claude: "Claude",
       codex: "Codex",
+      about: "About & Updates",
+    },
+    about: {
+      updateTitle: "Updates",
+      newVersion: "New version v{{version}}",
+      check: "Check for updates",
+      checkedAt: "Last checked {{time}}",
+      neverChecked: "Not checked yet",
+      autoCheckHint: "Auto-checks daily in the background",
+      upToDate: "You're on the latest version.",
+      apply: "Update & restart",
+      applying: "Downloading & installing…",
+      devHint:
+        "One-click update is desktop-only; in dev mode, git pull and restart.",
     },
     env: {
       connTitle: "Connection test",

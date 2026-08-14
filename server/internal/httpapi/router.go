@@ -10,10 +10,8 @@ import (
 
 	"acpp/server/internal/config"
 	"acpp/server/internal/service"
+	"acpp/server/internal/system"
 )
-
-// Version 会随 health 接口返回，方便前端确认后端版本。
-const Version = "0.1.0"
 
 // Services 是路由需要的全部业务服务，由装配层（cmd/server）构建后传入——
 // HTTP 层只做路由与编解码，不负责连库与组装依赖。
@@ -22,9 +20,10 @@ type Services struct {
 	Sessions   *service.SessionService
 	Chat       *service.ChatService
 	Terminals  *service.TerminalService
-	System     *service.SystemService
+	System     *system.Service
 	Skills     *service.SkillService
 	SkillUsage *service.SkillUsageService
+	Update     *system.Updater
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -32,15 +31,16 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	agents := agentHandler{agents: svcs.Agents, chat: svcs.Chat}
 	sessions := sessionHandler{sessions: svcs.Sessions, chat: svcs.Chat}
 	chat := chatHandler{chat: svcs.Chat}
-	system := systemHandler{system: svcs.System}
+	system := systemHandler{system: svcs.System, update: svcs.Update}
 	skills := skillHandler{skills: svcs.Skills, usage: svcs.SkillUsage}
 
 	api := http.NewServeMux()
 
+	// 版本号在 config.Version（构建期 ldflags 注入），随 health 返回供前端确认。
 	api.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeData(w, http.StatusOK, map[string]string{
 			"status":  "ok",
-			"version": Version,
+			"version": config.Version,
 		})
 	})
 
@@ -79,6 +79,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 环境体检与一键安装：依赖清单是后端白名单，安装命令不接受用户输入。
 	api.HandleFunc("GET /api/system/env", system.env)
 	api.HandleFunc("POST /api/system/env/install", system.envInstall)
+	// 版本检查（GitHub Releases，缓存 + ?force=1 现查）与一键更新重启。
+	api.HandleFunc("GET /api/system/update", system.updateInfo)
+	api.HandleFunc("POST /api/system/update/apply", system.updateApply)
 
 	// 技能库：磁盘为事实源（~/.acpp/skills + skillpack 分发链接），无数据库表。
 	api.HandleFunc("GET /api/skills", skills.list)

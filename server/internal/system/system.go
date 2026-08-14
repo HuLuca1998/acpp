@@ -1,4 +1,4 @@
-package service
+package system
 
 import (
 	"context"
@@ -9,16 +9,18 @@ import (
 	"gorm.io/gorm"
 
 	"acpp/server/internal/config"
+
+	"acpp/server/internal/service"
 )
 
-// SystemService 提供系统级配置：数据目录的查看与迁移。
-type SystemService struct {
+// Service 提供系统级配置：数据目录的查看与迁移。
+type Service struct {
 	db  *gorm.DB
 	cfg config.Config
 }
 
-func NewSystemService(gdb *gorm.DB, cfg config.Config) *SystemService {
-	return &SystemService{db: gdb, cfg: cfg}
+func NewService(gdb *gorm.DB, cfg config.Config) *Service {
+	return &Service{db: gdb, cfg: cfg}
 }
 
 // SystemInfo 是设置面板展示的数据目录状态。
@@ -31,7 +33,7 @@ type SystemInfo struct {
 	PendingDir string `json:"pendingDir,omitempty"`
 }
 
-func (s *SystemService) Info() SystemInfo {
+func (s *Service) Info() SystemInfo {
 	info := SystemInfo{
 		DataDir:    s.cfg.DataDir,
 		DefaultDir: config.ConfigHome(),
@@ -45,13 +47,13 @@ func (s *SystemService) Info() SystemInfo {
 // MigrateDataDir 把数据迁到新目录：sqlite 用 VACUUM INTO 做在线一致
 // 快照，转录逐文件拷贝（append-only，拷贝安全），最后写固定配置文件。
 // 旧数据留在原地不动；新目录在下次启动时生效。
-func (s *SystemService) MigrateDataDir(ctx context.Context, target string) (SystemInfo, error) {
+func (s *Service) MigrateDataDir(ctx context.Context, target string) (SystemInfo, error) {
 	target = filepath.Clean(target)
 	if !filepath.IsAbs(target) {
-		return SystemInfo{}, fmt.Errorf("%w: data dir must be an absolute path", ErrInvalid)
+		return SystemInfo{}, fmt.Errorf("%w: data dir must be an absolute path", service.ErrInvalid)
 	}
 	if config.SamePath(target, s.cfg.DataDir) {
-		return SystemInfo{}, fmt.Errorf("%w: already using this directory", ErrInvalid)
+		return SystemInfo{}, fmt.Errorf("%w: already using this directory", service.ErrInvalid)
 	}
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return SystemInfo{}, fmt.Errorf("create target dir: %w", err)
@@ -59,7 +61,7 @@ func (s *SystemService) MigrateDataDir(ctx context.Context, target string) (Syst
 	targetDB := filepath.Join(target, "acp.db")
 	if _, err := os.Stat(targetDB); err == nil {
 		// 覆盖别人的数据库比失败糟糕得多，让用户换个目录或清空它。
-		return SystemInfo{}, fmt.Errorf("%w: target already contains acp.db", ErrInvalid)
+		return SystemInfo{}, fmt.Errorf("%w: target already contains acp.db", service.ErrInvalid)
 	}
 
 	if err := s.db.WithContext(ctx).Exec("VACUUM INTO ?", targetDB).Error; err != nil {
@@ -75,4 +77,3 @@ func (s *SystemService) MigrateDataDir(ctx context.Context, target string) (Syst
 	info.PendingDir = target
 	return info, nil
 }
-
