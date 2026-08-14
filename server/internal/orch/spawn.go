@@ -114,7 +114,7 @@ func (s *Service) runTask(ctx context.Context, orch *model.OrchSession, role *mo
 		Key:        key,
 		Runtime:    acp.RuntimeFor(agent.Command, agent.Args, agent.Env),
 		Cwd:        cwd,
-		OnEvent:    func(ev acp.Event) { s.handleOrchEvent(0, br, ev) },
+		OnEvent:    func(ev acp.Event) { s.handleOrchEvent(0, key, br, ev) },
 		WireTap:    func(dir string, msg json.RawMessage) { s.transcripts.Append(key, dir, msg) },
 		ExtraEnv:   inj.ExtraEnv,
 		MetaExtra:  inj.MetaExtra,

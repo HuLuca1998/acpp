@@ -2,6 +2,7 @@ package orch
 
 import (
 	"log/slog"
+	"strings"
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
@@ -13,7 +14,7 @@ import (
 // 与 ChatService.handleEvent 的差异：不做配置页取舍过滤（编排会话不受
 // 模型下拉勾选影响），settings 快照写 orch 表；sessionID 是主会话 id，
 // 任务子会话传 0（settings 不落库）。
-func (s *Service) handleOrchEvent(sessionID uint, br *stream.Broker, ev acp.Event) {
+func (s *Service) handleOrchEvent(sessionID uint, key string, br *stream.Broker, ev acp.Event) {
 	switch ev.Kind {
 	case acp.EventMessage:
 		br.Publish(stream.Event{Kind: "message_chunk", Text: ev.Text})
@@ -38,6 +39,14 @@ func (s *Service) handleOrchEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		})
 
 	case acp.EventPermission:
+		// spawn_agent 是我们自己的系统工具，权限请求自动放行——否则
+		// 每次派发都弹一张没人该点的卡（claude 的 MCP 工具批准走这里）。
+		if key != "" && isSpawnPermission(ev) {
+			if opt := allowOption(ev.Options); opt != "" {
+				go func() { _ = s.manager.ResolvePermission(key, ev.PermissionID, opt) }()
+				return
+			}
+		}
 		br.Publish(stream.Event{
 			Kind:         "permission",
 			PermissionID: ev.PermissionID,
@@ -66,6 +75,16 @@ func (s *Service) handleOrchEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		br.Publish(stream.Event{Kind: "commands", Commands: ev.Commands})
 
 	case acp.EventElicitation:
+		// codex 的 MCP 工具批准走 elicitation 通道（message 形如
+		// `Allow the acpp MCP server to run tool "spawn_agent"?`），同样
+		// 自动放行——识别保守到「acpp + spawn_agent」双关键字。
+		if key != "" && isSpawnElicitation(ev) {
+			go func() {
+				_ = s.manager.ResolveElicitation(key, ev.ElicitationID,
+					acp.ElicitationResult{Action: "accept", Content: map[string]any{}})
+			}()
+			return
+		}
 		br.Publish(stream.Event{
 			Kind:          "elicitation",
 			ElicitationID: ev.ElicitationID,
@@ -117,4 +136,34 @@ func (s *Service) markOrchError(id uint, cause error) {
 // 实时数据源。
 func (s *Service) publishTaskUpdate(orchID uint, task *model.OrchTask) {
 	s.brokerFor(orchKey(orchID)).Publish(stream.Event{Kind: "task_update", Task: task})
+}
+
+// isSpawnPermission 识别「批准调用我们自己的 spawn_agent」的权限请求
+// （claude 通道）。识别保守：标题或输入里必须出现 spawn_agent。
+func isSpawnPermission(ev acp.Event) bool {
+	if strings.Contains(ev.Title, "spawn_agent") {
+		return true
+	}
+	return strings.Contains(string(ev.RawInput), "spawn_agent")
+}
+
+// allowOption 从权限选项里挑放行项：优先一次性放行（allow_always 会把
+// 授权持久到 agent 侧，超出本次会话的意图）。
+func allowOption(options []acp.PermissionOption) string {
+	for _, o := range options {
+		if o.Kind == "allow_once" {
+			return o.OptionID
+		}
+	}
+	for _, o := range options {
+		if o.Kind == "allow_always" {
+			return o.OptionID
+		}
+	}
+	return ""
+}
+
+// isSpawnElicitation 识别 codex 的 MCP 工具批准提问。
+func isSpawnElicitation(ev acp.Event) bool {
+	return strings.Contains(ev.Text, "acpp") && strings.Contains(ev.Text, "spawn_agent")
 }

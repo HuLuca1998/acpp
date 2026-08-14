@@ -81,7 +81,10 @@ func (s *Service) mainInjection(orch *model.OrchSession, agent *model.Agent, pro
 			MetaExtra: map[string]any{
 				"systemPrompt": map[string]any{"append": prompt},
 				"claudeCode": map[string]any{"options": map[string]any{
+					// 收内部 Task 子代理，预批我们自己的派发工具——
+					// 每次 spawn 都弹权限卡没有意义（事件层另有自动放行兜底）。
 					"disallowedTools": []string{"Task"},
+					"allowedTools":    []string{"mcp__acpp__spawn_agent"},
 				}},
 			},
 			MCPServers: []any{map[string]any{
@@ -199,7 +202,7 @@ func (s *Service) ensureOpen(ctx context.Context, orch *model.OrchSession) error
 		Key:     key,
 		Runtime: acp.RuntimeFor(agent.Command, agent.Args, agent.Env),
 		Cwd:     cwd,
-		OnEvent: func(ev acp.Event) { s.handleOrchEvent(orch.ID, br, ev) },
+		OnEvent: func(ev acp.Event) { s.handleOrchEvent(orch.ID, key, br, ev) },
 		WireTap: func(dir string, msg json.RawMessage) { s.transcripts.Append(key, dir, msg) },
 		// 编排会话同样跨重启恢复：MCP/提示词注入在 load 路径一并携带。
 		ResumeACPSessionID: orch.ACPSessionID,
