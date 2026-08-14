@@ -136,6 +136,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
+| GET | `/api/system/env` | 环境体检：brew/node/npm、CLI 与 ACP 适配器是否就位（含版本与路径） |
+| POST | `/api/system/env/install` | 一键安装缺失依赖（`{key}`，只认后端白名单：brew formula / npm -g） |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
 | GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型与命令清单） |

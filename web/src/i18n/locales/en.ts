@@ -378,8 +378,41 @@ export default {
   settingsPage: {
     menu: {
       system: "System",
+      env: "Environment",
       claude: "Claude",
       codex: "Codex",
+    },
+    env: {
+      connTitle: "Connection test",
+      connDescription:
+        "Spawns the agent for real, validating the command, dependencies and login state end to end.",
+      test: "Test",
+      connOk: "Connected · {{count}} models available",
+      depsTitle: "Dependency check",
+      depsDescription:
+        "Ordered by install chain: Homebrew → Node.js/npm → CLIs and ACP adapters. Missing items install with one click.",
+      recheck: "Re-check",
+      missing: "Not installed",
+      bundledHint: "Ships with Node.js",
+      install: "Install",
+      installing: "Installing…",
+      installDone: "{{name}} installed",
+      installFailed: "{{name}} install failed",
+      needFirst: "Install {{name}} first",
+      brewManualHint:
+        "Homebrew must be installed manually in a terminal (it asks for your password). Copy the command and run it there:",
+      copy: "Copy command",
+      copied: "Copied",
+      pathLabel: "Server PATH",
+      deps: {
+        brew: "Homebrew",
+        node: "Node.js",
+        npm: "npm",
+        "claude-agent-acp": "claude-agent-acp (ACP adapter)",
+        claude: "Claude Code CLI",
+        "codex-acp": "codex-acp (ACP adapter)",
+        codex: "Codex CLI",
+      },
     },
     tool: {
       commandHint:

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { AgentIcon } from "@/components/agent-icon"
 import { DirPicker } from "@/components/dir-picker"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
+import { EnvCheck } from "@/components/settings/env-check"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -31,11 +32,17 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FolderCogIcon, FolderOpenIcon, SettingsIcon } from "lucide-react"
+import {
+  ActivityIcon,
+  FolderCogIcon,
+  FolderOpenIcon,
+  SettingsIcon,
+} from "lucide-react"
 
-/** 设置分区：系统 + 两个内置工具（claude/codex 是产品固定形态，见 adr-005）。 */
+/** 设置分区：系统 / 环境体检 + 两个内置工具（claude/codex 是产品固定形态，见 adr-005）。 */
 const SECTIONS = [
   { key: "system", icon: <SettingsIcon className="size-4" /> },
+  { key: "env", icon: <ActivityIcon className="size-4" /> },
   { key: "claude", icon: <AgentIcon flavor="claude" className="size-4" /> },
   { key: "codex", icon: <AgentIcon flavor="codex" className="size-4" /> },
 ] as const
@@ -117,8 +124,13 @@ export function Settings() {
         ))}
       </nav>
 
-      {/* 工具分区：内置 claude / codex 的配置面。 */}
-      {section !== "system" ? (
+      {/* 环境分区：依赖体检 + 连接测试。 */}
+      {section === "env" ? (
+        <div className="flex min-w-0 flex-1 flex-col">
+          <EnvCheck />
+        </div>
+      ) : section !== "system" ? (
+        /* 工具分区：内置 claude / codex 的配置面。 */
         <div className="flex min-w-0 flex-1 flex-col">
           <AgentToolConfig name={section} />
         </div>

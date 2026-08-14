@@ -3,6 +3,8 @@ import type {
   CatalogInput,
   DirEntry,
   DirListing,
+  EnvInfo,
+  EnvInstallResult,
   GitCommitDetail,
   GitDiffView,
   GitOverview,
@@ -95,6 +97,14 @@ export const api = {
       request<SystemInfo>("/system/data-dir", {
         method: "PUT",
         body: JSON.stringify({ dataDir }),
+      }),
+    /** 环境体检：依赖是否就位（brew/node/适配器/CLI）。 */
+    env: () => request<EnvInfo>("/system/env"),
+    /** 一键安装缺失依赖；key 只认后端白名单，安装可能耗时数分钟。 */
+    envInstall: (key: string) =>
+      request<EnvInstallResult>("/system/env/install", {
+        method: "POST",
+        body: JSON.stringify({ key }),
       }),
   },
 

@@ -20,6 +20,33 @@ export interface SystemInfo {
   pendingDir?: string
 }
 
+/** 环境体检的一项依赖。 */
+export interface EnvDependency {
+  key: string
+  installed: boolean
+  version?: string
+  path?: string
+  /** auto 可一键安装；manual 需终端手动执行；bundled 随其他依赖就位。 */
+  installKind: "auto" | "manual" | "bundled"
+  /** manual 时给用户复制执行的命令。 */
+  installHint?: string
+  /** 一键安装的前置依赖 key。 */
+  requires?: string
+}
+
+/** 环境体检结果；path 是后端进程实际使用的 PATH。 */
+export interface EnvInfo {
+  deps: EnvDependency[]
+  path: string
+}
+
+/** 一次依赖安装的结果；ok=false 时 output 是失败输出尾巴。 */
+export interface EnvInstallResult {
+  key: string
+  ok: boolean
+  output: string
+}
+
 /** 配置页对一批条目的取舍；key 对模型是 id、对命令是 name。 */
 export interface CatalogInput {
   models?: { key: string; disabled: boolean; alias?: string }[]

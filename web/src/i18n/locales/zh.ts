@@ -363,8 +363,40 @@ export default {
   settingsPage: {
     menu: {
       system: "系统",
+      env: "环境",
       claude: "Claude",
       codex: "Codex",
+    },
+    env: {
+      connTitle: "连接测试",
+      connDescription: "真实拉起一次 agent，验证命令、依赖与登录态整条链。",
+      test: "测试连接",
+      connOk: "连接正常 · {{count}} 个可用模型",
+      depsTitle: "依赖体检",
+      depsDescription:
+        "按安装链排序：Homebrew → Node.js/npm → CLI 与 ACP 适配器。缺失项可一键安装。",
+      recheck: "重新检测",
+      missing: "未安装",
+      bundledHint: "随 Node.js 一起提供",
+      install: "安装",
+      installing: "安装中…",
+      installDone: "{{name}} 安装完成",
+      installFailed: "{{name}} 安装失败",
+      needFirst: "需先安装 {{name}}",
+      brewManualHint:
+        "Homebrew 需要在终端手动安装（过程会要求输入密码），复制命令后粘贴到终端执行：",
+      copy: "复制命令",
+      copied: "已复制",
+      pathLabel: "后端 PATH",
+      deps: {
+        brew: "Homebrew",
+        node: "Node.js",
+        npm: "npm",
+        "claude-agent-acp": "claude-agent-acp（ACP 适配器）",
+        claude: "Claude Code CLI",
+        "codex-acp": "codex-acp（ACP 适配器）",
+        codex: "Codex CLI",
+      },
     },
     tool: {
       commandHint: "启动命令与参数。保存后自动重新探测能力清单。",
