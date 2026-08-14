@@ -35,7 +35,8 @@ echo "==> 编译 acp-server"
 UPDATE_REPO="${ACP_UPDATE_REPO:-}"
 if [ -z "$UPDATE_REPO" ]; then
   ORIGIN="$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)"
-  UPDATE_REPO="$(printf '%s' "$ORIGIN" | sed -nE 's#.*github\.com[:/]([^/]+/[^/]+?)(\.git)?$#\1#p')"
+  # 两步剥离（BSD sed 的 ERE 不支持非贪婪）：去 host 前缀，再去 .git 后缀
+  UPDATE_REPO="$(printf '%s' "$ORIGIN" | sed -nE 's#.*github\.com[:/]##p' | sed 's#\.git$##')"
 fi
 LDFLAGS="-s -w -X acpp/server/internal/config.Version=$VERSION"
 if [ -n "$UPDATE_REPO" ]; then
