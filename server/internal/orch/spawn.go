@@ -177,10 +177,9 @@ func (s *Service) runTask(ctx context.Context, orch *model.OrchSession, role *mo
 	}
 	if result.Usage != nil {
 		s.addTokens(orch.ID, result.Usage)
-		if err := s.db.Model(&model.OrchTask{}).Where("id = ?", task.ID).
-			Update("tokens_used", int64(result.Usage.TotalTokens)).Error; err != nil {
-			slog.Warn("save task tokens", "task", task.ID, "err", err)
-		}
+		// 只改内存字段——落库统一在 SpawnAgent 收尾的 Save，这里写库会被
+		// 那次全字段保存覆盖回去。
+		task.TokensUsed = int64(result.Usage.TotalTokens)
 	}
 	task.StopReason = string(result.StopReason)
 
