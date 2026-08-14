@@ -195,6 +195,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/orchestrator/tasks/{tid}/events` `/messages` | 任务子会话的 SSE 流 / 历史（观察面板数据源） |
 | POST | `/api/orchestrator/tasks/{tid}/cancel` `/permission` `/elicitation` | 中止单任务 / 子会话的权限与提问裁决 |
 | POST | `/api/mcp/{token}` | 编排 MCP 端点（agent 回连，JSON-RPC；token 为每编排会话专属凭证，不出现在 API 响应里） |
+| * | `/api/orchestrator/sessions/{id}/fs/*` `/git/*` `/terminals*` `/transcript` | 编排主会话的完整工作区数据面：与普通会话同形状同实现，只差路径前缀（升级不降级） |
 
 SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`（编排主会话另有 `task_update`）。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
 
@@ -216,7 +217,7 @@ agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排�
 - **注入口两端不同**：claude 走 `session/new` 的 `_meta`（`systemPrompt.append` 调度提示词/persona + `disallowedTools:["Task"]` 收内部子代理 + `allowedTools` 预批派发工具）；codex 走编排专属 CODEX_HOME（config.toml 定义 MCP server，AGENTS.md 承载提示词/persona）。
 - **自家工具的权限自动放行**：spawn_agent 的权限请求（claude）与 MCP 批准提问（codex 的 elicitation 通道）由事件层自动放行，不弹卡。
 - **护栏**：并发子任务上限 4；spawn 深度硬性 1（子会话不挂 MCP）；急停一键中止全部；累计 token 用量展示。
-- **界面**：编排页 dockview 布局——主控对话 + 常驻任务列表；任务子会话面板不自动弹出，从列表点开/拖动布局/关闭不影响任务运行。
+- **界面**：编排页 dockview 布局——主控对话 + 常驻任务列表 + 普通会话的全部工作区面板（文件树/预览/diff/commits/日志/终端，⋯ 菜单开启）；任务子会话面板不自动弹出，从列表点开/拖动布局/关闭不影响任务运行。composer 同样支持图片、@ 文件引用、斜杠命令与 busy 排队插话。
 
 ## 安全姿态
 
@@ -299,3 +300,4 @@ cd web && npx shadcn@latest add <component>
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M3 已落地：dockview 骨架、文件树/预览、diff / 未推送 commit、多实例 PTY 终端与引用联动。剩 M4 打磨（布局预设、diff 虚拟滚动、压力验收）。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。
+- **编排（adr-006）的已知边界**：任务子会话用完即收、暂无「续问子代理」入口（记录与转录保留）；未连接的编排会话没有斜杠命令补全（首次连接后出现）；编排会话列表暂无搜索/筛选。
