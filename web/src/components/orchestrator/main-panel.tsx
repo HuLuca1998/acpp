@@ -110,6 +110,7 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
         busy={chat.busy}
         disabled={false}
         placeholder={t("orch.placeholder")}
+        commands={chat.commands}
         footer={
           <ComposerStatus
             cwd={isNew ? draftCwd : chat.orchSession?.cwd}
