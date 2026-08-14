@@ -17,9 +17,9 @@ import (
 )
 
 // Send 向编排主会话发一轮。语义对齐 ChatService.Send：广播用户消息、
-// 异步跑轮、懒连接；编排会话不做 @文件/图片（第一版纯文本）。
-func (s *Service) Send(ctx context.Context, id uint, content string) (*model.Message, error) {
-	if strings.TrimSpace(content) == "" {
+// 异步跑轮、懒连接；@ 文件与图片经共享的 BuildPromptBlocks 组块。
+func (s *Service) Send(ctx context.Context, id uint, in service.SendInput) (*model.Message, error) {
+	if strings.TrimSpace(in.Content) == "" && len(in.Images) == 0 && len(in.Files) == 0 {
 		return nil, fmt.Errorf("%w: message content is required", service.ErrInvalid)
 	}
 	orch, err := s.Get(ctx, id)
@@ -32,8 +32,13 @@ func (s *Service) Send(ctx context.Context, id uint, content string) (*model.Mes
 		return nil, err
 	}
 
+	blocks, payload, err := service.BuildPromptBlocks(orch.Cwd, in)
+	if err != nil {
+		return nil, err
+	}
+
 	if orch.Title == "" {
-		if title := service.DeriveTitle(content); title != "" {
+		if title := service.DeriveTitle(in.Content); title != "" {
 			if err := s.db.WithContext(ctx).Model(&model.OrchSession{}).
 				Where("id = ?", id).Update("title", title).Error; err != nil {
 				slog.Warn("orch auto title", "orch", id, "err", err)
@@ -46,7 +51,8 @@ func (s *Service) Send(ctx context.Context, id uint, content string) (*model.Mes
 		SessionID: id,
 		Role:      model.RoleUser,
 		Kind:      model.KindText,
-		Content:   content,
+		Content:   in.Content,
+		Payload:   payload,
 		CreatedAt: time.Now(),
 	}
 
@@ -57,7 +63,7 @@ func (s *Service) Send(ctx context.Context, id uint, content string) (*model.Mes
 	}
 	br.Publish(stream.Event{Kind: "user_message", Message: msg})
 
-	go s.runOrchTurn(id, br, []acp.ContentBlock{acp.TextBlock(content)})
+	go s.runOrchTurn(id, br, blocks)
 	return msg, nil
 }
 

@@ -1,15 +1,20 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"acpp/server/internal/service"
 )
 
+// cwdResolver 按会话 id 解析工作目录——普通会话与编排会话的唯一差异
+// 就是记录存在哪张表里，工作区数据面本身只关心 cwd。
+type cwdResolver func(ctx context.Context, id uint) (string, error)
+
 // workspaceHandler 提供工作区面板的数据面：文件树与文件预览。
 // 一切路径以会话 cwd 为边界，canonical guard 在 service 层。
 type workspaceHandler struct {
-	sessions *service.SessionService
+	cwdOf cwdResolver
 }
 
 func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
@@ -18,12 +23,12 @@ func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	session, err := h.sessions.Get(r.Context(), id)
+	cwd, err := h.cwdOf(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	listing, err := service.WorkspaceTree(r.Context(), session.Cwd, r.URL.Query().Get("path"), queryInt(r, "depth", 1))
+	listing, err := service.WorkspaceTree(r.Context(), cwd, r.URL.Query().Get("path"), queryInt(r, "depth", 1))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -37,12 +42,12 @@ func (h workspaceHandler) file(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	session, err := h.sessions.Get(r.Context(), id)
+	cwd, err := h.cwdOf(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	view, err := service.WorkspaceFile(session.Cwd, r.URL.Query().Get("path"))
+	view, err := service.WorkspaceFile(cwd, r.URL.Query().Get("path"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -56,12 +61,12 @@ func (h workspaceHandler) gitOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	session, err := h.sessions.Get(r.Context(), id)
+	cwd, err := h.cwdOf(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	overview, err := service.WorkspaceGitOverview(r.Context(), session.Cwd)
+	overview, err := service.WorkspaceGitOverview(r.Context(), cwd)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -75,12 +80,12 @@ func (h workspaceHandler) gitDiff(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	session, err := h.sessions.Get(r.Context(), id)
+	cwd, err := h.cwdOf(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	view, err := service.WorkspaceGitDiff(r.Context(), session.Cwd, r.URL.Query().Get("path"))
+	view, err := service.WorkspaceGitDiff(r.Context(), cwd, r.URL.Query().Get("path"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -95,13 +100,13 @@ func (h workspaceHandler) gitCommit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	session, err := h.sessions.Get(r.Context(), id)
+	cwd, err := h.cwdOf(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	detail, diff, err := service.WorkspaceGitCommit(
-		r.Context(), session.Cwd, r.PathValue("sha"), r.URL.Query().Get("path"))
+		r.Context(), cwd, r.PathValue("sha"), r.URL.Query().Get("path"))
 	if err != nil {
 		writeError(w, err)
 		return

@@ -287,6 +287,11 @@ func (s *Service) task(ctx context.Context, taskID uint) (*model.OrchTask, error
 	return &task, nil
 }
 
+// TranscriptPath 返回主会话转录文件路径（logs 面板与原始日志下载）。
+func (s *Service) TranscriptPath(id uint) string {
+	return s.transcripts.Path(orchKey(id))
+}
+
 // Messages 从转录重建主会话消息（分页语义与 ChatService.Messages 一致）。
 func (s *Service) Messages(id uint, limit int, before uint) ([]model.Message, int, error) {
 	return s.rebuildFor(orchKey(id), id, limit, before)

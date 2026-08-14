@@ -79,14 +79,12 @@ func (h orchHandler) send(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	var in struct {
-		Content string `json:"content"`
-	}
+	var in service.SendInput
 	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, err)
 		return
 	}
-	msg, err := h.orch.Send(r.Context(), id, in.Content)
+	msg, err := h.orch.Send(r.Context(), id, in)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -232,6 +230,21 @@ func (h orchHandler) events(w http.ResponseWriter, r *http.Request) {
 	events, cancel := h.orch.Subscribe(id)
 	defer cancel()
 	streamSSE(w, r, events)
+}
+
+// transcript 原样下发主会话转录 JSONL（logs 面板轮询靠 Range 续读）。
+func (h orchHandler) transcript(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if _, err := h.orch.Get(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	http.ServeFile(w, r, h.orch.TranscriptPath(id))
 }
 
 // ---- 任务子会话 ----

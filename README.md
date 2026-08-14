@@ -27,15 +27,19 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/             # 页面，与路由表一一对应：overview / sessions /
 │   │   │                       #   session-chat（工作区宿主，草稿态共用）/ skills / skill-detail /
+│   │   │                       #   orchestrator / orchestrator-chat（编排列表与工作区）/ roles /
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
-│   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session / use-async-data / use-mobile
+│   │   ├── hooks/              # use-chat（SSE 状态机）/ use-orch-chat / use-task-chat /
+│   │   │                       #   use-draft-session / use-async-data / use-mobile
 │   │   ├── i18n/               # i18next 初始化 + 类型增强 + locales/{zh,en}.ts
 │   │   ├── components/
 │   │   │   ├── ui/             # shadcn 组件（CLI 托管区，目录级 AGENTS.md）
 │   │   │   ├── shell/          # 应用外壳：侧边栏、顶栏、导航、主题/语言切换
 │   │   │   ├── chat/           # 消息渲染；composer/ 输入域；cards/ 权限、计划审批、提问卡
 │   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 七类面板
+│   │   │   ├── orchestrator/   # 编排工作区：主控对话 / 任务列表 / 任务子会话面板 / dock
+│   │   │   ├── roles/          # 角色编辑对话框
 │   │   │   ├── overview/       # 概览页四张卡
 │   │   │   ├── settings/       # 设置页分区面板（内置工具 claude/codex 的配置面）
 │   │   │   └── *.tsx           # 跨域小组件：status-dot / diff-view / dir-picker / agent-icon / list-page-states
@@ -63,6 +67,8 @@ acpp/
         ├── db/                 # GORM 连接 + AutoMigrate
         ├── model/              # Agent / Session / Message(重建 DTO) / SkillUsage
         ├── transcript/         # 会话转录 JSONL（对话内容唯一的持久化）
+        ├── stream/             # SSE 事件形状与广播器（聊天/编排共用的叶子包）
+        ├── orch/               # 编排（adr-006）：角色、编排主会话、spawn 任务子会话、系统 MCP 端点
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
         │   ├── chat.go         #   服务骨架与生命周期（Peek/Open/Close/回收）
@@ -174,14 +180,43 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
+| GET/POST | `/api/roles` | 角色列表 / 新建（编排里可雇佣的子代理定义，见 §编排） |
+| GET/PUT/DELETE | `/api/roles/{id}` | 角色详情 / 更新 / 删除 |
+| GET/POST | `/api/orchestrator/sessions` | 编排会话列表（分页）/ 新建（`{agentId, cwd?, title?}`） |
+| GET/DELETE | `/api/orchestrator/sessions/{id}` | 编排会话详情 / 删除（急停在跑任务、删任务记录与转录） |
+| POST | `/api/orchestrator/sessions/{id}/send` | 发一轮（`{content}` 纯文本），懒连接；主控经 MCP 工具派发子任务 |
+| GET | `/api/orchestrator/sessions/{id}/events` | 主会话 SSE（比普通会话多 `task_update` 事件——任务状态快照） |
+| GET | `/api/orchestrator/sessions/{id}/messages` | 主会话历史（转录重建，分页语义同普通会话） |
+| POST | `/api/orchestrator/sessions/{id}/cancel` | 中止主会话当前轮（不动子任务） |
+| POST | `/api/orchestrator/sessions/{id}/stop` | **急停**：中止主会话与全部在跑子任务 |
+| GET/PUT | `/api/orchestrator/sessions/{id}/settings` | 主会话统一设置（读给降级视图，写同普通会话） |
+| POST | `/api/orchestrator/sessions/{id}/permission` `/elicitation` | 主会话的权限/提问裁决回传 |
+| GET | `/api/orchestrator/sessions/{id}/tasks` | 任务列表（派发流数据源，老的在前） |
+| GET | `/api/orchestrator/tasks/{tid}/events` `/messages` | 任务子会话的 SSE 流 / 历史（观察面板数据源） |
+| POST | `/api/orchestrator/tasks/{tid}/cancel` `/permission` `/elicitation` | 中止单任务 / 子会话的权限与提问裁决 |
+| POST | `/api/mcp/{token}` | 编排 MCP 端点（agent 回连，JSON-RPC；token 为每编排会话专属凭证，不出现在 API 响应里） |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`（编排主会话另有 `task_update`）。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
 
 ## 数据模型
 
 - **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。产品形态上固定为内置的 claude / codex 两条记录（启动时缺失自动预置、按 name 判存不覆盖用户配置，见 adr-005），API 仍是通用的 `/api/agents`。`flavor` / `models` / `commands` / `skeleton` 是注册/更新后自动探测的缓存（拉临时会话读能力）：模型与命令供草稿态展示与 `/` 补全（条目带 `disabled` 标记，重探不清空取舍）；`skeleton` 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），与模型清单一起构成未连接会话的完整降级设置视图。模型条目支持 `alias`（配置页起显示别名，所有模型下拉优先显示）；`fastPolicy` 是快速模式取舍（首探按 flavor 落默认：claude 因额外计费默认 off，其余 on；off 时快速开关不出现在任何界面）。
 - **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`lastSettings` 是最后一次生效的统一设置当前值快照（设置视图每次变化时写回），恢复会话的工具栏靠它显示与断开前一致的当前值。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
+- **Role** — 编排里可雇佣的子代理角色（adr-006）：`persona`（注入子会话的人格）、`description`（进主控调度提示词的雇佣目录）、绑定工具与 `model`/`effort`/`level` 预设（空=工具默认档）。启动时预置分析员/开发者/审查者/测试员四个内置模板（一次性，删除不复活）。
+- **OrchSession / OrchTask** — 编排主会话与一次 spawn 派发（一个任务 = 一条角色子会话）。与 `sessions` 表刻意分表（隔离契约：编排整体可删而不影响普通会话）；`mcpToken` 是该会话专属 MCP 端点的凭证；`tokensUsed` 是主会话 + 全部子任务的累计 token。
+
+## 编排：外化子代理
+
+agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排（adr-006）把这条通道外化：主控会话挂载我方 MCP server 并被注入调度提示词（含角色雇佣目录），需要帮手时调用 `spawn_agent(role, task)`——后端拉起一条**真实的 ACP 子会话**（按角色注入人格/模型/权限档），同步跑完任务后把子代理的最终结论作为工具结果还给主控。派了什么、子代理每一步做了什么、返回了什么，全部可观察。
+
+关键机制（全部实测）：
+
+- **同步 spawn**：MCP 工具调用挂起到子会话 turn 结束。claude 默认约 2 分钟超时，经进程 env `MCP_TOOL_TIMEOUT` 放大；codex 在专属 CODEX_HOME 的 config.toml 里配 `tool_timeout_sec`。我方另有 30 分钟任务硬超时先行了断。
+- **注入口两端不同**：claude 走 `session/new` 的 `_meta`（`systemPrompt.append` 调度提示词/persona + `disallowedTools:["Task"]` 收内部子代理 + `allowedTools` 预批派发工具）；codex 走编排专属 CODEX_HOME（config.toml 定义 MCP server，AGENTS.md 承载提示词/persona）。
+- **自家工具的权限自动放行**：spawn_agent 的权限请求（claude）与 MCP 批准提问（codex 的 elicitation 通道）由事件层自动放行，不弹卡。
+- **护栏**：并发子任务上限 4；spawn 深度硬性 1（子会话不挂 MCP）；急停一键中止全部；累计 token 用量展示。
+- **界面**：编排页 dockview 布局——主控对话 + 常驻任务列表；任务子会话面板不自动弹出，从列表点开/拖动布局/关闭不影响任务运行。
 
 ## 安全姿态
 

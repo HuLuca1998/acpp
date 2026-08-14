@@ -99,10 +99,15 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	return msg, nil
 }
 
-// buildBlocks 把发送入参翻译成 prompt 内容块，并给临时消息组展示 payload。
-// @ 文件在这里读内容：路径相对会话 cwd 解析，读不到直接报错（发出去
-// 一个空引用比报错更糟）。
+// buildBlocks 把发送入参翻译成 prompt 内容块（见 BuildPromptBlocks）。
 func (s *ChatService) buildBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSONMap, error) {
+	return BuildPromptBlocks(cwd, in)
+}
+
+// BuildPromptBlocks 把发送入参翻译成 prompt 内容块，并给临时消息组展示
+// payload。@ 文件在这里读内容：路径相对会话 cwd 解析，读不到直接报错
+// （发出去一个空引用比报错更糟）。编排会话的发送共用（导出）。
+func BuildPromptBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSONMap, error) {
 	var blocks []acp.ContentBlock
 	payload := model.JSONMap{}
 

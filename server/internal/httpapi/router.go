@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -112,7 +113,22 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 配置页勾选：更新 models/commands 的启用状态。
 	api.HandleFunc("PUT /api/agents/{id}/catalog", agents.catalog)
 
-	workspace := workspaceHandler{sessions: svcs.Sessions}
+	// 工作区数据面按 cwd 工作，普通会话与编排会话只差记录来源。
+	sessionCwd := func(ctx context.Context, id uint) (string, error) {
+		session, err := svcs.Sessions.Get(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		return session.Cwd, nil
+	}
+	orchCwd := func(ctx context.Context, id uint) (string, error) {
+		orchSession, err := svcs.Orch.Get(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		return orchSession.Cwd, nil
+	}
+	workspace := workspaceHandler{cwdOf: sessionCwd}
 
 	api.HandleFunc("GET /api/sessions", sessions.list)
 	api.HandleFunc("POST /api/sessions", sessions.create)
@@ -131,7 +147,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 
 	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
 	terminals := terminalHandler{
-		sessions:       svcs.Sessions,
+		cwdOf:          sessionCwd,
 		terms:          svcs.Terminals,
 		originPatterns: corsHosts(cfg.CORSOrigins),
 	}
@@ -170,6 +186,26 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/permission", orch.taskPermission)
 	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/elicitation", orch.taskElicitation)
 	api.HandleFunc("/api/mcp/{token}", orch.mcp)
+
+	// 编排主会话的完整工作区（升级不降级）：文件树/预览、git 数据面、
+	// 终端与转录，全部复用普通会话的数据面实现，只有 cwd 来源不同。
+	orchWorkspace := workspaceHandler{cwdOf: orchCwd}
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/entries", orchWorkspace.tree)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/file", orchWorkspace.file)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/overview", orchWorkspace.gitOverview)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/diff", orchWorkspace.gitDiff)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/commits/{sha}", orchWorkspace.gitCommit)
+	orchTerminals := terminalHandler{
+		cwdOf:          orchCwd,
+		terms:          svcs.Terminals,
+		originPatterns: corsHosts(cfg.CORSOrigins),
+		keyOffset:      orchTerminalKeyOffset,
+	}
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/terminals", orchTerminals.create)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/terminals", orchTerminals.list)
+	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/terminals/{tid}", orchTerminals.remove)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/terminals/{tid}/ws", orchTerminals.attach)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/transcript", orch.transcript)
 
 	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)

@@ -31,11 +31,15 @@ func flavorOfAgent(agent *model.Agent) string {
 }
 
 // buildOrchPrompt 组装主会话的调度提示词：spawn_agent 用法 + 角色雇佣
-// 目录。写给 AI 看——task 必须自包含是子代理没有上下文的直接推论。
+// 目录。写给 AI 看——「默认委派」是编排模式的核心：用户不会点名工具，
+// 主控必须自己判断把实质性工作派给谁；task 必须自包含是子代理没有
+// 上下文的直接推论。
 func buildOrchPrompt(roles []model.Role) string {
 	var b strings.Builder
 	b.WriteString("\n# 编排模式\n\n")
-	b.WriteString("你是编排主控，可以通过 acpp 提供的 MCP 工具 `spawn_agent` 雇佣角色子代理完成子任务。\n\n")
+	b.WriteString("你是编排主控（协调者）。你的默认工作方式是**委派**：" +
+		"实质性工作交给角色子代理完成，你负责拆解任务、选择角色、把关结果、向用户汇总。" +
+		"通过 acpp 提供的 MCP 工具 `spawn_agent(role, task)` 雇佣子代理。\n\n")
 	b.WriteString("## 可用角色（role 参数填名字）\n\n")
 	if len(roles) == 0 {
 		b.WriteString("（当前没有可用角色，spawn_agent 不可用——自己完成任务。）\n")
@@ -44,13 +48,20 @@ func buildOrchPrompt(roles []model.Role) string {
 		fmt.Fprintf(&b, "- **%s**：%s\n", r.Name, r.Description)
 	}
 	b.WriteString(`
+## 何时委派（不要等用户点名）
+
+- 用户提出的任何需要读代码、写代码、审查或验证的实质性任务，主动拆解并派给上面职责匹配的角色——用户不会（也不需要）提到 spawn_agent 或角色名。
+- 多阶段任务按流水线推进，例如实现类需求：先派调研角色摸清现状 → 派实现角色改代码 → 派审查角色把关 → 派验证角色跑测试，每一步的产出喂给下一步的 task。
+- 相互独立的子任务并行派发（同一条消息里发多个 spawn_agent 调用）。
+- 只有纯聊天、一句话能答的问题、或对子代理结果的追问才自己直接回答。
+
 ## 委派规则
 
 - task 必须自包含：写清背景、目标、涉及路径与验收标准——子代理看不到你的对话上下文。
-- spawn_agent 会阻塞到子代理完成并返回其最终结论；需要并行时在同一条消息里发多个 spawn_agent 调用。
+- spawn_agent 会阻塞到子代理完成并返回其最终结论，耗时长属正常，不要中途放弃。
 - 子代理彼此独立、不共享记忆，跨子任务的协调与结果整合由你负责。
 - 调用失败会返回错误文本：可以重试、换角色或自己处理，不要静默放弃任务。
-- 简单问题直接自己回答，不要为聊天消息雇佣子代理。
+- 子代理的结论要经你判断后再采信：结果可疑就换个角色复核或自己抽查。
 `)
 	return b.String()
 }

@@ -15,11 +15,17 @@ import (
 // ws 协议：二进制帧 = 终端原始字节（双向）；客户端文本帧 = JSON 控制消息
 // （目前只有 resize）。
 type terminalHandler struct {
-	sessions *service.SessionService
-	terms    *service.TerminalService
+	cwdOf cwdResolver
+	terms *service.TerminalService
 	// originPatterns 供 ws 升级校验跨域（开发态 vite 端口与后端不同源）。
 	originPatterns []string
+	// keyOffset 隔离终端配额与列表的会话 key 空间：编排会话与普通会话的
+	// 数字 id 会重叠，TerminalService 以 uint 分组，偏移错开。
+	keyOffset uint
 }
+
+// orchTerminalKeyOffset 把编排会话的终端分组 key 错开普通会话的 id 空间。
+const orchTerminalKeyOffset = 1 << 30
 
 type terminalResize struct {
 	Type string `json:"type"`
@@ -33,12 +39,12 @@ func (h terminalHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	session, err := h.sessions.Get(r.Context(), id)
+	cwd, err := h.cwdOf(r.Context(), id)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	info, err := h.terms.Create(id, session.Cwd)
+	info, err := h.terms.Create(h.keyOffset+id, cwd)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -52,7 +58,7 @@ func (h terminalHandler) list(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, h.terms.List(id))
+	writeData(w, http.StatusOK, h.terms.List(h.keyOffset+id))
 }
 
 func (h terminalHandler) remove(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +67,7 @@ func (h terminalHandler) remove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if err := h.terms.Close(id, r.PathValue("tid")); err != nil {
+	if err := h.terms.Close(h.keyOffset+id, r.PathValue("tid")); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -76,7 +82,7 @@ func (h terminalHandler) attach(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	proxy, err := h.terms.Get(id, r.PathValue("tid"))
+	proxy, err := h.terms.Get(h.keyOffset+id, r.PathValue("tid"))
 	if err != nil {
 		writeError(w, err)
 		return
