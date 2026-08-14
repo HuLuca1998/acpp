@@ -170,7 +170,7 @@ export function Roles() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {role.level
-                          ? t(`chat.level.${role.level}` as never, {
+                          ? t(`chat.settings.level.${role.level}` as never, {
                               defaultValue: role.level,
                             })
                           : t("roles.default")}

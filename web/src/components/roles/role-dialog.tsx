@@ -221,7 +221,7 @@ function RoleForm({
                 <SelectItem value={NONE}>{t("roles.default")}</SelectItem>
                 {efforts.map((e) => (
                   <SelectItem key={e} value={e}>
-                    {t(`chat.effort.${e}` as never, { defaultValue: e })}
+                    {t(`chat.settings.effort.${e}` as never, { defaultValue: e })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -240,7 +240,7 @@ function RoleForm({
                 <SelectItem value={NONE}>{t("roles.default")}</SelectItem>
                 {levels.map((l) => (
                   <SelectItem key={l} value={l}>
-                    {t(`chat.level.${l}` as never, { defaultValue: l })}
+                    {t(`chat.settings.level.${l}` as never, { defaultValue: l })}
                   </SelectItem>
                 ))}
               </SelectContent>
