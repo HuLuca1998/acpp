@@ -7,6 +7,7 @@ import { BackendStatus } from "@/components/shell/backend-status"
 import { LanguageSwitcher } from "@/components/shell/language-switcher"
 import { NavMain } from "@/components/shell/nav-main"
 import { AgentIcon } from "@/components/agent-icon"
+import { NavProjects } from "@/components/shell/nav-projects"
 import { NavRecent } from "@/components/shell/nav-recent"
 import { NavSecondary } from "@/components/shell/nav-secondary"
 import {
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useIsOwner } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
+import { groupSessionsByProject, type SessionGroup } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   DramaIcon,
@@ -33,21 +35,31 @@ import {
   WrenchIcon,
 } from "lucide-react"
 
-const RECENT_LIMIT = 10
+// 分组前多拉一些：最终只展示 5 个项目 × 5 条，但要先有足够的样本才能
+// 挑出「最近用过的 5 个项目」。
+const RECENT_LIMIT = 50
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation()
   const { pathname } = useLocation()
   const isOwner = useIsOwner()
   const [recent, setRecent] = React.useState<Session[]>([])
+  const [groups, setGroups] = React.useState<SessionGroup[]>([])
 
   // 随路由变化刷新：新建/删除会话后列表立即跟上，不留已删会话的死链接。
   React.useEffect(() => {
     let cancelled = false
-    api.sessions
-      .list({ pageSize: RECENT_LIMIT })
-      .then((res) => {
-        if (!cancelled) setRecent(res.items)
+    Promise.all([
+      api.sessions.list({ pageSize: RECENT_LIMIT }),
+      // 项目拉不到（工作区根不可读等）不该拖垮最近会话，失败退化成平铺。
+      api.projects.list().catch(() => ({ items: [] })),
+    ])
+      .then(([sessions, projects]) => {
+        if (cancelled) return
+        setRecent(sessions.items)
+        setGroups(
+          groupSessionsByProject(sessions.items, projects.items).groups
+        )
       })
       .catch(() => {
         // 侧边栏的最近列表拉不到就空着，不打断主流程。
@@ -123,7 +135,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMain} />
-        {recentItems.length > 0 ? (
+        {/* 有项目就按项目分组（最多 5 组 × 5 条），否则平铺最近会话——
+            工作区里还没有仓库时分组只会多一层空壳。 */}
+        {groups.length > 0 ? (
+          <NavProjects label={t("nav.recentSessions")} groups={groups} />
+        ) : recentItems.length > 0 ? (
           <NavRecent label={t("nav.recentSessions")} items={recentItems} />
         ) : null}
         <NavSecondary items={navSecondary} className="mt-auto">

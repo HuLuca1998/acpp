@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router"
+import { useNavigate, useSearchParams } from "react-router"
 
 import { api } from "@/lib/api"
 import type {
@@ -70,10 +70,16 @@ function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
  */
 export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [choiceKey, setChoiceKey] = useState("")
-  const [cwd, setCwd] = useState("")
+  // 从项目卡片进来时带着 `?cwd=`：点项目 = 在这个仓库里开会话，
+  // 不该让人再去目录选择器里把同一个路径找一遍（adr-007）。
+  const [cwd, setCwd] = useState(() => searchParams.get("cwd") ?? "")
+  // 非空表示「在隔离工作区里干活」：建会话时先 git worktree add
+  // `<仓库>/worktrees/<名字>`，会话的工作目录随之指向那里。
+  const [worktree, setWorktree] = useState("")
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 模型之外的设置选择（思考深度/权限档/plan/fast）：本地暂存，
@@ -168,6 +174,7 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
         const session = await api.sessions.create({
           agentId: selected.agentId,
           cwd: cwd.trim(),
+          worktree: worktree.trim() || undefined,
         })
         // 模型与草稿态暂存的其余设置一次性应用（applySettings 内置幂等 Open）。
         const patch = filterPatch(draftPatch, selectedAgent)
@@ -187,7 +194,7 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
         setCreating(false)
       }
     },
-    [selected, selectedAgent, creating, cwd, draftPatch, navigate]
+    [selected, selectedAgent, creating, cwd, worktree, draftPatch, navigate]
   )
 
   return {
@@ -198,6 +205,8 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
     selected,
     selectedAgent,
     cwd,
+    worktree,
+    setWorktree,
     setCwd,
     creating,
     error,

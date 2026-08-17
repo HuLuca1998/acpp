@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { ListPageStates } from "@/components/list-page-states"
+import { ProjectsBar } from "@/components/projects/projects-bar"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { api } from "@/lib/api"
 import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
@@ -108,6 +109,11 @@ export function Sessions() {
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+      {/* 项目在会话之上：先选在哪个仓库里干活，再看这个仓库里的会话。
+          租户的导航只有这一页，项目入口必须落在这儿（adr-007）。 */}
+      <div className="px-4 lg:px-6">
+        <ProjectsBar />
+      </div>
       <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>
