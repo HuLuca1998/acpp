@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-006 编排/外化子代理）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-006 编排/外化子代理；adr-007 多租户隔离与项目管理）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -31,13 +31,15 @@ acpp/
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
 │   │   ├── hooks/              # use-chat（SSE 状态机）/ use-orch-chat / use-task-chat /
-│   │   │                       #   use-draft-session / use-async-data / use-mobile
+│   │   │                       #   use-draft-session / use-async-data / use-mobile /
+│   │   │                       #   identity-context（身份与 owner 判定）
 │   │   ├── i18n/               # i18next 初始化 + 类型增强 + locales/{zh,en}.ts
 │   │   ├── components/
 │   │   │   ├── ui/             # shadcn 组件（CLI 托管区，目录级 AGENTS.md）
 │   │   │   ├── shell/          # 应用外壳：侧边栏、顶栏、导航、主题/语言切换
 │   │   │   ├── chat/           # 消息渲染；composer/ 输入域；cards/ 权限、计划审批、提问卡
-│   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 七类面板
+│   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 九类面板
+│   │   │   ├── projects/       # 克隆仓库对话框（gh 清单 + URL）
 │   │   │   ├── orchestrator/   # 编排工作区：主控对话 / 任务列表 / 任务子会话面板 / dock
 │   │   │   ├── roles/          # 角色编辑对话框
 │   │   │   ├── overview/       # 概览页四张卡
@@ -69,8 +71,10 @@ acpp/
         ├── transcript/         # 会话转录 JSONL（对话内容唯一的持久化）
         ├── stream/             # SSE 事件形状与广播器（聊天/编排共用的叶子包）
         ├── orch/               # 编排（adr-006）：角色、编排主会话、spawn 任务子会话、系统 MCP 端点
+        ├── project/            # 工作区项目（adr-007）：git 仓库发现、克隆、gh 远端仓库清单
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
+        │   ├── tenant.go / guard.go # 多租户：租户 CRUD 与隔离范围（Scope）
         │   ├── chat.go         #   服务骨架与生命周期（Peek/Open/Close/回收）
         │   ├── chat_stream.go  #   SSE 契约 + ACP 事件映射
         │   ├── chat_turn.go    #   发送、内容块组装、轮次执行
@@ -144,6 +148,17 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
+| GET | `/api/auth/me` | 当前身份（owner / 租户 / 被停用 / 匿名）。未认证也返回 200，前端据此渲染邀请页 |
+| POST | `/api/auth/redeem` | 用邀请链接里的 token 换 HttpOnly cookie（`{token}`） |
+| POST | `/api/auth/logout` | 清凭证 |
+| GET/POST | `/api/tenants` | 局域网访客列表（带可直接转发的邀请链接）/ 新建（`{name}`，名字即目录名） |
+| PUT/DELETE | `/api/tenants/{id}` | 停用/启用、改 root / 删除（保留其会话与目录） |
+| POST | `/api/tenants/{id}/rotate` | 重新生成分享链接（旧链接立刻作废） |
+| GET/POST | `/api/projects` | 工作区项目（工作区根下的 git 仓库）/ 新建空项目（`{name}`，最多 `<组织>/<仓库>` 两层） |
+| DELETE | `/api/projects/{name...}` | 删项目目录（会话记录保留） |
+| POST | `/api/projects/clone` | 后台克隆（`{url, name?}`）；**租户强制禁用 git 凭证助手** |
+| GET | `/api/projects/clones` | 克隆任务进度（内存态，只对发起者可见） |
+| GET | `/api/projects/repos` | 可克隆仓库清单（gh，只要组织与协作关系，个人账号名下的不出现） |
 | GET | `/api/system/env` | 环境体检：brew/node/npm、CLI 与 ACP 适配器是否就位（含版本与路径） |
 | POST | `/api/system/env/install` | 一键安装缺失依赖（`{key}`，只认后端白名单：brew formula / npm -g） |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查） |
@@ -160,7 +175,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/skills/{name}/files` | 附属文件清单（带 size / binary / 修改时间） |
 | GET | `/api/skills/{name}/scripts` | `scripts/` 下脚本的头部元信息（`desc/usage/arg/opt/env` 注释解析成参数控件描述） |
 | POST | `/api/skills/{name}/scripts/run` | 传参试运行脚本（`{path, args, opts, env}`）：以技能目录为 cwd、60s 超时、输出各 256KB 截断，返回退出码与 stdout/stderr |
-| GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建 |
+| GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早） |
 | GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；gitignore + 固定黑名单过滤，路径限制在会话 cwd 内） |
@@ -168,6 +183,11 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/git/overview` | git 汇总：分支、upstream、ahead/behind、变更文件（含 numstat）、未推送 commit；非仓库返回 `isRepo:false` |
 | GET | `/api/sessions/{id}/git/diff` | 单文件工作区 diff（`?path=`，返回 HEAD 版与工作区版全文，行级对齐在前端） |
 | GET | `/api/sessions/{id}/git/commits/{sha}` | 提交详情（文件清单）；带 `?path=` 时返回该文件在这条提交前后的全文 |
+| GET | `/api/sessions/{id}/git/branches` | 分支面：当前分支、本地/远端分支、标签、worktree 清单（被占用的分支带占用者） |
+| POST | `/api/sessions/{id}/git/checkout` | 切换分支（`{branch, create?}`）；脏工作区拒绝切换 |
+| GET | `/api/sessions/{id}/git/history` | 提交链路（`?ref=&limit=&offset=`，`hasMore` 指示还有没有） |
+| GET | `/api/sessions/{id}/git/compare` | 两 ref 对比（`?base=&head=`）：head 独有的提交 + 三点 diff 的文件变更 |
+| POST/DELETE | `/api/sessions/{id}/git/worktrees` | 开/拆隔离工作区（`<仓库>/worktrees/<名字>`），拆时保留分支 |
 | GET/POST | `/api/sessions/{id}/terminals` | 工作区终端列表 / 新建（会话 cwd 起交互 shell，每会话上限见 `ACP_MAX_TERMINALS`） |
 | DELETE | `/api/sessions/{id}/terminals/{tid}` | 关闭终端（杀 pty） |
 | WS | `/api/sessions/{id}/terminals/{tid}/ws` | 终端双向流：二进制帧 = 原始字节，文本帧 = `{"type":"resize","cols","rows"}`；断线后 pty 保活 30s 供重连（带回放缓冲） |
@@ -177,6 +197,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/transcript` | 线级转录 JSONL 原样下发（`http.ServeFile`，支持 Range 字节续读——工作区 logs 面板靠它轮询增量实时跟随） |
 | GET | `/api/system` | 系统配置：当前/默认数据目录，`pendingDir` 表示已迁移待重启 |
 | PUT | `/api/system/data-dir` | 迁移数据目录（`{dataDir}` 绝对路径）：`VACUUM INTO` 在线快照 + 转录拷贝 + 写 `~/.acpp/config.json`，旧数据保留，重启后生效 |
+| PUT | `/api/system/workspace-dir` | 改工作区根（`{workspaceDir}`）：agent 干活的地方与访客 root 的父目录，立刻生效 |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
@@ -205,7 +226,29 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`lastSettings` 是最后一次生效的统一设置当前值快照（设置视图每次变化时写回），恢复会话的工具栏靠它显示与断开前一致的当前值。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
 - **Role** — 编排里可雇佣的子代理角色（adr-006）：`persona`（注入子会话的人格）、`description`（进主控调度提示词的雇佣目录）、绑定工具与 `model`/`effort`/`level` 预设（空=工具默认档）。启动时预置分析员/开发者/审查者/测试员四个内置模板（一次性，删除不复活）。
+- **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
+- **Project / Clone** — 都不入库：项目就是工作区根下的 git 仓库目录（扫盘得来，名字是相对根的路径），克隆任务只存在于内存（进程重启时 git 子进程也一起没了，留个「进行中」的假记录只会骗人）。
 - **OrchSession / OrchTask** — 编排主会话与一次 spawn 派发（一个任务 = 一条角色子会话）。与 `sessions` 表刻意分表（隔离契约：编排整体可删而不影响普通会话）；`mcpToken` 是该会话专属 MCP 端点的凭证；`tokensUsed` 是主会话 + 全部子任务的累计 token。
+
+## 工作区面板
+
+会话页是一套 dockview 工作台，面板可自由开关与拖放（⋯ 菜单勾选，或用布局预设一次摆好）：
+
+| 面板 | 管什么 |
+| --- | --- |
+| 对话 | 不可关闭，永远在 |
+| 文件树 | 工作目录的目录树，右键加 @ 引用 |
+| 查看器 | 文件内容 / 改动两种形态——「现在什么样」与「改了什么」是同一个阅读动作的两面 |
+| 分支 | 本地/远端/标签；点选驱动其他 git 面板，⌘ 点第二条进对比模式 |
+| 提交链路 | 提交历史（分页），顶部第一条是「工作区改动」，未推送的带标记 |
+| 变更 | 文件清单，**跟随选择态**：没选看工作区，选提交看那条提交，选两个 ref 看对比。按目录树展示，单子目录链压缩 |
+| 详情 | 提交说明 / 对比摘要 |
+| 日志 | 线级转录实时跟随 |
+| 终端 | 可多实例的真实 pty |
+
+四个 git 面板不互相说话，全部读命令总线里的同一份选择态——因此可以只开其中一个，也可以任意摆放。布局预设 **Git 工作台** 把它们按「左分支 ｜ 中链路 ｜ 右上变更 / 右下详情」一次摆好。
+
+**AI 联动**：右键提交「让 AI 审查」、右键分支「让 AI 对比」、右键文件「让 AI 分析改动」，写好的 prompt **只填进输入框，不自动发送**——发消息是用户的动作。
 
 ## 编排：外化子代理
 
@@ -227,6 +270,16 @@ agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排�
 2. **fs 代理 path guard** — 声明了 `fs` capability，agent 的 `fs/read_text_file` / `fs/write_text_file` 会走到我们进程里，路径解析成 canonical 形式后必须落在 cwd 内。**注意这条不是可靠拦截点**：codex 用自带 shell 完全不走 fs 代理，claude 0.63 实测权限批准后也由 SDK 自行落盘。它只是纵深防御的一层，真正的隔离靠第 3 条之外的 runtime 沙箱档 + OS 兜底。
 3. **权限裁决** — `session/request_permission` 挂起交给用户在界面上点选（批准/拒绝），拒绝真实生效（实测文件不会被创建）。runtime 只在当前权限档认为需要时才会问，所以它仍是策略层不是安全边界——真正的隔离要靠 runtime 自身的沙箱档位 + OS 级兜底。
 
+### 多租户（adr-007）
+
+局域网分享打开后，访问者分两种身份：**owner** 是本机访问（loopback 判定，全权），**租户**凭 owner 发的邀请链接换到一个 HttpOnly cookie。选 cookie 而不是 Authorization header，是因为 SSE（`EventSource`）与工作区终端（WebSocket）都带不了自定义 header——三条通道要统一鉴权，只有 cookie 能做到。
+
+隔离只有一个执行点（`service.Scope`）：数据面把租户条件写进查询本身（漏写等于查不到，不会变成越权），路径面把一切目录操作 canonical 化后钉在租户 root（`<工作区根>/<租户名>`）内。别人的会话按「不存在」处理而不是 403——403 会泄露会话是否存在，凭 id 递增就能数出别人有多少条。owner 专属面（编排、系统设置、技能/角色/工具的写）由集中的前缀表判定，新增路由自动继承策略。
+
+**诚实的边界**：隔离对**界面**是硬的，对**执行**是软的。租户能开工作区终端（`cd /` 就出了 root），agent 自带的 shell 同样不受 root 约束。也就是说这套东西防的是「看见别人的东西」与「误操作走出自己的目录」，**不防有意越权的人**——真正的执行隔离需要 OS 级沙箱（每租户一个系统用户 / 容器），不在范围内。局域网共享的前提仍是可信网络。
+
+另外，租户克隆仓库时强制禁用 git 凭证助手（`-c credential.helper=`）：不禁的话访客能借 owner 钥匙串里的凭证，把他有权访问的任何私有仓库拖下来。
+
 **工作区终端是本机任意命令执行面**：`/terminals` 端点在会话 cwd 起真实交互 shell（用户显式操作才创建），与 agent 已有的命令执行权限面同级。服务只监听 127.0.0.1；若把 `ACP_ADDR` 改成对外地址，这个面会随之暴露，必须配合网络层访问控制。macOS 桌面版的「允许局域网访问」开关就是这个暴露面，因此默认关闭，只应在可信局域网内开启。
 
 另外启动 agent 前会摘掉嵌套会话标记（`CLAUDECODE`、`CODEX_SANDBOX` 等）。不摘的话，从 Claude Code 终端启动本服务时 agent 会误判自己跑在另一个 agent 内部而拒绝服务——这个坑只在那种场景复现，本机开发时碰不到。
@@ -238,6 +291,7 @@ agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排�
 | `ACP_ADDR` | `127.0.0.1:48080` | 监听地址（macOS 桌面版由壳固定传 `48090`，局域网开关切换 host） |
 | `ACP_DATA_DIR` | `~/.acpp` | 数据根目录（db 与转录都派生于它）。优先级：本变量 > `~/.acpp/config.json` 里设置面板选定的目录 > 默认。首次启动自动创建；旧版 `server/data` 的存量数据自动迁入（拷贝，原数据保留） |
 | `ACP_DSN` | `<dataDir>/acp.db` | SQLite 文件路径（显式设置时覆盖派生值） |
+| 工作区根 | `~/acpp` | 不是环境变量：在 **设置 → 系统** 里选，存 `~/.acpp/config.json`。agent 干活的地方与访客 root 的父目录，与数据目录刻意分开 |
 | `ACP_CORS_ORIGINS` | `http://localhost:45173` | 允许的跨域来源，逗号分隔 |
 | `ACP_WEB_DIR` | 空 | 前端产物目录，设置后由后端托管静态文件 |
 | `ACP_MAX_SESSIONS` | `8` | 同时活着的 agent 子进程上限 |
@@ -297,7 +351,7 @@ cd web && npx shadcn@latest add <component>
 
 - 侧边栏的 Tools / Logs / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
-- **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M3 已落地：dockview 骨架、文件树/预览、diff / 未推送 commit、多实例 PTY 终端与引用联动。剩 M4 打磨（布局预设、diff 虚拟滚动、压力验收）。
+- **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
 - **权限裁决不落历史**：挂起/裁决过程只在当前轮展示，转录里有原始数据但重建暂未生成历史卡片。
 - **编排（adr-006）的已知边界**：任务子会话用完即收、暂无「续问子代理」入口（记录与转录保留）；未连接的编排会话没有斜杠命令补全（首次连接后出现）；编排会话列表暂无搜索/筛选。
