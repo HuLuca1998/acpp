@@ -107,6 +107,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 系统配置：数据目录查看 / 迁移（拷贝式，重启后生效）。
 	api.HandleFunc("GET /api/system", system.get)
 	api.HandleFunc("PUT /api/system/data-dir", system.migrate)
+	// 工作区根：agent 干活的地方与租户 root 的父目录，立刻生效。
+	api.HandleFunc("PUT /api/system/workspace-dir", system.workspaceDir)
 	// 环境体检与一键安装：依赖清单是后端白名单，安装命令不接受用户输入。
 	api.HandleFunc("GET /api/system/env", system.env)
 	api.HandleFunc("POST /api/system/env/install", system.envInstall)

@@ -31,15 +31,22 @@ func TenantScope(tenantID uint, root string) Scope {
 	return Scope{TenantID: tenantID, Root: root}
 }
 
-// Home 是该身份的起始目录：owner 用家目录（历史行为不变），租户用自己的
-// root——目录选择器一进来就该站在自己的地盘上。
+// Home 是该身份的起始目录：owner 用设置里的工作区根，租户用自己的 root。
+//
+// owner 原先从家目录起步——一进目录选择器就站在整台机器的根上，找项目
+// 得翻好几层。工作区根是「干活的地方」，作为起点更合手；owner 仍可以
+// 往上翻到任意目录（路径闸对他恒真）。
 func Home(s Scope) string {
 	if s.Owner {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return DefaultCwd()
+		root := DefaultCwd()
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				return root
+			}
+			return home
 		}
-		return home
+		return root
 	}
 	return s.Root
 }

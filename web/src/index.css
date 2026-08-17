@@ -696,12 +696,14 @@
   overflow: hidden;
 }
 
-/* tab 头容器声明为查询容器：窄栏时标题与关闭钮退隐、只剩图标。 */
+/* tab 头容器声明为查询容器：**很窄**时标题与关闭钮才退隐、只剩图标。
+   阈值给到 180px：三分栏时每组约 260px，用 280px 会把正常宽度的面板
+   也削成一排图标，谁也认不出哪个是哪个（更别提拖动它们）。 */
 .dockview-theme-acpp .dv-tabs-and-actions-container {
   container-type: inline-size;
   border-bottom: 1px solid var(--border);
 }
-@container (max-width: 280px) {
+@container (max-width: 180px) {
   .acpp-tab-label {
     display: none;
   }

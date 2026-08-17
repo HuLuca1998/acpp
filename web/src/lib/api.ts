@@ -239,6 +239,12 @@ export const api = {
 
   system: {
     get: () => request<SystemInfo>("/system"),
+    /** 改工作区根（立刻生效：只影响之后新建的会话与访客）。 */
+    setWorkspaceDir: (workspaceDir: string) =>
+      request<SystemInfo>("/system/workspace-dir", {
+        method: "PUT",
+        body: JSON.stringify({ workspaceDir }),
+      }),
     /** 迁移数据目录（拷贝式，重启后端后生效）。 */
     migrateDataDir: (dataDir: string) =>
       request<SystemInfo>("/system/data-dir", {

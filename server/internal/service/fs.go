@@ -6,11 +6,19 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"acpp/server/internal/config"
 )
 
-// DefaultCwd 是会话工作目录的全局兜底：~/acpp。
-// agent 干活的产物不该混进任意目录，给它一个专门的工作区。
+// DefaultCwd 是工作区根：agent 干活的地方，也是租户 root 的父目录。
+//
+// 优先取设置里选定的目录，没设过用 ~/acpp。它与**数据目录**（~/.acpp，
+// 装 db、转录、技能包）是两回事：让 agent 拿数据目录当工作目录，等于
+// 请它往自家数据里乱写。
 func DefaultCwd() string {
+	if saved := config.SavedWorkspaceDir(); saved != "" {
+		return saved
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "/tmp/acpp"

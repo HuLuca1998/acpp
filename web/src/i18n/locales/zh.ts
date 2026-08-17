@@ -539,6 +539,14 @@ export default {
     openFailed: "无法连接 agent",
   },
   settingsPage: {
+    workspace: {
+      title: "工作区根目录",
+      description:
+        "agent 干活的地方：新建会话的默认工作目录，也是每位局域网访客各自目录的父目录。与上面的数据目录分开——数据目录装的是数据库与转录，不该被 agent 当工作区写。改动立刻生效，只影响之后新建的会话与访客。",
+      current: "当前",
+      targetPlaceholder: "/Users/you/acpp",
+      saved: "工作区根目录已更新",
+    },
     menu: {
       system: "系统",
       env: "环境",

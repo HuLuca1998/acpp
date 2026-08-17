@@ -8,6 +8,7 @@ import type { SystemInfo } from "@/types/acp"
 import { cn } from "@/lib/utils"
 import { AgentIcon } from "@/components/agent-icon"
 import { DirPicker } from "@/components/dir-picker"
+import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
@@ -153,67 +154,71 @@ export function Settings() {
           {info === null ? (
             <Skeleton className="h-48 w-full" />
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <FolderCogIcon className="size-4" />
-                  {t("settingsPage.system.title")}
-                </CardTitle>
-                <CardDescription>
-                  {t("settingsPage.system.description")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-sm text-muted-foreground">
-                    {t("settingsPage.system.current")}
-                  </span>
-                  <span className="truncate font-mono text-sm">
-                    {info.dataDir}
-                  </span>
-                  {info.dataDir === info.defaultDir ? (
-                    <Badge variant="secondary" className="shrink-0">
-                      {t("settingsPage.system.default")}
-                    </Badge>
+            <>
+              {/* 工作区根在数据目录之上：它才是每天要打交道的那个目录。 */}
+              <WorkspaceDirCard info={info} onChange={setInfo} />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FolderCogIcon className="size-4" />
+                    {t("settingsPage.system.title")}
+                  </CardTitle>
+                  <CardDescription>
+                    {t("settingsPage.system.description")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-sm text-muted-foreground">
+                      {t("settingsPage.system.current")}
+                    </span>
+                    <span className="truncate font-mono text-sm">
+                      {info.dataDir}
+                    </span>
+                    {info.dataDir === info.defaultDir ? (
+                      <Badge variant="secondary" className="shrink-0">
+                        {t("settingsPage.system.default")}
+                      </Badge>
+                    ) : null}
+                  </div>
+
+                  {info.pendingDir ? (
+                    <Alert>
+                      <AlertTitle>
+                        {t("settingsPage.system.pendingTitle")}
+                      </AlertTitle>
+                      <AlertDescription className="font-mono">
+                        {info.pendingDir}
+                      </AlertDescription>
+                    </Alert>
                   ) : null}
-                </div>
 
-                {info.pendingDir ? (
-                  <Alert>
-                    <AlertTitle>
-                      {t("settingsPage.system.pendingTitle")}
-                    </AlertTitle>
-                    <AlertDescription className="font-mono">
-                      {info.pendingDir}
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                    placeholder={t("settingsPage.system.targetPlaceholder")}
-                    className="font-mono text-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPickerOpen(true)}
-                  >
-                    <FolderOpenIcon data-icon="inline-start" />
-                    {t("settingsPage.system.browse")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={target.trim() === "" || migrating}
-                    onClick={() => setConfirmOpen(true)}
-                  >
-                    {t("settingsPage.system.migrate")}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={target}
+                      onChange={(e) => setTarget(e.target.value)}
+                      placeholder={t("settingsPage.system.targetPlaceholder")}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPickerOpen(true)}
+                    >
+                      <FolderOpenIcon data-icon="inline-start" />
+                      {t("settingsPage.system.browse")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={target.trim() === "" || migrating}
+                      onClick={() => setConfirmOpen(true)}
+                    >
+                      {t("settingsPage.system.migrate")}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
           )}
         </div>
       )}

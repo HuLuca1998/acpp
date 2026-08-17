@@ -13,6 +13,10 @@ import (
 // 数据目录本身可迁移，指向它的配置必须待在固定位置才找得到。
 type fileConfig struct {
 	DataDir string `json:"dataDir,omitempty"`
+	// WorkspaceDir 是 agent 干活的地方（会话 cwd 的默认落点、租户 root 的
+	// 父目录）。与 DataDir 刻意分开：数据目录装 db、转录与技能包，让 agent
+	// 拿它当工作目录等于请它往自家数据里乱写。
+	WorkspaceDir string `json:"workspaceDir,omitempty"`
 }
 
 // ConfigHome 是固定的配置根（也是数据目录的默认值）：~/.acpp。
@@ -27,26 +31,58 @@ func ConfigHome() string {
 
 func configFile() string { return filepath.Join(ConfigHome(), "config.json") }
 
+// DefaultWorkspaceDir 是工作区根的默认值：~/acpp。
+func DefaultWorkspaceDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/acpp"
+	}
+	return filepath.Join(home, "acpp")
+}
+
 // SavedDataDir 读用户在设置面板选定的数据目录；没改过返回空串。
 func SavedDataDir() string {
-	raw, err := os.ReadFile(configFile())
-	if err != nil {
-		return ""
-	}
-	var fc fileConfig
-	if err := json.Unmarshal(raw, &fc); err != nil {
-		return ""
-	}
-	return fc.DataDir
+	return readFileConfig().DataDir
+}
+
+// SavedWorkspaceDir 读用户选定的工作区根；没设过返回空串。
+func SavedWorkspaceDir() string {
+	return readFileConfig().WorkspaceDir
 }
 
 // SaveDataDir 把选定的数据目录写进固定配置文件（迁移时调用），
-// 下次启动生效。
+// 下次启动生效。工作区根不动。
 func SaveDataDir(dir string) error {
+	fc := readFileConfig()
+	fc.DataDir = dir
+	return writeFileConfig(fc)
+}
+
+// SaveWorkspaceDir 把选定的工作区根写进配置文件。与数据目录不同，它
+// **立刻生效**——不涉及已打开的数据库，只影响之后新建会话的默认落点。
+func SaveWorkspaceDir(dir string) error {
+	fc := readFileConfig()
+	fc.WorkspaceDir = dir
+	return writeFileConfig(fc)
+}
+
+func readFileConfig() fileConfig {
+	var fc fileConfig
+	raw, err := os.ReadFile(configFile())
+	if err != nil {
+		return fc
+	}
+	if err := json.Unmarshal(raw, &fc); err != nil {
+		return fileConfig{}
+	}
+	return fc
+}
+
+func writeFileConfig(fc fileConfig) error {
 	if err := os.MkdirAll(ConfigHome(), 0o755); err != nil {
 		return fmt.Errorf("create config home: %w", err)
 	}
-	b, err := json.MarshalIndent(fileConfig{DataDir: dir}, "", "  ")
+	b, err := json.MarshalIndent(fc, "", "  ")
 	if err != nil {
 		return err
 	}

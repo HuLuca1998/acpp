@@ -565,6 +565,14 @@ export default {
     openFailed: "Could not connect to the agent",
   },
   settingsPage: {
+    workspace: {
+      title: "Workspace root",
+      description:
+        "Where agents do their work: the default working directory for new sessions, and the parent of each LAN guest's own directory. Kept separate from the data directory above, which holds the database and transcripts and should never be an agent's workspace. Takes effect immediately, for sessions and guests created afterwards.",
+      current: "Current",
+      targetPlaceholder: "/Users/you/acpp",
+      saved: "Workspace root updated",
+    },
     menu: {
       system: "System",
       env: "Environment",

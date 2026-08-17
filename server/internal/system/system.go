@@ -31,17 +31,42 @@ type SystemInfo struct {
 	DefaultDir string `json:"defaultDir"`
 	// PendingDir 非空表示已迁移到新目录、等待重启生效。
 	PendingDir string `json:"pendingDir,omitempty"`
+	// WorkspaceDir 是 agent 干活的地方：新会话工作目录的默认落点，也是
+	// 局域网访客各自 root 的父目录（adr-007）。与数据目录刻意分开——
+	// 数据目录装 db、转录与技能包，不该被 agent 当工作区写。
+	WorkspaceDir string `json:"workspaceDir"`
+	// DefaultWorkspaceDir 是工作区根的默认值（~/acpp）。
+	DefaultWorkspaceDir string `json:"defaultWorkspaceDir"`
 }
 
 func (s *Service) Info() SystemInfo {
 	info := SystemInfo{
-		DataDir:    s.cfg.DataDir,
-		DefaultDir: config.ConfigHome(),
+		DataDir:             s.cfg.DataDir,
+		DefaultDir:          config.ConfigHome(),
+		WorkspaceDir:        service.DefaultCwd(),
+		DefaultWorkspaceDir: config.DefaultWorkspaceDir(),
 	}
 	if saved := config.SavedDataDir(); saved != "" && !config.SamePath(saved, s.cfg.DataDir) {
 		info.PendingDir = saved
 	}
 	return info
+}
+
+// SetWorkspaceDir 改工作区根。与数据目录不同，它**立刻生效**：不涉及
+// 已打开的数据库，只影响之后新建会话的默认落点与新建租户的 root。
+// 已有会话与已有租户的目录不动——它们的路径已经写进记录了。
+func (s *Service) SetWorkspaceDir(dir string) (SystemInfo, error) {
+	dir = filepath.Clean(dir)
+	if !filepath.IsAbs(dir) {
+		return SystemInfo{}, fmt.Errorf("%w: workspace dir must be an absolute path", service.ErrInvalid)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return SystemInfo{}, fmt.Errorf("create workspace dir: %w", err)
+	}
+	if err := config.SaveWorkspaceDir(dir); err != nil {
+		return SystemInfo{}, err
+	}
+	return s.Info(), nil
 }
 
 // MigrateDataDir 把数据迁到新目录：sqlite 用 VACUUM INTO 做在线一致

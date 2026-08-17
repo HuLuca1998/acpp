@@ -49,6 +49,23 @@ func (h systemHandler) envInstall(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, res)
 }
 
+// workspaceDir 改工作区根（立刻生效，不需要重启）。
+func (h systemHandler) workspaceDir(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		WorkspaceDir string `json:"workspaceDir"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	info, err := h.system.SetWorkspaceDir(req.WorkspaceDir)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, info)
+}
+
 func (h systemHandler) migrate(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		DataDir string `json:"dataDir"`

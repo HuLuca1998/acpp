@@ -18,6 +18,10 @@ export interface SystemInfo {
   defaultDir: string
   /** 非空表示已迁移到新目录、等待重启生效。 */
   pendingDir?: string
+  /** 工作区根：新会话工作目录的默认落点，也是访客各自 root 的父目录。 */
+  workspaceDir: string
+  /** 工作区根的默认值（~/acpp）。 */
+  defaultWorkspaceDir: string
 }
 
 /** 环境体检的一项依赖。 */
