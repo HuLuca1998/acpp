@@ -62,7 +62,7 @@ func buildOrchPrompt(roles []model.Role) string {
 ## 委派规则
 
 - task 必须自包含：写清背景、目标、涉及路径与验收标准——子代理看不到你的对话上下文。
-- hire_role 会阻塞到子代理完成并返回其最终结论，耗时长属正常，不要中途放弃。
+- hire_role 会同步等待子代理完成并返回结论；长任务会先返回「任务 #N 仍在后台运行」的提示——此时**立即调用 wait_task(task_id=N) 接力等待**，循环直到拿到结论，绝不要因此重新派发或放弃。
 - 子代理彼此独立、不共享记忆，跨子任务的协调与结果整合由你负责。
 - 调用失败会返回错误文本：可以重试、换角色或自己处理，不要静默放弃任务。
 - **只用 acpp 的 hire_role 委派**：不要使用运行时内置的 spawn_agent/collaboration 等内部多代理工具——那些子代理对用户不可见，违背编排的目的。
@@ -107,7 +107,7 @@ func (s *Service) mainInjection(orch *model.OrchSession, agent *model.Agent, pro
 					// 收内部 Task 子代理，预批我们自己的派发工具——
 					// 每次 spawn 都弹权限卡没有意义（事件层另有自动放行兜底）。
 					"disallowedTools": []string{"Task"},
-					"allowedTools":    []string{"mcp__acpp__hire_role"},
+					"allowedTools":    []string{"mcp__acpp__hire_role", "mcp__acpp__wait_task"},
 					// acpp server 走 SDK options 注入而不是 session/new 的
 					// mcpServers：只有这条路能带 per-server timeout——
 					// MCP_TOOL_TIMEOUT env 存在一层 5 分钟 clamp（实测

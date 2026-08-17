@@ -141,10 +141,12 @@ func (s *Service) publishTaskUpdate(orchID uint, task *model.OrchTask) {
 // isSpawnPermission 识别「批准调用我们自己的 hire_role」的权限请求
 // （claude 通道）。识别保守：标题或输入里必须出现 hire_role。
 func isSpawnPermission(ev acp.Event) bool {
-	if strings.Contains(ev.Title, "hire_role") {
-		return true
+	for _, name := range []string{"hire_role", "wait_task"} {
+		if strings.Contains(ev.Title, name) || strings.Contains(string(ev.RawInput), name) {
+			return true
+		}
 	}
-	return strings.Contains(string(ev.RawInput), "hire_role")
+	return false
 }
 
 // allowOption 从权限选项里挑放行项：优先一次性放行（allow_always 会把
@@ -165,5 +167,8 @@ func allowOption(options []acp.PermissionOption) string {
 
 // isSpawnElicitation 识别 codex 的 MCP 工具批准提问。
 func isSpawnElicitation(ev acp.Event) bool {
-	return strings.Contains(ev.Text, "acpp") && strings.Contains(ev.Text, "hire_role")
+	if !strings.Contains(ev.Text, "acpp") {
+		return false
+	}
+	return strings.Contains(ev.Text, "hire_role") || strings.Contains(ev.Text, "wait_task")
 }

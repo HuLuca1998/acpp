@@ -14,10 +14,17 @@ import (
 	"acpp/server/internal/stream"
 )
 
-// SpawnAgent 是 spawn_agent 工具的实现：按角色拉起一条真实的 ACP 子会话，
-// 同步跑完任务并返回其最终结论——外化 subagent 的核心（adr-006）。
-// 调用方（MCP handler）阻塞在这里，主会话的工具调用因此挂起等待，
-// 语义与 claude 内部 Task 一致，只是全过程可观察。
+// spawnSyncWait 是 hire_role/wait_task 单次调用的同步等待窗口。runtime
+// 对 MCP 工具调用有我们改不掉的超时上限（claude 实测约 5 分钟 clamp，
+// env 与 per-server timeout 都突破不了；codex 上限未知），窗口取其下
+// ——超窗不算失败，返回「继续 wait_task」提示让主控接力等待，任务
+// 本体不受任何 runtime 超时影响。
+const spawnSyncWait = 270 * time.Second
+
+// SpawnAgent 是 hire_role 工具的实现：按角色拉起一条真实的 ACP 子会话
+// 后台执行任务——外化 subagent 的核心（adr-006）。调用方（MCP handler）
+// 在同步窗口内等结果：快任务直接拿到结论（与内部 Task 体验一致），
+// 慢任务收到接力提示改调 WaitTask，成果永不因 runtime 超时丢失。
 func (s *Service) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleName, taskText string) (string, error) {
 	if strings.TrimSpace(taskText) == "" {
 		return "", fmt.Errorf("%w: task is required", service.ErrInvalid)
@@ -36,7 +43,7 @@ func (s *Service) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleN
 	}
 
 	// 并发护栏：一条主会话同时在跑的任务数有限——雇佣是注意力尺度的
-	// 行为，不是资源压测。
+	// 行为，不是资源压测。计数在任务 goroutine 收尾时归还。
 	s.mu.Lock()
 	if s.runningTasks[orch.ID] >= orchMaxConcurrentTasks {
 		s.mu.Unlock()
@@ -44,11 +51,6 @@ func (s *Service) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleN
 	}
 	s.runningTasks[orch.ID]++
 	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.runningTasks[orch.ID]--
-		s.mu.Unlock()
-	}()
 
 	task := model.OrchTask{
 		OrchSessionID: orch.ID,
@@ -58,14 +60,39 @@ func (s *Service) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleN
 		State:         model.OrchTaskRunning,
 	}
 	if err := s.db.WithContext(ctx).Create(&task).Error; err != nil {
+		s.mu.Lock()
+		s.runningTasks[orch.ID]--
+		s.mu.Unlock()
 		return "", fmt.Errorf("create orch task: %w", err)
 	}
 	s.publishTaskUpdate(orch.ID, &task)
+
+	go s.executeTask(orch, role, &agent, task)
+
+	return s.awaitTask(ctx, task.ID)
+}
+
+// WaitTask 是 wait_task 工具的实现：对一条后台任务续一段同步等待窗口。
+func (s *Service) WaitTask(ctx context.Context, orch *model.OrchSession, taskID uint) (string, error) {
+	task, err := s.task(ctx, taskID)
+	if err != nil || task.OrchSessionID != orch.ID {
+		return "", fmt.Errorf("unknown task %d", taskID)
+	}
+	return s.awaitTask(ctx, taskID)
+}
+
+// executeTask 在独立 goroutine 里跑完任务并统一收尾落库、广播终态——
+// 与等待方完全解耦，runtime 的调用超时、连接断开都影响不到它。
+func (s *Service) executeTask(orch *model.OrchSession, role *model.Role, agent *model.Agent, task model.OrchTask) {
+	defer func() {
+		s.mu.Lock()
+		s.runningTasks[orch.ID]--
+		s.mu.Unlock()
+	}()
 	started := time.Now()
 
-	result, runErr := s.runTask(ctx, orch, role, &agent, &task)
+	result, runErr := s.runTask(context.Background(), orch, role, agent, &task)
 
-	// 收尾统一在这里落库并广播——成功失败都要让派发流看到终态。
 	task.DurationMS = time.Since(started).Milliseconds()
 	if runErr != nil {
 		task.State = model.OrchTaskFailed
@@ -77,15 +104,41 @@ func (s *Service) SpawnAgent(ctx context.Context, orch *model.OrchSession, roleN
 	if all, _, err := s.TaskMessages(task.ID, 0, 0); err == nil {
 		task.MessageCount = len(all)
 	}
-	if err := s.db.WithContext(context.Background()).Save(&task).Error; err != nil {
+	if err := s.db.Save(&task).Error; err != nil {
 		slog.Error("save orch task", "task", task.ID, "err", err)
 	}
 	s.publishTaskUpdate(orch.ID, &task)
+}
 
-	if runErr != nil {
-		return "", runErr
+// awaitTask 轮询任务终态，最多等一个同步窗口。超窗返回接力提示
+// （正常文本而非错误——主控读到后调 wait_task 继续）。
+func (s *Service) awaitTask(ctx context.Context, taskID uint) (string, error) {
+	deadline := time.NewTimer(spawnSyncWait)
+	defer deadline.Stop()
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+
+	for {
+		task, err := s.task(context.Background(), taskID)
+		if err != nil {
+			return "", err
+		}
+		switch task.State {
+		case model.OrchTaskDone:
+			return task.Result, nil
+		case model.OrchTaskFailed:
+			return "", fmt.Errorf("%s", task.Result)
+		}
+		select {
+		case <-ctx.Done():
+			// 调用方已断开，响应写不出去了；任务在后台继续跑。
+			return "", ctx.Err()
+		case <-deadline.C:
+			return fmt.Sprintf("任务 #%d 仍在后台运行（角色继续工作中，成果不会丢失）。"+
+				"请立即调用 wait_task(task_id=%d) 继续等待它的结果，不要重新派发。", taskID, taskID), nil
+		case <-tick.C:
+		}
 	}
-	return result, nil
 }
 
 // runTask 打开角色子会话并跑完这一轮任务。子会话用完即收进程

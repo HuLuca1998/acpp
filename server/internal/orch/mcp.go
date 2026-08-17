@@ -61,6 +61,24 @@ var spawnAgentTool = map[string]any{
 	},
 }
 
+// waitTaskTool 是 wait_task 的 MCP 工具声明：hire_role 的同步窗口耗尽
+// 后（长任务），主控用它接力等待——任务在后台照跑，成果不丢。
+var waitTaskTool = map[string]any{
+	"name": "wait_task",
+	"description": "继续等待一个后台任务的结果。hire_role 返回「任务仍在后台运行」的提示时调用它，" +
+		"直到拿到任务结论；不要因为等待就重新派发同一个任务。",
+	"inputSchema": map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"task_id": map[string]any{
+				"type":        "number",
+				"description": "hire_role 提示里给出的任务编号",
+			},
+		},
+		"required": []string{"task_id"},
+	},
+}
+
 // HandleMCP 处理一条发到 /api/mcp/{token} 的 JSON-RPC 消息。
 // 返回 (响应对象, 是否有响应)：通知类消息无响应（HTTP 202）。
 // token 即凭证——解析不到就报错，不区分「不存在」与「无权」。
@@ -97,7 +115,7 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 
 	case "tools/list":
 		return mcpResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{
-			"tools": []any{spawnAgentTool},
+			"tools": []any{spawnAgentTool, waitTaskTool},
 		}}, true
 
 	case "tools/call":
@@ -119,20 +137,28 @@ func (s *Service) mcpToolCall(ctx context.Context, orch *model.OrchSession, req 
 	var params struct {
 		Name      string `json:"name"`
 		Arguments struct {
-			Role string `json:"role"`
-			Task string `json:"task"`
+			Role   string  `json:"role"`
+			Task   string  `json:"task"`
+			TaskID float64 `json:"task_id"`
 		} `json:"arguments"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return mcpResponse{JSONRPC: "2.0", ID: req.ID,
 			Error: &mcpError{Code: -32602, Message: "bad tools/call params"}}
 	}
-	if params.Name != "hire_role" {
+
+	var result string
+	var err error
+	switch params.Name {
+	case "hire_role":
+		result, err = s.SpawnAgent(ctx, orch, params.Arguments.Role, params.Arguments.Task)
+	case "wait_task":
+		result, err = s.WaitTask(ctx, orch, uint(params.Arguments.TaskID))
+	default:
 		return mcpResponse{JSONRPC: "2.0", ID: req.ID,
 			Error: &mcpError{Code: -32602, Message: fmt.Sprintf("unknown tool %q", params.Name)}}
 	}
 
-	result, err := s.SpawnAgent(ctx, orch, params.Arguments.Role, params.Arguments.Task)
 	if err != nil {
 		return mcpResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{
 			"content": []any{map[string]any{"type": "text", "text": "子任务失败：" + err.Error()}},
