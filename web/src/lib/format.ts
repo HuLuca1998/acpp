@@ -40,3 +40,17 @@ export function formatTokens(n: number): string {
 export function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
+
+/**
+ * 把绝对路径显示成对当前身份有意义的样子。
+ *
+ * 访客的 root 是 `<工作区根>/<他的名字>`，完整路径里带着这台机器主人的
+ * 用户名与目录结构——对他既没用又多余。落在 root 内就折成 `~`，其余
+ * 原样（owner 没有 root，看到的永远是真实路径）。
+ */
+export function displayPath(path: string, root?: string): string {
+  if (!path || !root) return path
+  if (path === root) return "~"
+  const prefix = root.endsWith("/") ? root : `${root}/`
+  return path.startsWith(prefix) ? `~/${path.slice(prefix.length)}` : path
+}

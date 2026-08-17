@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { CloneDialog } from "@/components/projects/clone-dialog"
+import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
+import { displayPath } from "@/lib/format"
 import type { DirListing } from "@/types/acp"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,6 +47,7 @@ export function DirPicker({
   mode?: "dir" | "file"
 }) {
   const { t } = useTranslation()
+  const { identity } = useIdentity()
   const [listing, setListing] = useState<DirListing | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +58,9 @@ export function DirPicker({
   // 克隆是后台任务：盯到它结束，成功就直接把选择器带进新仓库目录——
   // 用户点「克隆」的意图就是要在那儿干活，不该让他自己再翻一遍目录。
   const watching = useRef<string | null>(null)
+  // 当前浏览的目录正被克隆时给出提示。git clone 先拉 .git 再 checkout 文件，
+  // 中途目录里只有隐藏的 .git——列表看上去空空如也，不说一声就像是失败了。
+  const [cloningHere, setCloningHere] = useState(false)
 
   const load = useCallback(
     async (path?: string) => {
@@ -65,7 +71,15 @@ export function DirPicker({
       setNewName("")
       setCreateError(null)
       try {
-        setListing(await api.fs.dirs(path, mode === "file"))
+        const next = await api.fs.dirs(path, mode === "file")
+        setListing(next)
+        const clones = await api.projects
+          .clones()
+          .then((res) => res.items)
+          .catch(() => [])
+        setCloningHere(
+          clones.some((c) => c.state === "running" && c.path === next.path)
+        )
       } catch (err) {
         setError((err as Error).message)
       } finally {
@@ -144,7 +158,7 @@ export function DirPicker({
             className="min-w-0 flex-1 truncate font-mono"
             title={listing?.path}
           >
-            {listing?.path ?? ""}
+            {displayPath(listing?.path ?? "", identity?.root)}
           </span>
           {mode === "dir" ? (
             <>
@@ -227,7 +241,11 @@ export function DirPicker({
             (listing.files?.length ?? 0) === 0 ? (
             <Empty className="h-full justify-center">
               <EmptyHeader>
-                <EmptyDescription>{t("dirPicker.empty")}</EmptyDescription>
+                <EmptyDescription>
+                  {cloningHere
+                    ? t("dirPicker.cloningHere")
+                    : t("dirPicker.empty")}
+                </EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (

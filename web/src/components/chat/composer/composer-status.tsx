@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next"
 
 import type { ContextUsage } from "@/hooks/use-chat"
-import { formatTokens } from "@/lib/format"
+import { useIdentity } from "@/hooks/identity-context"
+import { displayPath, formatTokens } from "@/lib/format"
 import { FolderIcon, GitBranchIcon, PencilIcon } from "lucide-react"
 
 /**
@@ -29,6 +30,9 @@ export function ComposerStatus({
   onPickCwd?: () => void
 }) {
   const { t } = useTranslation()
+  const { identity } = useIdentity()
+  // 访客看到的是 `~/...`：完整路径里带着这台机器主人的用户名，对他没用。
+  const shownCwd = displayPath(cwd ?? "", identity?.root)
   if (!cwd && !gitBranch && !branchSlot && !worktreeSlot && !usage) return null
 
   return (
@@ -41,13 +45,13 @@ export function ComposerStatus({
           onClick={onPickCwd}
         >
           <FolderIcon className="size-3 shrink-0" />
-          <span className="truncate font-mono">{cwd}</span>
+          <span className="truncate font-mono">{shownCwd}</span>
           <PencilIcon className="size-3 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
         </button>
       ) : cwd ? (
         <span className="flex min-w-0 items-center gap-1" title={cwd}>
           <FolderIcon className="size-3 shrink-0" />
-          <span className="truncate font-mono">{cwd}</span>
+          <span className="truncate font-mono">{shownCwd}</span>
         </span>
       ) : null}
       {branchSlot ??

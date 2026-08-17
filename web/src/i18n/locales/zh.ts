@@ -260,6 +260,7 @@ export default {
     },
   },
   dirPicker: {
+    cloningHere: "正在克隆到这个目录，文件下载完就会出现。",
     title: "选择工作目录",
     fileTitle: "选择要引用的文件",
     up: "上级目录",

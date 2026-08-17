@@ -119,6 +119,8 @@ export default {
     level: "Access",
     default: "Default",
     builtin: "Built-in",
+    cloningHere:
+      "Cloning into this directory; files appear once the download finishes.",
     empty: "No roles yet",
     emptyHint:
       "Once created, the conductor can hire roles by name for subtasks.",
@@ -277,6 +279,8 @@ export default {
     },
   },
   dirPicker: {
+    cloningHere:
+      "Cloning into this directory; files appear once the download finishes.",
     title: "Choose a working directory",
     fileTitle: "Choose a file to reference",
     up: "Parent directory",
