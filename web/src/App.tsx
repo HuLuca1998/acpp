@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Route, Routes } from "react-router"
 
 import { DashboardLayout } from "@/routes/dashboard-layout"
+import { Databases } from "@/routes/databases"
 import { NotFound } from "@/routes/not-found"
 import { Orchestrator } from "@/routes/orchestrator"
 import { OrchestratorChat } from "@/routes/orchestrator-chat"
@@ -40,6 +41,8 @@ export function App() {
         <Route path="sessions/new" element={<SessionChat />} />
         <Route path="sessions/:id" element={<SessionChat />} />
         <Route path="roles" element={<Roles />} />
+        {/* 数据库连接（adr-008）：按项目 + 环境管理，会话侧只看得到本项目的。 */}
+        <Route path="databases" element={<Databases />} />
         <Route path="orchestrator" element={<Orchestrator />} />
         {/* 编排会话同样 draft-first：/new 草稿态，首条消息落地才创建。 */}
         <Route path="orchestrator/new" element={<OrchestratorChat />} />

@@ -693,3 +693,8 @@ export interface GitCompare {
   commits: GitCommit[]
   files: GitFileChange[]
 }
+
+// 数据库数据源（adr-008）的领域类型在 ./db，从这里原样转出——文件按职责
+// 拆开，但 `@/types/acp` 仍是领域类型的单一入口，调用方不必记住哪个类型
+// 住在哪个文件里。
+export * from "./db"

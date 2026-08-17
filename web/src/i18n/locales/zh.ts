@@ -1,3 +1,5 @@
+import { zhDb } from "./zh-db"
+
 export default {
   common: {
     appName: "ACPP",
@@ -15,6 +17,7 @@ export default {
     sessions: "会话",
     orchestrator: "编排",
     roles: "角色",
+    databases: "数据库",
     tools: "工具",
     logs: "日志",
     settings: "设置",
@@ -98,6 +101,7 @@ export default {
         "关闭后「快速」按钮不再出现；claude 的快速模式额外计费，默认关闭。",
     },
   },
+  db: zhDb,
   roles: {
     title: "角色",
     description: "编排里可雇佣的子代理：人格、绑定工具、模型与权限档预设。",

@@ -1,7 +1,8 @@
-import { memo, useContext } from "react"
+import { memo, useContext, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AttachmentTray } from "@/components/chat/composer/attachment-tray"
+import { DbSlashPanel } from "@/components/db/db-slash-panel"
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
 import { ChatStream } from "@/components/chat/chat-stream"
 import { Composer } from "@/components/chat/composer/composer"
@@ -16,6 +17,7 @@ import {
   ChatPanelContext,
   type ChatPanelData,
 } from "@/components/workspace/chat-panel-context"
+import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { cn } from "@/lib/utils"
 import { AtSignIcon, ImageIcon } from "lucide-react"
 
@@ -70,6 +72,22 @@ export const ChatPanel = memo(function ChatPanel() {
     addImages,
     draftCwd,
   } = useChatPanel()
+
+  // 本地斜杠命令的结果（目前只有 /db）：浮在输入框上方，不进对话流。
+  // null 表示没在看。
+  const [localCommand, setLocalCommand] = useState<string | null>(null)
+  const sessionId = chat.session?.id ?? 0
+
+  // 本地命令自己消化掉，不发给 agent；其余照常提交。
+  function handleSubmit() {
+    const local = parseLocalCommand(draft)
+    if (local && sessionId) {
+      setLocalCommand(local.args)
+      setDraft("")
+      return
+    }
+    submit()
+  }
 
   const hasContent =
     chat.messages.length > 0 ||
@@ -135,7 +153,7 @@ export const ChatPanel = memo(function ChatPanel() {
       <Composer
         value={draft}
         onChange={setDraft}
-        onSubmit={submit}
+        onSubmit={handleSubmit}
         onCancel={isNew ? undefined : () => void chat.cancel()}
         busy={chat.busy}
         pending={isNew && newSession.creating}
@@ -146,7 +164,9 @@ export const ChatPanel = memo(function ChatPanel() {
             ? (newSession.selectedAgent?.commands ?? []).filter(
                 (c) => !c.disabled
               )
-            : chat.commands
+            : // 本地命令只在会话建起来之后给：它们要按会话工作目录
+              // 所属的项目取数据源，草稿态还没有会话可问。
+              withLocalCommands(chat.commands, { db: t("db.slashHint") })
         }
         attachments={
           <AttachmentTray
@@ -157,6 +177,15 @@ export const ChatPanel = memo(function ChatPanel() {
           />
         }
         onPasteImages={(picked) => void addImages(picked)}
+        localPanel={
+          localCommand !== null && sessionId ? (
+            <DbSlashPanel
+              sessionId={sessionId}
+              args={localCommand}
+              onClose={() => setLocalCommand(null)}
+            />
+          ) : null
+        }
         queue={
           <QueuedMessages
             items={chat.queued}

@@ -1,3 +1,5 @@
+import { enDb } from "./en-db"
+
 export default {
   common: {
     appName: "ACPP",
@@ -15,6 +17,7 @@ export default {
     sessions: "Sessions",
     orchestrator: "Orchestrator",
     roles: "Roles",
+    databases: "Databases",
     tools: "Tools",
     logs: "Logs",
     settings: "Settings",
@@ -100,6 +103,7 @@ export default {
         "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
     },
   },
+  db: enDb,
   roles: {
     title: "Roles",
     description:

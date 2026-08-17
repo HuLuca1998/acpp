@@ -13,8 +13,10 @@
 | api.ts            | 后端 API 客户端，全部 HTTP/SSE/ws 地址的唯一出口；组件禁止裸 fetch    | `api`、`ApiError`、`Paged`                                           |
 | chat-events.ts    | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat    | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs`  |
 | clipboard.ts      | 复制到剪贴板；非安全上下文（局域网 http）静默退让                     | `copyText`                                                           |
+| db-result.ts      | 数据库 MCP 工具输出文本 → 结构化结果（对话里渲染真表格用）；格式与后端 datasource/render.go 共同约定 | `parseDbToolOutput`、`isDbQueryCall`、`ParsedDbResult`              |
 | elicitation.ts    | elicitation JSON Schema 解析成结构化问题与作答收集                    | `parseElicitationSchema`、`answerFor`                                |
 | files.ts          | 浏览器文件 → base64 图片附件、剪贴板取图                              | `fileToImageAttachment`、`imagesFromClipboard`                       |
+| local-commands.ts | 本地斜杠命令（前端自己执行、不发给 agent）的解析与补全清单合并        | `parseLocalCommand`、`withLocalCommands`、`LOCAL_COMMANDS`          |
 | format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`capitalize`、`displayPath` |
 | git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |

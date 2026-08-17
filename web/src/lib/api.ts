@@ -2,6 +2,12 @@ import type {
   Agent,
   CatalogInput,
   CloneTask,
+  DataSource,
+  DataSourceInput,
+  DataSourceTest,
+  DbDatabase,
+  DbTable,
+  DbTableDetail,
   DirEntry,
   DirListing,
   EnvInfo,
@@ -36,6 +42,7 @@ import type {
   SkillScriptRunResult,
   SkillUpdateInput,
   SkillUsage,
+  SqlExecResult,
   SystemInfo,
   Tenant,
   TerminalInfo,
@@ -328,6 +335,19 @@ export const api = {
   },
 
   sessions: {
+    /**
+     * 会话可见的数据源：只有当前工作目录所属项目的那几条。斜杠命令读它
+     * ——界面能看到的范围与 AI 能操作的范围必须是同一个。
+     */
+    datasources: (id: number) =>
+      request<DataSource[]>(`/sessions/${id}/datasources`),
+    datasourceDatabases: (id: number, dsid: number) =>
+      request<DbDatabase[]>(`/sessions/${id}/datasources/${dsid}/databases`),
+    datasourceTables: (id: number, dsid: number, database: string) =>
+      request<DbTable[]>(
+        `/sessions/${id}/datasources/${dsid}/tables?database=${encodeURIComponent(database)}`
+      ),
+
     list: (params?: { agentId?: number; page?: number; pageSize?: number }) => {
       const qs = new URLSearchParams()
       if (params?.agentId) qs.set("agentId", String(params.agentId))
@@ -630,6 +650,47 @@ export const api = {
       request<DirEntry>("/fs/dirs", {
         method: "POST",
         body: JSON.stringify({ path, name }),
+      }),
+  },
+
+  /**
+   * 数据库数据源（adr-008）。管理面是全量的（owner 专属）；会话面在
+   * sessions.datasources 下，只给当前项目的那几条——两个入口刻意分开，
+   * 免得在会话里误用别的项目的连接。
+   */
+  datasources: {
+    list: () => request<DataSource[]>("/datasources"),
+    get: (id: number) => request<DataSource>(`/datasources/${id}`),
+    create: (input: DataSourceInput) =>
+      request<DataSource>("/datasources", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (id: number, input: DataSourceInput) =>
+      request<DataSource>(`/datasources/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    remove: (id: number) =>
+      request<null>(`/datasources/${id}`, { method: "DELETE" }),
+    /** 拨一次真连接确认配置可用，失败不抛异常而是返回 ok:false + 原话。 */
+    test: (id: number) =>
+      request<DataSourceTest>(`/datasources/${id}/test`, { method: "POST" }),
+    databases: (id: number) =>
+      request<DbDatabase[]>(`/datasources/${id}/databases`),
+    tables: (id: number, database: string) =>
+      request<DbTable[]>(
+        `/datasources/${id}/tables?database=${encodeURIComponent(database)}`
+      ),
+    schema: (id: number, database: string, table: string) =>
+      request<DbTableDetail>(
+        `/datasources/${id}/schema?database=${encodeURIComponent(database)}&table=${encodeURIComponent(table)}`
+      ),
+    /** 执行一段 SQL，可含多条语句（按顺序执行、遇错即停）。 */
+    query: (id: number, input: { database?: string; sql: string; maxRows?: number }) =>
+      request<SqlExecResult>(`/datasources/${id}/query`, {
+        method: "POST",
+        body: JSON.stringify(input),
       }),
   },
 }

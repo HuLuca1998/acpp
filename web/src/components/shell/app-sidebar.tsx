@@ -25,6 +25,7 @@ import { capitalize } from "@/lib/format"
 import { groupSessionsByCwd, type SessionGroup } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
+  DatabaseIcon,
   DramaIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
@@ -92,6 +93,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           icon: <NetworkIcon />,
         },
         { title: t("nav.roles"), url: "/roles", icon: <DramaIcon /> },
+        {
+          title: t("nav.databases"),
+          url: "/databases",
+          icon: <DatabaseIcon />,
+        },
         { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
         { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
       ]

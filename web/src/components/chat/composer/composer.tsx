@@ -38,6 +38,7 @@ export function Composer({
   attachments,
   onPasteImages,
   queue,
+  localPanel,
 }: {
   value: string
   onChange: (value: string) => void
@@ -61,6 +62,8 @@ export function Composer({
   onPasteImages?: (files: File[]) => void
   /** 排队的插话条（输入卡上方，busy 期间的消息先排队再发）。 */
   queue?: React.ReactNode
+  /** 本地斜杠命令的结果卡（输入卡上方，前端自己渲染，不进对话流）。 */
+  localPanel?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const canSend = !disabled && !pending && value.trim() !== ""
@@ -97,6 +100,7 @@ export function Composer({
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
       <div className="absolute inset-x-0 -top-8 bottom-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
       <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 lg:px-6">
+        {localPanel}
         {queue}
         {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。 */}
         <div

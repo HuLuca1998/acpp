@@ -1,13 +1,20 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+  isDbQueryCall,
+  parseDbToolOutput,
+  type ParsedDbResult,
+} from "@/lib/db-result"
 import { cn } from "@/lib/utils"
+import { SqlResultView } from "@/components/db/sql-result-view"
 import { DiffView } from "@/components/diff-view"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import {
   BrainIcon,
   ChevronRightIcon,
+  DatabaseIcon,
   FileDiffIcon,
   FileTextIcon,
   GlobeIcon,
@@ -101,13 +108,62 @@ function TerminalView({
   )
 }
 
-/** 按工具类型渲染详情：edit → diff，execute/read → 终端，其余 → 原始 JSON。 */
+/**
+ * 数据库查询：数据源标识 + 语句 + 字段 + 可滚动数据，与配置页的 SQL
+ * 控制台共用 SqlResultView。
+ */
+function DbQueryView({
+  sql,
+  parsed,
+}: {
+  sql: string
+  parsed: ParsedDbResult | null
+}) {
+  // 还没跑完（或结果解析不出来）时先把 SQL 亮出来——等待期间最该看见的
+  // 就是「它到底要跑什么」。
+  if (!parsed) {
+    return (
+      <pre className="overflow-auto rounded-lg border border-border bg-background/50 px-2.5 py-1.5 font-mono text-xs leading-5 whitespace-pre-wrap">
+        {sql}
+      </pre>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* 哪个数据源、哪个库——跑错环境的代价太大，不能只靠记忆。 */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <DatabaseIcon className="size-3.5 shrink-0" />
+        <span className="font-mono">{parsed.source}</span>
+        {parsed.database ? (
+          <>
+            <span aria-hidden>/</span>
+            <span className="font-mono">{parsed.database}</span>
+          </>
+        ) : null}
+        <span className="ml-auto tabular-nums">{parsed.elapsedMs}ms</span>
+      </div>
+      <SqlResultView results={parsed.results} />
+    </div>
+  )
+}
+
+/** 按工具类型渲染详情：数据库 → 结果表格，edit → diff，execute/read → 终端，其余 → 原始 JSON。 */
 function ToolCallDetail({ payload }: { payload: ToolCallPayload }) {
   const diffs = (payload.content ?? []).filter(
     (c) => c.type === "diff" && typeof c.newText === "string"
   )
   const command = payload.rawInput?.command
   const { output, exitCode } = outputOf(payload)
+
+  if (isDbQueryCall(payload.rawInput)) {
+    return (
+      <DbQueryView
+        sql={payload.rawInput.sql}
+        parsed={output ? parseDbToolOutput(output) : null}
+      />
+    )
+  }
 
   if (diffs.length > 0 || command || output) {
     return (
@@ -169,7 +225,9 @@ export function ToolCallBlock({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const expandable = hasDetail(payload)
-  const Icon = KIND_ICONS[payload?.kind ?? ""] ?? WrenchIcon
+  const Icon = isDbQueryCall(payload?.rawInput)
+    ? DatabaseIcon
+    : (KIND_ICONS[payload?.kind ?? ""] ?? WrenchIcon)
 
   const header = (
     <>

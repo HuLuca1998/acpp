@@ -1,0 +1,197 @@
+import { useTranslation } from "react-i18next"
+
+import { api } from "@/lib/api"
+import { cn } from "@/lib/utils"
+import { useAsyncData } from "@/hooks/use-async-data"
+import type { DataSource } from "@/types/acp"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { StatusDot } from "@/components/status-dot"
+import { DatabaseIcon, TableIcon, XIcon } from "lucide-react"
+
+/**
+ * `/db` 的结果卡：浮在输入框上方，只给用户看。
+ *
+ * 刻意不进对话流：查一眼有哪些库是「顺手看看」，不该变成一条消息占着
+ * 上下文，也不该等 agent 响应。关掉即走，刷新不留痕。
+ *
+ * 能看到什么与 AI 能操作什么是同一个范围——都只有当前工作目录所属项目的
+ * 数据源（后端 /sessions/{id}/datasources 已按项目过滤）。
+ */
+export function DbSlashPanel({
+  sessionId,
+  /** 命令参数：空 = 列数据源，`<env>` = 列库，`<env> <db>` = 列表。 */
+  args,
+  onClose,
+}: {
+  sessionId: number
+  args: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [envArg, dbArg] = args.split(/\s+/).filter(Boolean)
+  const { data: sources, error } = useAsyncData(
+    () => api.sessions.datasources(sessionId),
+    [sessionId]
+  )
+
+  const picked = envArg ? pickSource(sources ?? [], envArg) : null
+
+  return (
+    <div className="pointer-events-auto mb-2 overflow-hidden rounded-xl border border-border bg-card/95 backdrop-blur-xl transition-[opacity,translate] duration-200 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
+      <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 text-xs">
+        <DatabaseIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="font-medium">{t("db.title")}</span>
+        {picked ? (
+          <span className="font-mono text-muted-foreground">{picked.ref}</span>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="ml-auto"
+          aria-label={t("common.cancel")}
+          onClick={onClose}
+        >
+          <XIcon />
+        </Button>
+      </div>
+
+      <div className="max-h-64 overflow-y-auto p-2 text-xs">
+        {error ? (
+          <p className="px-1 py-2 text-destructive">{error}</p>
+        ) : !sources ? (
+          <Skeleton className="h-16 w-full" />
+        ) : sources.length === 0 ? (
+          <p className="px-1 py-2 text-muted-foreground">
+            {t("db.noSourceForProject")}
+          </p>
+        ) : !envArg ? (
+          <SourceList sources={sources} />
+        ) : !picked ? (
+          <p className="px-1 py-2 text-muted-foreground">
+            {t("db.pickSource")}：
+            {sources.map((s) => s.env).join(" / ")}
+          </p>
+        ) : dbArg ? (
+          <TableList sessionId={sessionId} source={picked} database={dbArg} />
+        ) : (
+          <DatabaseList sessionId={sessionId} source={picked} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SourceList({ sources }: { sources: DataSource[] }) {
+  const { t } = useTranslation()
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {sources.map((s) => (
+        <li key={s.id} className="flex items-center gap-2 px-1 py-1">
+          <StatusDot tone={s.disabled ? "muted" : "success"} />
+          <span className="shrink-0 font-mono font-medium">{s.env}</span>
+          <span className="min-w-0 truncate font-mono text-muted-foreground">
+            {s.host}:{s.port}
+            {s.database ? `/${s.database}` : ""}
+          </span>
+          {s.disabled ? (
+            <span className="shrink-0 text-muted-foreground">
+              {t("db.disabled")}
+            </span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function DatabaseList({
+  sessionId,
+  source,
+}: {
+  sessionId: number
+  source: DataSource
+}) {
+  const { t } = useTranslation()
+  const { data, error } = useAsyncData(
+    () => api.sessions.datasourceDatabases(sessionId, source.id),
+    [sessionId, source.id]
+  )
+
+  if (error) return <p className="px-1 py-2 text-destructive">{error}</p>
+  if (!data) return <Skeleton className="h-16 w-full" />
+
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {data.map((d) => (
+        <li
+          key={d.name}
+          className={cn(
+            "flex items-center gap-2 px-1 py-1",
+            d.system && "text-muted-foreground"
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate font-mono">{d.name}</span>
+          <span className="shrink-0 text-muted-foreground tabular-nums">
+            {t("db.tableCount", { count: d.tables })}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function TableList({
+  sessionId,
+  source,
+  database,
+}: {
+  sessionId: number
+  source: DataSource
+  database: string
+}) {
+  const { t } = useTranslation()
+  const { data, error } = useAsyncData(
+    () => api.sessions.datasourceTables(sessionId, source.id, database),
+    [sessionId, source.id, database]
+  )
+
+  if (error) return <p className="px-1 py-2 text-destructive">{error}</p>
+  if (!data) return <Skeleton className="h-16 w-full" />
+  if (data.length === 0) {
+    return (
+      <p className="px-1 py-2 text-muted-foreground">
+        {t("db.tableCount", { count: 0 })}
+      </p>
+    )
+  }
+
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {data.map((tb) => (
+        <li key={tb.name} className="flex items-center gap-2 px-1 py-1">
+          <TableIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate font-mono">{tb.name}</span>
+          {tb.comment ? (
+            <span className="min-w-0 max-w-40 truncate text-muted-foreground">
+              {tb.comment}
+            </span>
+          ) : null}
+          <span className="shrink-0 text-muted-foreground tabular-nums">
+            {tb.rows}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** 按环境名或完整 `<项目>/<环境>` 找数据源，与后端 Resolve 同一套写法。 */
+function pickSource(sources: DataSource[], ref: string): DataSource | null {
+  const lower = ref.toLowerCase()
+  return (
+    sources.find(
+      (s) => s.env.toLowerCase() === lower || s.ref.toLowerCase() === lower
+    ) ?? null
+  )
+}
