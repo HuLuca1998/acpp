@@ -5,7 +5,9 @@ import { AttachmentTray } from "@/components/chat/composer/attachment-tray"
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
 import { ChatStream } from "@/components/chat/chat-stream"
 import { Composer } from "@/components/chat/composer/composer"
+import { BranchPicker } from "@/components/chat/composer/branch-picker"
 import { ComposerStatus } from "@/components/chat/composer/composer-status"
+import { WorktreeToggle } from "@/components/chat/composer/worktree-toggle"
 import { DraftControls } from "@/components/chat/composer/draft-controls"
 import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
@@ -165,7 +167,17 @@ export const ChatPanel = memo(function ChatPanel() {
         footer={
           <ComposerStatus
             cwd={isNew ? draftCwd : chat.session?.cwd}
-            gitBranch={isNew ? undefined : chat.session?.gitBranch}
+            branchSlot={
+              isNew ? null : <BranchPicker fallback={chat.session?.gitBranch} />
+            }
+            worktreeSlot={
+              isNew ? (
+                <WorktreeToggle
+                  value={newSession.worktree}
+                  onChange={newSession.setWorktree}
+                />
+              ) : null
+            }
             usage={isNew ? null : chat.contextUsage}
             onPickCwd={isNew ? openCwdPicker : undefined}
           />

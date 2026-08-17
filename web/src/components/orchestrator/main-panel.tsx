@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { AttachmentTray } from "@/components/chat/composer/attachment-tray"
 import { ChatStream } from "@/components/chat/chat-stream"
 import { Composer } from "@/components/chat/composer/composer"
+import { BranchPicker } from "@/components/chat/composer/branch-picker"
 import { ComposerStatus } from "@/components/chat/composer/composer-status"
 import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
@@ -185,6 +186,7 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
         footer={
           <ComposerStatus
             cwd={isNew ? draftCwd : chat.orchSession?.cwd}
+            branchSlot={isNew ? null : <BranchPicker />}
             usage={isNew ? null : chat.contextUsage}
             onPickCwd={isNew ? openCwdPicker : undefined}
           />

@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
+import { CloneDialog } from "@/components/projects/clone-dialog"
 import { api } from "@/lib/api"
 import type { DirListing } from "@/types/acp"
 import { Button } from "@/components/ui/button"
@@ -14,7 +16,13 @@ import {
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowUpIcon, FileIcon, FolderIcon, FolderPlusIcon } from "lucide-react"
+import {
+  ArrowUpIcon,
+  DownloadCloudIcon,
+  FileIcon,
+  FolderIcon,
+  FolderPlusIcon,
+} from "lucide-react"
 
 /**
  * 目录/文件选择器：后端代劳列目录的导航弹窗。
@@ -43,6 +51,10 @@ export function DirPicker({
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [createError, setCreateError] = useState<string | null>(null)
+  const [cloneOpen, setCloneOpen] = useState(false)
+  // 克隆是后台任务：盯到它结束，成功就直接把选择器带进新仓库目录——
+  // 用户点「克隆」的意图就是要在那儿干活，不该让他自己再翻一遍目录。
+  const watching = useRef<string | null>(null)
 
   const load = useCallback(
     async (path?: string) => {
@@ -83,6 +95,32 @@ export function DirPicker({
     queueMicrotask(() => void load(initialPath || undefined))
   }, [open, initialPath, load])
 
+  const watchClone = useCallback(
+    (id: string, path: string) => {
+      watching.current = id
+      const timer = setInterval(() => {
+        void api.projects
+          .clones()
+          .then((res) => {
+            const task = res.items.find((item) => item.id === id)
+            if (!task || task.state === "running") return
+            clearInterval(timer)
+            watching.current = null
+            if (task.state === "done") {
+              toast.success(t("projects.cloneDone", { name: task.name }))
+              void load(path)
+            } else {
+              toast.error(task.error || t("projects.cloneFailed"))
+            }
+          })
+          .catch(() => {
+            // 轮询失败下一轮再来。
+          })
+      }, 3000)
+    },
+    [load, t]
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -109,18 +147,31 @@ export function DirPicker({
             {listing?.path ?? ""}
           </span>
           {mode === "dir" ? (
-            <Button
-              size="icon-sm"
-              variant="outline"
-              aria-label={t("dirPicker.newFolder")}
-              disabled={loading || !listing}
-              onClick={() => {
-                setCreating(true)
-                setCreateError(null)
-              }}
-            >
-              <FolderPlusIcon className="size-3.5" />
-            </Button>
+            <>
+              {/* 选工作目录时最常见的下一步其实是「先把仓库弄下来」——
+                  克隆入口放在这里，不用先去别处建好项目再回来选。 */}
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label={t("projects.clone")}
+                title={t("projects.clone")}
+                onClick={() => setCloneOpen(true)}
+              >
+                <DownloadCloudIcon className="size-3.5" />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label={t("dirPicker.newFolder")}
+                disabled={loading || !listing}
+                onClick={() => {
+                  setCreating(true)
+                  setCreateError(null)
+                }}
+              >
+                <FolderPlusIcon className="size-3.5" />
+              </Button>
+            </>
           ) : null}
         </div>
 
@@ -230,6 +281,15 @@ export function DirPicker({
           ) : null}
         </DialogFooter>
       </DialogContent>
+
+      <CloneDialog
+        open={cloneOpen}
+        onOpenChange={setCloneOpen}
+        onCloned={(task) => {
+          toast.info(t("projects.cloning"))
+          watchClone(task.id, task.path)
+        }}
+      />
     </Dialog>
   )
 }

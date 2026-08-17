@@ -143,6 +143,18 @@ export function workspaceScopeApi(prefix: string) {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    /** 开隔离工作区：`<仓库>/worktrees/<名字>`，返回它的绝对路径。 */
+    worktreeCreate: (id: number, input: { name: string; branch?: string }) =>
+      request<{ path: string }>(`${prefix}/${id}/git/worktrees`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    /** 拆掉一个 worktree（分支保留）。 */
+    worktreeRemove: (id: number, path: string) =>
+      request<null>(`${prefix}/${id}/git/worktrees`, {
+        method: "DELETE",
+        body: JSON.stringify({ path }),
+      }),
     /** 提交详情（文件清单）。 */
     gitCommit: (id: number, sha: string) =>
       request<GitCommitDetail>(`${prefix}/${id}/git/commits/${sha}`),

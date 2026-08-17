@@ -13,17 +13,23 @@ import { FolderIcon, GitBranchIcon, PencilIcon } from "lucide-react"
 export function ComposerStatus({
   cwd,
   gitBranch,
+  branchSlot,
+  worktreeSlot,
   usage,
   onPickCwd,
 }: {
   cwd?: string
   gitBranch?: string
+  /** 可交互的分支控件（BranchPicker）；给了它就不再渲染纯文本分支。 */
+  branchSlot?: React.ReactNode
+  /** 草稿态的 worktree 开关，跟在分支之后。 */
+  worktreeSlot?: React.ReactNode
   usage?: ContextUsage | null
   /** 草稿态：点击工作目录打开目录选择器；老会话不传，纯展示。 */
   onPickCwd?: () => void
 }) {
   const { t } = useTranslation()
-  if (!cwd && !gitBranch && !usage) return null
+  if (!cwd && !gitBranch && !branchSlot && !worktreeSlot && !usage) return null
 
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground/80">
@@ -44,12 +50,14 @@ export function ComposerStatus({
           <span className="truncate font-mono">{cwd}</span>
         </span>
       ) : null}
-      {gitBranch ? (
-        <span className="flex shrink-0 items-center gap-1">
-          <GitBranchIcon className="size-3" />
-          <span className="font-mono">{gitBranch}</span>
-        </span>
-      ) : null}
+      {branchSlot ??
+        (gitBranch ? (
+          <span className="flex shrink-0 items-center gap-1">
+            <GitBranchIcon className="size-3" />
+            <span className="font-mono">{gitBranch}</span>
+          </span>
+        ) : null)}
+      {worktreeSlot}
       {usage && usage.size > 0 ? (
         <span
           className="ml-auto shrink-0 tabular-nums"

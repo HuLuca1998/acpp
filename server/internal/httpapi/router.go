@@ -233,6 +233,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/commits/{sha}", orchWorkspace.gitCommit)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/branches", orchWorkspace.branches)
 	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/checkout", orchWorkspace.checkout)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.createWorktree)
+	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.removeWorktree)
 	orchTerminals := terminalHandler{
 		cwdOf:          orchCwd,
 		terms:          svcs.Terminals,
