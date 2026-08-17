@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -54,6 +55,7 @@ import {
 } from "@/components/ui/table"
 import {
   CopyIcon,
+  TriangleAlertIcon,
   MoreHorizontalIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -93,7 +95,11 @@ export function Tenants() {
   async function copyInvite(tenant: Tenant) {
     try {
       await navigator.clipboard.writeText(tenant.inviteUrl)
-      toast.success(t("tenants.linkCopied"))
+      toast.success(
+        tenant.shareable
+          ? t("tenants.linkCopied")
+          : t("tenants.linkCopiedLocal")
+      )
     } catch {
       // 剪贴板在非安全上下文里不可用（局域网 http 访问就是这种情况），
       // 退而把链接摆出来让人手动复制。
@@ -173,7 +179,18 @@ export function Tenants() {
               </Button>
             </CardAction>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
+            {/* 只监听本机时，任何链接发出去都打不开——与其让人试半天，
+                不如直接说清楚现在的状态和开启方式。 */}
+            {tenants && tenants.length > 0 && !tenants[0].shareable ? (
+              <Alert>
+                <TriangleAlertIcon />
+                <AlertTitle>{t("tenants.localOnlyTitle")}</AlertTitle>
+                <AlertDescription>
+                  {t("tenants.localOnlyHint")}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {error || tenants === null || tenants.length === 0 ? (
               <ListPageStates
                 icon={<UsersIcon />}

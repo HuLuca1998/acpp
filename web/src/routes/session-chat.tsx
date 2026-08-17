@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router"
 
 import { useChat } from "@/hooks/use-chat"
 import { useDraftSession } from "@/hooks/use-draft-session"
+import { useIdentity } from "@/hooks/identity-context"
 import type { ImageAttachment } from "@/types/acp"
 import { fileToImageAttachment } from "@/lib/files"
 import { DirPicker } from "@/components/dir-picker"
@@ -47,16 +48,18 @@ export function SessionChat() {
   const [draft, setDraft] = useState("")
 
   // 待发送附件：图片（粘贴/选择）与 @ 引用的文件路径。
+  const { identity } = useIdentity()
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
-  // 草稿态**不预设**工作目录：没选就显示占位文案，由后端落到工作区根。
-  // 以前会回落到 agent 记录里的 cwd——那是历史残留，不该替用户决定他
-  // 这次要在哪儿干活。
-  const draftCwd = newSession.cwd.trim() || t("sessions.form.cwdPlaceholder")
+  // 草稿态**不预设**工作目录：没选就显示这个身份的起点作为提示，由后端
+  // 落到那儿。以前会回落到 agent 记录里的 cwd——那是历史残留，不该替
+  // 用户决定他这次在哪儿干活。访客看到的是自己的目录，不是通用的 ~/acpp。
+  const draftCwd =
+    newSession.cwd.trim() || identity?.root || t("sessions.form.cwdPlaceholder")
 
   async function addImages(picked: File[]) {
     const attachments = await Promise.all(picked.map(fileToImageAttachment))

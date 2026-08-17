@@ -22,6 +22,10 @@ type tenantHandler struct {
 type tenantView struct {
 	service.TenantView
 	InviteURL string `json:"inviteUrl"`
+	// Shareable 表示这条链接现在真的能发出去用。服务只监听回环时它是
+	// false——那种情况下给一条 `http://192.168.x.x:...` 的链接是骗人的，
+	// 谁点都连不上。界面据此说明「先开启局域网访问」。
+	Shareable bool `json:"shareable"`
 }
 
 func (h tenantHandler) list(w http.ResponseWriter, r *http.Request) {
@@ -37,17 +41,40 @@ func (h tenantHandler) list(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, newPage(views))
 }
 
-// withInviteURL 拼 `http://<局域网IP>:<端口>/?invite=<token>`。
+// withInviteURL 拼 `http://<局域网IP>:<端口>/?invite=<token>`，并如实标出
+// 这条链接当下能不能真的发出去。
 func (h tenantHandler) withInviteURL(tenant service.TenantView) tenantView {
-	host := lanIP()
-	_, port, err := net.SplitHostPort(h.addr)
+	host, port, err := net.SplitHostPort(h.addr)
 	if err != nil || port == "" {
 		port = "48080"
 	}
+	shareable := listensBeyondLoopback(host)
+
+	// 只监听回环时给本机地址：链接至少能在这台机器上点开（owner 想验一眼
+	// 访客视角就靠它），而不是一条谁都连不上的局域网地址。
+	target := lanIP()
+	if !shareable {
+		target = "127.0.0.1"
+	}
 	return tenantView{
 		TenantView: tenant,
-		InviteURL:  fmt.Sprintf("http://%s:%s/?invite=%s", host, port, tenant.InviteToken),
+		InviteURL:  fmt.Sprintf("http://%s:%s/?invite=%s", target, port, tenant.InviteToken),
+		Shareable:  shareable,
 	}
+}
+
+// listensBeyondLoopback 判断监听地址是否对本机之外开放。
+// 空 host（":48080"）与 0.0.0.0 都是全网卡监听。
+func listensBeyondLoopback(host string) bool {
+	if host == "" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// 主机名（少见）：无从判断，按能分享处理，界面不该无端阻拦。
+		return true
+	}
+	return !ip.IsLoopback()
 }
 
 // lanIP 取本机第一个非回环 IPv4。拿不到就退回 localhost——链接会「只能

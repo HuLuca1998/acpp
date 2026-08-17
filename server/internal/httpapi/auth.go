@@ -83,13 +83,20 @@ func withIdentity(tenants *service.TenantService, next http.Handler) http.Handle
 }
 
 func resolveIdentity(r *http.Request, tenants *service.TenantService) identity {
+	cookie, err := r.Cookie(tenantCookie)
+	hasCookie := err == nil && cookie.Value != ""
+
 	// 本机访问即 owner：桌面壳与主机浏览器天然从回环地址进来，判定零配置、
-	// 不会丢，也不需要维护一份 owner 凭证。局域网设备拿不到这个身份。
-	if isLoopback(r.RemoteAddr) {
+	// 不会丢，也不需要维护一份 owner 凭证。
+	//
+	// 但**带了租户凭证就按租户算**，哪怕请求来自回环。两个原因：
+	// 一是 owner 想在本机验一眼访客视角，点自己发出去的链接就行；
+	// 二是任何反向代理（含开发态的 vite proxy）都会把来源改写成回环，
+	// 若只看地址，代理后面的每个访客都会被提权成 owner。
+	if isLoopback(r.RemoteAddr) && !hasCookie {
 		return identity{owner: true}
 	}
-	cookie, err := r.Cookie(tenantCookie)
-	if err != nil || cookie.Value == "" {
+	if !hasCookie {
 		return identity{}
 	}
 	tenant, err := tenants.Authenticate(r.Context(), cookie.Value)

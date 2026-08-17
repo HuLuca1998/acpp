@@ -47,6 +47,11 @@ build-server: ## 构建后端到 build/server/acp-server
 serve: build-web build-server ## 由后端单进程托管前端产物
 	ACP_WEB_DIR=build/web ./build/server/acp-server
 
+.PHONY: serve-lan
+serve-lan: build-web build-server ## 同 serve，但对局域网开放（分享链接才打得开）
+	@echo "局域网访问已开启——分享链接对局域网内设备有效。工作区终端是任意命令执行面，只在可信网络里用（README §安全姿态）。"
+	ACP_WEB_DIR=build/web ACP_ADDR=0.0.0.0:48080 ./build/server/acp-server
+
 .PHONY: app
 app: ## 打包 macOS 桌面版到 build/app/ACPP.app
 	scripts/build-macos-app.sh

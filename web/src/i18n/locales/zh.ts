@@ -446,9 +446,12 @@ export default {
       askExplain: "让 AI 解释这条提交",
       askWorkingTree: "让 AI 审查未提交的改动",
       askCommitMessage: "让 AI 写提交信息",
-      promptExplain: "解释提交 {{sha}}（{{subject}}）：它改了什么、为什么这么改。",
-      promptWorkingTree: "审查我当前未提交的改动：先 git status 与 git diff 看清，再指出问题与风险。",
-      promptCommitMessage: "看一遍我当前未提交的改动，按 Conventional Commits 给我一条中文提交信息（只给信息本身）。",
+      promptExplain:
+        "解释提交 {{sha}}（{{subject}}）：它改了什么、为什么这么改。",
+      promptWorkingTree:
+        "审查我当前未提交的改动：先 git status 与 git diff 看清，再指出问题与风险。",
+      promptCommitMessage:
+        "看一遍我当前未提交的改动，按 Conventional Commits 给我一条中文提交信息（只给信息本身）。",
       commit: "提交",
       commitAll: "提交全部改动…",
       commitAllDesc: "把工作区里的 {{count}} 个改动（含未跟踪文件）一次提交。",
@@ -456,9 +459,11 @@ export default {
       committed: "已提交",
       discard: "丢弃",
       discardAll: "丢弃全部改动",
-      discardAllDesc: "工作区里的 {{count}} 个改动会回到上次提交的状态，未跟踪的新文件会被删除。此操作不可恢复。",
+      discardAllDesc:
+        "工作区里的 {{count}} 个改动会回到上次提交的状态，未跟踪的新文件会被删除。此操作不可恢复。",
       discardFile: "丢弃这个文件的改动",
-      discardFileDesc: "{{path}} 会回到上次提交的状态；如果它是新文件，会被删除。此操作不可恢复。",
+      discardFileDesc:
+        "{{path}} 会回到上次提交的状态；如果它是新文件，会被删除。此操作不可恢复。",
       discarded: "已丢弃改动",
       copySha: "复制完整 sha",
       copySubject: "复制提交标题",
@@ -567,6 +572,10 @@ export default {
     never: "从未使用",
     actions: "操作",
     copyLink: "复制邀请链接",
+    localOnlyTitle: "当前只能本机访问",
+    localOnlyHint:
+      "服务监听在 127.0.0.1，链接发给别人打不开。桌面版在菜单栏图标右键里开「允许局域网访问」；命令行启动时设 ACP_ADDR=0.0.0.0:48080（并让后端托管前端产物，如 make serve）。",
+    linkCopiedLocal: "链接已复制（当前只能本机打开）",
     linkCopied: "邀请链接已复制",
     rotate: "重新生成链接",
     rotateConfirm:

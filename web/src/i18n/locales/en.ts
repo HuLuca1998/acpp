@@ -467,19 +467,25 @@ export default {
       askExplain: "Ask AI to explain this commit",
       askWorkingTree: "Ask AI to review uncommitted changes",
       askCommitMessage: "Ask AI for a commit message",
-      promptExplain: "Explain commit {{sha}} ({{subject}}): what it changes and why.",
-      promptWorkingTree: "Review my uncommitted changes: read git status and git diff first, then point out problems and risks.",
-      promptCommitMessage: "Read my uncommitted changes and give me one Conventional Commits message (the message only).",
+      promptExplain:
+        "Explain commit {{sha}} ({{subject}}): what it changes and why.",
+      promptWorkingTree:
+        "Review my uncommitted changes: read git status and git diff first, then point out problems and risks.",
+      promptCommitMessage:
+        "Read my uncommitted changes and give me one Conventional Commits message (the message only).",
       commit: "Commit",
       commitAll: "Commit all changes...",
-      commitAllDesc: "Commit all {{count}} changes in the working tree, including untracked files.",
+      commitAllDesc:
+        "Commit all {{count}} changes in the working tree, including untracked files.",
       commitPlaceholder: "feat: describe this change",
       committed: "Committed",
       discard: "Discard",
       discardAll: "Discard all changes",
-      discardAllDesc: "All {{count}} changes go back to the last commit and untracked files are deleted. This cannot be undone.",
+      discardAllDesc:
+        "All {{count}} changes go back to the last commit and untracked files are deleted. This cannot be undone.",
       discardFile: "Discard changes to this file",
-      discardFileDesc: "{{path}} goes back to the last commit; if it is a new file it is deleted. This cannot be undone.",
+      discardFileDesc:
+        "{{path}} goes back to the last commit; if it is a new file it is deleted. This cannot be undone.",
       discarded: "Changes discarded",
       copySha: "Copy full sha",
       copySubject: "Copy subject",
@@ -595,6 +601,10 @@ export default {
     never: "Never used",
     actions: "Actions",
     copyLink: "Copy invite link",
+    localOnlyTitle: "Reachable from this machine only",
+    localOnlyHint:
+      'The server listens on 127.0.0.1, so the link will not open for anyone else. In the desktop app, enable "Allow LAN access" from the menu bar icon; from the command line set ACP_ADDR=0.0.0.0:48080 and serve the web build (make serve).',
+    linkCopiedLocal: "Link copied (opens on this machine only)",
     linkCopied: "Invite link copied",
     rotate: "Regenerate link",
     rotateConfirm:

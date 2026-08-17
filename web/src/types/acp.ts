@@ -603,6 +603,8 @@ export interface Tenant {
   inviteToken: string
   /** 可直接转发的邀请链接（后端拼好局域网 IP 与端口）。 */
   inviteUrl: string
+  /** 这条链接现在真的能发出去用；服务只监听本机时为 false。 */
+  shareable: boolean
   sessionCount: number
 }
 
