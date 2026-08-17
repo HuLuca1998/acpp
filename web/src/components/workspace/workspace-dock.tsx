@@ -48,8 +48,8 @@ const ACPP_THEME: DockviewTheme = {
 
 /**
  * 面板内容包一层「右键到此为止」：面板自己的右键菜单（文件树、git 面板）
- * 处理完后，事件继续冒泡会让 dockview 去找它的企业版 ContextMenu 模块，
- * 控制台每次右键都报一条缺模块的错。我们不用它那套菜单，就在这儿断掉。
+ * 处理完后事件不再上交给 dockview——它那套 tab/组菜单在企业版里，我们
+ * 不用，也不希望它抢走面板自己的菜单。
  */
 function withOwnContextMenu(
   Panel: React.FunctionComponent<IDockviewPanelProps>
@@ -105,8 +105,9 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
     <div
       className="flex h-full items-center gap-1.5 px-2 text-xs"
       title={label}
-      // tab 上的右键同样不交给 dockview：它会去找只在企业版里的
-      // ContextMenu 模块，控制台每次都报一条缺模块的错。
+      // tab 的右键不交给 dockview——它的 tab 菜单在企业版里，我们也不需要。
+      // （dockview 在初始化时仍会为缺少该模块打一条控制台告警，那是库自身
+      //  的行为，与这里的拦截无关，也不影响功能。）
       onContextMenu={(e) => e.preventDefault()}
     >
       <span className="relative shrink-0">
