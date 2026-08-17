@@ -139,6 +139,12 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
         at(id, `/fs/file?path=${encodeURIComponent(path)}`)
       ),
 
+    /**
+     * 文件下载地址。返回 URL 而不是发请求：交给浏览器自己下，才能有
+     * 原生的下载进度与「另存为」；同源请求 cookie 自动带上，鉴权照旧。
+     */
+    downloadUrl: (id: number, path: string) =>
+      `${BASE}${at(id, `/fs/download?path=${encodeURIComponent(path)}`)}`,
     /** git 汇总：分支/领先落后/变更文件/未推送 commit，diff 与 commit 面板共享。 */
     gitOverview: (id: number) => request<GitOverview>(at(id, `/git/overview`)),
     /** 工作区单文件 diff（HEAD 版对工作区版的两端全文）。 */

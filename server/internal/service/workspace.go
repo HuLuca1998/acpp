@@ -190,6 +190,29 @@ func WorkspaceFile(cwd, path string) (*WorkspaceFileView, error) {
 	return view, nil
 }
 
+// WorkspaceFilePath 解析出一个可以直接下发的文件绝对路径。
+//
+// 与 WorkspaceFile 的区别：那个是给预览用的（文本、截断、二进制只标记），
+// 这个是给下载用的——原样、不截断、二进制也照给。路径闸是同一道。
+func WorkspaceFilePath(cwd, path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("%w: path required", ErrInvalid)
+	}
+	target, err := workspacePath(cwd, path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	if info.IsDir() {
+		// 目录要下载得先打包，那是另一件事；这里诚实拒绝而不是给个空文件。
+		return "", fmt.Errorf("%w: %s is a directory", ErrInvalid, path)
+	}
+	return target, nil
+}
+
 // workspacePath 把请求路径解析成 canonical 绝对路径，并强制落在会话 cwd 内。
 // 与 acp fs 代理同款姿态：符号链接先解析再比对，防止链接逃逸。
 func workspacePath(cwd, path string) (string, error) {

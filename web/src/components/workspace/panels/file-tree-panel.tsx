@@ -149,6 +149,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
               onToggle={toggleDir}
               onOpenFile={ws.openPreview}
               onAddReference={ws.addReference}
+              onDownload={ws.downloadFile}
             />
           ))
         )}
@@ -171,6 +172,7 @@ function TreeNode({
   onToggle,
   onOpenFile,
   onAddReference,
+  onDownload,
 }: {
   entry: TreeEntry
   depth: number
@@ -179,6 +181,8 @@ function TreeNode({
   onToggle: (entry: TreeEntry) => void
   onOpenFile: (path: string) => void
   onAddReference: (path: string) => void
+  /** 目录不给：打包下载是另一件事，菜单里只对文件出现。 */
+  onDownload: (path: string) => void
 }) {
   const { t } = useTranslation()
   const isDir = entry.kind === "dir"
@@ -221,9 +225,14 @@ function TreeNode({
             {t("workspace.refMenu.addReference")}
           </ContextMenuItem>
           {!isDir ? (
-            <ContextMenuItem onClick={() => onOpenFile(entry.path)}>
-              {t("workspace.refMenu.openPreview")}
-            </ContextMenuItem>
+            <>
+              <ContextMenuItem onClick={() => onOpenFile(entry.path)}>
+                {t("workspace.refMenu.openPreview")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onDownload(entry.path)}>
+                {t("workspace.refMenu.download")}
+              </ContextMenuItem>
+            </>
           ) : null}
           <ContextMenuItem
             onClick={() => void navigator.clipboard.writeText(entry.path)}
@@ -243,6 +252,7 @@ function TreeNode({
               onToggle={onToggle}
               onOpenFile={onOpenFile}
               onAddReference={onAddReference}
+              onDownload={onDownload}
             />
           ))
         : null}

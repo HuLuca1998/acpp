@@ -459,6 +459,7 @@ export default {
     refMenu: {
       addReference: "Add to chat references",
       openPreview: "Preview",
+      download: "Download file",
       copyPath: "Copy path",
     },
     git: {

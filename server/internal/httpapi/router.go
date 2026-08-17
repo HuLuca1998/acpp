@@ -176,12 +176,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	}
 	workspace := workspaceHandler{cwdOf: sessionCwd}
 
-
 	// 草稿态工作区：会话还没建，目录由 `?cwd=` 给。看文件与 git 状态只需要
 	// 一个目录——选完工作目录就该能用，不必先发一条消息把会话建出来。
 	draft := workspaceHandler{cwdOf: draftCwd}
 	api.HandleFunc("GET /api/workspace/fs/entries", draft.tree)
 	api.HandleFunc("GET /api/workspace/fs/file", draft.file)
+	api.HandleFunc("GET /api/workspace/fs/download", draft.download)
 	api.HandleFunc("GET /api/workspace/git/overview", draft.gitOverview)
 	api.HandleFunc("GET /api/workspace/git/diff", draft.gitDiff)
 	api.HandleFunc("GET /api/workspace/git/commits/{sha}", draft.gitCommit)
@@ -209,6 +209,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 工作区面板数据面：文件树（depth≤2 一次返回，gitignore 过滤）与文件预览。
 	api.HandleFunc("GET /api/sessions/{id}/fs/entries", workspace.tree)
 	api.HandleFunc("GET /api/sessions/{id}/fs/file", workspace.file)
+	// 原样下载（右键「下载」）：与预览分开——预览会截断、二进制只标记。
+	api.HandleFunc("GET /api/sessions/{id}/fs/download", workspace.download)
 	// git 数据面：overview 供 diff/commit 两面板共享，diff/commit 按需取全文。
 	api.HandleFunc("GET /api/sessions/{id}/git/overview", workspace.gitOverview)
 	api.HandleFunc("GET /api/sessions/{id}/git/diff", workspace.gitDiff)
@@ -278,6 +280,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	orchWorkspace := workspaceHandler{cwdOf: orchCwd}
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/entries", orchWorkspace.tree)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/file", orchWorkspace.file)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/download", orchWorkspace.download)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/overview", orchWorkspace.gitOverview)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/diff", orchWorkspace.gitDiff)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/commits/{sha}", orchWorkspace.gitCommit)

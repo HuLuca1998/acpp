@@ -202,6 +202,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
             onAsk={askAboutFile}
             onReference={ws.addReference}
             onPreview={ws.openPreview}
+            onDownload={ws.downloadFile}
             onCopy={(value) => void copyText(value)}
             onDiscard={comparing || selection.sha ? undefined : discardFile}
             onAskDir={(dir) => ws.askAI(t("workspace.git.promptDir", { dir }))}
@@ -225,6 +226,7 @@ function ChangeTree({
   onAsk,
   onReference,
   onPreview,
+  onDownload,
   onCopy,
   onDiscard,
   onAskDir,
@@ -235,6 +237,7 @@ function ChangeTree({
   onAsk: (path: string) => void
   onReference: (path: string) => void
   onPreview: (path: string) => void
+  onDownload: (path: string) => void
   onCopy: (value: string) => void
   /** 只有看工作区时才给：提交里的改动没什么可丢的。 */
   onDiscard?: (path: string) => void
@@ -282,6 +285,7 @@ function ChangeTree({
                 onAsk={onAsk}
                 onReference={onReference}
                 onPreview={onPreview}
+                onDownload={onDownload}
                 onCopy={onCopy}
                 onDiscard={onDiscard}
                 onAskDir={onAskDir}
@@ -321,6 +325,9 @@ function ChangeTree({
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onReference(item.path)}>
               {t("workspace.refMenu.addReference")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onDownload(item.path)}>
+              {t("workspace.refMenu.download")}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onCopy(item.path)}>
               {t("workspace.git.copyPath")}

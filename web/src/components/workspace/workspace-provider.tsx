@@ -118,6 +118,16 @@ export function WorkspaceProvider({
         ensureOpen("preview")
         listenersRef.current.forEach((l) => l())
       },
+      downloadFile: (path) => {
+        // 造一个一次性链接点掉：download 属性让浏览器走「另存为」而不是
+        // 在标签页里打开，后端的 Content-Disposition 决定最终文件名。
+        const link = document.createElement("a")
+        link.href = activeScope.downloadUrl(sessionId, path)
+        link.download = path.split("/").pop() ?? "download"
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+      },
       addReference: (path) => {
         referenceSinkRef.current?.(path)
       },

@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
+	"path/filepath"
 
 	"acpp/server/internal/service"
 )
@@ -112,6 +115,28 @@ func (h workspaceHandler) compare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, compare)
+}
+
+// download 原样下发一个工作区文件（浏览器另存为）。预览接口是给「看」的
+// （文本、截断、二进制只标记），下载要的是原始字节。
+func (h workspaceHandler) download(w http.ResponseWriter, r *http.Request) {
+	cwd, err := h.cwdOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	target, err := service.WorkspaceFilePath(cwd, r.URL.Query().Get("path"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	// filename* 用 RFC 5987 编码，中文名与空格才不会在下载时变成乱码或被截断。
+	name := filepath.Base(target)
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s",
+			name, url.PathEscape(name)))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, target)
 }
 
 // branches 是会话底部分支控件的数据：当前分支、本地/远端分支、worktree 清单。
