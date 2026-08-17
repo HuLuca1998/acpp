@@ -57,6 +57,11 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, service.ErrInvalid):
 		status = http.StatusBadRequest
+	case errors.Is(err, service.ErrUnauthorized):
+		// 没有有效身份：前端据此跳到「需要邀请链接」页面（adr-007）。
+		status = http.StatusUnauthorized
+	case errors.Is(err, service.ErrForbidden):
+		status = http.StatusForbidden
 	case errors.Is(err, acp.ErrUnsupported):
 		// 该 runtime 不支持这个统一设置维度；正常前端不会发（控件按
 		// Settings 隐藏），发了就是入参问题。

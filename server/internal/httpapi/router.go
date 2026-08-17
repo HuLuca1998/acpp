@@ -28,6 +28,7 @@ type Services struct {
 	Update     *system.Updater
 	Roles      *orch.RoleService
 	Orch       *orch.Service
+	Tenants    *service.TenantService
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -47,6 +48,21 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 			"version": config.Version,
 		})
 	})
+
+	// 身份：邀请兑换、身份自查、退出（adr-007）。这三条是公开路径，
+	// 未认证也能访问——否则前端连「我需要邀请链接」都问不出来。
+	auth := authHandler{tenants: svcs.Tenants}
+	api.HandleFunc("GET /api/auth/me", auth.me)
+	api.HandleFunc("POST /api/auth/redeem", auth.redeem)
+	api.HandleFunc("POST /api/auth/logout", auth.logout)
+
+	// 租户管理：owner 专属（isOwnerOnly 按前缀覆盖）。
+	tenants := tenantHandler{tenants: svcs.Tenants}
+	api.HandleFunc("GET /api/tenants", tenants.list)
+	api.HandleFunc("POST /api/tenants", tenants.create)
+	api.HandleFunc("PUT /api/tenants/{id}", tenants.update)
+	api.HandleFunc("POST /api/tenants/{id}/rotate", tenants.rotate)
+	api.HandleFunc("DELETE /api/tenants/{id}", tenants.remove)
 
 	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。
 	// ?files=1 时连同文件一起列（@ 文件引用用）。
@@ -219,7 +235,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/sessions/{id}/permission", chat.permission)
 
 	root := http.NewServeMux()
-	root.Handle("/api/", api)
+	// 身份中间件只包 API：前端页面本身必须对未认证访客可加载，否则
+	// 邀请链接 `/?invite=xxx` 会先撞 401 白屏，连兑换都发不出去。
+	root.Handle("/api/", withIdentity(svcs.Tenants, api))
 	if cfg.WebDir != "" {
 		root.Handle("/", spaHandler(cfg.WebDir))
 	}

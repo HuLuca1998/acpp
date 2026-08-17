@@ -17,6 +17,9 @@ type Session struct {
 	ID uint `gorm:"primaryKey" json:"id"`
 	// AgentID 指向发起该会话的 agent。
 	AgentID uint `gorm:"not null;index" json:"agentId"`
+	// TenantID 是会话归属的租户（adr-007）；0 表示 owner 自己的会话。
+	// 隔离靠查询条件执行，不靠 handler 自觉——见 service.Scope。
+	TenantID uint `gorm:"not null;default:0;index" json:"tenantId"`
 	// ACPSessionID 是 agent 侧返回的 sessionId，用于 session/prompt 等后续调用。
 	ACPSessionID string       `gorm:"size:128;index" json:"acpSessionId"`
 	Title        string       `gorm:"size:256" json:"title"`

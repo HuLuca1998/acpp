@@ -115,6 +115,10 @@ func run() error {
 		slog.Warn("normalize stale orch tasks", "err", err)
 	}
 
+	// 多租户（adr-007）：局域网访客的身份与目录隔离。租户 root 落在默认
+	// 工作区下（~/acpp/<租户>），owner 由 loopback 判定，不入表。
+	tenantService := service.NewTenantService(gdb, service.DefaultCwd())
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -134,6 +138,7 @@ func run() error {
 		Update:     updateService,
 		Roles:      roleService,
 		Orch:       orchService,
+		Tenants:    tenantService,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
