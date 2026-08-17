@@ -18,6 +18,7 @@
 | line-diff.ts | 行级 diff（LCS 对齐，大文件退化保护） | `lineDiff` |
 | message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠） | `groupMessages` |
 | palette.ts | 主题方案的注册、读写与应用（token 定义在 index.css） | `PALETTES`、`loadPalette`、`applyPalette` |
+| path-tree.ts | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用 | `buildPathTree`、`countFiles`、`PathTreeNode` |
 | session-groups.ts | 会话按项目分组（adr-007）：cwd 前缀归属、组内取最新、最多 5 组 × 5 条 | `groupSessionsByProject`、`SessionGroup`、`MAX_GROUPS` |
 | status-tone.ts | 会话/agent 状态 → StatusDot 色调的统一映射 | `SESSION_STATE_TONE`、`AGENT_STATUS_TONE`、`StatusTone` |
 | utils.ts | 类名合并（shadcn 标配） | `cn` |

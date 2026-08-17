@@ -406,9 +406,11 @@ export default {
     panels: {
       chat: "Chat",
       files: "Files",
-      preview: "Preview",
-      diff: "Working tree",
-      commits: "Unpushed commits",
+      preview: "Viewer",
+      branches: "Branches",
+      history: "History",
+      changes: "Changes",
+      detail: "Details",
       logs: "Logs",
       terminal: "Terminal",
     },
@@ -424,6 +426,7 @@ export default {
       default: "Default (chat first)",
       ide: "IDE classic",
       review: "Code review",
+      git: "Git workbench",
       terminalBench: "Terminal bench",
     },
     terminal: {
@@ -452,6 +455,32 @@ export default {
       copyPath: "Copy path",
     },
     git: {
+      workingTree: "Working tree",
+      workingTreeDesc: "On {{branch}}, {{files}} file(s) changed.",
+      local: "Local",
+      remote: "Remote",
+      tags: "Tags",
+      checkout: "Check out this branch",
+      comparing: "Comparing {{base}} → {{head}}",
+      pickTwoHint: "⌘-click a second ref to compare",
+      commitCount: "{{count}} commits",
+      fileCount: "{{count}} files",
+      aheadBehind: "{{ahead}} ahead · {{behind}} behind",
+      noCommits: "No commits",
+      noChanges: "No changes",
+      loadMore: "Load earlier",
+      askReview: "Ask AI to review this commit",
+      askCompare: "Ask AI to compare these branches",
+      askFile: "Ask AI to analyze this file's changes",
+      promptCommit:
+        "Review commit {{sha}} ({{subject}}): read the change with git show first, then point out problems and risks.",
+      promptCompare:
+        "Compare branches {{base}} and {{head}}: use git log {{base}}..{{head}} and git diff {{base}}...{{head}}, then explain what this branch does and what is risky about it.",
+      promptBranch:
+        "Analyze branch {{ref}}: what does it change relative to the current branch?",
+      promptFile: "Analyze the changes to {{path}} in {{where}}.",
+      promptFileCompare:
+        "Analyze the differences in {{path}} between {{base}} and {{head}}.",
       notRepo: "This directory is not a git repository",
       clean: "Working tree clean, nothing uncommitted.",
       refresh: "Refresh",
@@ -468,7 +497,8 @@ export default {
     title: "Projects",
     sessions: "Sessions",
     clone: "Clone repository",
-    cloneDesc: "Pick a repository from your organizations and collaborations (repositories under your personal account are never listed), or paste a URL.",
+    cloneDesc:
+      "Pick a repository from your organizations and collaborations (repositories under your personal account are never listed), or paste a URL.",
     cloneUrl: "Clone this URL",
     cloning: "Cloning...",
     cloneDone: "{{name}} cloned",
@@ -479,24 +509,30 @@ export default {
     private: "Private",
     urlPlaceholder: "https://github.com/org/repo.git",
     create: "New project",
-    createDesc: "Create an empty directory in your workspace, shaped as owner/repo.",
+    createDesc:
+      "Create an empty directory in your workspace, shaped as owner/repo.",
     name: "Project name",
     namePlaceholder: "BDBGAME2024/pp-game",
     nameHint: "At most two levels: <owner>/<repo>.",
   },
   identity: {
     inviteTitle: "Invite link required",
-    inviteDesc: "The owner of this machine can generate an invite link for you on the Connections page.",
+    inviteDesc:
+      "The owner of this machine can generate an invite link for you on the Connections page.",
     revokedTitle: "Access closed",
-    revokedDesc: "Your access has been turned off by the owner of this machine.",
-    revokedDescNamed: "Access for \"{{name}}\" has been turned off by the owner of this machine.",
+    revokedDesc:
+      "Your access has been turned off by the owner of this machine.",
+    revokedDescNamed:
+      'Access for "{{name}}" has been turned off by the owner of this machine.',
     offlineTitle: "Backend unreachable",
   },
   tenants: {
     title: "LAN guests",
-    description: "Hand each person on your LAN their own invite link: separate sessions, separate working directory, revocable at any time. You are on this machine, so you always have full access.",
+    description:
+      "Hand each person on your LAN their own invite link: separate sessions, separate working directory, revocable at any time. You are on this machine, so you always have full access.",
     add: "Add guest",
-    addDesc: "The name doubles as their workspace directory (~/acpp/<name>) and cannot be changed later.",
+    addDesc:
+      "The name doubles as their workspace directory (~/acpp/<name>) and cannot be changed later.",
     addAndCopy: "Create and copy link",
     name: "Name",
     namePlaceholder: "alice",
@@ -509,13 +545,15 @@ export default {
     copyLink: "Copy invite link",
     linkCopied: "Invite link copied",
     rotate: "Regenerate link",
-    rotateConfirm: "The link \"{{name}}\" already has stops working immediately; you will need to send them the new one. Sessions and files are untouched.",
+    rotateConfirm:
+      'The link "{{name}}" already has stops working immediately; you will need to send them the new one. Sessions and files are untouched.',
     enable: "Restore access",
     disable: "Close access",
     enabled: "Access restored",
     disabled: "Access closed",
     removeTitle: "Delete guest",
-    removeConfirm: "Deleting \"{{name}}\" invalidates their link immediately. Their sessions and files stay on disk, visible only to you.",
+    removeConfirm:
+      'Deleting "{{name}}" invalidates their link immediately. Their sessions and files stay on disk, visible only to you.',
     removed: "Guest deleted",
     empty: "No guests yet",
     emptyHint: "Add a guest and send them the generated link.",

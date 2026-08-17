@@ -148,7 +148,9 @@ export function Tenants() {
     if (!deleting) return
     try {
       await api.tenants.remove(deleting.id)
-      setTenants((prev) => prev?.filter((item) => item.id !== deleting.id) ?? null)
+      setTenants(
+        (prev) => prev?.filter((item) => item.id !== deleting.id) ?? null
+      )
       toast.success(t("tenants.removed"))
     } catch (err) {
       toast.error((err as Error).message)
@@ -242,12 +244,16 @@ export function Tenants() {
                               <CopyIcon />
                               <span>{t("tenants.copyLink")}</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setRotating(tenant)}>
+                            <DropdownMenuItem
+                              onClick={() => setRotating(tenant)}
+                            >
                               <RefreshCwIcon />
                               <span>{t("tenants.rotate")}</span>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => void toggle(tenant)}>
+                            <DropdownMenuItem
+                              onClick={() => void toggle(tenant)}
+                            >
                               <StatusDot
                                 tone={tenant.disabled ? "success" : "muted"}
                               />

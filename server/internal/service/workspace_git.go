@@ -340,3 +340,158 @@ func countFileLines(path string) int {
 	}
 	return n
 }
+
+// git 面板的历史数据面（adr-002 M4 / adr-007）：提交链路与两个 ref 的对比。
+// overview 只管「当前工作区的状态」，这里管「历史与分支之间的关系」。
+
+// maxHistoryLimit 是单次提交列表的上限。链路面板滚动加载，一次几千条既
+// 拖慢 git 也没人看得完。
+const maxHistoryLimit = 200
+
+// GitHistory 是提交链路面板的一页数据。
+type GitHistory struct {
+	Commits []GitCommit `json:"commits"`
+	// HasMore 表示还能继续往下翻（多取一条判断出来的）。
+	HasMore bool `json:"hasMore"`
+}
+
+// GitCompare 是两个 ref 的对比结果：head 相对 base 多出的提交与文件变更。
+type GitCompare struct {
+	Base string `json:"base"`
+	Head string `json:"head"`
+	// Ahead/Behind 是 head 相对 base 的领先与落后提交数。
+	Ahead   int             `json:"ahead"`
+	Behind  int             `json:"behind"`
+	Commits []GitCommit     `json:"commits"`
+	Files   []GitFileChange `json:"files"`
+}
+
+// WorkspaceGitHistory 取提交链路。ref 为空时看当前 HEAD；ref 可以是分支、
+// 标签或 sha，一律先过 refName 校验再交给 git。
+func WorkspaceGitHistory(ctx context.Context, cwd, ref string, limit, offset int) (*GitHistory, error) {
+	if _, err := runGit(ctx, cwd, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return &GitHistory{Commits: []GitCommit{}}, nil
+	}
+	if limit <= 0 || limit > maxHistoryLimit {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	args := []string{"log", "--format=%H%x01%h%x01%s%x01%an%x01%ct",
+		// 多取一条用来判断「还有没有更多」，不用再跑一次 count。
+		fmt.Sprintf("-n%d", limit+1),
+		fmt.Sprintf("--skip=%d", offset),
+	}
+	if ref != "" {
+		if err := checkRefName(ref); err != nil {
+			return nil, err
+		}
+		args = append(args, ref)
+	}
+	args = append(args, "--")
+
+	out, err := runGit(ctx, cwd, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+
+	commits := []GitCommit{}
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if commit, ok := parseCommitLine(line); ok {
+			commits = append(commits, commit)
+		}
+	}
+
+	history := &GitHistory{Commits: commits}
+	if len(commits) > limit {
+		history.Commits = commits[:limit]
+		history.HasMore = true
+	}
+	return history, nil
+}
+
+// WorkspaceGitCompare 对比两个 ref：提交清单取 `base..head`（head 独有的），
+// 文件变更取三点 diff `base...head`（从共同祖先算起）——这正是「这条分支
+// 做了什么」该看的东西，而不是把 base 后来的改动也算进来。
+func WorkspaceGitCompare(ctx context.Context, cwd, base, head string) (*GitCompare, error) {
+	if err := checkRefName(base); err != nil {
+		return nil, err
+	}
+	if err := checkRefName(head); err != nil {
+		return nil, err
+	}
+	if _, err := runGit(ctx, cwd, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return nil, fmt.Errorf("%w: not a git repository", ErrInvalid)
+	}
+
+	compare := &GitCompare{
+		Base:    base,
+		Head:    head,
+		Commits: []GitCommit{},
+		Files:   []GitFileChange{},
+	}
+
+	if counts, err := runGit(ctx, cwd, "rev-list", "--left-right", "--count",
+		base+"..."+head, "--"); err == nil {
+		fields := strings.Fields(strings.TrimSpace(counts))
+		if len(fields) == 2 {
+			compare.Behind = atoiSafe(fields[0])
+			compare.Ahead = atoiSafe(fields[1])
+		}
+	}
+
+	out, err := runGit(ctx, cwd, "log", "--format=%H%x01%h%x01%s%x01%an%x01%ct",
+		"-n", "200", base+".."+head, "--")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if commit, ok := parseCommitLine(line); ok {
+			compare.Commits = append(compare.Commits, commit)
+		}
+	}
+
+	stat, err := runGit(ctx, cwd, "diff", "--numstat", "-z", base+"..."+head, "--")
+	if err != nil {
+		return compare, nil
+	}
+	stats := parseNumstat(stat)
+	for _, path := range stats.order {
+		counts := stats.byPath[path]
+		compare.Files = append(compare.Files, GitFileChange{
+			Path:    path,
+			Status:  "M",
+			Added:   counts[0],
+			Deleted: counts[1],
+		})
+	}
+	return compare, nil
+}
+
+// checkRefName 挡住会被 git 当成选项或路径的 ref。ref 直接进命令行数组
+// （没有 shell），但 `--upload-pack=...` 这类以 `-` 开头的值仍会被 git
+// 自己解释成选项，必须先挡掉。
+func checkRefName(ref string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return fmt.Errorf("%w: ref is required", ErrInvalid)
+	}
+	if strings.HasPrefix(ref, "-") || strings.Contains(ref, "..") ||
+		strings.ContainsAny(ref, " \t\n:?*[\\^~") {
+		return fmt.Errorf("%w: invalid ref %q", ErrInvalid, ref)
+	}
+	return nil
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return n
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
+}

@@ -6,7 +6,9 @@ import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import {
   useWorkspace,
   WorkspaceContext,
+  type GitSelection,
   type GitStoreState,
+  type PreviewTarget,
   type WorkspaceValue,
 } from "@/components/workspace/workspace-context"
 import {
@@ -27,7 +29,7 @@ export function WorkspaceProvider({
   children: React.ReactNode
 }) {
   const apiRef = useRef<DockviewApi | null>(null)
-  const previewRef = useRef<string | null>(null)
+  const previewRef = useRef<PreviewTarget | null>(null)
   const listenersRef = useRef(new Set<() => void>())
   const gitRef = useRef<GitStoreState>({
     data: null,
@@ -37,6 +39,10 @@ export function WorkspaceProvider({
   const gitListenersRef = useRef(new Set<() => void>())
   const refreshListenersRef = useRef(new Set<() => void>())
   const referenceSinkRef = useRef<((path: string) => void) | null>(null)
+  const askSinkRef = useRef<((prompt: string) => void) | null>(null)
+  // git 面板群的唯一选择事实源：refs 空 = 看 HEAD，sha null = 看工作区改动。
+  const selectionRef = useRef<GitSelection>({ refs: [], sha: null })
+  const selectionListenersRef = useRef(new Set<() => void>())
 
   const value = useMemo<WorkspaceValue>(() => {
     const ensureOpen = (id: WorkspacePanelKind) => {
@@ -83,7 +89,12 @@ export function WorkspaceProvider({
         if (dock) applyLayoutPreset(dock, preset)
       },
       openPreview: (path) => {
-        previewRef.current = path
+        previewRef.current = { path, mode: "file" }
+        ensureOpen("preview")
+        listenersRef.current.forEach((l) => l())
+      },
+      openDiff: (path, sha) => {
+        previewRef.current = { path, mode: "diff", sha }
         ensureOpen("preview")
         listenersRef.current.forEach((l) => l())
       },
@@ -92,6 +103,32 @@ export function WorkspaceProvider({
       },
       attachReferenceSink: (sink) => {
         referenceSinkRef.current = sink
+      },
+      askAI: (prompt) => {
+        askSinkRef.current?.(prompt)
+      },
+      attachAskSink: (sink) => {
+        askSinkRef.current = sink
+      },
+      selectRefs: (refs) => {
+        // 最多两个：一个看历史，两个对比。第三次点击顶掉最早的那个。
+        selectionRef.current = {
+          refs: refs.slice(-2),
+          // 换分支时旧提交多半已不在新链路里，回到「工作区改动」这个安全落点。
+          sha: null,
+        }
+        notifySelection()
+      },
+      selectCommit: (sha) => {
+        selectionRef.current = { ...selectionRef.current, sha }
+        notifySelection()
+      },
+      selectionStore: {
+        subscribe: (listener) => {
+          selectionListenersRef.current.add(listener)
+          return () => selectionListenersRef.current.delete(listener)
+        },
+        get: () => selectionRef.current,
       },
       previewStore: {
         subscribe: (listener) => {
@@ -116,6 +153,10 @@ export function WorkspaceProvider({
         refreshListenersRef.current.add(listener)
         return () => refreshListenersRef.current.delete(listener)
       },
+    }
+
+    function notifySelection() {
+      selectionListenersRef.current.forEach((l) => l())
     }
 
     function refreshGit() {
@@ -144,6 +185,20 @@ export function WorkspaceProvider({
       {children}
     </WorkspaceContext.Provider>
   )
+}
+
+/** 页面层把「问 AI」落点注册进命令总线的行为组件，不渲染任何内容。 */
+export function WorkspaceAskSink({
+  onAsk,
+}: {
+  onAsk: (prompt: string) => void
+}) {
+  const ws = useWorkspace()
+  useEffect(() => {
+    ws.attachAskSink(onAsk)
+    return () => ws.attachAskSink(null)
+  }, [ws, onAsk])
+  return null
 }
 
 /** 页面层把「加引用」落点注册进命令总线的行为组件，不渲染任何内容。 */

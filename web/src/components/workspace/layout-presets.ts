@@ -3,12 +3,14 @@ import type { AddPanelOptions, DockviewApi } from "dockview-react"
 import { panelKindOf } from "@/components/workspace/workspace-panels"
 
 /** 内置布局预设（adr-002 §2.4）：同一引擎的四种起点，应用后仍可自由拖调。 */
-export type LayoutPreset = "default" | "ide" | "review" | "terminalBench"
+export type LayoutPreset =
+  "default" | "ide" | "review" | "git" | "terminalBench"
 
 export const LAYOUT_PRESETS: readonly LayoutPreset[] = [
   "default",
   "ide",
   "review",
+  "git",
   "terminalBench",
 ]
 
@@ -78,16 +80,16 @@ export function applyLayoutPreset(api: DockviewApi, preset: LayoutPreset) {
         position: { referencePanel: "files", direction: "right" },
       })
       api.addPanel({
-        id: "diff",
-        component: "diff",
+        id: "changes",
+        component: "changes",
         position: { referencePanel: "chat", direction: "right" },
       })
-      for (const id of ["commits", "preview"] as const) {
+      for (const id of ["preview", "history"] as const) {
         api.addPanel({
           id,
           component: id,
           inactive: true,
-          position: { referencePanel: "diff", direction: "within" },
+          position: { referencePanel: "changes", direction: "within" },
         })
       }
       addTerminal({ direction: "below" })
@@ -99,21 +101,54 @@ export function applyLayoutPreset(api: DockviewApi, preset: LayoutPreset) {
       break
     }
     case "review": {
-      // 对话左 36%，diff 大块细读，commit 伴随在下。
+      // 对话左 36%，变更清单大块细读，文件查看器伴随在下。
       api.addPanel({ id: "chat", component: "chat", minimumWidth: 320 })
       api.addPanel({
-        id: "diff",
-        component: "diff",
+        id: "changes",
+        component: "changes",
         position: { referencePanel: "chat", direction: "right" },
       })
       api.addPanel({
-        id: "commits",
-        component: "commits",
-        position: { referencePanel: "diff", direction: "below" },
+        id: "preview",
+        component: "preview",
+        position: { referencePanel: "changes", direction: "below" },
       })
       afterMeasure(api, () => {
         setWidth(api, "chat", 0.36)
-        setHeight(api, "commits", 0.28)
+        setHeight(api, "preview", 0.55)
+      })
+      break
+    }
+    case "git": {
+      // 组合窗口（用户要的那张图）：对话在上，git 四件套横贯底部——
+      // 左分支 ｜ 中提交链路 ｜ 右上变更 ｜ 右下详情。四个面板独立可关，
+      // 这里只是把它们一次摆好。
+      api.addPanel({ id: "chat", component: "chat", minimumWidth: 320 })
+      api.addPanel({
+        id: "branches",
+        component: "branches",
+        position: { referencePanel: "chat", direction: "below" },
+      })
+      api.addPanel({
+        id: "history",
+        component: "history",
+        position: { referencePanel: "branches", direction: "right" },
+      })
+      api.addPanel({
+        id: "changes",
+        component: "changes",
+        position: { referencePanel: "history", direction: "right" },
+      })
+      api.addPanel({
+        id: "detail",
+        component: "detail",
+        position: { referencePanel: "changes", direction: "below" },
+      })
+      afterMeasure(api, () => {
+        setHeight(api, "branches", 0.42)
+        setWidth(api, "branches", 0.18)
+        setWidth(api, "history", 0.46)
+        setHeight(api, "detail", 0.5)
       })
       break
     }
@@ -125,7 +160,7 @@ export function applyLayoutPreset(api: DockviewApi, preset: LayoutPreset) {
         component: "files",
         position: { referencePanel: "chat", direction: "right" },
       })
-      for (const id of ["preview", "diff", "commits"] as const) {
+      for (const id of ["preview", "changes", "history"] as const) {
         api.addPanel({
           id,
           component: id,

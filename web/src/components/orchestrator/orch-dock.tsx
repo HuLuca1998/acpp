@@ -16,8 +16,10 @@ import { OrchMainPanel } from "@/components/orchestrator/main-panel"
 import { OrchTaskPanel } from "@/components/orchestrator/task-panel"
 import { OrchTasksPanel } from "@/components/orchestrator/tasks-panel"
 import { useOrchCtx } from "@/components/orchestrator/orch-context"
-import { CommitsPanel } from "@/components/workspace/panels/commits-panel"
-import { DiffPanel } from "@/components/workspace/panels/diff-panel"
+import { BranchesPanel } from "@/components/workspace/panels/branches-panel"
+import { ChangesPanel } from "@/components/workspace/panels/changes-panel"
+import { CommitDetailPanel } from "@/components/workspace/panels/commit-detail-panel"
+import { HistoryPanel } from "@/components/workspace/panels/history-panel"
 import { FilePreviewPanel } from "@/components/workspace/panels/file-preview-panel"
 import { FileTreePanel } from "@/components/workspace/panels/file-tree-panel"
 import { LogsPanel } from "@/components/workspace/panels/logs-panel"
@@ -53,8 +55,10 @@ const COMPONENTS: Record<
   task: OrchTaskPanel,
   files: FileTreePanel,
   preview: FilePreviewPanel,
-  diff: DiffPanel,
-  commits: CommitsPanel,
+  branches: BranchesPanel,
+  history: HistoryPanel,
+  changes: ChangesPanel,
+  detail: CommitDetailPanel,
   logs: LogsPanel,
   terminal: TerminalPanel,
 }
@@ -155,7 +159,7 @@ function buildDefaultLayout(api: DockviewApi) {
 
 /**
  * 编排页 docking 容器：主控对话 + 常驻任务列表 + 完整工作区面板
- * （文件树/预览/diff/commits/日志/终端，经 ⋯ 菜单开）。任务子会话面板
+ * （文件树/查看器/分支/提交链路/变更/详情/日志/终端，经 ⋯ 菜单开）。任务子会话面板
  * 由列表点开（不自动弹出），可拖动布局、可关闭（任务照跑）。
  */
 export const OrchDock = memo(function OrchDock() {

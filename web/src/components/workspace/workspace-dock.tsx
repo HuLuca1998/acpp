@@ -15,8 +15,10 @@ import { XIcon } from "lucide-react"
 
 import { ChatPanel } from "@/components/workspace/panels/chat-panel"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
-import { CommitsPanel } from "@/components/workspace/panels/commits-panel"
-import { DiffPanel } from "@/components/workspace/panels/diff-panel"
+import { BranchesPanel } from "@/components/workspace/panels/branches-panel"
+import { ChangesPanel } from "@/components/workspace/panels/changes-panel"
+import { CommitDetailPanel } from "@/components/workspace/panels/commit-detail-panel"
+import { HistoryPanel } from "@/components/workspace/panels/history-panel"
 import { FilePreviewPanel } from "@/components/workspace/panels/file-preview-panel"
 import { FileTreePanel } from "@/components/workspace/panels/file-tree-panel"
 import { LogsPanel } from "@/components/workspace/panels/logs-panel"
@@ -52,8 +54,10 @@ const COMPONENTS: Record<
   chat: ChatPanel,
   files: FileTreePanel,
   preview: FilePreviewPanel,
-  diff: DiffPanel,
-  commits: CommitsPanel,
+  branches: BranchesPanel,
+  history: HistoryPanel,
+  changes: ChangesPanel,
+  detail: CommitDetailPanel,
   logs: LogsPanel,
   terminal: TerminalPanel,
 }
@@ -80,11 +84,11 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
     >
       <span className="relative shrink-0">
         <Icon className="size-3.5" />
-        {kind === "commits" ? <CommitsTabDot /> : null}
+        {kind === "history" ? <CommitsTabDot /> : null}
       </span>
       <span className="acpp-tab-label flex items-center gap-1 truncate">
         {label}
-        {kind === "commits" ? <CommitsTabCount /> : null}
+        {kind === "history" ? <CommitsTabCount /> : null}
       </span>
       {kind !== "chat" ? (
         <button

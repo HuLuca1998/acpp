@@ -3,28 +3,28 @@ import { GitBranchIcon, RotateCwIcon } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
-import type { GitOverview } from "@/types/acp"
-
-/** diff / commit 面板共用的头部：分支、领先/落后、刷新。 */
+/** git 面板群共用的头部：主标题（多为当前分支）、右侧提示、刷新。 */
 export function GitPanelHeader({
-  overview,
+  title,
+  hint,
   loading,
   onRefresh,
 }: {
-  overview: GitOverview
-  loading: boolean
+  title: string
+  /** 右侧的次要说明（对比中的两个 ref、选择提示等）。 */
+  hint?: string
+  loading?: boolean
   onRefresh: () => void
 }) {
   const { t } = useTranslation()
   return (
     <div className="flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-xs text-muted-foreground">
       <GitBranchIcon className="size-3.5 shrink-0" />
-      <span className="truncate font-mono">{overview.branch}</span>
-      {overview.ahead > 0 ? (
-        <span className="shrink-0 tabular-nums">↑{overview.ahead}</span>
-      ) : null}
-      {overview.behind > 0 ? (
-        <span className="shrink-0 tabular-nums">↓{overview.behind}</span>
+      <span className="truncate font-mono">{title}</span>
+      {hint ? (
+        <span className="min-w-0 flex-1 truncate text-right text-[11px] text-muted-foreground/70">
+          {hint}
+        </span>
       ) : null}
       <span className="flex-1" />
       {loading ? <Spinner className="size-3" /> : null}

@@ -12,6 +12,7 @@ import { OrchDock } from "@/components/orchestrator/orch-dock"
 import {
   WorkspaceAutoRefresh,
   WorkspaceProvider,
+  WorkspaceAskSink,
   WorkspaceReferenceSink,
 } from "@/components/workspace/workspace-provider"
 import { useWorkspace } from "@/components/workspace/workspace-context"
@@ -178,6 +179,15 @@ export function OrchestratorChat() {
       </OrchContextBridge>
       {/* turn 结束刷新 git/文件树——子代理刚改完文件的时刻。 */}
       <WorkspaceAutoRefresh busy={chat.busy || hasRunningTask(chat)} />
+      {/* git 面板右键的「让 AI 分析」：把写好的 prompt 填进输入框——
+          只填不发，发不发是用户的决定。 */}
+      <WorkspaceAskSink
+        onAsk={(prompt) =>
+          setDraft((prev) =>
+            prev.trim() ? `${prev.trimEnd()}\n\n${prompt}` : prompt
+          )
+        }
+      />
       {/* 工作区右键/预览的「添加到引用」落到 composer 的 @ 引用列表。 */}
       <WorkspaceReferenceSink
         onAdd={(path) =>

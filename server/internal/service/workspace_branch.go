@@ -45,6 +45,7 @@ type GitBranchView struct {
 	Dirty     bool          `json:"dirty"`
 	Local     []GitBranch   `json:"local"`
 	Remote    []string      `json:"remote"`
+	Tags      []string      `json:"tags"`
 	Worktrees []GitWorktree `json:"worktrees"`
 }
 
@@ -63,6 +64,7 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		IsRepo:    true,
 		Local:     []GitBranch{},
 		Remote:    []string{},
+		Tags:      []string{},
 		Worktrees: []GitWorktree{},
 	}
 
@@ -114,6 +116,18 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 				continue
 			}
 			view.Remote = append(view.Remote, name)
+		}
+	}
+	// 标签按创建时间倒序取前 50：老标签谁也不会在面板里翻到底。
+	if out, err := runGit(ctx, cwd, "tag", "--list", "--sort=-creatordate"); err == nil {
+		for _, name := range strings.Split(strings.TrimSpace(out), "\n") {
+			if name = strings.TrimSpace(name); name == "" {
+				continue
+			}
+			view.Tags = append(view.Tags, name)
+			if len(view.Tags) >= 50 {
+				break
+			}
 		}
 	}
 	return view, nil

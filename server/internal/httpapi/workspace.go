@@ -96,6 +96,53 @@ func (h workspaceHandler) gitDiff(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, view)
 }
 
+// history 是提交链路面板的一页（?ref= 按分支/标签过滤，?limit=&offset= 翻页）。
+func (h workspaceHandler) history(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	cwd, err := h.cwdOf(r, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	history, err := service.WorkspaceGitHistory(
+		r.Context(),
+		cwd,
+		r.URL.Query().Get("ref"),
+		queryInt(r, "limit", 50),
+		queryInt(r, "offset", 0),
+	)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, history)
+}
+
+// compare 对比两个 ref：head 相对 base 多出的提交与文件变更。
+func (h workspaceHandler) compare(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	cwd, err := h.cwdOf(r, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	compare, err := service.WorkspaceGitCompare(
+		r.Context(), cwd, r.URL.Query().Get("base"), r.URL.Query().Get("head"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, compare)
+}
+
 // branches 是会话底部分支控件的数据：当前分支、本地/远端分支、worktree 清单。
 func (h workspaceHandler) branches(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

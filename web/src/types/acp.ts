@@ -660,5 +660,22 @@ export interface GitBranchView {
   dirty: boolean
   local: GitBranch[]
   remote: string[]
+  tags: string[]
   worktrees: GitWorktree[]
+}
+
+/** 提交链路的一页。 */
+export interface GitHistory {
+  commits: GitCommit[]
+  hasMore: boolean
+}
+
+/** 两个 ref 的对比：head 相对 base 多出的提交与文件变更（三点 diff）。 */
+export interface GitCompare {
+  base: string
+  head: string
+  ahead: number
+  behind: number
+  commits: GitCommit[]
+  files: GitFileChange[]
 }

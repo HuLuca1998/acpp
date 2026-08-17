@@ -177,6 +177,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 分支面：会话底部的分支控件读 branches，切换走 checkout；
 	// worktree 是「勾一下就有个隔离工作区」的落地（adr-007）。
 	api.HandleFunc("GET /api/sessions/{id}/git/branches", workspace.branches)
+	api.HandleFunc("GET /api/sessions/{id}/git/history", workspace.history)
+	api.HandleFunc("GET /api/sessions/{id}/git/compare", workspace.compare)
 	api.HandleFunc("POST /api/sessions/{id}/git/checkout", workspace.checkout)
 	api.HandleFunc("POST /api/sessions/{id}/git/worktrees", workspace.createWorktree)
 	api.HandleFunc("DELETE /api/sessions/{id}/git/worktrees", workspace.removeWorktree)
@@ -232,6 +234,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/diff", orchWorkspace.gitDiff)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/commits/{sha}", orchWorkspace.gitCommit)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/branches", orchWorkspace.branches)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/history", orchWorkspace.history)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/compare", orchWorkspace.compare)
 	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/checkout", orchWorkspace.checkout)
 	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.createWorktree)
 	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.removeWorktree)

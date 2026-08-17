@@ -8,6 +8,8 @@ import type {
   EnvInstallResult,
   GitBranchView,
   GitCommitDetail,
+  GitCompare,
+  GitHistory,
   GitDiffView,
   GitOverview,
   Identity,
@@ -143,6 +145,23 @@ export function workspaceScopeApi(prefix: string) {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    /** 提交链路的一页（ref 为空看 HEAD；offset 翻页，hasMore 指示还有没有）。 */
+    gitHistory: (
+      id: number,
+      params?: { ref?: string; limit?: number; offset?: number }
+    ) => {
+      const qs = new URLSearchParams()
+      if (params?.ref) qs.set("ref", params.ref)
+      if (params?.limit) qs.set("limit", String(params.limit))
+      if (params?.offset) qs.set("offset", String(params.offset))
+      const s = qs.toString()
+      return request<GitHistory>(`${prefix}/${id}/git/history${s ? `?${s}` : ""}`)
+    },
+    /** 对比两个 ref：head 相对 base 多出的提交与文件变更。 */
+    gitCompare: (id: number, base: string, head: string) =>
+      request<GitCompare>(
+        `${prefix}/${id}/git/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`
+      ),
     /** 开隔离工作区：`<仓库>/worktrees/<名字>`，返回它的绝对路径。 */
     worktreeCreate: (id: number, input: { name: string; branch?: string }) =>
       request<{ path: string }>(`${prefix}/${id}/git/worktrees`, {

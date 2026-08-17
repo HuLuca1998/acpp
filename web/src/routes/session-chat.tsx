@@ -15,6 +15,7 @@ import { WorkspaceDock } from "@/components/workspace/workspace-dock"
 import {
   WorkspaceAutoRefresh,
   WorkspaceProvider,
+  WorkspaceAskSink,
   WorkspaceReferenceSink,
 } from "@/components/workspace/workspace-provider"
 import { Button } from "@/components/ui/button"
@@ -182,6 +183,15 @@ export function SessionChat() {
       </ChatPanelContext.Provider>
       {/* turn 结束刷新 git/文件树——agent 改完文件的时刻。 */}
       <WorkspaceAutoRefresh busy={chat.busy} />
+      {/* git 面板右键的「让 AI 分析」：把写好的 prompt 填进输入框——
+          只填不发，发不发是用户的决定。 */}
+      <WorkspaceAskSink
+        onAsk={(prompt) =>
+          setDraft((prev) =>
+            prev.trim() ? `${prev.trimEnd()}\n\n${prompt}` : prompt
+          )
+        }
+      />
       {/* 工作区右键/预览的「添加到引用」落到 composer 的 @ 引用列表。 */}
       <WorkspaceReferenceSink
         onAdd={(path) =>

@@ -2,9 +2,10 @@ import { memo, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AtSignIcon, FileTextIcon } from "lucide-react"
 
-import type { WorkspaceFile } from "@/types/acp"
+import type { GitDiffView, WorkspaceFile } from "@/types/acp"
+import { DiffView } from "@/components/diff-view"
 import {
-  usePreviewPath,
+  usePreviewTarget,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
 import {
@@ -19,27 +20,53 @@ import { Spinner } from "@/components/ui/spinner"
 /** 预览渲染的行数上限：更大的文件截断展示，虚拟滚动是 M4 的事。 */
 const MAX_RENDER_LINES = 5000
 
+/** diff 渲染的行数上限（同样是虚拟滚动前的兜底）。 */
+const DIFF_MAX_LINES = 2000
+
 /**
- * 文件预览面板：只读、等宽、行号。行级 content-visibility 让首屏
- * 只付出可视区域的渲染成本，大文件滚动时按需绘制。
+ * 文件查看器面板：只读、等宽、行号，两种形态——
+ * **file** 看文件当前内容，**diff** 看它改了什么（工作区改动或某条提交）。
+ *
+ * 合成一个面板是刻意的：这两件事是同一个阅读动作的两面，各占一个 tab
+ * 只会让人在「现在什么样」和「改了什么」之间来回找。形态由命令总线的
+ * 预览目标决定（文件树点文件 → file，变更面板点文件 → diff）。
  */
 export const FilePreviewPanel = memo(function FilePreviewPanel() {
   const { t } = useTranslation()
   const ws = useWorkspace()
-  const path = usePreviewPath()
+  const target = usePreviewTarget()
+  const path = target?.path ?? null
   const [file, setFile] = useState<WorkspaceFile | null>(null)
+  const [diff, setDiff] = useState<GitDiffView | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!path || !ws.sessionId) return
+    if (!target || !ws.sessionId) return
     let stale = false
     setLoading(true)
     setError(null)
-    ws.scope
-      .workspaceFile(ws.sessionId, path)
-      .then((view) => {
-        if (!stale) setFile(view)
+    setFile(null)
+    setDiff(null)
+
+    const request =
+      target.mode === "diff"
+        ? target.sha
+          ? ws.scope
+              .gitCommitFile(ws.sessionId, target.sha, target.path)
+              .then((view) => ({ diff: view }))
+          : ws.scope
+              .gitDiff(ws.sessionId, target.path)
+              .then((view) => ({ diff: view }))
+        : ws.scope
+            .workspaceFile(ws.sessionId, target.path)
+            .then((view) => ({ file: view }))
+
+    request
+      .then((result) => {
+        if (stale) return
+        if ("diff" in result) setDiff(result.diff)
+        else setFile(result.file)
       })
       .catch((err) => {
         if (!stale) setError(err instanceof Error ? err.message : String(err))
@@ -50,7 +77,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     return () => {
       stale = true
     }
-  }, [path, ws.sessionId, ws.scope])
+  }, [target, ws.sessionId, ws.scope])
 
   const { lines, clipped } = useMemo(() => {
     if (!file || file.binary) return { lines: [], clipped: false }
@@ -89,6 +116,13 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         >
           {path}
         </span>
+        {target?.mode === "diff" ? (
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+            {target.sha
+              ? target.sha.slice(0, 7)
+              : t("workspace.git.workingTree")}
+          </span>
+        ) : null}
         <button
           type="button"
           aria-label={t("workspace.refMenu.addReference")}
@@ -102,6 +136,20 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
       <div className="min-h-0 flex-1 overflow-auto">
         {error ? (
           <div className="p-3 text-xs text-destructive">{error}</div>
+        ) : diff ? (
+          diff.binary ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              {t("workspace.git.binary")}
+            </div>
+          ) : (
+            <div className="p-2">
+              <DiffView
+                oldText={diff.oldText}
+                newText={diff.newText}
+                maxLines={DIFF_MAX_LINES}
+              />
+            </div>
+          )
         ) : file?.binary ? (
           <div className="p-3 text-xs text-muted-foreground">
             {t("workspace.preview.binary")}
