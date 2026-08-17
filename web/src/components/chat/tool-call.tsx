@@ -37,8 +37,10 @@ const KIND_ICONS: Record<string, LucideIcon> = {
 }
 
 /**
- * tool_call 消息 payload 的已知形状。rawOutput 随 runtime 变：
- * codex 是对象 {formatted_output, exit_code}，claude 是纯字符串。
+ * tool_call 消息 payload 的已知形状。rawOutput 有三种：codex 的内建工具
+ * 是对象 {formatted_output, exit_code}，claude 的内建工具是纯字符串，
+ * **MCP 工具**（含我们自己的 acpp-db）则是 MCP 的 content 数组
+ * `[{type:"text", text}]`——三种都要认，漏一种那类工具就只剩黑箱。
  */
 export interface ToolCallPayload {
   toolCallId?: string
@@ -47,6 +49,7 @@ export interface ToolCallPayload {
   rawInput?: { command?: string; cwd?: string } & Record<string, unknown>
   rawOutput?:
     | string
+    | { type?: string; text?: string }[]
     | ({
         formatted_output?: string
         exit_code?: number
@@ -59,13 +62,22 @@ export interface ToolCallPayload {
   }[]
 }
 
-/** 归一化两种 rawOutput 形状，取正文与退出码。 */
+/** 归一化三种 rawOutput 形状，取正文与退出码。 */
 function outputOf(payload: ToolCallPayload): {
   output?: string
   exitCode?: number
 } {
   const raw = payload.rawOutput
   if (typeof raw === "string") return { output: raw }
+  if (Array.isArray(raw)) {
+    // MCP 的 content 数组：拼接全部文本块（我们的工具只产一块，
+    // 但别的 MCP server 可能分多块返回）。
+    const text = raw
+      .filter((part) => typeof part?.text === "string")
+      .map((part) => part.text)
+      .join("\n")
+    return { output: text || undefined }
+  }
   return { output: raw?.formatted_output, exitCode: raw?.exit_code }
 }
 
