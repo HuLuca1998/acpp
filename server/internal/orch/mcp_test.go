@@ -85,7 +85,8 @@ func TestService_HandleMCP_Protocol(t *testing.T) {
 	if err := json.Unmarshal(raw, &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(list.Result.Tools) != 1 || list.Result.Tools[0].Name != "hire_role" {
+	if len(list.Result.Tools) != 2 || list.Result.Tools[0].Name != "hire_role" ||
+		list.Result.Tools[1].Name != "wait_task" {
 		t.Fatalf("tools = %s", raw)
 	}
 
