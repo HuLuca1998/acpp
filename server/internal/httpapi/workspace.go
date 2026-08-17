@@ -96,6 +96,102 @@ func (h workspaceHandler) gitDiff(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, view)
 }
 
+// branches 是会话底部分支控件的数据：当前分支、本地/远端分支、worktree 清单。
+func (h workspaceHandler) branches(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	cwd, err := h.cwdOf(r, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	view, err := service.WorkspaceGitBranches(r.Context(), cwd)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, view)
+}
+
+// checkout 切换分支（可新建），返回切换后的分支视图。
+func (h workspaceHandler) checkout(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	cwd, err := h.cwdOf(r, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var in service.CheckoutInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	view, err := service.WorkspaceGitCheckout(r.Context(), cwd, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, view)
+}
+
+// createWorktree 在会话仓库下开一个隔离工作区，返回它的路径——
+// 从这里开新会话就是「在 worktree 里干活」。
+func (h workspaceHandler) createWorktree(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	cwd, err := h.cwdOf(r, id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var in service.WorktreeInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	path, err := service.CreateWorktree(r.Context(), scopeOf(r), cwd, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusCreated, map[string]string{"path": path})
+}
+
+// removeWorktree 拆掉一个 worktree（分支保留）。
+func (h workspaceHandler) removeWorktree(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if _, err := h.cwdOf(r, id); err != nil {
+		writeError(w, err)
+		return
+	}
+	var in struct {
+		Path string `json:"path"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := service.RemoveWorktree(r.Context(), scopeOf(r), in.Path); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, nil)
+}
+
 // gitCommit 带 ?path= 时返回该文件在这条提交前后的全文，否则返回提交详情。
 func (h workspaceHandler) gitCommit(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

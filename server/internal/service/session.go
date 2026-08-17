@@ -47,6 +47,12 @@ type SessionInput struct {
 	AgentID uint   `json:"agentId"`
 	Title   string `json:"title"`
 	Cwd     string `json:"cwd"`
+	// Worktree 非空时先在 Cwd 所在仓库下开 `worktrees/<Worktree>`，会话的
+	// 工作目录随之指向那里——「在隔离工作区里干活」是勾一下就该成立的事，
+	// 不该让人先去终端里手敲 git worktree add（adr-007）。
+	Worktree string `json:"worktree,omitempty"`
+	// WorktreeBranch 为空时用 Worktree 当分支名。
+	WorktreeBranch string `json:"worktreeBranch,omitempty"`
 }
 
 // List 按更新时间倒序分页。pageSize 有默认与上限——全量拉取会随
@@ -133,6 +139,17 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 	cwd, err = scope.GuardNewPath(cwd)
 	if err != nil {
 		return nil, err
+	}
+
+	if in.Worktree != "" {
+		worktree, err := CreateWorktree(ctx, scope, cwd, WorktreeInput{
+			Name:   in.Worktree,
+			Branch: in.WorktreeBranch,
+		})
+		if err != nil {
+			return nil, err
+		}
+		cwd = worktree
 	}
 
 	session := model.Session{

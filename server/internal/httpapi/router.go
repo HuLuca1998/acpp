@@ -174,6 +174,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/git/overview", workspace.gitOverview)
 	api.HandleFunc("GET /api/sessions/{id}/git/diff", workspace.gitDiff)
 	api.HandleFunc("GET /api/sessions/{id}/git/commits/{sha}", workspace.gitCommit)
+	// 分支面：会话底部的分支控件读 branches，切换走 checkout；
+	// worktree 是「勾一下就有个隔离工作区」的落地（adr-007）。
+	api.HandleFunc("GET /api/sessions/{id}/git/branches", workspace.branches)
+	api.HandleFunc("POST /api/sessions/{id}/git/checkout", workspace.checkout)
+	api.HandleFunc("POST /api/sessions/{id}/git/worktrees", workspace.createWorktree)
+	api.HandleFunc("DELETE /api/sessions/{id}/git/worktrees", workspace.removeWorktree)
 
 	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
 	terminals := terminalHandler{
@@ -225,6 +231,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/overview", orchWorkspace.gitOverview)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/diff", orchWorkspace.gitDiff)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/commits/{sha}", orchWorkspace.gitCommit)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/branches", orchWorkspace.branches)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/checkout", orchWorkspace.checkout)
 	orchTerminals := terminalHandler{
 		cwdOf:          orchCwd,
 		terms:          svcs.Terminals,
