@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -35,7 +34,7 @@ type Services struct {
 func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	agents := agentHandler{agents: svcs.Agents, chat: svcs.Chat}
 	sessions := sessionHandler{sessions: svcs.Sessions, chat: svcs.Chat}
-	chat := chatHandler{chat: svcs.Chat}
+	chat := chatHandler{chat: svcs.Chat, sessions: svcs.Sessions}
 	system := systemHandler{system: svcs.System, update: svcs.Update}
 	skills := skillHandler{skills: svcs.Skills, usage: svcs.SkillUsage}
 
@@ -67,7 +66,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。
 	// ?files=1 时连同文件一起列（@ 文件引用用）。
 	api.HandleFunc("GET /api/fs/dirs", func(w http.ResponseWriter, r *http.Request) {
-		listing, err := service.ListDirs(r.URL.Query().Get("path"), r.URL.Query().Get("files") == "1")
+		listing, err := service.ListDirs(scopeOf(r), r.URL.Query().Get("path"), r.URL.Query().Get("files") == "1")
 		if err != nil {
 			writeError(w, err)
 			return
@@ -85,7 +84,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 			writeError(w, err)
 			return
 		}
-		entry, err := service.CreateDir(req.Path, req.Name)
+		entry, err := service.CreateDir(scopeOf(r), req.Path, req.Name)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -130,15 +129,18 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("PUT /api/agents/{id}/catalog", agents.catalog)
 
 	// 工作区数据面按 cwd 工作，普通会话与编排会话只差记录来源。
-	sessionCwd := func(ctx context.Context, id uint) (string, error) {
-		session, err := svcs.Sessions.Get(ctx, id)
+	// 解析 cwd 的同时做归属校验：工作区的全部数据面（文件树、预览、git、
+	// 终端）都经这一步，隔离因此只有一个执行点（adr-007）。
+	sessionCwd := func(r *http.Request, id uint) (string, error) {
+		session, err := svcs.Sessions.Get(r.Context(), scopeOf(r), id)
 		if err != nil {
 			return "", err
 		}
 		return session.Cwd, nil
 	}
-	orchCwd := func(ctx context.Context, id uint) (string, error) {
-		orchSession, err := svcs.Orch.Get(ctx, id)
+	// 编排整体是 owner 专属（isOwnerOnly 已按前缀拦截），到这里不必再分身份。
+	orchCwd := func(r *http.Request, id uint) (string, error) {
+		orchSession, err := svcs.Orch.Get(r.Context(), id)
 		if err != nil {
 			return "", err
 		}

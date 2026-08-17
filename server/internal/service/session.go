@@ -51,7 +51,7 @@ type SessionInput struct {
 
 // List 按更新时间倒序分页。pageSize 有默认与上限——全量拉取会随
 // 会话数线性变慢，侧栏这类场景只需要前几条。
-func (s *SessionService) List(ctx context.Context, agentID uint, page, pageSize int) ([]SessionView, int64, error) {
+func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, page, pageSize int) ([]SessionView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -62,7 +62,7 @@ func (s *SessionService) List(ctx context.Context, agentID uint, page, pageSize 
 		pageSize = 200
 	}
 
-	q := s.db.WithContext(ctx).Model(&model.Session{})
+	q := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{}))
 	if agentID != 0 {
 		q = q.Where("agent_id = ?", agentID)
 	}
@@ -89,9 +89,13 @@ func (s *SessionService) List(ctx context.Context, agentID uint, page, pageSize 
 	return views, total, nil
 }
 
-func (s *SessionService) Get(ctx context.Context, id uint) (*SessionView, error) {
+// Get 按 scope 取会话：不属于当前身份的会话一律当作**不存在**（404 而不是
+// 403）——403 会把「这条会话确实存在」这个事实泄露出去，凭 id 逐个试就能
+// 数出别人有多少会话。
+func (s *SessionService) Get(ctx context.Context, scope Scope, id uint) (*SessionView, error) {
 	var session model.Session
-	err := s.db.WithContext(ctx).Preload("Agent").First(&session, id).Error
+	err := scope.FilterSessions(s.db.WithContext(ctx)).
+		Preload("Agent").First(&session, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("session %d: %w", id, ErrNotFound)
 	}
@@ -101,7 +105,7 @@ func (s *SessionService) Get(ctx context.Context, id uint) (*SessionView, error)
 	return s.toView(&session), nil
 }
 
-func (s *SessionService) Create(ctx context.Context, in SessionInput) (*SessionView, error) {
+func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInput) (*SessionView, error) {
 	if in.AgentID == 0 {
 		return nil, fmt.Errorf("%w: agentId is required", ErrInvalid)
 	}
@@ -120,14 +124,23 @@ func (s *SessionService) Create(ctx context.Context, in SessionInput) (*SessionV
 		cwd = agent.Cwd
 	}
 	if cwd == "" {
-		cwd = DefaultCwd()
+		// 租户的默认工作目录是自己的 root，不是全局工作区——否则一条不带
+		// cwd 的建会话请求就能把 agent 开在别人（或 owner）的目录里。
+		cwd = Home(scope)
+	}
+	// 会话 cwd 是 agent 的活动范围，必须先过路径闸。目录不存在时由
+	// ACP 侧的 session/new 负责创建（README §安全姿态），这里只管边界。
+	cwd, err = scope.GuardNewPath(cwd)
+	if err != nil {
+		return nil, err
 	}
 
 	session := model.Session{
-		AgentID: agent.ID,
-		Title:   in.Title,
-		Cwd:     cwd,
-		State:   model.SessionActive,
+		AgentID:  agent.ID,
+		TenantID: scope.TenantID,
+		Title:    in.Title,
+		Cwd:      cwd,
+		State:    model.SessionActive,
 	}
 	if err := s.db.WithContext(ctx).Create(&session).Error; err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
@@ -137,8 +150,8 @@ func (s *SessionService) Create(ctx context.Context, in SessionInput) (*SessionV
 	return s.toView(&session), nil
 }
 
-func (s *SessionService) Delete(ctx context.Context, id uint) error {
-	res := s.db.WithContext(ctx).Delete(&model.Session{}, id)
+func (s *SessionService) Delete(ctx context.Context, scope Scope, id uint) error {
+	res := scope.FilterSessions(s.db.WithContext(ctx)).Delete(&model.Session{}, id)
 	if res.Error != nil {
 		return fmt.Errorf("delete session %d: %w", id, res.Error)
 	}

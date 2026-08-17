@@ -25,7 +25,7 @@ func (h sessionHandler) list(w http.ResponseWriter, r *http.Request) {
 	pageNum := queryInt(r, "page", 1)
 	pageSize := queryInt(r, "pageSize", 50)
 
-	sessions, total, err := h.sessions.List(r.Context(), agentID, pageNum, pageSize)
+	sessions, total, err := h.sessions.List(r.Context(), scopeOf(r), agentID, pageNum, pageSize)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -49,6 +49,12 @@ func (h sessionHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 归属先行：不属于当前身份的会话当作不存在（adr-007）。
+	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+		writeError(w, err)
+		return
+	}
+
 	// Peek 不拉进程：查看记录是零成本读操作。
 	session, err := h.chat.Peek(r.Context(), id)
 	if err != nil {
@@ -65,7 +71,7 @@ func (h sessionHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := h.sessions.Create(r.Context(), in)
+	session, err := h.sessions.Create(r.Context(), scopeOf(r), in)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -80,12 +86,17 @@ func (h sessionHandler) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+		writeError(w, err)
+		return
+	}
+
 	// 先收子进程再删记录，否则 agent 会变成没人认领的孤儿进程。
 	if err := h.chat.Destroy(r.Context(), id); err != nil {
 		writeError(w, err)
 		return
 	}
-	if err := h.sessions.Delete(r.Context(), id); err != nil {
+	if err := h.sessions.Delete(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -101,7 +112,7 @@ func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), id); err != nil {
+	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -129,7 +140,7 @@ func (h sessionHandler) transcript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), id); err != nil {
+	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}

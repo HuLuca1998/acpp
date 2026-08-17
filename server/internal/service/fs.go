@@ -36,9 +36,14 @@ type DirListing struct {
 // CreateDir 在 parent 下新建一个子目录，供工作目录选择器就地开新目录。
 // name 只允许单层目录名：路径分隔符与 "."/".." 一律拒绝（防目录逃逸）；
 // 隐藏名也拒绝——列目录不展示隐藏项，建出来看不见只会造成困惑。
-func CreateDir(parent, name string) (*DirEntry, error) {
+// parent 先过 scope 的路径闸，租户建不到自己 root 外面去（adr-007）。
+func CreateDir(scope Scope, parent, name string) (*DirEntry, error) {
 	if !filepath.IsAbs(parent) {
 		return nil, fmt.Errorf("%w: parent must be absolute", ErrInvalid)
+	}
+	parent, err := scope.GuardPath(parent)
+	if err != nil {
+		return nil, err
 	}
 	name = strings.TrimSpace(name)
 	if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
@@ -47,7 +52,7 @@ func CreateDir(parent, name string) (*DirEntry, error) {
 	if strings.HasPrefix(name, ".") {
 		return nil, fmt.Errorf("%w: hidden directory not allowed", ErrInvalid)
 	}
-	path := filepath.Join(filepath.Clean(parent), name)
+	path := filepath.Join(parent, name)
 	if err := os.Mkdir(path, 0o755); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
 	}
@@ -56,19 +61,16 @@ func CreateDir(parent, name string) (*DirEntry, error) {
 
 // ListDirs 列出指定目录的子目录（withFiles 时连同文件），供前端的
 // 目录/文件选择器导航。浏览器拿不到本地路径（File System Access API
-// 只给 handle），选择只能由后端代劳。path 为空从家目录开始；隐藏项不列。
-func ListDirs(path string, withFiles bool) (*DirListing, error) {
-	if path == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("resolve home: %w", err)
-		}
-		path = home
+// 只给 handle），选择只能由后端代劳。隐藏项不列。
+//
+// path 为空时从 scope 的起点开始：owner 是家目录，租户是自己的 root。
+// 租户站在 root 上时不给 Parent——「上一层」按钮不该把人带出自己的地盘
+//（后端即使被绕过也会在 GuardPath 拒掉，这里是让界面别显示假入口）。
+func ListDirs(scope Scope, path string, withFiles bool) (*DirListing, error) {
+	path, err := scope.GuardPath(path)
+	if err != nil {
+		return nil, err
 	}
-	if !filepath.IsAbs(path) {
-		return nil, fmt.Errorf("%w: path must be absolute", ErrInvalid)
-	}
-	path = filepath.Clean(path)
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -77,7 +79,9 @@ func ListDirs(path string, withFiles bool) (*DirListing, error) {
 
 	listing := &DirListing{Path: path, Dirs: []DirEntry{}}
 	if parent := filepath.Dir(path); parent != path {
-		listing.Parent = parent
+		if _, err := scope.GuardPath(parent); err == nil {
+			listing.Parent = parent
+		}
 	}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), ".") {

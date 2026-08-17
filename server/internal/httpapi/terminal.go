@@ -39,7 +39,7 @@ func (h terminalHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	cwd, err := h.cwdOf(r.Context(), id)
+	cwd, err := h.cwdOf(r, id)
 	if err != nil {
 		writeError(w, err)
 		return

@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"acpp/server/internal/service"
@@ -9,7 +8,11 @@ import (
 
 // cwdResolver 按会话 id 解析工作目录——普通会话与编排会话的唯一差异
 // 就是记录存在哪张表里，工作区数据面本身只关心 cwd。
-type cwdResolver func(ctx context.Context, id uint) (string, error)
+//
+// 取整个请求而不只是 context：解析时要顺带做归属校验（会话不属于当前
+// 身份就当作不存在），而身份是从请求里读出来的。工作区的全部数据面因此
+// 共用同一道闸，不用每个 handler 自己记得校验（adr-007）。
+type cwdResolver func(r *http.Request, id uint) (string, error)
 
 // workspaceHandler 提供工作区面板的数据面：文件树与文件预览。
 // 一切路径以会话 cwd 为边界，canonical guard 在 service 层。
@@ -23,7 +26,7 @@ func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	cwd, err := h.cwdOf(r.Context(), id)
+	cwd, err := h.cwdOf(r, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -42,7 +45,7 @@ func (h workspaceHandler) file(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	cwd, err := h.cwdOf(r.Context(), id)
+	cwd, err := h.cwdOf(r, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -61,7 +64,7 @@ func (h workspaceHandler) gitOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	cwd, err := h.cwdOf(r.Context(), id)
+	cwd, err := h.cwdOf(r, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -80,7 +83,7 @@ func (h workspaceHandler) gitDiff(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	cwd, err := h.cwdOf(r.Context(), id)
+	cwd, err := h.cwdOf(r, id)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -100,7 +103,7 @@ func (h workspaceHandler) gitCommit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	cwd, err := h.cwdOf(r.Context(), id)
+	cwd, err := h.cwdOf(r, id)
 	if err != nil {
 		writeError(w, err)
 		return

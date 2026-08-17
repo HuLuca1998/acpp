@@ -45,8 +45,13 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 
 // Peek 返回会话视图但绝不拉起进程——「查看记录」是零成本读操作，
 // 只有真的发消息才值得连接 agent。进程恰好活着时顺带附上统一设置。
+//
+// 本文件里对会话的读取一律用 OwnerScope：归属校验在 HTTP 入口一次性做完
+// （adr-007），到这里已经是「确认属于调用者」的会话 id，再过一次租户条件
+// 只会让内部流程（空闲回收、错误标记）无从下手。
+
 func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, error) {
-	view, err := s.sessions.Get(ctx, sessionID)
+	view, err := s.sessions.Get(ctx, OwnerScope(), sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +91,7 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 // Open 为一条已存在的数据库会话拉起 agent 并完成 ACP 握手。
 // 会话已经开着时直接返回，重复调用是安全的。
 func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, error) {
-	view, err := s.sessions.Get(ctx, sessionID)
+	view, err := s.sessions.Get(ctx, OwnerScope(), sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +143,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		return nil, fmt.Errorf("save acp session id: %w", err)
 	}
 
-	view, err = s.sessions.Get(ctx, sessionID)
+	view, err = s.sessions.Get(ctx, OwnerScope(), sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +166,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 // Destroy 在删除会话前做彻底清理：先尽力删掉 agent 侧的线程历史
 // （session/delete，删不掉只记警告不阻塞本地删除），再关进程。
 func (s *ChatService) Destroy(ctx context.Context, sessionID uint) error {
-	view, err := s.sessions.Get(ctx, sessionID)
+	view, err := s.sessions.Get(ctx, OwnerScope(), sessionID)
 	if err == nil && view.ACPSessionID != "" {
 		var agent model.Agent
 		if err := s.db.WithContext(ctx).First(&agent, view.AgentID).Error; err == nil {

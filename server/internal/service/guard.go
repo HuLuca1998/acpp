@@ -92,6 +92,12 @@ func (s Scope) GuardNewPath(path string) (string, error) {
 		return clean, nil
 	}
 
+	// 已经存在的路径按已存在校验——否则连租户 root 自身都会被拒（它的父
+	// 目录是所有租户的公共 base，当然不在自己的 root 内）。
+	if _, err := os.Stat(clean); err == nil {
+		return s.GuardPath(clean)
+	}
+
 	parent, err := s.GuardPath(filepath.Dir(clean))
 	if err != nil {
 		return "", err

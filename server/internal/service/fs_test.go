@@ -12,7 +12,7 @@ import (
 func TestCreateDir_CreatesNavigableDir(t *testing.T) {
 	parent := t.TempDir()
 
-	entry, err := CreateDir(parent, "acp-workspace")
+	entry, err := CreateDir(OwnerScope(), parent, "acp-workspace")
 	if err != nil {
 		t.Fatalf("CreateDir: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestCreateDir_CreatesNavigableDir(t *testing.T) {
 	if err != nil || !info.IsDir() {
 		t.Fatalf("created path not a dir: info=%v err=%v", info, err)
 	}
-	listing, err := ListDirs(parent, false)
+	listing, err := ListDirs(OwnerScope(), parent, false)
 	if err != nil {
 		t.Fatalf("ListDirs: %v", err)
 	}
@@ -42,10 +42,10 @@ func TestCreateDir_CreatesNavigableDir(t *testing.T) {
 // 契约：重名冲突返回 ErrInvalid，不静默成功。
 func TestCreateDir_DuplicateIsInvalid(t *testing.T) {
 	parent := t.TempDir()
-	if _, err := CreateDir(parent, "projects"); err != nil {
+	if _, err := CreateDir(OwnerScope(), parent, "projects"); err != nil {
 		t.Fatalf("first CreateDir: %v", err)
 	}
-	if _, err := CreateDir(parent, "projects"); !errors.Is(err, ErrInvalid) {
+	if _, err := CreateDir(OwnerScope(), parent, "projects"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("duplicate err = %v, want ErrInvalid", err)
 	}
 }
@@ -68,7 +68,7 @@ func TestCreateDir_RejectsUnsafeNames(t *testing.T) {
 		{"相对 parent", "some/relative", "workspace"},
 	}
 	for _, tc := range cases {
-		if _, err := CreateDir(tc.parent, tc.name); !errors.Is(err, ErrInvalid) {
+		if _, err := CreateDir(OwnerScope(), tc.parent, tc.name); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", tc.label, err)
 		}
 	}
