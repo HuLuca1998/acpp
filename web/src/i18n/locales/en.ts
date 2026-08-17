@@ -578,6 +578,7 @@ export default {
     nameHint: "At most two levels: <owner>/<repo>.",
   },
   identity: {
+    admin: "Admin",
     inviteTitle: "Invite link required",
     inviteDesc:
       "The owner of this machine can generate an invite link for you on the Connections page.",

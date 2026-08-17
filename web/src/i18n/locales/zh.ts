@@ -551,6 +551,7 @@ export default {
     nameHint: "最多两层：<组织>/<仓库>。",
   },
   identity: {
+    admin: "Admin",
     inviteTitle: "需要邀请链接",
     inviteDesc:
       "这台机器的主人可以在「连接」页为你生成一条邀请链接，打开它即可使用。",

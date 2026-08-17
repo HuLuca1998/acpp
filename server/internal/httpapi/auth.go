@@ -179,7 +179,11 @@ func meOf(id identity) meResponse {
 
 // me 未认证时同样返回 200——前端据此渲染「需要邀请链接」页面，
 // 401 会被通用错误处理当成故障弹提示。
+//
+// no-store 是必须的：这个响应会随 cookie 变（兑换邀请前后是两个身份），
+// 被缓存住的话点邀请链接进来第一屏还是上一个身份的界面。
 func (h authHandler) me(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	writeData(w, http.StatusOK, meOf(identityOf(r)))
 }
 

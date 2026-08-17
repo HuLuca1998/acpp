@@ -19,8 +19,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { useIsOwner } from "@/hooks/identity-context"
+import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
+import { capitalize } from "@/lib/format"
 import { groupSessionsByCwd, type SessionGroup } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
@@ -30,6 +31,7 @@ import {
   NetworkIcon,
   PlugZapIcon,
   ScrollTextIcon,
+  UserRoundIcon,
   Settings2Icon,
   PuzzleIcon,
   WrenchIcon,
@@ -42,7 +44,15 @@ const RECENT_LIMIT = 50
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation()
   const { pathname } = useLocation()
-  const isOwner = useIsOwner()
+  const { identity } = useIdentity()
+  const isOwner = identity?.owner ?? false
+  // 底部显示「我是谁」：owner 是这台机器的主人，访客用自己的名字（首字母
+  // 大写，租户名是目录名、多半是小写的）。
+  const whoami = isOwner
+    ? t("identity.admin")
+    : identity?.tenantName
+      ? capitalize(identity.tenantName)
+      : ""
   const [recent, setRecent] = React.useState<Session[]>([])
   const [groups, setGroups] = React.useState<SessionGroup[]>([])
 
@@ -144,6 +154,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </NavSecondary>
       </SidebarContent>
       <SidebarFooter>
+        {whoami ? (
+          <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
+            <UserRoundIcon className="size-3.5 shrink-0" />
+            <span className="truncate">{whoami}</span>
+          </div>
+        ) : null}
         <BackendStatus />
       </SidebarFooter>
     </Sidebar>

@@ -560,8 +560,11 @@ export const api = {
 
   /** 身份（adr-007）。凭证是 HttpOnly cookie，请求不用手动带。 */
   auth: {
-    /** 未认证时同样 200（authenticated=false），前端据此渲染邀请页。 */
-    me: () => request<Identity>("/auth/me"),
+    /**
+     * 未认证时同样 200（authenticated=false），前端据此渲染邀请页。
+     * no-store：响应随 cookie 变，缓存住会让人兑换完还看见上一个身份。
+     */
+    me: () => request<Identity>("/auth/me", { cache: "no-store" }),
     /** 用邀请链接里的 token 换 cookie。 */
     redeem: (token: string) =>
       request<Identity>("/auth/redeem", {
