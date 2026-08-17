@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
@@ -17,10 +17,15 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { GitCommit } from "@/types/acp"
+import type { GitCommit, GitOverview } from "@/types/acp"
 import { GitCommitHorizontalIcon, PencilLineIcon } from "lucide-react"
 
 const PAGE_SIZE = 50
+
+/** 未推送提交的 sha 集合；overview 未加载时是空集。 */
+function unpushedShas(overview: GitOverview | null): Set<string> {
+  return new Set((overview?.commits ?? []).map((commit) => commit.sha))
+}
 
 /**
  * 提交链路面板（vscode / GoLand 的中栏）。取代了原来的「未推送提交」面板：
@@ -36,6 +41,7 @@ export const HistoryPanel = memo(function HistoryPanel() {
   const selection = useGitSelection()
   const git = useGitOverview()
 
+  const tokenRef = useRef(0)
   const [commits, setCommits] = useState<GitCommit[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -49,17 +55,25 @@ export const HistoryPanel = memo(function HistoryPanel() {
   const load = useCallback(
     (offset = 0) => {
       if (!ws.sessionId) return
+      // 换 ref 后旧请求的结果必须丢掉，否则「加载更早」会把另一条分支的
+      // 提交接在当前链路后面。
+      const token = ++tokenRef.current
       ws.scope
         .gitHistory(ws.sessionId, { ref, limit: PAGE_SIZE, offset })
         .then((page) => {
+          if (tokenRef.current !== token) return
           setCommits((prev) =>
             offset === 0 ? page.commits : [...(prev ?? []), ...page.commits]
           )
           setHasMore(page.hasMore)
           setError(null)
         })
-        .catch((err: Error) => setError(err.message))
-        .finally(() => setLoading(false))
+        .catch((err: Error) => {
+          if (tokenRef.current === token) setError(err.message)
+        })
+        .finally(() => {
+          if (tokenRef.current === token) setLoading(false)
+        })
     },
     [ws, ref]
   )
@@ -83,9 +97,8 @@ export const HistoryPanel = memo(function HistoryPanel() {
     )
   }
 
-  const unpushed = new Set(
-    (git.data?.commits ?? []).map((commit) => commit.sha)
-  )
+  // 未推送集合跟着 git 汇总走，不随链路的每次重渲染重建。
+  const unpushed = unpushedShas(git.data)
   const dirtyCount = git.data?.files.length ?? 0
 
   return (

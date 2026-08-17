@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -50,13 +50,20 @@ export const ChangesPanel = memo(function ChangesPanel() {
   const [files, setFiles] = useState<GitFileChange[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const tokenRef = useRef(0)
+  const staleRef = useRef(0)
 
   const comparing = selection.refs.length === 2
   const [base, head] = selection.refs
 
   // 同 history：首屏加载态由 files === null 表达，spinner 留给显式刷新。
+  //
+  // token 是 stale 守卫：选择切得比请求快时，旧结果必须被丢掉——否则
+  // 面板显示的是上一次点的那条提交的文件。
   const load = useCallback(() => {
     if (!ws.sessionId) return
+    const token = ++tokenRef.current
+    staleRef.current = token
 
     const request = comparing
       ? ws.scope
@@ -70,23 +77,38 @@ export const ChangesPanel = memo(function ChangesPanel() {
 
     request
       .then((data) => {
+        if (staleRef.current !== token) return
         // null 表示「看工作区」——那份数据在共享的 gitStore 里，不重复拉。
         if (data === null) {
           setFiles(null)
           ws.refreshGit()
+          setError(null)
           return
         }
         setFiles(data)
+        setError(null)
       })
-      .then(() => setError(null))
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false))
+      .catch((err: Error) => {
+        if (staleRef.current === token) setError(err.message)
+      })
+      .finally(() => {
+        if (staleRef.current === token) setLoading(false)
+      })
   }, [ws, comparing, base, head, selection.sha])
 
   useEffect(() => {
     load()
     return ws.onWorkspaceRefresh(load)
   }, [load, ws])
+
+  // 工作区模式下用共享的 gitStore，避免同一份数据两处拉。
+  const list = comparing || selection.sha ? files : (git.data?.files ?? null)
+  // 树只在文件清单变化时重建：大变更集（几百个文件）每次渲染重建一遍纯属
+  // 浪费，而这个面板会被选择态与 git 刷新频繁带着重渲染。
+  const tree = useMemo(
+    () => (list ? buildPathTree(list, (file) => file.path) : null),
+    [list]
+  )
 
   if (!ws.sessionId) {
     return (
@@ -102,8 +124,6 @@ export const ChangesPanel = memo(function ChangesPanel() {
     )
   }
 
-  // 工作区模式下用共享的 gitStore，避免同一份数据两处拉。
-  const list = comparing || selection.sha ? files : (git.data?.files ?? null)
   const title = comparing
     ? `${base} → ${head}`
     : selection.sha
@@ -144,7 +164,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
         }}
       />
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {list === null ? (
+        {list === null || tree === null ? (
           <div className="flex items-center justify-center py-6">
             <Spinner className="size-4 text-muted-foreground" />
           </div>
@@ -152,7 +172,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
           <PanelEmptyState title={t("workspace.git.noChanges")} />
         ) : (
           <ChangeTree
-            node={buildPathTree(list, (file) => file.path)}
+            node={tree}
             depth={0}
             onOpen={openDiff}
             onAsk={askAboutFile}

@@ -1,9 +1,10 @@
 import { memo, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AtSignIcon, FileTextIcon } from "lucide-react"
+import { AtSignIcon, CodeIcon, EyeIcon, FileTextIcon } from "lucide-react"
 
 import type { GitDiffView, WorkspaceFile } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
+import { MarkdownContent } from "@/components/chat/markdown"
 import {
   usePreviewTarget,
   useWorkspace,
@@ -40,6 +41,9 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   const [diff, setDiff] = useState<GitDiffView | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // markdown 默认看渲染后的样子——打开一个 README 是为了读它，不是读它的
+  // 语法；要看源码点一下切过去。
+  const [raw, setRaw] = useState(false)
 
   useEffect(() => {
     if (!target || !ws.sessionId) return
@@ -116,6 +120,25 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         >
           {path}
         </span>
+        {isMarkdown(path) && target?.mode !== "diff" ? (
+          <button
+            type="button"
+            aria-label={t(
+              raw ? "workspace.preview.rendered" : "workspace.preview.source"
+            )}
+            title={t(
+              raw ? "workspace.preview.rendered" : "workspace.preview.source"
+            )}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+            onClick={() => setRaw((prev) => !prev)}
+          >
+            {raw ? (
+              <EyeIcon className="size-3.5" />
+            ) : (
+              <CodeIcon className="size-3.5" />
+            )}
+          </button>
+        ) : null}
         {target?.mode === "diff" ? (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
             {target.sha
@@ -154,12 +177,19 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
           <div className="p-3 text-xs text-muted-foreground">
             {t("workspace.preview.binary")}
           </div>
+        ) : file && isMarkdown(path) && !raw ? (
+          <div className="px-4 py-3">
+            <MarkdownContent>{file.content}</MarkdownContent>
+          </div>
         ) : file ? (
           <div className="w-max min-w-full py-2 font-mono text-xs leading-5">
             {lines.map((line, i) => (
               <div
                 key={i}
-                className="flex [contain-intrinsic-block-size:1.25rem] [content-visibility:auto]"
+                // contain-intrinsic-size 必须带 auto：固定值让浏览器用估算
+                // 高度堆叠所有行，面板尺寸一变（拖动分栏、切布局）累积误差
+                // 就会把后半段留成空白；auto 让它记住实测高度再复用。
+                className="flex [contain-intrinsic-block-size:auto_1.25rem] [content-visibility:auto]"
               >
                 <span className="w-12 shrink-0 pr-3 text-right text-muted-foreground/60 tabular-nums select-none">
                   {i + 1}
@@ -178,3 +208,10 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     </div>
   )
 })
+
+/** 只按扩展名判断：内容嗅探对 markdown 不可靠，也没必要。 */
+function isMarkdown(path: string | null): boolean {
+  if (!path) return false
+  const lower = path.toLowerCase()
+  return lower.endsWith(".md") || lower.endsWith(".markdown")
+}

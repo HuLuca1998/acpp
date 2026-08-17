@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -38,6 +38,7 @@ export const BranchesPanel = memo(function BranchesPanel() {
   const ws = useWorkspace()
   const selection = useGitSelection()
 
+  const tokenRef = useRef(0)
   const [view, setView] = useState<GitBranchView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
@@ -46,13 +47,18 @@ export const BranchesPanel = memo(function BranchesPanel() {
 
   const load = useCallback(() => {
     if (!ws.sessionId) return
+    // 刷新与 checkout 会并发：晚发出的请求才是当前状态。
+    const token = ++tokenRef.current
     ws.scope
       .gitBranches(ws.sessionId)
       .then((data) => {
+        if (tokenRef.current !== token) return
         setView(data)
         setError(null)
       })
-      .catch((err: Error) => setError(err.message))
+      .catch((err: Error) => {
+        if (tokenRef.current === token) setError(err.message)
+      })
   }, [ws])
 
   useEffect(() => {
@@ -105,7 +111,9 @@ export const BranchesPanel = memo(function BranchesPanel() {
 
   const checkout = async (ref: string) => {
     try {
-      setView(await ws.scope.gitCheckout(ws.sessionId, { branch: ref }))
+      const next = await ws.scope.gitCheckout(ws.sessionId, { branch: ref })
+      tokenRef.current++
+      setView(next)
       ws.refreshWorkspace()
       toast.success(t("chat.branch.switched", { branch: ref }))
     } catch (err) {

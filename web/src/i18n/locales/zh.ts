@@ -399,6 +399,10 @@ export default {
     menu: {
       label: "窗口管理",
       windows: "工作区窗口",
+      myLayouts: "我的布局",
+      saveLayout: "保存当前布局…",
+      saveLayoutDesc: "把现在的分栏存下来，之后一键切回。存在本机浏览器里。",
+      layoutNamePlaceholder: "例如：审查现场",
       resetLayout: "恢复默认布局",
       newTerminal: "新建终端",
       layouts: "布局",
@@ -426,6 +430,8 @@ export default {
     preview: {
       emptyTitle: "没有打开的文件",
       emptyHint: "在文件树中点击文件即可预览。",
+      rendered: "看渲染结果",
+      source: "看源码",
       binary: "二进制文件，无法预览。",
       truncated: "内容过长，已截断显示。",
     },

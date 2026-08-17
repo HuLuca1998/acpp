@@ -127,11 +127,9 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 
 	cwd := in.Cwd
 	if cwd == "" {
-		cwd = agent.Cwd
-	}
-	if cwd == "" {
-		// 租户的默认工作目录是自己的 root，不是全局工作区——否则一条不带
-		// cwd 的建会话请求就能把 agent 开在别人（或 owner）的目录里。
+		// 不带 cwd 就落在这个身份的工作区根：owner 是设置里选的那个，
+		// 租户是自己的目录。刻意**不看 agent.Cwd**——那是 agent 配置里的
+		// 历史残留，不该替用户决定他这次要在哪儿干活。
 		cwd = Home(scope)
 	}
 	// 会话 cwd 是 agent 的活动范围，必须先过路径闸。目录不存在时由

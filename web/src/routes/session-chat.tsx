@@ -53,11 +53,10 @@ export function SessionChat() {
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
-  // 草稿态显示待选工作目录（空则 agent 默认，再兜底 ~/acpp）。
-  const draftCwd =
-    newSession.cwd.trim() ||
-    newSession.selectedAgent?.cwd ||
-    t("sessions.form.cwdPlaceholder")
+  // 草稿态**不预设**工作目录：没选就显示占位文案，由后端落到工作区根。
+  // 以前会回落到 agent 记录里的 cwd——那是历史残留，不该替用户决定他
+  // 这次要在哪儿干活。
+  const draftCwd = newSession.cwd.trim() || t("sessions.form.cwdPlaceholder")
 
   async function addImages(picked: File[]) {
     const attachments = await Promise.all(picked.map(fileToImageAttachment))
@@ -228,9 +227,9 @@ export function SessionChat() {
       <DirPicker
         open={cwdPickerOpen}
         onOpenChange={setCwdPickerOpen}
-        initialPath={
-          newSession.cwd.trim() || newSession.selectedAgent?.cwd || undefined
-        }
+        // 没选过就不给起点：后端从工作区根开始（owner 是设置里的那个，
+        // 访客是自己的目录），而不是从 agent 记录里的历史 cwd。
+        initialPath={newSession.cwd.trim() || undefined}
         onSelect={newSession.setCwd}
       />
     </WorkspaceProvider>

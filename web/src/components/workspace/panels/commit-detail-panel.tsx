@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
@@ -33,39 +33,51 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
   const comparing = selection.refs.length === 2
   const [base, head] = selection.refs
 
-  const load = useCallback(() => {
+  // stale 守卫：切选择比请求回来快是常事，没有它旧结果会盖掉新结果，
+  // 面板显示的就是上一次点的那条。
+  useEffect(() => {
     if (!ws.sessionId) return
+    let stale = false
 
     if (comparing) {
       ws.scope
         .gitCompare(ws.sessionId, base, head)
         .then((data) => {
+          if (stale) return
           setCompare(data)
           setCommit(null)
           setError(null)
         })
-        .catch((err: Error) => setError(err.message))
-        .finally(() => setLoading(false))
-      return
+        .catch((err: Error) => !stale && setError(err.message))
+        .finally(() => !stale && setLoading(false))
+      return () => {
+        stale = true
+      }
     }
 
     if (!selection.sha) {
+      // 退出对比 / 取消选择：把两份结果都清掉，否则面板还挂着上一次的
+      // 对比摘要，看上去像是还选着。
+      setCompare(null)
+      setCommit(null)
+      setError(null)
       return
     }
+
     ws.scope
       .gitCommit(ws.sessionId, selection.sha)
       .then((detail) => {
+        if (stale) return
         setCommit(detail.commit)
         setCompare(null)
         setError(null)
       })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false))
+      .catch((err: Error) => !stale && setError(err.message))
+      .finally(() => !stale && setLoading(false))
+    return () => {
+      stale = true
+    }
   }, [ws, comparing, base, head, selection.sha])
-
-  useEffect(() => {
-    load()
-  }, [load])
 
   if (!ws.sessionId) {
     return (

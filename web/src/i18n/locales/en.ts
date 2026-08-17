@@ -418,6 +418,10 @@ export default {
     menu: {
       label: "Manage windows",
       windows: "Workspace windows",
+      myLayouts: "My layouts",
+      saveLayout: "Save current layout...",
+      saveLayoutDesc: "Keep the arrangement you just built and switch back to it in one click. Stored in this browser.",
+      layoutNamePlaceholder: "e.g. Review setup",
       resetLayout: "Reset layout",
       newTerminal: "New terminal",
       layouts: "Layouts",
@@ -446,6 +450,8 @@ export default {
     preview: {
       emptyTitle: "No file open",
       emptyHint: "Click a file in the file tree to preview it.",
+      rendered: "Show rendered",
+      source: "Show source",
       binary: "Binary file, cannot preview.",
       truncated: "Content too long, display truncated.",
     },
