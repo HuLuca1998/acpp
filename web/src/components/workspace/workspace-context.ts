@@ -73,8 +73,8 @@ export interface WorkspaceValue {
   openPreview: (path: string) => void
   /** 在查看器里以 diff 模式打开：sha 为空看工作区改动，否则看那条提交。 */
   openDiff: (path: string, sha?: string) => void
-  /** 下载工作区里的一个文件（浏览器另存为）。 */
-  downloadFile: (path: string) => void
+  /** 下载工作区里的文件；archive=true 时把目录打包成 zip。 */
+  downloadFile: (path: string, archive?: boolean) => void
   /** 把文件/文件夹加进 composer 的 @ 引用（由页面层注册实现）。 */
   addReference: (path: string) => void
   /** 页面层注册 addReference 的落点；卸载时传 null。 */

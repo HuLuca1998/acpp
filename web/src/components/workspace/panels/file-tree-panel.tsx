@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ChevronRightIcon,
@@ -8,10 +8,19 @@ import {
 } from "lucide-react"
 
 import { api } from "@/lib/api"
+import {
+  buildChangeMap,
+  CHANGE_TONE,
+  dirChangeKind,
+  type FileChangeKind,
+} from "@/lib/git-status"
 import { cn } from "@/lib/utils"
 import type { TreeEntry } from "@/types/acp"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
-import { useWorkspace } from "@/components/workspace/workspace-context"
+import {
+  useGitOverview,
+  useWorkspace,
+} from "@/components/workspace/workspace-context"
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
@@ -30,6 +39,10 @@ export const FileTreePanel = memo(function FileTreePanel() {
   const ws = useWorkspace()
   const [entries, setEntries] = useState<TreeEntry[] | null>(null)
   const [truncated, setTruncated] = useState(false)
+  const git = useGitOverview()
+  // 变更着色跟着共享的 git 汇总走：turn 结束与手动刷新都会重取，
+  // 文件树不必自己再问一遍。
+  const changes = useMemo(() => buildChangeMap(git.data), [git.data])
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [childrenByPath, setChildrenByPath] = useState<
@@ -150,6 +163,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
               onOpenFile={ws.openPreview}
               onAddReference={ws.addReference}
               onDownload={ws.downloadFile}
+              changes={changes}
             />
           ))
         )}
@@ -173,6 +187,7 @@ function TreeNode({
   onOpenFile,
   onAddReference,
   onDownload,
+  changes,
 }: {
   entry: TreeEntry
   depth: number
@@ -181,11 +196,16 @@ function TreeNode({
   onToggle: (entry: TreeEntry) => void
   onOpenFile: (path: string) => void
   onAddReference: (path: string) => void
-  /** 目录不给：打包下载是另一件事，菜单里只对文件出现。 */
-  onDownload: (path: string) => void
+  onDownload: (path: string, archive?: boolean) => void
+  /** 绝对路径 → git 状态，用来给条目着色。 */
+  changes: Map<string, FileChangeKind>
 }) {
   const { t } = useTranslation()
   const isDir = entry.kind === "dir"
+  // 目录跟着内部的变更走：不展开也能看出哪一支动过。
+  const tone = isDir
+    ? dirChangeKind(entry.path, changes)
+    : changes.get(entry.path)
   const isOpen = isDir && expanded.has(entry.path)
   const children = entry.children ?? childrenByPath.get(entry.path)
 
@@ -218,13 +238,20 @@ function TreeNode({
           ) : (
             <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
           )}
-          <span className="truncate">{entry.name}</span>
+          {/* 变更着色只落在名字上：树本来就密，底色会让人看不清层级。 */}
+          <span className={cn("truncate", tone && CHANGE_TONE[tone])}>
+            {entry.name}
+          </span>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => onAddReference(entry.path)}>
             {t("workspace.refMenu.addReference")}
           </ContextMenuItem>
-          {!isDir ? (
+          {isDir ? (
+            <ContextMenuItem onClick={() => onDownload(entry.path, true)}>
+              {t("workspace.refMenu.downloadZip")}
+            </ContextMenuItem>
+          ) : (
             <>
               <ContextMenuItem onClick={() => onOpenFile(entry.path)}>
                 {t("workspace.refMenu.openPreview")}
@@ -233,7 +260,7 @@ function TreeNode({
                 {t("workspace.refMenu.download")}
               </ContextMenuItem>
             </>
-          ) : null}
+          )}
           <ContextMenuItem
             onClick={() => void navigator.clipboard.writeText(entry.path)}
           >
@@ -253,6 +280,7 @@ function TreeNode({
               onOpenFile={onOpenFile}
               onAddReference={onAddReference}
               onDownload={onDownload}
+              changes={changes}
             />
           ))
         : null}

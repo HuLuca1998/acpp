@@ -35,7 +35,11 @@ type GitCommit struct {
 
 // GitOverview 是 diff 面板与 commit 面板共享的一次性视图。
 type GitOverview struct {
-	IsRepo   bool            `json:"isRepo"`
+	IsRepo bool `json:"isRepo"`
+	// Root 是仓库根的绝对路径。status 给的文件路径相对它，而不是相对会话
+	// cwd（cwd 可能是仓库的子目录）——没有它，界面无法把变更对应到文件树
+	// 里的具体条目。
+	Root     string          `json:"root,omitempty"`
 	Branch   string          `json:"branch,omitempty"`
 	Upstream string          `json:"upstream,omitempty"`
 	Ahead    int             `json:"ahead"`
@@ -66,6 +70,10 @@ var shaPattern = regexp.MustCompile(`^[0-9a-fA-F]{4,64}$`)
 // 诚实返回 isRepo=false 由前端画空态。
 func WorkspaceGitOverview(ctx context.Context, cwd string) (*GitOverview, error) {
 	overview := &GitOverview{Files: []GitFileChange{}, Commits: []GitCommit{}}
+
+	if root, err := runGit(ctx, cwd, "rev-parse", "--show-toplevel"); err == nil {
+		overview.Root = strings.TrimSpace(root)
+	}
 
 	branch, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {

@@ -125,18 +125,40 @@ func (h workspaceHandler) download(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	target, err := service.WorkspaceFilePath(cwd, r.URL.Query().Get("path"))
+	path := r.URL.Query().Get("path")
+
+	// 目录打包：边写边发，大目录不占内存。头必须在写第一个字节前发完。
+	if r.URL.Query().Get("archive") == "1" {
+		name := filepath.Base(filepath.Clean(path))
+		if name == "." || name == string(filepath.Separator) {
+			name = "workspace"
+		}
+		w.Header().Set("Content-Type", "application/zip")
+		setAttachment(w, name+".zip")
+		if _, err := service.WorkspaceZip(cwd, path, w); err != nil {
+			// 已经开始写 body 的话改不了状态码了——错误只能落日志，
+			// 客户端会看到一个不完整的 zip。头还没发时正常报错。
+			writeError(w, err)
+		}
+		return
+	}
+
+	target, err := service.WorkspaceFilePath(cwd, path)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	// filename* 用 RFC 5987 编码，中文名与空格才不会在下载时变成乱码或被截断。
-	name := filepath.Base(target)
+	setAttachment(w, filepath.Base(target))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, target)
+}
+
+// setAttachment 让浏览器走「另存为」。filename* 用 RFC 5987 编码，中文名
+// 与空格才不会在下载时变成乱码或被截断。
+func setAttachment(w http.ResponseWriter, name string) {
 	w.Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s",
 			name, url.PathEscape(name)))
-	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeFile(w, r, target)
 }
 
 // branches 是会话底部分支控件的数据：当前分支、本地/远端分支、worktree 清单。

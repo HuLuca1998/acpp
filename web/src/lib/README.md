@@ -16,6 +16,7 @@
 | elicitation.ts    | elicitation JSON Schema 解析成结构化问题与作答收集                    | `parseElicitationSchema`、`answerFor`                                |
 | files.ts          | 浏览器文件 → base64 图片附件、剪贴板取图                              | `fileToImageAttachment`、`imagesFromClipboard`                       |
 | format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`capitalize` |
+| git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |
 | message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）                          | `groupMessages`                                                      |
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |

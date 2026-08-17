@@ -1,11 +1,13 @@
 package service
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -355,4 +357,83 @@ func DirReferenceListing(path string) string {
 	}
 	b.WriteString("\nRead individual files as needed for their contents.\n")
 	return b.String()
+}
+
+// zipMaxBytes 是打包下载的总量上限。目录打包是「把产出物取走」，不是
+// 备份整个磁盘——超了就明确失败，好过让人等一个永远下不完的文件。
+const zipMaxBytes int64 = 512 << 20 // 512 MiB
+
+// WorkspaceZip 把一个目录流式打包成 zip 写进 w。
+//
+// 跳过的东西与文件树看到的一致（固定黑名单 + 隐藏项）：界面上没显示的
+// 东西不该悄悄出现在下载包里，`.git` 与依赖目录更是没人想要。符号链接
+// 一律跳过，避免打包时绕进循环。
+func WorkspaceZip(cwd, path string, w io.Writer) (string, error) {
+	target, err := workspacePath(cwd, path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%w: %s is not a directory", ErrInvalid, path)
+	}
+
+	name := filepath.Base(target)
+	zw := zip.NewWriter(w)
+	var total int64
+
+	err = filepath.WalkDir(target, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// 读不了的单个条目跳过：一个权限不足的文件不该让整包失败。
+			return nil //nolint:nilerr // 有意吞掉单条目错误
+		}
+		if p == target {
+			return nil
+		}
+		base := d.Name()
+		if workspaceSkip[base] || strings.HasPrefix(base, ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil // 符号链接与设备文件不打包
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return nil //nolint:nilerr // 同上：单条目失败不牵连整包
+		}
+		total += info.Size()
+		if total > zipMaxBytes {
+			return fmt.Errorf("%w: directory exceeds %d MiB", ErrInvalid, zipMaxBytes>>20)
+		}
+
+		rel, err := filepath.Rel(target, p)
+		if err != nil {
+			return nil //nolint:nilerr
+		}
+		entry, err := zw.Create(filepath.ToSlash(filepath.Join(name, rel)))
+		if err != nil {
+			return err
+		}
+		file, err := os.Open(p)
+		if err != nil {
+			return nil //nolint:nilerr
+		}
+		defer file.Close()
+		_, err = io.Copy(entry, file)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return name, zw.Close()
 }

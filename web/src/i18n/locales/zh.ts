@@ -438,6 +438,7 @@ export default {
     refMenu: {
       addReference: "添加到对话引用",
       openPreview: "预览",
+      downloadZip: "打包下载（zip）",
       download: "下载文件",
       copyPath: "复制路径",
     },

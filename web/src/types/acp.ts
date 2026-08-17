@@ -285,6 +285,8 @@ export interface GitCommit {
 /** diff / commit 面板共享的一次性视图，与 service.GitOverview 对齐。 */
 export interface GitOverview {
   isRepo: boolean
+  /** 仓库根绝对路径：files 里的路径相对它，界面靠它对应到文件树条目。 */
+  root?: string
   branch?: string
   upstream?: string
   ahead: number
