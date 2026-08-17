@@ -97,7 +97,7 @@ func (s *Service) Clone(scope service.Scope, in CloneInput) (*Clone, error) {
 	}
 
 	clone := s.clones.add(scope, url, rel, path)
-	go s.runClone(clone, scope)
+	go s.runClone(clone)
 	return clone, nil
 }
 
@@ -106,25 +106,20 @@ func (s *Service) Clones(scope service.Scope) []Clone {
 	return s.clones.list(scope)
 }
 
-// runClone 执行克隆。**租户一律禁用 git 凭证助手**：不禁的话 git 会拿
-// owner 钥匙串里的凭证去拉私有仓库，任何访客都能借 owner 的身份把
-// 他有权访问的仓库拖下来（adr-007）。owner 自己克隆不受此限。
-func (s *Service) runClone(clone *Clone, scope service.Scope) {
+// runClone 执行克隆。
+//
+// **访客与 owner 用同一套本机 git 凭证**（产品决定）：这台机器上能拉到的
+// 仓库，局域网访客也能拉。清单只管「界面上列出什么」，不再兼作能力边界——
+// 手输 URL 同样会用凭证，包括 owner 个人账号名下的私有仓库。
+// 换句话说：谁拿到邀请链接，谁就能拉走你 git 凭证够得着的任何仓库。
+func (s *Service) runClone(clone *Clone) {
 	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
 	defer cancel()
 
-	args := []string{}
-	if !scope.Owner {
-		args = append(args, "-c", "credential.helper=")
-	}
-	args = append(args, "clone", clone.URL, clone.Path)
-
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", "clone", clone.URL, clone.Path)
 	cmd.Env = append(os.Environ(),
-		// 没有凭证就直接失败，不要挂在终端提示上等一个永远不会来的输入。
+		// 凭证助手照常用；只是不要挂在终端提示上等一个永远不会来的输入。
 		"GIT_TERMINAL_PROMPT=0",
-		"GIT_ASKPASS=",
-		"SSH_ASKPASS=",
 	)
 	output, err := cmd.CombinedOutput()
 

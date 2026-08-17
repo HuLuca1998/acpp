@@ -542,6 +542,7 @@ export default {
     reposUnavailable: "仓库清单不可用",
     noRepos: "没有匹配的仓库",
     private: "私有",
+    urlHint: "私有仓库只能克隆上面清单里的那些；其他地址仅限公开仓库。",
     urlPlaceholder: "https://github.com/组织/仓库.git",
     create: "新建项目",
     createDesc: "在工作区里建一个空目录，形如「组织/仓库」。",

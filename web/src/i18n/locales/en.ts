@@ -567,6 +567,8 @@ export default {
     reposUnavailable: "Repository list unavailable",
     noRepos: "No matching repositories",
     private: "Private",
+    urlHint:
+      "Private repositories must come from the list above; other URLs work only for public repositories.",
     urlPlaceholder: "https://github.com/org/repo.git",
     create: "New project",
     createDesc:

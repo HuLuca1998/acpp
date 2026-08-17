@@ -146,15 +146,20 @@ export function CloneDialog({
           )}
         </div>
 
-        <Input
-          value={url}
-          placeholder={t("projects.urlPlaceholder")}
-          className="font-mono text-xs"
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void clone(url)
-          }}
-        />
+        <div className="flex flex-col gap-1">
+          <Input
+            value={url}
+            placeholder={t("projects.urlPlaceholder")}
+            className="font-mono text-xs"
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void clone(url)
+            }}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            {t("projects.urlHint")}
+          </p>
+        </div>
         {cloneError ? (
           <p className="text-xs text-destructive">{cloneError}</p>
         ) : null}

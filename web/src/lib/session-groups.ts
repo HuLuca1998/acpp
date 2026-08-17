@@ -1,70 +1,72 @@
-import type { Project, Session } from "@/types/acp"
+import type { Session } from "@/types/acp"
 
-/** 一个项目 + 它名下最近的若干条会话。 */
+/** 一个工作目录 + 它名下最近的若干条会话。 */
 export interface SessionGroup {
-  project: Project
+  /** 工作目录绝对路径，同时是分组的标识。 */
+  cwd: string
+  /** 侧边栏显示的短名（同名目录会自动带上一层父目录区分）。 */
+  label: string
+  /** 组内最新会话的分支，没有就不显示。 */
+  branch?: string
   sessions: Session[]
 }
 
-/** 侧边栏「最近会话」的展示上限：最多 5 个项目 × 每个 5 条 = 25 条。 */
+/** 侧边栏「最近会话」的展示上限：最多 5 个工作区 × 每个 5 条 = 25 条。 */
 export const MAX_GROUPS = 5
 export const MAX_SESSIONS_PER_GROUP = 5
 
 /**
- * 把会话按项目分组（adr-007）。
+ * 把会话按**工作目录**分组。
  *
- * 归属靠 cwd 前缀：会话的工作目录落在哪个项目目录下就属于哪个项目，
- * worktree（`<仓库>/worktrees/<名字>`）自然归进它的主仓库。项目路径较长的
- * 优先匹配，免得嵌套仓库被外层抢走。
+ * 刻意不依赖项目（git 仓库）扫描：会话可以开在任何目录上，一旦工作区根
+ * 变了、或者目录压根不是仓库，靠项目匹配就会整片落空，侧边栏退回平铺。
+ * cwd 是会话自带的事实，永远对得上。
  *
- * 分组顺序按「组内最新会话」排——最近干活的项目排在最前，这比按项目
- * 目录时间排更贴合「最近会话」这四个字。不属于任何项目的会话归入
- * `ungrouped`，由调用方决定怎么展示。
+ * 组的顺序按「组内最新会话」排——最近干活的工作区排在最前，这比按目录
+ * 名或创建时间更贴合「最近会话」这四个字。
  */
-export function groupSessionsByProject(
+export function groupSessionsByCwd(
   sessions: Session[],
-  projects: Project[],
   limits?: { groups?: number; perGroup?: number }
-): { groups: SessionGroup[]; ungrouped: Session[] } {
+): SessionGroup[] {
   const maxGroups = limits?.groups ?? MAX_GROUPS
   const perGroup = limits?.perGroup ?? MAX_SESSIONS_PER_GROUP
 
-  // 长路径在前：`/a/b` 里嵌着 `/a/b/c` 时，会话该归给 `/a/b/c`。
-  const ordered = [...projects].sort((a, b) => b.path.length - a.path.length)
   const buckets = new Map<string, Session[]>()
-  const ungrouped: Session[] = []
-
   for (const session of sessions) {
-    const owner = ordered.find((project) => isUnder(project.path, session.cwd))
-    if (!owner) {
-      ungrouped.push(session)
-      continue
-    }
-    const bucket = buckets.get(owner.name)
+    const cwd = session.cwd?.trim()
+    if (!cwd) continue
+    const bucket = buckets.get(cwd)
     if (bucket) bucket.push(session)
-    else buckets.set(owner.name, [session])
+    else buckets.set(cwd, [session])
   }
 
   const groups: SessionGroup[] = []
-  for (const project of projects) {
-    const bucket = buckets.get(project.name)
-    if (!bucket?.length) continue
+  for (const [cwd, bucket] of buckets) {
     const sorted = [...bucket].sort(
       (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
     )
-    groups.push({ project, sessions: sorted.slice(0, perGroup) })
+    groups.push({
+      cwd,
+      label: "",
+      branch: sorted.find((s) => s.gitBranch)?.gitBranch,
+      sessions: sorted.slice(0, perGroup),
+    })
   }
 
   groups.sort(
     (a, b) =>
       Date.parse(b.sessions[0].updatedAt) - Date.parse(a.sessions[0].updatedAt)
   )
-  return { groups: groups.slice(0, maxGroups), ungrouped }
+
+  // 标签只用文件夹名，不写路径：侧边栏窄，路径一长就被截断，反而不如
+  // 一个短名 + 悬停看完整路径来得清楚。
+  return groups
+    .slice(0, maxGroups)
+    .map((group) => ({ ...group, label: baseName(group.cwd) }))
 }
 
-/** path 是否等于 base 或在 base 之下（纯字符串比较，两边都是后端给的绝对路径）。 */
-function isUnder(base: string, path: string): boolean {
-  if (!base || !path) return false
-  if (path === base) return true
-  return path.startsWith(base.endsWith("/") ? base : `${base}/`)
+function baseName(path: string): string {
+  const parts = path.split("/").filter(Boolean)
+  return parts.at(-1) ?? path
 }

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useIsOwner } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
-import { groupSessionsByProject, type SessionGroup } from "@/lib/session-groups"
+import { groupSessionsByCwd, type SessionGroup } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   DramaIcon,
@@ -49,15 +49,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // 随路由变化刷新：新建/删除会话后列表立即跟上，不留已删会话的死链接。
   React.useEffect(() => {
     let cancelled = false
-    Promise.all([
-      api.sessions.list({ pageSize: RECENT_LIMIT }),
-      // 项目拉不到（工作区根不可读等）不该拖垮最近会话，失败退化成平铺。
-      api.projects.list().catch(() => ({ items: [] })),
-    ])
-      .then(([sessions, projects]) => {
+    api.sessions
+      .list({ pageSize: RECENT_LIMIT })
+      .then((sessions) => {
         if (cancelled) return
         setRecent(sessions.items)
-        setGroups(groupSessionsByProject(sessions.items, projects.items).groups)
+        // 按 cwd 分组，不依赖项目扫描——会话自带的目录永远对得上。
+        setGroups(groupSessionsByCwd(sessions.items))
       })
       .catch(() => {
         // 侧边栏的最近列表拉不到就空着，不打断主流程。
