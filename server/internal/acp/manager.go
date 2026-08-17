@@ -133,7 +133,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 	// 能按命令名判断（agentInfo 要 initialize 后才有，但命令名足以分 claude/
 	// codex）。Meta/AdditionalDirs 留给 handshake 的 session/new 与 load 用。
 	if m.skillpackDir != "" {
-		inj := adapterFor(flavorOf("", opts.Runtime.Command)).Isolation(IsolationInput{
+		inj := adapterFor(FlavorOf("", opts.Runtime.Command)).Isolation(IsolationInput{
 			SkillpackDir: m.skillpackDir,
 			Cwd:          opts.Cwd,
 			Home:         os.Getenv("HOME"),
@@ -218,7 +218,7 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 	if init.AgentInfo != nil {
 		agentName = init.AgentInfo.Name
 	}
-	sess.adapter = adapterFor(flavorOf(agentName, command))
+	sess.adapter = adapterFor(FlavorOf(agentName, command))
 
 	// 先尝试恢复：上下文留在 agent 侧同一个 thread 里，进程重启后还能续聊。
 	// load 会重放全部历史 update，重放期间的内容事件被抑制，不能混进实时流。

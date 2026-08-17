@@ -33,9 +33,16 @@ type Session struct {
 	// LastSettings 是最后一次生效的统一设置当前值快照
 	// （model/effort/level/plan/fast），恢复会话的降级视图用它填 Current*，
 	// 让三种状态（新建/进行中/恢复）的设置控件显示一致。
-	LastSettings JSONMap   `gorm:"type:text" json:"lastSettings,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `gorm:"index" json:"updatedAt"`
+	LastSettings JSONMap `gorm:"type:text" json:"lastSettings,omitempty"`
+	// MCPToken 是本会话专属 MCP 端点的路径令牌（/api/mcp/db/{token}）：
+	// agent 子进程带着它回连拿数据库工具。懒生成——只有真的挂载了工具面
+	// 的会话才有值。不出 API：它是凭证。
+	//
+	// 索引刻意不加 unique：绝大多数会话这里是空串，而 SQLite 的唯一索引
+	// 会把多个空串判成重复。唯一性由 24 字节随机数保证，不靠约束。
+	MCPToken  string    `gorm:"size:64;index" json:"-"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `gorm:"index" json:"updatedAt"`
 
 	Agent *Agent `gorm:"foreignKey:AgentID" json:"-"`
 }

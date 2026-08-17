@@ -28,9 +28,24 @@ type ChatService struct {
 	//（不启用统计）。
 	skillUsage *SkillUsageService
 
+	// mounter 由装配层注入，为会话算出要挂载的 MCP 工具面（目前是数据库
+	// 数据源）。用接口而不是直接 import 那个业务包——依赖只允许单向，
+	// 而它反过来要用 SessionService 解析 token。可为 nil（不挂任何工具）。
+	mounter MCPMounter
+
 	mu      sync.Mutex
 	brokers map[uint]*stream.Broker
 }
+
+// MCPMounter 为一条会话算出要挂载的 MCP server 清单与 _meta 追加内容。
+// 两个返回值对应 acp.OpenOptions 的 MCPServers 与 MetaExtra——哪个有值
+// 取决于 runtime 方言，实现方自己判断。
+type MCPMounter interface {
+	MountsFor(ctx context.Context, sessionID uint, cwd, flavor string) ([]any, map[string]any, error)
+}
+
+// SetMCPMounter 装上工具面来源。装配期调用一次，之后只读。
+func (s *ChatService) SetMCPMounter(m MCPMounter) { s.mounter = m }
 
 func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
 	return &ChatService{
@@ -117,6 +132,23 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		cwd = agent.Cwd
 	}
 
+	// 工具面按工作目录现算：数据库数据源是按项目隔离的，会话开在哪个
+	// 项目就只挂哪个项目的。算不出来不算失败——没有数据库工具的会话
+	// 照样是一条正常会话。
+	var mcpServers []any
+	var metaExtra map[string]any
+	if s.mounter != nil {
+		flavor := agent.Flavor
+		if flavor == "" {
+			flavor = string(acp.FlavorOf(agent.Name, agent.Command))
+		}
+		mcpServers, metaExtra, err = s.mounter.MountsFor(ctx, sessionID, cwd, flavor)
+		if err != nil {
+			slog.Warn("mount session mcp", "session", sessionID, "err", err)
+			mcpServers, metaExtra = nil, nil
+		}
+	}
+
 	br := s.brokerFor(sessionID)
 	sess, err := s.manager.Open(ctx, acp.OpenOptions{
 		Key:     key,
@@ -127,6 +159,8 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		WireTap: func(dir string, msg json.RawMessage) { s.transcripts.Append(key, dir, msg) },
 		// 进程重启后优先恢复 agent 侧的同一条会话，保住上下文。
 		ResumeACPSessionID: view.ACPSessionID,
+		MCPServers:         mcpServers,
+		MetaExtra:          metaExtra,
 	})
 	if err != nil {
 		s.markSessionError(sessionID, err)

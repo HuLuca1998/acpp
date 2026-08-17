@@ -273,8 +273,8 @@ func TestFlavorOf(t *testing.T) {
 		{"gemini-cli", "gemini", FlavorGeneric},
 	}
 	for _, c := range cases {
-		if got := flavorOf(c.agentName, c.command); got != c.want {
-			t.Errorf("flavorOf(%q, %q) = %q, want %q", c.agentName, c.command, got, c.want)
+		if got := FlavorOf(c.agentName, c.command); got != c.want {
+			t.Errorf("FlavorOf(%q, %q) = %q, want %q", c.agentName, c.command, got, c.want)
 		}
 	}
 }

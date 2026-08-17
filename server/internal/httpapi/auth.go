@@ -130,6 +130,9 @@ func isOwnerOnly(r *http.Request) bool {
 	switch {
 	case strings.HasPrefix(path, "/api/orchestrator/"),
 		strings.HasPrefix(path, "/api/tenants"),
+		// 数据库连接里躺着生产库凭证，整个面（含只读的库表浏览）都是
+		// owner 的；会话侧那几条按项目过滤的另有 owner 判定。
+		strings.HasPrefix(path, "/api/datasources"),
 		strings.HasPrefix(path, "/api/system"):
 		return true
 	case strings.HasPrefix(path, "/api/skills"),

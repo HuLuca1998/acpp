@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"acpp/server/internal/config"
+	"acpp/server/internal/datasource"
 	"acpp/server/internal/orch"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
@@ -28,8 +29,9 @@ type Services struct {
 	Update     *system.Updater
 	Roles      *orch.RoleService
 	Orch       *orch.Service
-	Tenants    *service.TenantService
-	Projects   *project.Service
+	Tenants     *service.TenantService
+	Projects    *project.Service
+	DataSources *datasource.Service
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -232,6 +234,28 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/sessions/{id}/git/discard", workspace.discard)
 	api.HandleFunc("POST /api/sessions/{id}/git/worktrees", workspace.createWorktree)
 	api.HandleFunc("DELETE /api/sessions/{id}/git/worktrees", workspace.removeWorktree)
+
+	// 数据库数据源：管理面是 owner 专属（isOwnerOnly 按前缀覆盖），
+	// 会话面按 cwd 所属项目过滤——界面能看到的范围与 AI 能操作的范围
+	// 是同一个（datasource.Service.ForCwd 是唯一执行点）。
+	datasources := datasourceHandler{sources: svcs.DataSources, cwdOf: sessionCwd}
+	api.HandleFunc("GET /api/datasources", datasources.list)
+	api.HandleFunc("POST /api/datasources", datasources.create)
+	api.HandleFunc("GET /api/datasources/{id}", datasources.get)
+	api.HandleFunc("PUT /api/datasources/{id}", datasources.update)
+	api.HandleFunc("DELETE /api/datasources/{id}", datasources.remove)
+	api.HandleFunc("POST /api/datasources/{id}/test", datasources.test)
+	api.HandleFunc("GET /api/datasources/{id}/databases", datasources.databases)
+	api.HandleFunc("GET /api/datasources/{id}/tables", datasources.tables)
+	api.HandleFunc("GET /api/datasources/{id}/schema", datasources.schema)
+	api.HandleFunc("POST /api/datasources/{id}/query", datasources.query)
+	// 会话侧（斜杠命令的数据源）：只列当前项目的，id 不在项目内按不存在处理。
+	api.HandleFunc("GET /api/sessions/{id}/datasources", datasources.sessionList)
+	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/databases", datasources.sessionDatabases)
+	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/tables", datasources.sessionTables)
+	// agent 回连的数据库工具端点。路径比编排的 /api/mcp/{token} 更具体，
+	// ServeMux 会优先命中这条。
+	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)
 
 	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
 	terminals := terminalHandler{

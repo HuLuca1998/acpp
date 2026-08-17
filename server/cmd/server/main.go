@@ -13,6 +13,7 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/config"
+	"acpp/server/internal/datasource"
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/model"
@@ -123,6 +124,12 @@ func run() error {
 	// 项目面：扫工作区根下的 git 仓库，克隆落到 <root>/<组织>/<仓库>。
 	projectService := project.NewService(gdb)
 
+	// 数据库数据源：配置面 + 挂给会话的 MCP 工具面。两个方向都经这里
+	// 装配——chat 只认得 MCPMounter 接口，datasource 只认得 Sessions 接口，
+	// 两个业务包因此不互相 import。
+	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr)
+	chatService.SetMCPMounter(datasourceService)
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -132,18 +139,19 @@ func run() error {
 	updateService.StartPeriodicCheck(context.Background(), 24*time.Hour)
 
 	handler := httpapi.NewRouter(cfg, httpapi.Services{
-		Agents:     agentService,
-		Sessions:   sessionService,
-		Chat:       chatService,
-		Terminals:  terminalService,
-		System:     system.NewService(gdb, cfg),
-		Skills:     service.NewSkillService(cfg.DataDir, skillUsage),
-		SkillUsage: skillUsage,
-		Update:     updateService,
-		Roles:      roleService,
-		Orch:       orchService,
-		Tenants:    tenantService,
-		Projects:   projectService,
+		Agents:      agentService,
+		Sessions:    sessionService,
+		Chat:        chatService,
+		Terminals:   terminalService,
+		System:      system.NewService(gdb, cfg),
+		Skills:      service.NewSkillService(cfg.DataDir, skillUsage),
+		SkillUsage:  skillUsage,
+		Update:      updateService,
+		Roles:       roleService,
+		Orch:        orchService,
+		Tenants:     tenantService,
+		Projects:    projectService,
+		DataSources: datasourceService,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

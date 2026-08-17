@@ -18,9 +18,9 @@ const (
 	FlavorGeneric Flavor = "generic"
 )
 
-// flavorOf 用 initialize 返回的 agent 名与启动命令双信号识别方言。
+// FlavorOf 用 initialize 返回的 agent 名与启动命令双信号识别方言。
 // 认不出的一律走 generic：按 category 试探、其余透传，不猜语义。
-func flavorOf(agentName, command string) Flavor {
+func FlavorOf(agentName, command string) Flavor {
 	s := strings.ToLower(agentName + " " + command)
 	switch {
 	case strings.Contains(s, "claude"):

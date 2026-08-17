@@ -20,14 +20,7 @@ func flavorOfAgent(agent *model.Agent) string {
 	if agent.Flavor != "" {
 		return agent.Flavor
 	}
-	s := strings.ToLower(agent.Name + " " + agent.Command)
-	switch {
-	case strings.Contains(s, "claude"):
-		return "claude"
-	case strings.Contains(s, "codex"):
-		return "codex"
-	}
-	return "generic"
+	return string(acp.FlavorOf(agent.Name, agent.Command))
 }
 
 // buildOrchPrompt 组装主会话的调度提示词：spawn_agent 用法 + 角色雇佣

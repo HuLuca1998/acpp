@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -163,6 +165,42 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 
 	session.Agent = &agent
 	return s.toView(&session), nil
+}
+
+// EnsureMCPToken 懒生成会话专属的 MCP 端点令牌（agent 子进程带它回连拿
+// 工具）。已有就复用——token 换新会让恢复中的会话指向一个死端点。
+func (s *SessionService) EnsureMCPToken(ctx context.Context, id uint) (string, error) {
+	var session model.Session
+	if err := s.db.WithContext(ctx).First(&session, id).Error; err != nil {
+		return "", fmt.Errorf("load session %d: %w", id, err)
+	}
+	if session.MCPToken != "" {
+		return session.MCPToken, nil
+	}
+
+	raw := make([]byte, 24)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate mcp token: %w", err)
+	}
+	token := hex.EncodeToString(raw)
+	if err := s.db.WithContext(ctx).Model(&model.Session{}).
+		Where("id = ?", id).Update("mcp_token", token).Error; err != nil {
+		return "", fmt.Errorf("save mcp token: %w", err)
+	}
+	return token, nil
+}
+
+// CwdByMCPToken 把 MCP 端点的 token 解析成会话工作目录。
+// token 即凭证：查不到一律同一个错，不区分「不存在」与「无权」。
+func (s *SessionService) CwdByMCPToken(ctx context.Context, token string) (string, error) {
+	if token == "" {
+		return "", fmt.Errorf("%w: mcp token", ErrNotFound)
+	}
+	var session model.Session
+	if err := s.db.WithContext(ctx).Where("mcp_token = ?", token).First(&session).Error; err != nil {
+		return "", fmt.Errorf("%w: mcp token", ErrNotFound)
+	}
+	return session.Cwd, nil
 }
 
 func (s *SessionService) Delete(ctx context.Context, scope Scope, id uint) error {
