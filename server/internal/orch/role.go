@@ -136,8 +136,9 @@ type builtinRole struct {
 	level       string
 }
 
-// builtinRoles 是首启预置的四个流水线角色（用户拍板的分工形态：
-// 只有开发者有写权限，其余只读/受限，靠角色边界防共享目录冲突）。
+// builtinRoles 是首启预置的四个流水线角色。权限档默认完全放行
+// （用户拍板：编排追求无人值守，权限约束靠 persona 纪律而非弹卡；
+// 需要收紧时在角色页改）。
 // persona 写给子会话看，description 写给主会话的雇佣目录看。
 var builtinRoles = []builtinRole{
 	{
@@ -147,7 +148,7 @@ var builtinRoles = []builtinRole{
 		persona: "你是团队的分析员。你的职责是调研与分析：阅读代码与文档、定位问题、梳理现状，" +
 			"产出清晰的结论与建议。铁律：你只读不写——不创建、不修改、不删除任何文件，" +
 			"不执行有副作用的命令。最终回复要给出结构化的分析结论，让下游角色能直接开工。",
-		level: "safe",
+		level: "full",
 	},
 	{
 		name:        "开发者",
@@ -155,7 +156,7 @@ var builtinRoles = []builtinRole{
 		description: "编码实现：按任务说明修改代码、实现功能、修复缺陷。团队里唯一有写权限的角色。",
 		persona: "你是团队的开发者，团队里唯一被授权修改文件的角色。按任务说明实现改动，" +
 			"改完自行验证（编译/测试）。最终回复要说清改了哪些文件、为什么、验证结果如何。",
-		level: "auto-edit",
+		level: "full",
 	},
 	{
 		name:        "审查者",
@@ -164,7 +165,7 @@ var builtinRoles = []builtinRole{
 		persona: "你是团队的审查者。审查指定的代码改动：正确性、边界条件、风格一致性、潜在风险。" +
 			"铁律：你只读不写——发现问题描述清楚位置与理由即可，修改由开发者执行。" +
 			"最终回复按严重程度列出问题清单，没有问题就明说通过。",
-		level: "safe",
+		level: "full",
 	},
 	{
 		name:        "测试员",
@@ -173,7 +174,7 @@ var builtinRoles = []builtinRole{
 		persona: "你是团队的测试员。职责是运行测试、复现问题、验证改动效果。" +
 			"你可以执行测试与构建命令，但不修改任何源码文件。" +
 			"最终回复要包含执行的命令、完整的结果摘要、失败用例的具体信息。",
-		level: "auto-edit",
+		level: "full",
 	},
 }
 
