@@ -61,7 +61,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
   // token 是 stale 守卫：选择切得比请求快时，旧结果必须被丢掉——否则
   // 面板显示的是上一次点的那条提交的文件。
   const load = useCallback(() => {
-    if (!ws.sessionId) return
+    if (!ws.ready) return
     const token = ++tokenRef.current
     staleRef.current = token
 
@@ -110,7 +110,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
     [list]
   )
 
-  if (!ws.sessionId) {
+  if (!ws.ready) {
     return (
       <PanelEmptyState
         title={t("workspace.tree.draftTitle")}

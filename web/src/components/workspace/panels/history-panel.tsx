@@ -54,7 +54,7 @@ export const HistoryPanel = memo(function HistoryPanel() {
   // setState 会触发额外一轮渲染，spinner 只留给显式刷新与翻页。
   const load = useCallback(
     (offset = 0) => {
-      if (!ws.sessionId) return
+      if (!ws.ready) return
       // 换 ref 后旧请求的结果必须丢掉，否则「加载更早」会把另一条分支的
       // 提交接在当前链路后面。
       const token = ++tokenRef.current
@@ -83,7 +83,7 @@ export const HistoryPanel = memo(function HistoryPanel() {
     return ws.onWorkspaceRefresh(() => load(0))
   }, [load, ws])
 
-  if (!ws.sessionId) {
+  if (!ws.ready) {
     return (
       <PanelEmptyState
         title={t("workspace.tree.draftTitle")}

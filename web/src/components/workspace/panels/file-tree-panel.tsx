@@ -37,7 +37,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
   >(new Map())
 
   const load = useCallback(() => {
-    if (!ws.sessionId) return
+    if (!ws.ready) return
     ws.scope
       .workspaceTree(ws.sessionId, { depth: 2 })
       .then((listing) => {
@@ -55,7 +55,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err))
       })
-  }, [ws.sessionId, ws.scope])
+  }, [ws.ready, ws.sessionId, ws.scope])
 
   useEffect(() => {
     load()
@@ -90,7 +90,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
     [ws.sessionId, childrenByPath]
   )
 
-  if (!ws.sessionId) {
+  if (!ws.ready) {
     return (
       <PanelEmptyState
         title={t("workspace.tree.draftTitle")}

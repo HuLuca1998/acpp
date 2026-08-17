@@ -305,3 +305,210 @@ func sameDir(a, b string) bool {
 	rb, err2 := filepath.EvalSymlinks(b)
 	return err1 == nil && err2 == nil && ra == rb
 }
+
+// ── git 写操作（提交/推送/拉取/合并/分支增删/丢弃改动）────────────
+//
+// 每个操作都是一条固定的 git 命令，参数经白名单校验后走 exec 数组传递
+// （没有 shell）。失败时把 git 的话原样带回去——「push 被拒绝因为远端有
+// 新提交」这种信息，翻译成「操作失败」只会让人不知道下一步做什么。
+
+// GitOpResult 是一次写操作的结果：git 的输出 + 操作后的分支视图。
+type GitOpResult struct {
+	Output string         `json:"output,omitempty"`
+	Branch *GitBranchView `json:"branch,omitempty"`
+}
+
+// WorkspaceGitCommitAll 提交工作区的全部改动（含未跟踪文件）。
+//
+// 用 `add -A` + `commit` 而不是 `commit -a`：后者不含未跟踪文件，界面上
+// 明明列着的新文件提交后却不见了，是最容易让人失去信任的那种「意外」。
+func WorkspaceGitCommitAll(ctx context.Context, cwd, message string) (*GitOpResult, error) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return nil, fmt.Errorf("%w: commit message is required", ErrInvalid)
+	}
+	if err := requireRepo(ctx, cwd); err != nil {
+		return nil, err
+	}
+	if _, err := runGit(ctx, cwd, "add", "-A"); err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	out, err := runGit(ctx, cwd, "commit", "-m", message)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return withBranchView(ctx, cwd, out)
+}
+
+// WorkspaceGitPush 推送当前分支。没有 upstream 时顺手建立跟踪关系——
+// 第一次推一条新分支是常态，不该因为「没有上游」失败一次再让人手敲。
+func WorkspaceGitPush(ctx context.Context, cwd string) (*GitOpResult, error) {
+	if err := requireRepo(ctx, cwd); err != nil {
+		return nil, err
+	}
+	branch, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	name := strings.TrimSpace(branch)
+	if name == "HEAD" {
+		return nil, fmt.Errorf("%w: detached HEAD has nothing to push", ErrInvalid)
+	}
+
+	args := []string{"push"}
+	if _, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); err != nil {
+		args = append(args, "-u", "origin", name)
+	}
+	out, err := runGit(ctx, cwd, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return withBranchView(ctx, cwd, out)
+}
+
+// WorkspaceGitPull 拉取当前分支，**只接受快进**。
+// 自动 merge 会在别人推过东西时留下一个谁也没想要的合并提交，甚至冲突；
+// 快进失败是有用的信号：该由人决定 rebase 还是 merge。
+func WorkspaceGitPull(ctx context.Context, cwd string) (*GitOpResult, error) {
+	if err := requireRepo(ctx, cwd); err != nil {
+		return nil, err
+	}
+	out, err := runGit(ctx, cwd, "pull", "--ff-only")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return withBranchView(ctx, cwd, out)
+}
+
+// WorkspaceGitMerge 把 ref 合并进当前分支（不打开编辑器）。
+func WorkspaceGitMerge(ctx context.Context, cwd, ref string) (*GitOpResult, error) {
+	if err := checkRefName(ref); err != nil {
+		return nil, err
+	}
+	if err := requireRepo(ctx, cwd); err != nil {
+		return nil, err
+	}
+	out, err := runGit(ctx, cwd, "merge", "--no-edit", ref)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return withBranchView(ctx, cwd, out)
+}
+
+// BranchInput 是新建分支的入参：从 From（空 = 当前 HEAD）拉出 Name。
+type BranchInput struct {
+	Name string `json:"name"`
+	From string `json:"from"`
+	// Checkout 为 true 时顺带切过去。
+	Checkout bool `json:"checkout"`
+}
+
+// WorkspaceGitCreateBranch 新建分支（可选立刻切过去）。
+func WorkspaceGitCreateBranch(ctx context.Context, cwd string, in BranchInput) (*GitOpResult, error) {
+	if err := checkRefName(in.Name); err != nil {
+		return nil, err
+	}
+	from := strings.TrimSpace(in.From)
+	if from != "" {
+		if err := checkRefName(from); err != nil {
+			return nil, err
+		}
+	}
+	if err := requireRepo(ctx, cwd); err != nil {
+		return nil, err
+	}
+
+	if in.Checkout {
+		// 切过去要求工作区干净，理由同 WorkspaceGitCheckout。
+		if status, err := runGit(ctx, cwd, "status", "--porcelain"); err == nil && strings.TrimSpace(status) != "" {
+			return nil, fmt.Errorf("%w: working tree has uncommitted changes", ErrInvalid)
+		}
+	}
+
+	args := []string{"branch", in.Name}
+	if in.Checkout {
+		args = []string{"checkout", "-b", in.Name}
+	}
+	if from != "" {
+		args = append(args, from)
+	}
+	out, err := runGit(ctx, cwd, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return withBranchView(ctx, cwd, out)
+}
+
+// WorkspaceGitDeleteBranch 删本地分支。force 才用 -D——没合并的分支
+// 默认删不掉是 git 的保护，不该替用户绕过去。
+func WorkspaceGitDeleteBranch(ctx context.Context, cwd, name string, force bool) (*GitOpResult, error) {
+	if err := checkRefName(name); err != nil {
+		return nil, err
+	}
+	if err := requireRepo(ctx, cwd); err != nil {
+		return nil, err
+	}
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	out, err := runGit(ctx, cwd, "branch", flag, name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return withBranchView(ctx, cwd, out)
+}
+
+// WorkspaceGitDiscard 丢弃改动：paths 为空表示整个工作区。
+//
+// 已跟踪文件用 restore 回到 HEAD，未跟踪文件用 clean 删掉——只做前者的话
+// 「丢弃全部改动」之后界面上还挂着一堆新文件，与它的字面意思不符。
+func WorkspaceGitDiscard(ctx context.Context, cwd string, paths []string) error {
+	if err := requireRepo(ctx, cwd); err != nil {
+		return err
+	}
+	for _, path := range paths {
+		if strings.HasPrefix(path, "-") || strings.Contains(path, "\x00") {
+			return fmt.Errorf("%w: invalid path %q", ErrInvalid, path)
+		}
+	}
+
+	restore := []string{"restore", "--staged", "--worktree", "--"}
+	clean := []string{"clean", "-fd", "--"}
+	if len(paths) == 0 {
+		restore = append(restore, ".")
+		clean = append(clean, ".")
+	} else {
+		restore = append(restore, paths...)
+		clean = append(clean, paths...)
+	}
+
+	// restore 对「只有未跟踪文件」的路径会报错，那不是失败——clean 会处理它。
+	restoreErr := func() error {
+		if _, err := runGit(ctx, cwd, restore...); err != nil {
+			return err
+		}
+		return nil
+	}()
+	if _, err := runGit(ctx, cwd, clean...); err != nil && restoreErr != nil {
+		return fmt.Errorf("%w: %s", ErrInvalid, restoreErr)
+	}
+	return nil
+}
+
+// requireRepo 是写操作的统一前置：不是仓库就别往下走。
+func requireRepo(ctx context.Context, cwd string) error {
+	if _, err := runGit(ctx, cwd, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return fmt.Errorf("%w: not a git repository", ErrInvalid)
+	}
+	return nil
+}
+
+// withBranchView 给写操作的结果附上最新分支视图，省掉前端再问一次。
+func withBranchView(ctx context.Context, cwd, output string) (*GitOpResult, error) {
+	result := &GitOpResult{Output: strings.TrimSpace(output)}
+	if view, err := WorkspaceGitBranches(ctx, cwd); err == nil {
+		result.Branch = view
+	}
+	return result, nil
+}

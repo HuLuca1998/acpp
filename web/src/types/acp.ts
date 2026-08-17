@@ -668,6 +668,12 @@ export interface GitBranchView {
   worktrees: GitWorktree[]
 }
 
+/** 一次 git 写操作的结果：git 的原话 + 操作后的分支视图。 */
+export interface GitOpResult {
+  output?: string
+  branch?: GitBranchView
+}
+
 /** 提交链路的一页。 */
 export interface GitHistory {
   commits: GitCommit[]

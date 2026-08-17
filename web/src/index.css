@@ -9,41 +9,42 @@
 
 /* prose（markdown 正文）配色映射到主题变量，无需 prose-invert 即可跟随深浅色。 */
 .prose {
-    --tw-prose-body: var(--foreground);
-    --tw-prose-headings: var(--foreground);
-    --tw-prose-lead: var(--muted-foreground);
-    --tw-prose-links: var(--primary);
-    --tw-prose-bold: var(--foreground);
-    --tw-prose-counters: var(--muted-foreground);
-    --tw-prose-bullets: var(--muted-foreground);
-    --tw-prose-hr: var(--border);
-    --tw-prose-quotes: var(--foreground);
-    --tw-prose-quote-borders: var(--border);
-    --tw-prose-captions: var(--muted-foreground);
-    --tw-prose-kbd: var(--foreground);
-    --tw-prose-code: var(--foreground);
-    --tw-prose-pre-code: var(--foreground);
-    --tw-prose-pre-bg: var(--background);
-    --tw-prose-th-borders: var(--border);
-    --tw-prose-td-borders: var(--border);
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--background);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
 }
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    /* 系统字体栈：macOS 上即 SF Pro，打包成桌面 app 后与原生控件完全一致。 */
-    --font-sans: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --font-heading: var(--font-sans);
+  /* 系统字体栈：macOS 上即 SF Pro，打包成桌面 app 后与原生控件完全一致。 */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
 
-    /* 强化过的 easing：内置的 ease-out 太弱，撑不起"响应迅速"的手感。 */
-    --ease-snappy: cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-fluid: cubic-bezier(0.77, 0, 0.175, 1);
-    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* 强化过的 easing：内置的 ease-out 太弱，撑不起"响应迅速"的手感。 */
+  --ease-snappy: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-fluid: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-    /* 状态色：跨全部 palette 恒定（palette 块不覆盖它们），深浅两版见 :root/.dark。 */
-    --color-success: var(--success);
-    --color-warning: var(--warning);
+  /* 状态色：跨全部 palette 恒定（palette 块不覆盖它们），深浅两版见 :root/.dark。 */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
 
-    /* 品牌色：agent 图标用，跨 palette 与明暗恒定（Claude 官方橙）。 */
-    --color-brand-claude: #d97757;
+  /* 品牌色：agent 图标用，跨 palette 与明暗恒定（Claude 官方橙）。 */
+  --color-brand-claude: #d97757;
 }
 
 /* 滚动条随主题走：细条、无轨道底色，thumb 用前景色的低透明版，
@@ -65,160 +66,171 @@
 }
 
 @theme inline {
+  /* 活跃状态点的呼吸动画：比 animate-pulse 轻得多，只做存在感提示。 */
+  --animate-breathe: breathe 2.6s var(--ease-fluid) infinite;
 
-    /* 活跃状态点的呼吸动画：比 animate-pulse 轻得多，只做存在感提示。 */
-    --animate-breathe: breathe 2.6s var(--ease-fluid) infinite;
-
-    @keyframes breathe {
-      0%,
-      100% {
-        opacity: 1;
-      }
-      50% {
-        opacity: 0.45;
-      }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 1;
     }
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+    50% {
+      opacity: 0.45;
+    }
+  }
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.527 0.154 150.069);
-    --primary-foreground: oklch(0.982 0.018 155.826);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --success: oklch(0.6 0.15 150);
-    --warning: oklch(0.666 0.132 75);
-    --radius: 0.875rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.627 0.194 149.214);
-    --sidebar-primary-foreground: oklch(0.982 0.018 155.826);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.527 0.154 150.069);
+  --primary-foreground: oklch(0.982 0.018 155.826);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --success: oklch(0.6 0.15 150);
+  --warning: oklch(0.666 0.132 75);
+  --radius: 0.875rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.627 0.194 149.214);
+  --sidebar-primary-foreground: oklch(0.982 0.018 155.826);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.448 0.119 151.328);
-    --primary-foreground: oklch(0.982 0.018 155.826);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --success: oklch(0.723 0.19 150);
-    --warning: oklch(0.75 0.14 80);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.723 0.219 149.579);
-    --sidebar-primary-foreground: oklch(0.982 0.018 155.826);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.448 0.119 151.328);
+  --primary-foreground: oklch(0.982 0.018 155.826);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --success: oklch(0.723 0.19 150);
+  --warning: oklch(0.75 0.14 80);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.723 0.219 149.579);
+  --sidebar-primary-foreground: oklch(0.982 0.018 155.826);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
     @apply bg-background text-foreground;
     /* 桌面 app 语义：界面 chrome 默认不可选中，内容区单独恢复（见下）。 */
     user-select: none;
-    }
+  }
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    }
+  }
 
   /* macOS 原生控件用箭头光标；手型是"网页链接"的隐喻，桌面 app 里出戏。 */
-  button, [role="button"], [role="menuitem"], [role="option"], [role="tab"], label {
+  button,
+  [role="button"],
+  [role="menuitem"],
+  [role="option"],
+  [role="tab"],
+  label {
     cursor: default;
   }
 
   /* 正文内容必须可复制：消息、代码、输入框、markdown。 */
-  input, textarea, pre, code,
-  .prose, [data-slot="bubble-content"], [data-slot="marker-content"] {
+  input,
+  textarea,
+  pre,
+  code,
+  .prose,
+  [data-slot="bubble-content"],
+  [data-slot="marker-content"] {
     user-select: text;
   }
 
   /* 大标题收紧字距——字号越大，默认字距越显松。 */
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     letter-spacing: -0.015em;
   }
 }
@@ -233,7 +245,9 @@
   [data-slot="sidebar-menu-button"],
   [data-slot="toggle-group-item"],
   [data-slot="tabs-trigger"] {
-    transition-property: scale, background-color, border-color, color, box-shadow, opacity, translate;
+    transition-property:
+      scale, background-color, border-color, color, box-shadow, opacity,
+      translate;
     transition-duration: 150ms;
     transition-timing-function: var(--ease-snappy);
   }
@@ -678,15 +692,38 @@
   --dv-tab-margin-inline: 3px;
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--primary);
-  --dv-drag-over-background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  --dv-drag-over-background-color: color-mix(
+    in oklab,
+    var(--primary) 12%,
+    transparent
+  );
   --dv-drag-over-border-color: var(--primary);
   --dv-icon-hover-background-color: var(--muted);
-  --dv-tabs-container-scrollbar-color: color-mix(in oklab, var(--foreground) 25%, transparent);
-  --dv-scrollbar-background-color: color-mix(in oklab, var(--foreground) 25%, transparent);
-  --dv-edge-dock-indicator-color: color-mix(in oklab, var(--primary) 55%, transparent);
+  --dv-tabs-container-scrollbar-color: color-mix(
+    in oklab,
+    var(--foreground) 25%,
+    transparent
+  );
+  --dv-scrollbar-background-color: color-mix(
+    in oklab,
+    var(--foreground) 25%,
+    transparent
+  );
+  --dv-edge-dock-indicator-color: color-mix(
+    in oklab,
+    var(--primary) 55%,
+    transparent
+  );
   --dv-context-menu-background-color: var(--popover);
   --dv-context-menu-color: var(--popover-foreground);
-  --dv-floating-box-shadow: 0 8px 32px rgb(0 0 0 / 0.22), 0 2px 8px rgb(0 0 0 / 0.12);
+  --dv-floating-box-shadow:
+    0 8px 32px rgb(0 0 0 / 0.22), 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+/* 分栏拖拽条压到遮罩层之下：dockview 给 sash 的 z-index 是 99，盖过
+   Dialog 的遮罩，结果弹窗开着还能把背后的分栏拖来拖去。 */
+.dockview-theme-acpp .dv-sash {
+  z-index: 20;
 }
 
 /* 组容器：卡片质感（细描边 + 圆角裁切），gap 露出的缝隙是页面底色。 */

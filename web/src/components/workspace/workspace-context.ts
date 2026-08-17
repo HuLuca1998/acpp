@@ -46,8 +46,14 @@ export interface GitStoreState {
  * 承载，只有订阅了 usePreviewPath 的组件会因它重渲染。
  */
 export interface WorkspaceValue {
-  /** 草稿态（会话未创建）为 0，面板据此显示「创建后可用」空态。 */
+  /** 草稿态（会话未创建）为 0。 */
   sessionId: number
+  /**
+   * 工作区数据面能否使用：会话态永远能，草稿态取决于用户选没选工作目录。
+   * 面板用它决定画空态还是画内容——「有没有会话」不是判据，「有没有
+   * 目录」才是。
+   */
+  ready: boolean
   /** 工作区数据面的作用域 API：普通会话与编排主会话只差路径前缀。 */
   scope: WorkspaceScopeApi
   /** dock ready 时注入 dockview api；卸载时传 null。 */

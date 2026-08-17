@@ -6,13 +6,14 @@ import (
 	"acpp/server/internal/service"
 )
 
-// cwdResolver 按会话 id 解析工作目录——普通会话与编排会话的唯一差异
-// 就是记录存在哪张表里，工作区数据面本身只关心 cwd。
+// cwdResolver 解析这次请求要看哪个目录。三种来源共用同一批 handler：
+// 普通会话、编排会话（记录存在哪张表的差别）、以及**草稿态**——会话还
+// 没建，目录由请求直接给（`?cwd=`）。
 //
-// 取整个请求而不只是 context：解析时要顺带做归属校验（会话不属于当前
-// 身份就当作不存在），而身份是从请求里读出来的。工作区的全部数据面因此
-// 共用同一道闸，不用每个 handler 自己记得校验（adr-007）。
-type cwdResolver func(r *http.Request, id uint) (string, error)
+// 取整个请求而不只是 context：解析时要顺带做归属校验与路径闸，而身份是
+// 从请求里读出来的。工作区的全部数据面因此共用同一道闸，不用每个 handler
+// 自己记得校验（adr-007）。
+type cwdResolver func(r *http.Request) (string, error)
 
 // workspaceHandler 提供工作区面板的数据面：文件树与文件预览。
 // 一切路径以会话 cwd 为边界，canonical guard 在 service 层。
@@ -21,12 +22,7 @@ type workspaceHandler struct {
 }
 
 func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -40,12 +36,7 @@ func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h workspaceHandler) file(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -59,12 +50,7 @@ func (h workspaceHandler) file(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h workspaceHandler) gitOverview(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -78,12 +64,7 @@ func (h workspaceHandler) gitOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h workspaceHandler) gitDiff(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -98,12 +79,7 @@ func (h workspaceHandler) gitDiff(w http.ResponseWriter, r *http.Request) {
 
 // history 是提交链路面板的一页（?ref= 按分支/标签过滤，?limit=&offset= 翻页）。
 func (h workspaceHandler) history(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -124,12 +100,7 @@ func (h workspaceHandler) history(w http.ResponseWriter, r *http.Request) {
 
 // compare 对比两个 ref：head 相对 base 多出的提交与文件变更。
 func (h workspaceHandler) compare(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -145,12 +116,7 @@ func (h workspaceHandler) compare(w http.ResponseWriter, r *http.Request) {
 
 // branches 是会话底部分支控件的数据：当前分支、本地/远端分支、worktree 清单。
 func (h workspaceHandler) branches(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -165,12 +131,7 @@ func (h workspaceHandler) branches(w http.ResponseWriter, r *http.Request) {
 
 // checkout 切换分支（可新建），返回切换后的分支视图。
 func (h workspaceHandler) checkout(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -191,12 +152,7 @@ func (h workspaceHandler) checkout(w http.ResponseWriter, r *http.Request) {
 // createWorktree 在会话仓库下开一个隔离工作区，返回它的路径——
 // 从这里开新会话就是「在 worktree 里干活」。
 func (h workspaceHandler) createWorktree(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -216,12 +172,7 @@ func (h workspaceHandler) createWorktree(w http.ResponseWriter, r *http.Request)
 
 // removeWorktree 拆掉一个 worktree（分支保留）。
 func (h workspaceHandler) removeWorktree(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	if _, err := h.cwdOf(r, id); err != nil {
+	if _, err := h.cwdOf(r); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -241,12 +192,7 @@ func (h workspaceHandler) removeWorktree(w http.ResponseWriter, r *http.Request)
 
 // gitCommit 带 ?path= 时返回该文件在这条提交前后的全文，否则返回提交详情。
 func (h workspaceHandler) gitCommit(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r, "id")
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	cwd, err := h.cwdOf(r, id)
+	cwd, err := h.cwdOf(r)
 	if err != nil {
 		writeError(w, err)
 		return

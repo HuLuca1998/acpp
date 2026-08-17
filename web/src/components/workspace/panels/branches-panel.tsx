@@ -5,6 +5,13 @@ import { toast } from "sonner"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
 import {
+  GitConfirmDialog,
+  GitPromptDialog,
+  type GitConfirm,
+  type GitPrompt,
+} from "@/components/workspace/panels/git-dialogs"
+import { copyText } from "@/lib/clipboard"
+import {
   useGitSelection,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
@@ -12,12 +19,13 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
-import type { GitBranchView } from "@/types/acp"
+import type { GitBranchView, GitOpResult } from "@/types/acp"
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -26,12 +34,22 @@ import {
   TagIcon,
 } from "lucide-react"
 
+type RefKind = "local" | "remote" | "tag"
+
+/** 在分支清单里挑主分支：main 优先，其次 master，都没有就没有。 */
+function mainBranchOf(names: string[]): string | null {
+  return (
+    names.find((n) => n === "main") ?? names.find((n) => n === "master") ?? null
+  )
+}
+
 /**
  * 分支面板（vscode / GoLand 的 Git 工具窗左栏）：本地、远程、标签三组。
  *
  * 它是 git 面板群的**选择驱动方**——点一条 ref 让链路面板过滤到它，
- * 按住 ⌘/Ctrl 点第二条进入对比模式，变更与详情面板随之显示对比结果。
- * 面板之间不互相调用，全部经命令总线的选择态（workspace-context）。
+ * ⌘/Ctrl 点第二条进入对比模式。右键菜单按**当前状态**出项：只选了一条
+ * 时不会冒出「对比这两条分支」，当前分支不会出现「迁出」，脏工作区不会
+ * 给你一个点了必然失败的切换。
  */
 export const BranchesPanel = memo(function BranchesPanel() {
   const { t } = useTranslation()
@@ -44,10 +62,12 @@ export const BranchesPanel = memo(function BranchesPanel() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     tags: true,
   })
+  const [prompt, setPrompt] = useState<GitPrompt | null>(null)
+  const [confirm, setConfirm] = useState<GitConfirm | null>(null)
 
   const load = useCallback(() => {
-    if (!ws.sessionId) return
-    // 刷新与 checkout 会并发：晚发出的请求才是当前状态。
+    if (!ws.ready) return
+    // 刷新与写操作会并发：晚发出的请求才是当前状态。
     const token = ++tokenRef.current
     ws.scope
       .gitBranches(ws.sessionId)
@@ -67,7 +87,24 @@ export const BranchesPanel = memo(function BranchesPanel() {
     return ws.onWorkspaceRefresh(load)
   }, [load, ws])
 
-  if (!ws.sessionId) {
+  /** 写操作走同一条路：跑命令 → 换视图 → 刷工作区 → 报结果。 */
+  const run = useCallback(
+    async (label: string, op: () => Promise<GitOpResult>) => {
+      try {
+        const result = await op()
+        tokenRef.current++
+        if (result.branch) setView(result.branch)
+        ws.refreshWorkspace()
+        toast.success(result.output?.trim() || label)
+      } catch (err) {
+        // git 的原话就是下一步该做什么的说明（推送被拒、合并冲突……）。
+        toast.error((err as Error).message)
+      }
+    },
+    [ws]
+  )
+
+  if (!ws.ready) {
     return (
       <PanelEmptyState
         title={t("workspace.tree.draftTitle")}
@@ -91,10 +128,17 @@ export const BranchesPanel = memo(function BranchesPanel() {
     return <PanelEmptyState title={t("workspace.git.notRepo")} />
   }
 
+  const branchView = view
+  const sessionId = ws.sessionId
+  const mainBranch = mainBranchOf(branchView.local.map((b) => b.name))
+  const currentBranch = branchView.detached
+    ? null
+    : (branchView.current ?? null)
+
   const toggle = (key: string) =>
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  /** 单击 = 只选它；⌘/Ctrl 单击 = 加入选择（凑够两个即对比）。 */
+  /** 单击 = 只选它（再点取消）；⌘/Ctrl 单击 = 加入选择，凑够两条即对比。 */
   const pick = (ref: string, additive: boolean) => {
     if (!additive) {
       ws.selectRefs(
@@ -109,29 +153,49 @@ export const BranchesPanel = memo(function BranchesPanel() {
     )
   }
 
-  const checkout = async (ref: string) => {
-    try {
-      const next = await ws.scope.gitCheckout(ws.sessionId, { branch: ref })
-      tokenRef.current++
-      setView(next)
-      ws.refreshWorkspace()
-      toast.success(t("chat.branch.switched", { branch: ref }))
-    } catch (err) {
-      toast.error((err as Error).message)
-    }
-  }
-
-  /**
-   * 右键「让 AI 分析」：已经选了另一条 ref 就写成对比请求，否则问这条
-   * 分支本身。prompt 只填进输入框，发不发由用户决定。
-   */
-  const askAbout = (target: string) => {
-    const other = selection.refs.find((ref) => ref !== target)
-    ws.askAI(
-      other
-        ? t("workspace.git.promptCompare", { base: other, head: target })
-        : t("workspace.git.promptBranch", { ref: target })
-    )
+  const actions: RefActions = {
+    askCompare: (base, head) =>
+      ws.askAI(t("workspace.git.promptCompare", { base, head })),
+    askBranch: (ref) => ws.askAI(t("workspace.git.promptBranch", { ref })),
+    checkout: (ref) =>
+      void run(t("chat.branch.switched", { branch: ref }), () =>
+        ws.scope
+          .gitCheckout(sessionId, { branch: ref })
+          .then((branch) => ({ branch }))
+      ),
+    newBranch: (from, remote) =>
+      setPrompt({
+        title: remote
+          ? t("workspace.git.checkoutRemote")
+          : t("workspace.git.newBranchFrom", { ref: from }),
+        description: t("workspace.git.newBranchDesc"),
+        placeholder: "feat/my-change",
+        defaultValue: remote ? from.replace(/^[^/]+\//, "") : "",
+        confirmLabel: t("workspace.git.createAndSwitch"),
+        onConfirm: (name) =>
+          void run(t("workspace.git.branchCreated", { name }), () =>
+            ws.scope.gitCreateBranch(sessionId, { name, from, checkout: true })
+          ),
+      }),
+    merge: (ref) =>
+      void run(t("workspace.git.merged", { ref }), () =>
+        ws.scope.gitMerge(sessionId, ref)
+      ),
+    push: () =>
+      void run(t("workspace.git.pushed"), () => ws.scope.gitPush(sessionId)),
+    pull: () =>
+      void run(t("workspace.git.pulled"), () => ws.scope.gitPull(sessionId)),
+    remove: (ref) =>
+      setConfirm({
+        title: t("workspace.git.deleteBranchShort"),
+        description: t("workspace.git.deleteBranchDesc", { ref }),
+        confirmLabel: t("common.delete"),
+        onConfirm: () =>
+          void run(t("workspace.git.branchDeleted", { ref }), () =>
+            ws.scope.gitDeleteBranch(sessionId, ref)
+          ),
+      }),
+    copy: (value) => void copyText(value),
   }
 
   const compareHint =
@@ -142,10 +206,22 @@ export const BranchesPanel = memo(function BranchesPanel() {
         })
       : t("workspace.git.pickTwoHint")
 
+  const rowContext = (name: string): RowContext => ({
+    // 只有「选中两条且本行是其中之一」才谈得上对比这两条——菜单项跟着
+    // 状态走，而不是碰巧选了别的就换句话说。
+    selectedPair:
+      selection.refs.length === 2 && selection.refs.includes(name)
+        ? (selection.refs.find((ref) => ref !== name) ?? null)
+        : null,
+    currentBranch,
+    mainBranch,
+    dirty: branchView.dirty,
+  })
+
   return (
     <div className="flex h-full flex-col">
       <GitPanelHeader
-        title={view.current ?? t("chat.branch.none")}
+        title={branchView.current ?? t("chat.branch.none")}
         hint={compareHint}
         onRefresh={load}
       />
@@ -155,10 +231,11 @@ export const BranchesPanel = memo(function BranchesPanel() {
           collapsed={collapsed.local}
           onToggle={() => toggle("local")}
         >
-          {view.local.map((branch) => (
+          {branchView.local.map((branch) => (
             <RefRow
               key={branch.name}
               name={branch.name}
+              kind="local"
               icon={
                 branch.worktree ? (
                   <LockIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -168,14 +245,11 @@ export const BranchesPanel = memo(function BranchesPanel() {
               }
               title={branch.worktree}
               current={branch.current}
+              takenByWorktree={Boolean(branch.worktree)}
               selected={selection.refs.includes(branch.name)}
+              context={rowContext(branch.name)}
+              actions={actions}
               onPick={(additive) => pick(branch.name, additive)}
-              onCheckout={
-                branch.current || branch.worktree || view.dirty
-                  ? undefined
-                  : () => void checkout(branch.name)
-              }
-              onAsk={() => askAbout(branch.name)}
             />
           ))}
         </Group>
@@ -185,44 +259,78 @@ export const BranchesPanel = memo(function BranchesPanel() {
           collapsed={collapsed.remote}
           onToggle={() => toggle("remote")}
         >
-          {view.remote.map((name) => (
+          {branchView.remote.map((name) => (
             <RefRow
               key={name}
               name={name}
+              kind="remote"
               icon={
                 <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
               }
               selected={selection.refs.includes(name)}
+              context={rowContext(name)}
+              actions={actions}
               onPick={(additive) => pick(name, additive)}
-              onAsk={() => askAbout(name)}
             />
           ))}
         </Group>
 
-        {view.tags.length > 0 ? (
+        {branchView.tags.length > 0 ? (
           <Group
             label={t("workspace.git.tags")}
             collapsed={collapsed.tags}
             onToggle={() => toggle("tags")}
           >
-            {view.tags.map((name) => (
+            {branchView.tags.map((name) => (
               <RefRow
                 key={name}
                 name={name}
+                kind="tag"
                 icon={
                   <TagIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
                 }
                 selected={selection.refs.includes(name)}
+                context={rowContext(name)}
+                actions={actions}
                 onPick={(additive) => pick(name, additive)}
-                onAsk={() => askAbout(name)}
               />
             ))}
           </Group>
         ) : null}
       </div>
+
+      {/* key 让每个操作拿到自己的输入框实例：换操作即重挂，输入不残留。 */}
+      <GitPromptDialog
+        key={prompt?.title ?? "closed"}
+        prompt={prompt}
+        onClose={() => setPrompt(null)}
+      />
+      <GitConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
     </div>
   )
 })
+
+/** 一行 ref 能做的事；实现全在面板里，行只按状态挑该显示的那几条。 */
+interface RefActions {
+  askCompare: (base: string, head: string) => void
+  askBranch: (ref: string) => void
+  checkout: (ref: string) => void
+  newBranch: (from: string, remote?: boolean) => void
+  merge: (ref: string) => void
+  push: () => void
+  pull: () => void
+  remove: (ref: string) => void
+  copy: (value: string) => void
+}
+
+/** 决定这一行菜单长什么样的全部状态。 */
+interface RowContext {
+  /** 选中两条且本行在其中时，另一条是谁；否则 null。 */
+  selectedPair: string | null
+  currentBranch: string | null
+  mainBranch: string | null
+  dirty: boolean
+}
 
 function Group({
   label,
@@ -256,24 +364,41 @@ function Group({
 
 function RefRow({
   name,
+  kind,
   icon,
   title,
   current,
+  takenByWorktree,
   selected,
+  context,
+  actions,
   onPick,
-  onCheckout,
-  onAsk,
 }: {
   name: string
+  kind: RefKind
   icon: React.ReactNode
   title?: string
   current?: boolean
+  takenByWorktree?: boolean
   selected: boolean
+  context: RowContext
+  actions: RefActions
   onPick: (additive: boolean) => void
-  onCheckout?: () => void
-  onAsk: () => void
 }) {
   const { t } = useTranslation()
+  const { selectedPair, currentBranch, mainBranch, dirty } = context
+
+  // 迁出的前提：不是当前分支、没被别的 worktree 占着、工作区干净
+  //（git 会把未提交改动带过去，那是惊吓不是便利）。
+  const canCheckout = kind === "local" && !current && !takenByWorktree && !dirty
+  const canMerge = kind !== "tag" && !current && currentBranch !== null
+  const compareWithCurrent =
+    currentBranch !== null && name !== currentBranch ? currentBranch : null
+  const compareWithMain =
+    mainBranch !== null && name !== mainBranch && mainBranch !== currentBranch
+      ? mainBranch
+      : null
+
   return (
     <ContextMenu>
       <ContextMenuTrigger
@@ -293,17 +418,81 @@ function RefRow({
         {icon}
         <span className="truncate font-mono text-xs">{name}</span>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
-        <ContextMenuItem onClick={onAsk}>
-          {t("workspace.git.askCompare")}
+
+      <ContextMenuContent className="w-60">
+        <ContextMenuLabel className="truncate font-mono text-xs">
+          {name}
+        </ContextMenuLabel>
+        <ContextMenuSeparator />
+
+        {selectedPair ? (
+          <ContextMenuItem
+            onClick={() => actions.askCompare(selectedPair, name)}
+          >
+            {t("workspace.git.askComparePair", { base: selectedPair })}
+          </ContextMenuItem>
+        ) : null}
+        {!selectedPair && compareWithCurrent ? (
+          <ContextMenuItem
+            onClick={() => actions.askCompare(compareWithCurrent, name)}
+          >
+            {t("workspace.git.askCompareCurrent", {
+              current: compareWithCurrent,
+            })}
+          </ContextMenuItem>
+        ) : null}
+        {!selectedPair && compareWithMain ? (
+          <ContextMenuItem
+            onClick={() => actions.askCompare(compareWithMain, name)}
+          >
+            {t("workspace.git.askCompareMain", { main: compareWithMain })}
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuItem onClick={() => actions.askBranch(name)}>
+          {t("workspace.git.askBranch")}
         </ContextMenuItem>
-        {onCheckout ? (
+
+        <ContextMenuSeparator />
+
+        {canCheckout ? (
+          <ContextMenuItem onClick={() => actions.checkout(name)}>
+            {t("workspace.git.checkout")}
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuItem
+          onClick={() => actions.newBranch(name, kind === "remote")}
+        >
+          {kind === "remote"
+            ? t("workspace.git.checkoutRemote")
+            : t("workspace.git.newBranch")}
+        </ContextMenuItem>
+        {canMerge ? (
+          <ContextMenuItem onClick={() => actions.merge(name)}>
+            {t("workspace.git.mergeInto", { current: currentBranch })}
+          </ContextMenuItem>
+        ) : null}
+        {current ? (
           <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={onCheckout}>
-              {t("workspace.git.checkout")}
+            <ContextMenuItem onClick={actions.pull}>
+              {t("workspace.git.pull")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={actions.push}>
+              {t("workspace.git.push")}
             </ContextMenuItem>
           </>
+        ) : null}
+
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => actions.copy(name)}>
+          {t("workspace.git.copyName")}
+        </ContextMenuItem>
+        {kind === "local" && !current ? (
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => actions.remove(name)}
+          >
+            {t("workspace.git.deleteBranchShort")}
+          </ContextMenuItem>
         ) : null}
       </ContextMenuContent>
     </ContextMenu>

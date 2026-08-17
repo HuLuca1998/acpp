@@ -57,9 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       .then(([sessions, projects]) => {
         if (cancelled) return
         setRecent(sessions.items)
-        setGroups(
-          groupSessionsByProject(sessions.items, projects.items).groups
-        )
+        setGroups(groupSessionsByProject(sessions.items, projects.items).groups)
       })
       .catch(() => {
         // 侧边栏的最近列表拉不到就空着，不打断主流程。

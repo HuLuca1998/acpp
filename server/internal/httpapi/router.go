@@ -145,15 +145,29 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 工作区数据面按 cwd 工作，普通会话与编排会话只差记录来源。
 	// 解析 cwd 的同时做归属校验：工作区的全部数据面（文件树、预览、git、
 	// 终端）都经这一步，隔离因此只有一个执行点（adr-007）。
-	sessionCwd := func(r *http.Request, id uint) (string, error) {
+	sessionCwd := func(r *http.Request) (string, error) {
+		id, err := pathID(r, "id")
+		if err != nil {
+			return "", err
+		}
 		session, err := svcs.Sessions.Get(r.Context(), scopeOf(r), id)
 		if err != nil {
 			return "", err
 		}
 		return session.Cwd, nil
 	}
+	// 草稿态：会话还没建，目录由请求直接给。看文件、看 git 状态本来就
+	// 只需要一个目录——不该等到「发出第一条消息」之后才允许（adr-002）。
+	// 路径闸照旧：租户给什么都逃不出自己的 root。
+	draftCwd := func(r *http.Request) (string, error) {
+		return scopeOf(r).GuardPath(r.URL.Query().Get("cwd"))
+	}
 	// 编排整体是 owner 专属（isOwnerOnly 已按前缀拦截），到这里不必再分身份。
-	orchCwd := func(r *http.Request, id uint) (string, error) {
+	orchCwd := func(r *http.Request) (string, error) {
+		id, err := pathID(r, "id")
+		if err != nil {
+			return "", err
+		}
 		orchSession, err := svcs.Orch.Get(r.Context(), id)
 		if err != nil {
 			return "", err
@@ -161,6 +175,29 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		return orchSession.Cwd, nil
 	}
 	workspace := workspaceHandler{cwdOf: sessionCwd}
+
+
+	// 草稿态工作区：会话还没建，目录由 `?cwd=` 给。看文件与 git 状态只需要
+	// 一个目录——选完工作目录就该能用，不必先发一条消息把会话建出来。
+	draft := workspaceHandler{cwdOf: draftCwd}
+	api.HandleFunc("GET /api/workspace/fs/entries", draft.tree)
+	api.HandleFunc("GET /api/workspace/fs/file", draft.file)
+	api.HandleFunc("GET /api/workspace/git/overview", draft.gitOverview)
+	api.HandleFunc("GET /api/workspace/git/diff", draft.gitDiff)
+	api.HandleFunc("GET /api/workspace/git/commits/{sha}", draft.gitCommit)
+	api.HandleFunc("GET /api/workspace/git/branches", draft.branches)
+	api.HandleFunc("GET /api/workspace/git/history", draft.history)
+	api.HandleFunc("GET /api/workspace/git/compare", draft.compare)
+	api.HandleFunc("POST /api/workspace/git/checkout", draft.checkout)
+	api.HandleFunc("POST /api/workspace/git/commit", draft.commit)
+	api.HandleFunc("POST /api/workspace/git/push", draft.push)
+	api.HandleFunc("POST /api/workspace/git/pull", draft.pull)
+	api.HandleFunc("POST /api/workspace/git/merge", draft.merge)
+	api.HandleFunc("POST /api/workspace/git/branches", draft.createBranch)
+	api.HandleFunc("DELETE /api/workspace/git/branches/{name}", draft.deleteBranch)
+	api.HandleFunc("POST /api/workspace/git/discard", draft.discard)
+	api.HandleFunc("POST /api/workspace/git/worktrees", draft.createWorktree)
+	api.HandleFunc("DELETE /api/workspace/git/worktrees", draft.removeWorktree)
 
 	api.HandleFunc("GET /api/sessions", sessions.list)
 	api.HandleFunc("POST /api/sessions", sessions.create)
@@ -182,6 +219,15 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/git/history", workspace.history)
 	api.HandleFunc("GET /api/sessions/{id}/git/compare", workspace.compare)
 	api.HandleFunc("POST /api/sessions/{id}/git/checkout", workspace.checkout)
+	// git 写操作：提交/推送/拉取/合并/分支增删/丢弃改动。每条都把 git 的
+	// 原话带回界面——失败原因本身就是下一步该做什么的说明。
+	api.HandleFunc("POST /api/sessions/{id}/git/commit", workspace.commit)
+	api.HandleFunc("POST /api/sessions/{id}/git/push", workspace.push)
+	api.HandleFunc("POST /api/sessions/{id}/git/pull", workspace.pull)
+	api.HandleFunc("POST /api/sessions/{id}/git/merge", workspace.merge)
+	api.HandleFunc("POST /api/sessions/{id}/git/branches", workspace.createBranch)
+	api.HandleFunc("DELETE /api/sessions/{id}/git/branches/{name}", workspace.deleteBranch)
+	api.HandleFunc("POST /api/sessions/{id}/git/discard", workspace.discard)
 	api.HandleFunc("POST /api/sessions/{id}/git/worktrees", workspace.createWorktree)
 	api.HandleFunc("DELETE /api/sessions/{id}/git/worktrees", workspace.removeWorktree)
 
@@ -239,6 +285,13 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/history", orchWorkspace.history)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/compare", orchWorkspace.compare)
 	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/checkout", orchWorkspace.checkout)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/commit", orchWorkspace.commit)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/push", orchWorkspace.push)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/pull", orchWorkspace.pull)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/merge", orchWorkspace.merge)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/branches", orchWorkspace.createBranch)
+	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/git/branches/{name}", orchWorkspace.deleteBranch)
+	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/discard", orchWorkspace.discard)
 	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.createWorktree)
 	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.removeWorktree)
 	orchTerminals := terminalHandler{

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef } from "react"
 import type { DockviewApi } from "dockview-react"
 
-import { api, type WorkspaceScopeApi } from "@/lib/api"
+import * as React from "react"
+
+import { api, workspaceScopeApi, type WorkspaceScopeApi } from "@/lib/api"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import {
   useWorkspace,
@@ -20,14 +22,30 @@ import {
 /** 命令总线的宿主：状态全在 ref 里，provider 本身不因命令重渲染。 */
 export function WorkspaceProvider({
   sessionId,
-  scope = api.sessions,
+  scope,
+  draftCwd,
   children,
 }: {
   sessionId: number
   /** 数据面作用域，默认普通会话；编排页传 api.orchestrator。 */
   scope?: WorkspaceScopeApi
+  /**
+   * 草稿态选定的工作目录。给了它，文件树与 git 面板立刻可用——看文件
+   * 只需要一个目录，不该等到「发出第一条消息」把会话建出来（adr-002）。
+   */
+  draftCwd?: string
   children: React.ReactNode
 }) {
+  // 会话建好前后用不同的作用域，但面板看到的是同一套方法签名。
+  const activeScope = React.useMemo(
+    () =>
+      sessionId
+        ? (scope ?? api.sessions)
+        : draftCwd
+          ? draftWorkspaceScope(draftCwd)
+          : (scope ?? api.sessions),
+    [sessionId, scope, draftCwd]
+  )
   const apiRef = useRef<DockviewApi | null>(null)
   const previewRef = useRef<PreviewTarget | null>(null)
   const listenersRef = useRef(new Set<() => void>())
@@ -57,7 +75,9 @@ export function WorkspaceProvider({
     }
     return {
       sessionId,
-      scope,
+      scope: activeScope,
+      /** 有目录可看就算就绪：会话态看会话的 cwd，草稿态看选定的目录。 */
+      ready: sessionId > 0 || Boolean(draftCwd),
       attachApi: (api) => {
         apiRef.current = api
       },
@@ -79,7 +99,7 @@ export function WorkspaceProvider({
       newTerminal: () => {
         const dock = apiRef.current
         if (!dock || !sessionId) return
-        void scope
+        void activeScope
           .terminalCreate(sessionId)
           .then((info) => addTerminalPanel(dock, info.id, info.num))
           .catch(() => {})
@@ -164,7 +184,7 @@ export function WorkspaceProvider({
       const notify = () => gitListenersRef.current.forEach((l) => l())
       gitRef.current = { ...gitRef.current, loading: true }
       notify()
-      scope
+      activeScope
         .gitOverview(sessionId)
         .then((data) => {
           gitRef.current = { data, loading: false, error: null }
@@ -178,7 +198,7 @@ export function WorkspaceProvider({
         })
         .finally(notify)
     }
-  }, [sessionId, scope])
+  }, [sessionId, activeScope, draftCwd])
 
   return (
     <WorkspaceContext.Provider value={value}>
@@ -227,4 +247,9 @@ export function WorkspaceAutoRefresh({ busy }: { busy: boolean }) {
     prev.current = busy
   }, [busy, ws])
   return null
+}
+
+/** 草稿态作用域：同一套方法，目录走 `?cwd=`（见 lib/api 的 workspaceScopeApi）。 */
+function draftWorkspaceScope(cwd: string): WorkspaceScopeApi {
+  return workspaceScopeApi("/sessions", cwd)
 }

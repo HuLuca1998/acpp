@@ -36,7 +36,7 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
   // stale 守卫：切选择比请求回来快是常事，没有它旧结果会盖掉新结果，
   // 面板显示的就是上一次点的那条。
   useEffect(() => {
-    if (!ws.sessionId) return
+    if (!ws.ready) return
     let stale = false
 
     if (comparing) {
@@ -79,7 +79,7 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
     }
   }, [ws, comparing, base, head, selection.sha])
 
-  if (!ws.sessionId) {
+  if (!ws.ready) {
     return (
       <PanelEmptyState
         title={t("workspace.tree.draftTitle")}

@@ -10,6 +10,7 @@ import type {
   GitCommitDetail,
   GitCompare,
   GitHistory,
+  GitOpResult,
   GitDiffView,
   GitOverview,
   Identity,
@@ -78,7 +79,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * 工作区数据面的作用域 API：普通会话与编排主会话的端点形状完全一致，
  * 只差路径前缀。面板组件经 WorkspaceProvider 拿到对应作用域实例。
  */
-export function workspaceScopeApi(prefix: string) {
+export function workspaceScopeApi(prefix: string, draftCwd?: string) {
+  /**
+   * 一次请求的路径基底。会话态是 `/sessions/{id}`；草稿态没有会话，
+   * 基底是 `/workspace`，目录改由 `?cwd=` 带过去——看文件和看 git 状态
+   * 本来就只需要一个目录，不该等到会话建出来才允许。
+   */
+  const at = (id: number, path: string) => {
+    if (draftCwd === undefined) return at(id, `${path}`)
+    const [base, query] = path.split("?")
+    const params = new URLSearchParams(query)
+    params.set("cwd", draftCwd)
+    return `/workspace${base}?${params.toString()}`
+  }
   return {
     /**
      * 增量读转录 JSONL（logs 面板轮询用）：转录 append-only，用 Range
@@ -118,30 +131,27 @@ export function workspaceScopeApi(prefix: string) {
       if (params?.path) qs.set("path", params.path)
       if (params?.depth) qs.set("depth", String(params.depth))
       const s = qs.toString()
-      return request<TreeListing>(
-        `${prefix}/${id}/fs/entries${s ? `?${s}` : ""}`
-      )
+      return request<TreeListing>(at(id, `/fs/entries${s ? `?${s}` : ""}`))
     },
     /** 工作区文件内容（预览用，路径限制在会话 cwd 内）。 */
     workspaceFile: (id: number, path: string) =>
       request<WorkspaceFile>(
-        `${prefix}/${id}/fs/file?path=${encodeURIComponent(path)}`
+        at(id, `/fs/file?path=${encodeURIComponent(path)}`)
       ),
 
     /** git 汇总：分支/领先落后/变更文件/未推送 commit，diff 与 commit 面板共享。 */
-    gitOverview: (id: number) =>
-      request<GitOverview>(`${prefix}/${id}/git/overview`),
+    gitOverview: (id: number) => request<GitOverview>(at(id, `/git/overview`)),
     /** 工作区单文件 diff（HEAD 版对工作区版的两端全文）。 */
     gitDiff: (id: number, path: string) =>
       request<GitDiffView>(
-        `${prefix}/${id}/git/diff?path=${encodeURIComponent(path)}`
+        at(id, `/git/diff?path=${encodeURIComponent(path)}`)
       ),
     /** 分支面：当前分支、本地/远端分支、worktree 清单（会话底部控件用）。 */
     gitBranches: (id: number) =>
-      request<GitBranchView>(`${prefix}/${id}/git/branches`),
+      request<GitBranchView>(at(id, `/git/branches`)),
     /** 切换分支（create=true 时先从当前 HEAD 新建）。脏工作区后端会拒。 */
     gitCheckout: (id: number, input: { branch: string; create?: boolean }) =>
-      request<GitBranchView>(`${prefix}/${id}/git/checkout`, {
+      request<GitBranchView>(at(id, `/git/checkout`), {
         method: "POST",
         body: JSON.stringify(input),
       }),
@@ -155,41 +165,85 @@ export function workspaceScopeApi(prefix: string) {
       if (params?.limit) qs.set("limit", String(params.limit))
       if (params?.offset) qs.set("offset", String(params.offset))
       const s = qs.toString()
-      return request<GitHistory>(`${prefix}/${id}/git/history${s ? `?${s}` : ""}`)
+      return request<GitHistory>(at(id, `/git/history${s ? `?${s}` : ""}`))
     },
     /** 对比两个 ref：head 相对 base 多出的提交与文件变更。 */
     gitCompare: (id: number, base: string, head: string) =>
       request<GitCompare>(
-        `${prefix}/${id}/git/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`
+        at(
+          id,
+          `/git/compare?base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`
+        )
       ),
+    /** 提交工作区全部改动（含未跟踪文件）。 */
+    gitCommitAll: (id: number, message: string) =>
+      request<GitOpResult>(at(id, "/git/commit"), {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }),
+    /** 推送当前分支（没有 upstream 时顺手建立跟踪）。 */
+    gitPush: (id: number) =>
+      request<GitOpResult>(at(id, "/git/push"), { method: "POST" }),
+    /** 拉取当前分支，只接受快进。 */
+    gitPull: (id: number) =>
+      request<GitOpResult>(at(id, "/git/pull"), { method: "POST" }),
+    /** 把某个 ref 合并进当前分支。 */
+    gitMerge: (id: number, ref: string) =>
+      request<GitOpResult>(at(id, "/git/merge"), {
+        method: "POST",
+        body: JSON.stringify({ ref }),
+      }),
+    /** 新建分支（from 为空即当前 HEAD；checkout 表示顺带切过去）。 */
+    gitCreateBranch: (
+      id: number,
+      input: { name: string; from?: string; checkout?: boolean }
+    ) =>
+      request<GitOpResult>(at(id, "/git/branches"), {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    /** 删本地分支；force 才用 -D（没合并的分支默认删不掉是 git 的保护）。 */
+    gitDeleteBranch: (id: number, name: string, force = false) =>
+      request<GitOpResult>(
+        at(
+          id,
+          `/git/branches/${encodeURIComponent(name)}${force ? "?force=1" : ""}`
+        ),
+        { method: "DELETE" }
+      ),
+    /** 丢弃改动：paths 为空表示整个工作区。 */
+    gitDiscard: (id: number, paths?: string[]) =>
+      request<null>(at(id, "/git/discard"), {
+        method: "POST",
+        body: JSON.stringify({ paths: paths ?? [] }),
+      }),
     /** 开隔离工作区：`<仓库>/worktrees/<名字>`，返回它的绝对路径。 */
     worktreeCreate: (id: number, input: { name: string; branch?: string }) =>
-      request<{ path: string }>(`${prefix}/${id}/git/worktrees`, {
+      request<{ path: string }>(at(id, `/git/worktrees`), {
         method: "POST",
         body: JSON.stringify(input),
       }),
     /** 拆掉一个 worktree（分支保留）。 */
     worktreeRemove: (id: number, path: string) =>
-      request<null>(`${prefix}/${id}/git/worktrees`, {
+      request<null>(at(id, `/git/worktrees`), {
         method: "DELETE",
         body: JSON.stringify({ path }),
       }),
     /** 提交详情（文件清单）。 */
     gitCommit: (id: number, sha: string) =>
-      request<GitCommitDetail>(`${prefix}/${id}/git/commits/${sha}`),
+      request<GitCommitDetail>(at(id, `/git/commits/${sha}`)),
     /** 某文件在一条提交前后的全文。 */
     gitCommitFile: (id: number, sha: string, path: string) =>
       request<GitDiffView>(
-        `${prefix}/${id}/git/commits/${sha}?path=${encodeURIComponent(path)}`
+        at(id, `/git/commits/${sha}?path=${encodeURIComponent(path)}`)
       ),
 
     /** 工作区终端：REST 管生命周期，ws 走 terminalWsUrl。 */
     terminalCreate: (id: number) =>
-      request<TerminalInfo>(`${prefix}/${id}/terminals`, { method: "POST" }),
-    terminalList: (id: number) =>
-      request<TerminalInfo[]>(`${prefix}/${id}/terminals`),
+      request<TerminalInfo>(at(id, `/terminals`), { method: "POST" }),
+    terminalList: (id: number) => request<TerminalInfo[]>(at(id, `/terminals`)),
     terminalRemove: (id: number, tid: string) =>
-      request<null>(`${prefix}/${id}/terminals/${tid}`, { method: "DELETE" }),
+      request<null>(at(id, `/terminals/${tid}`), { method: "DELETE" }),
     terminalWsUrl: (id: number, tid: string) => {
       // 开发态直连后端：vite 的 ws 代理在 HMR/重启后会僵死（输入静默丢失），
       // 端口是项目固定约定（根 AGENTS.md §4.0），后端 ws 升级已放行本源。
@@ -528,7 +582,8 @@ export const api = {
     /** 重新生成分享链接：旧链接立刻作废，会话与目录不动。 */
     rotate: (id: number) =>
       request<Tenant>(`/tenants/${id}/rotate`, { method: "POST" }),
-    remove: (id: number) => request<null>(`/tenants/${id}`, { method: "DELETE" }),
+    remove: (id: number) =>
+      request<null>(`/tenants/${id}`, { method: "DELETE" }),
   },
 
   /** 工作区项目：磁盘即事实源，克隆是后台任务。 */

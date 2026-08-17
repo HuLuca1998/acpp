@@ -179,14 +179,19 @@ export function OrchestratorChat() {
       </OrchContextBridge>
       {/* turn 结束刷新 git/文件树——子代理刚改完文件的时刻。 */}
       <WorkspaceAutoRefresh busy={chat.busy || hasRunningTask(chat)} />
-      {/* git 面板右键的「让 AI 分析」：把写好的 prompt 填进输入框——
-          只填不发，发不发是用户的决定。 */}
+      {/* git 面板右键的「让 AI 分析」：直接发出去。点那一下的意图就是
+          「现在分析给我看」，再让人回输入框按一次回车是多余的一步。
+          草稿态还没有会话可发，退化成填进输入框。 */}
       <WorkspaceAskSink
-        onAsk={(prompt) =>
-          setDraft((prev) =>
-            prev.trim() ? `${prev.trimEnd()}\n\n${prompt}` : prompt
-          )
-        }
+        onAsk={(prompt) => {
+          if (isNew) {
+            setDraft((prev) =>
+              prev.trim() ? `${prev.trimEnd()}\n\n${prompt}` : prompt
+            )
+            return
+          }
+          void chat.send({ content: prompt })
+        }}
       />
       {/* 工作区右键/预览的「添加到引用」落到 composer 的 @ 引用列表。 */}
       <WorkspaceReferenceSink
