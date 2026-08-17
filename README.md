@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-006 编排/外化子代理；adr-007 多租户隔离与项目管理）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-006 编排/外化子代理；adr-007 多租户隔离与项目管理；adr-008 数据库数据源）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -42,11 +42,12 @@ acpp/
 │   │   │   ├── projects/       # 克隆仓库对话框（gh 清单 + URL）
 │   │   │   ├── orchestrator/   # 编排工作区：主控对话 / 任务列表 / 任务子会话面板 / dock
 │   │   │   ├── roles/          # 角色编辑对话框
+│   │   │   ├── db/             # 数据库：连接对话框、库表浏览、SQL 结果表格
 │   │   │   ├── overview/       # 概览页四张卡
 │   │   │   ├── settings/       # 设置页分区面板（内置工具 claude/codex 的配置面）
 │   │   │   └── *.tsx           # 跨域小组件：status-dot / diff-view / dir-picker / agent-icon / list-page-states
 │   │   ├── lib/                # 纯函数与客户端；README.md 是工具索引（脚本对账）
-│   │   ├── types/acp.ts        # 领域类型，与 server/internal/model 对齐
+│   │   ├── types/              # 领域类型，与 server/internal/model 对齐（acp.ts 转出 db.ts）
 │   │   └── index.css           # Tailwind v4 主题变量 + 视觉深度层
 │   └── vite.config.ts          # /api 代理到 127.0.0.1:48080；outDir 指向 ../build/web
 └── server/
@@ -72,6 +73,8 @@ acpp/
         ├── stream/             # SSE 事件形状与广播器（聊天/编排共用的叶子包）
         ├── orch/               # 编排（adr-006）：角色、编排主会话、spawn 任务子会话、系统 MCP 端点
         ├── project/            # 工作区项目（adr-007）：git 仓库发现、克隆、gh 远端仓库清单
+        ├── mcp/                # 我方 MCP server 的协议外壳（JSON-RPC + 工具分发），编排与数据源共用
+        ├── datasource/         # 外部 MySQL 数据源（adr-008）：连接配置、SSH 隧道、库表探查、多段执行、MCP 工具面
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
         │   ├── tenant.go / guard.go # 多租户：租户 CRUD 与隔离范围（Scope）
@@ -201,6 +204,14 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
+| GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?…}`；密码永不下发，响应只给 `hasPassword` 标志位） |
+| GET/PUT/DELETE | `/api/datasources/{id}` | 连接详情 / 更新（密码留空=不改） / 删除 |
+| POST | `/api/datasources/{id}/test` | 测试连接（连不上返回 200 带 `{ok:false, error}`，那是配置问题不是服务故障） |
+| GET | `/api/datasources/{id}/databases` `/tables` `/schema` | 库清单 / 表清单（`?database=`） / 表结构（`?database=&table=`，含列、索引与建表语句） |
+| POST | `/api/datasources/{id}/query` | 执行 SQL（`{database?, sql, maxRows?}`，可含多条语句：按序执行、遇错即停，每条独立返回耗时与影响行数；行数硬顶 1000） |
+| GET | `/api/sessions/{id}/datasources` | **会话可见的**数据源：只有当前工作目录所属项目的那几条（斜杠命令数据源） |
+| GET | `/api/sessions/{id}/datasources/{dsid}/databases` `/tables` | 同上但按会话过滤，项目之外的 id 按「不存在」处理 |
+| POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | GET/POST | `/api/roles` | 角色列表 / 新建（编排里可雇佣的子代理定义，见 §编排） |
 | GET/PUT/DELETE | `/api/roles/{id}` | 角色详情 / 更新 / 删除 |
 | GET/POST | `/api/orchestrator/sessions` | 编排会话列表（分页）/ 新建（`{agentId, cwd?, title?}`） |
@@ -228,6 +239,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - **Role** — 编排里可雇佣的子代理角色（adr-006）：`persona`（注入子会话的人格）、`description`（进主控调度提示词的雇佣目录）、绑定工具与 `model`/`effort`/`level` 预设（空=工具默认档）。启动时预置分析员/开发者/审查者/测试员四个内置模板（一次性，删除不复活）。
 - **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
 - **Project / Clone** — 都不入库：项目就是工作区根下的 git 仓库目录（扫盘得来，名字是相对根的路径），克隆任务只存在于内存（进程重启时 git 子进程也一起没了，留个「进行中」的假记录只会骗人）。
+- **DataSource** — 一个外部 MySQL 数据源（adr-008）。身份是**项目 + 环境**两级（`pp-game` 的 `local`/`dev`/`pre`），组合唯一，`<项目>/<环境>` 即对外标识（AI 调工具时填的 `source`）。只存配置不存连接：每次调用都是「拨号 → 执行 → 关闭」的一次性连接（含 SSH 隧道），因此没有任何运行态字段。密码类字段永不出 API，响应只带 `hasPassword` 这类布尔位。
 - **OrchSession / OrchTask** — 编排主会话与一次 spawn 派发（一个任务 = 一条角色子会话）。与 `sessions` 表刻意分表（隔离契约：编排整体可删而不影响普通会话）；`mcpToken` 是该会话专属 MCP 端点的凭证；`tokensUsed` 是主会话 + 全部子任务的累计 token。
 
 ## 工作区面板
@@ -261,6 +273,31 @@ agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排�
 - **自家工具的权限自动放行**：hire_role 的权限请求（claude）与 MCP 批准提问（codex 的 elicitation 通道）由事件层自动放行，不弹卡。
 - **护栏**：并发子任务上限 4；spawn 深度硬性 1（子会话不挂 MCP）；急停一键中止全部；累计 token 用量展示。
 - **界面**：编排页 dockview 布局——主控对话 + 常驻任务列表 + 普通会话的全部工作区面板（文件树/预览/diff/commits/日志/终端，⋯ 菜单开启）；任务子会话面板不自动弹出，从列表点开/拖动布局/关闭不影响任务运行。composer 同样支持图片、@ 文件引用、斜杠命令与 busy 排队插话。
+
+## 数据库
+
+按**项目 + 环境**管理 MySQL 连接（adr-008）：`pp-game` 的 `local` / `dev` / `pre` 是三条独立数据源，`<项目>/<环境>` 就是它对外的标识。侧边栏「数据库」页配置（连接对话框照 Navicat 分常规 / SSH / 高级三个页签），页面里可以直接浏览库表、看表结构、跑多段 SQL。
+
+**项目是可见性边界**——这是整个功能的安全底座：
+
+```
+会话 cwd ──推项目名──→ 只取该项目的数据源 ──→ MCP 工具面 / 斜杠命令
+```
+
+一条开在 `pp-game` 目录下的会话，看得到、连得上的只有 `pp-game` 的几个环境；别的项目的连接对它而言**不存在**（会话侧按 id 直取也返回 404）。过滤的执行点只有一个（`datasource.Service.ForCwd`），界面与 AI 共用；推不出项目就一个都看不见，而不是看见全部。worktree 归属主仓库，工作区之外的目录用最近的 git 仓库名。
+
+**AI 怎么用**：会话所在项目有可用数据源时才挂载 `acpp-db` 这个 MCP server（没有就完全不挂，免得工具清单里多五个用不了的条目）。五个工具——`db_sources`（列数据源）、`db_databases`、`db_tables`、`db_schema`（列/索引/建表语句）、`db_query`（执行，支持多条语句）。claude 侧预批这些工具不弹权限卡，并注入一段说明要求「写 SQL 前先看表结构、环境不明确先问用户」。
+
+**能跑什么由数据库账号决定**：软件层不做 SQL 语句白名单——半吊子的语句过滤挡不住存储过程与动态 SQL，却会让人误以为已经安全、敢用高权限账号连进来。要只读就配只读账号。
+
+**行数护栏在我们这侧**：最多 1000 行（默认 500）。不给用户的 SQL 自动加 `LIMIT`，也不在库上设任何会话变量——你的库我们只读它、不改它的行为。实现是流式游标逐行读，读满上限就取消这次查询让驱动断开，而不是把剩下几百万行读完再丢掉。**诚实的边界**：断开后正在回传结果的查询会因写失败很快中止，但还在扫描/排序、尚未吐数据的查询 MySQL 不会察觉客户端已走，会跑完那一段——要立刻杀掉得发 `KILL QUERY`，那是在库上动手，没做。
+
+**SSH 隧道**：开启后主机/端口填的是**跳板机视角**的地址（线上库多半是 `127.0.0.1:3306`）。验证方式三选一（密码 / 公钥 / 密码和公钥），公钥留空路径则走 ssh-agent。跳板机指纹按 `~/.ssh/known_hosts` 校验且**没有跳过开关**——隧道后面挂着生产库，忽略指纹等于把中间人攻击的门开着；新主机先手工 ssh 一次，或按错误提示 `ssh-keyscan` 补录。
+
+**两个查看入口**：
+
+- 对话里 AI 的 `db_query` 有专用渲染——数据源标识、SQL、耗时、字段表头与可滚动数据，与配置页的 SQL 控制台是同一个组件（MCP 只回文本，前端按两端约定的制表符格式解析回结构化；解析不出来退回原始文本，不编造表格）。
+- 输入框里的 `/db` 是**本地斜杠命令**：前端拦截，结果浮在输入框上方，不进对话、不消耗 token、不用等 agent。`/db` 列本项目数据源，`/db dev` 列库，`/db dev mydb` 列表。
 
 ## 安全姿态
 
