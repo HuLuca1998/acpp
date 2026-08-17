@@ -46,25 +46,8 @@ const ACPP_THEME: DockviewTheme = {
   tabAnimation: "smooth",
 }
 
-/**
- * 面板内容包一层「右键到此为止」：面板自己的右键菜单（文件树、git 面板）
- * 处理完后事件不再上交给 dockview——它那套 tab/组菜单在企业版里，我们
- * 不用，也不希望它抢走面板自己的菜单。
- */
-function withOwnContextMenu(
-  Panel: React.FunctionComponent<IDockviewPanelProps>
-): React.FunctionComponent<IDockviewPanelProps> {
-  return function PanelWithMenuGuard(props: IDockviewPanelProps) {
-    return (
-      <div className="h-full" onContextMenu={(e) => e.stopPropagation()}>
-        <Panel {...props} />
-      </div>
-    )
-  }
-}
-
 /** 面板组件注册表：引用必须稳定（模块级），dockview 据此重建面板。 */
-const RAW_COMPONENTS: Record<
+const COMPONENTS: Record<
   WorkspacePanelKind,
   React.FunctionComponent<IDockviewPanelProps>
 > = {
@@ -79,12 +62,6 @@ const RAW_COMPONENTS: Record<
   terminal: TerminalPanel,
 }
 
-const COMPONENTS = Object.fromEntries(
-  Object.entries(RAW_COMPONENTS).map(([kind, Panel]) => [
-    kind,
-    withOwnContextMenu(Panel),
-  ])
-) as Record<WorkspacePanelKind, React.FunctionComponent<IDockviewPanelProps>>
 
 /**
  * 自定义 tab：图标 + 标题 + 关闭钮（chat 无）。窄栏时标题由容器查询

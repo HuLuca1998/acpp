@@ -173,7 +173,11 @@ export function OrchestratorChat() {
   return (
     <WorkspaceProvider sessionId={isNew ? 0 : orchId} scope={api.orchestrator}>
       <OrchContextBridge value={value}>
-        <div className="min-h-0 flex-1 p-1.5">
+        {/* overflow-hidden 是必须的：dockview 内部是「视图层 + overlay 渲染层」
+            两层各占 100%，scrollHeight 天然是自身高度的两倍。外层若允许滚动，
+            页面底下就会多出一屏空白还能往下滚——工作区是固定视口的布局，
+            滚动归各面板自己管。 */}
+        <div className="min-h-0 flex-1 overflow-hidden p-1.5">
           <OrchDock />
         </div>
       </OrchContextBridge>
