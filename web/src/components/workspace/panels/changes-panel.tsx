@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import {
   ChangeStat,
@@ -7,6 +8,11 @@ import {
   StatusLetter,
 } from "@/components/workspace/panels/git-parts"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
+import {
+  GitConfirmDialog,
+  type GitConfirm,
+} from "@/components/workspace/panels/git-dialogs"
+import { copyText } from "@/lib/clipboard"
 import {
   useGitOverview,
   useGitSelection,
@@ -52,6 +58,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
   const [error, setError] = useState<string | null>(null)
   const tokenRef = useRef(0)
   const staleRef = useRef(0)
+  const [confirm, setConfirm] = useState<GitConfirm | null>(null)
 
   const comparing = selection.refs.length === 2
   const [base, head] = selection.refs
@@ -135,6 +142,23 @@ export const ChangesPanel = memo(function ChangesPanel() {
     ws.openDiff(path, selection.sha ?? undefined)
   }
 
+  /** 丢弃单个文件的改动：只在看工作区时成立（提交里的改动没什么可丢的）。 */
+  const discardFile = (path: string) =>
+    setConfirm({
+      title: t("workspace.git.discardFile"),
+      description: t("workspace.git.discardFileDesc", { path }),
+      confirmLabel: t("workspace.git.discard"),
+      onConfirm: async () => {
+        try {
+          await ws.scope.gitDiscard(ws.sessionId, [path])
+          ws.refreshWorkspace()
+          toast.success(t("workspace.git.discarded"))
+        } catch (err) {
+          toast.error((err as Error).message)
+        }
+      },
+    })
+
   const askAboutFile = (path: string) => {
     ws.askAI(
       comparing
@@ -177,9 +201,15 @@ export const ChangesPanel = memo(function ChangesPanel() {
             onOpen={openDiff}
             onAsk={askAboutFile}
             onReference={ws.addReference}
+            onPreview={ws.openPreview}
+            onCopy={(value) => void copyText(value)}
+            onDiscard={comparing || selection.sha ? undefined : discardFile}
+            onAskDir={(dir) => ws.askAI(t("workspace.git.promptDir", { dir }))}
           />
         )}
       </div>
+
+      <GitConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
     </div>
   )
 })
@@ -194,12 +224,21 @@ function ChangeTree({
   onOpen,
   onAsk,
   onReference,
+  onPreview,
+  onCopy,
+  onDiscard,
+  onAskDir,
 }: {
   node: PathTreeNode<GitFileChange>
   depth: number
   onOpen: (path: string) => void
   onAsk: (path: string) => void
   onReference: (path: string) => void
+  onPreview: (path: string) => void
+  onCopy: (value: string) => void
+  /** 只有看工作区时才给：提交里的改动没什么可丢的。 */
+  onDiscard?: (path: string) => void
+  onAskDir: (dir: string) => void
 }) {
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -242,6 +281,10 @@ function ChangeTree({
                 onOpen={onOpen}
                 onAsk={onAsk}
                 onReference={onReference}
+                onPreview={onPreview}
+                onCopy={onCopy}
+                onDiscard={onDiscard}
+                onAskDir={onAskDir}
               />
             )}
           </div>
@@ -268,14 +311,31 @@ function ChangeTree({
             <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
             <ChangeStat added={item.added} deleted={item.deleted} />
           </ContextMenuTrigger>
-          <ContextMenuContent className="w-52">
+          <ContextMenuContent className="w-56">
             <ContextMenuItem onClick={() => onAsk(item.path)}>
               {t("workspace.git.askFile")}
             </ContextMenuItem>
             <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => onPreview(item.path)}>
+              {t("workspace.git.openCurrent")}
+            </ContextMenuItem>
             <ContextMenuItem onClick={() => onReference(item.path)}>
               {t("workspace.refMenu.addReference")}
             </ContextMenuItem>
+            <ContextMenuItem onClick={() => onCopy(item.path)}>
+              {t("workspace.git.copyPath")}
+            </ContextMenuItem>
+            {onDiscard ? (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                  variant="destructive"
+                  onClick={() => onDiscard(item.path)}
+                >
+                  {t("workspace.git.discardFile")}
+                </ContextMenuItem>
+              </>
+            ) : null}
           </ContextMenuContent>
         </ContextMenu>
       ))}

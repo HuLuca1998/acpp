@@ -1,7 +1,15 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
+import {
+  GitConfirmDialog,
+  GitPromptDialog,
+  type GitConfirm,
+  type GitPrompt,
+} from "@/components/workspace/panels/git-dialogs"
+import { copyText } from "@/lib/clipboard"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import {
   useGitOverview,
@@ -12,6 +20,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Spinner } from "@/components/ui/spinner"
@@ -46,6 +55,8 @@ export const HistoryPanel = memo(function HistoryPanel() {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState<GitPrompt | null>(null)
+  const [confirm, setConfirm] = useState<GitConfirm | null>(null)
 
   // 选中一条 ref 就看它的历史；选了两条是对比模式，链路显示 head 的历史。
   const ref = selection.refs.at(-1) ?? ""
@@ -82,6 +93,18 @@ export const HistoryPanel = memo(function HistoryPanel() {
     load(0)
     return ws.onWorkspaceRefresh(() => load(0))
   }, [load, ws])
+
+  /** 写操作统一走这里：跑命令 → 刷工作区 → 把 git 的原话报出来。 */
+  const run = async (label: string, op: () => Promise<unknown>) => {
+    try {
+      const result = (await op()) as { output?: string } | null
+      ws.refreshWorkspace()
+      load(0)
+      toast.success(result?.output?.trim() || label)
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
 
   if (!ws.ready) {
     return (
@@ -162,6 +185,33 @@ export const HistoryPanel = memo(function HistoryPanel() {
                   })
                 )
               }
+              onExplain={() =>
+                ws.askAI(
+                  t("workspace.git.promptExplain", {
+                    sha: commit.short,
+                    subject: commit.subject,
+                  })
+                )
+              }
+              onBranch={() =>
+                setPrompt({
+                  title: t("workspace.git.newBranchFrom", {
+                    ref: commit.short,
+                  }),
+                  description: t("workspace.git.newBranchDesc"),
+                  placeholder: "fix/from-this-commit",
+                  confirmLabel: t("workspace.git.createAndSwitch"),
+                  onConfirm: (name) =>
+                    void run(t("workspace.git.branchCreated", { name }), () =>
+                      ws.scope.gitCreateBranch(ws.sessionId, {
+                        name,
+                        from: commit.sha,
+                        checkout: true,
+                      })
+                    ),
+                })
+              }
+              onCopy={(value) => void copyText(value)}
             />
           ))
         )}
@@ -180,6 +230,13 @@ export const HistoryPanel = memo(function HistoryPanel() {
           </button>
         ) : null}
       </div>
+
+      <GitPromptDialog
+        key={prompt?.title ?? "closed"}
+        prompt={prompt}
+        onClose={() => setPrompt(null)}
+      />
+      <GitConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
     </div>
   )
 })
@@ -191,6 +248,9 @@ function CommitRow({
   time,
   onSelect,
   onAsk,
+  onExplain,
+  onBranch,
+  onCopy,
 }: {
   commit: GitCommit
   selected: boolean
@@ -198,6 +258,9 @@ function CommitRow({
   time: string
   onSelect: () => void
   onAsk: () => void
+  onExplain: () => void
+  onBranch: () => void
+  onCopy: (value: string) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -232,9 +295,23 @@ function CommitRow({
           {commit.short}
         </span>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent className="w-56">
         <ContextMenuItem onClick={onAsk}>
           {t("workspace.git.askReview")}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={onExplain}>
+          {t("workspace.git.askExplain")}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={onBranch}>
+          {t("workspace.git.newBranch")}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => onCopy(commit.sha)}>
+          {t("workspace.git.copySha")}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onCopy(commit.subject)}>
+          {t("workspace.git.copySubject")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

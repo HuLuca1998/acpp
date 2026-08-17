@@ -46,8 +46,25 @@ const ACPP_THEME: DockviewTheme = {
   tabAnimation: "smooth",
 }
 
+/**
+ * 面板内容包一层「右键到此为止」：面板自己的右键菜单（文件树、git 面板）
+ * 处理完后，事件继续冒泡会让 dockview 去找它的企业版 ContextMenu 模块，
+ * 控制台每次右键都报一条缺模块的错。我们不用它那套菜单，就在这儿断掉。
+ */
+function withOwnContextMenu(
+  Panel: React.FunctionComponent<IDockviewPanelProps>
+): React.FunctionComponent<IDockviewPanelProps> {
+  return function PanelWithMenuGuard(props: IDockviewPanelProps) {
+    return (
+      <div className="h-full" onContextMenu={(e) => e.stopPropagation()}>
+        <Panel {...props} />
+      </div>
+    )
+  }
+}
+
 /** 面板组件注册表：引用必须稳定（模块级），dockview 据此重建面板。 */
-const COMPONENTS: Record<
+const RAW_COMPONENTS: Record<
   WorkspacePanelKind,
   React.FunctionComponent<IDockviewPanelProps>
 > = {
@@ -61,6 +78,13 @@ const COMPONENTS: Record<
   logs: LogsPanel,
   terminal: TerminalPanel,
 }
+
+const COMPONENTS = Object.fromEntries(
+  Object.entries(RAW_COMPONENTS).map(([kind, Panel]) => [
+    kind,
+    withOwnContextMenu(Panel),
+  ])
+) as Record<WorkspacePanelKind, React.FunctionComponent<IDockviewPanelProps>>
 
 /**
  * 自定义 tab：图标 + 标题 + 关闭钮（chat 无）。窄栏时标题由容器查询
@@ -81,6 +105,9 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
     <div
       className="flex h-full items-center gap-1.5 px-2 text-xs"
       title={label}
+      // tab 上的右键同样不交给 dockview：它会去找只在企业版里的
+      // ContextMenu 模块，控制台每次都报一条缺模块的错。
+      onContextMenu={(e) => e.preventDefault()}
     >
       <span className="relative shrink-0">
         <Icon className="size-3.5" />

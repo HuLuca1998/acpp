@@ -86,7 +86,7 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
    * 本来就只需要一个目录，不该等到会话建出来才允许。
    */
   const at = (id: number, path: string) => {
-    if (draftCwd === undefined) return at(id, `${path}`)
+    if (draftCwd === undefined) return `${prefix}/${id}${path}`
     const [base, query] = path.split("?")
     const params = new URLSearchParams(query)
     params.set("cwd", draftCwd)
