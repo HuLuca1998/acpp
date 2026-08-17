@@ -1,17 +1,22 @@
 import type {
   Agent,
   CatalogInput,
+  CloneTask,
   DirEntry,
   DirListing,
   EnvInfo,
   EnvInstallResult,
+  GitBranchView,
   GitCommitDetail,
   GitDiffView,
   GitOverview,
+  Identity,
   Message,
   OrchSession,
   OrchTask,
   Paged,
+  Project,
+  RemoteRepo,
   Role,
   RoleInput,
   SendInput,
@@ -29,6 +34,7 @@ import type {
   SkillUpdateInput,
   SkillUsage,
   SystemInfo,
+  Tenant,
   TerminalInfo,
   TreeListing,
   UpdateInfo,
@@ -128,6 +134,15 @@ export function workspaceScopeApi(prefix: string) {
       request<GitDiffView>(
         `${prefix}/${id}/git/diff?path=${encodeURIComponent(path)}`
       ),
+    /** 分支面：当前分支、本地/远端分支、worktree 清单（会话底部控件用）。 */
+    gitBranches: (id: number) =>
+      request<GitBranchView>(`${prefix}/${id}/git/branches`),
+    /** 切换分支（create=true 时先从当前 HEAD 新建）。脏工作区后端会拒。 */
+    gitCheckout: (id: number, input: { branch: string; create?: boolean }) =>
+      request<GitBranchView>(`${prefix}/${id}/git/checkout`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
     /** 提交详情（文件清单）。 */
     gitCommit: (id: number, sha: string) =>
       request<GitCommitDetail>(`${prefix}/${id}/git/commits/${sha}`),
@@ -225,7 +240,14 @@ export const api = {
       return request<Paged<Session>>(`/sessions${s ? `?${s}` : ""}`)
     },
     get: (id: number) => request<Session>(`/sessions/${id}`),
-    create: (input: { agentId: number; title?: string; cwd?: string }) =>
+    create: (input: {
+      agentId: number
+      title?: string
+      cwd?: string
+      /** 非空时先在 cwd 所在仓库下开 `worktrees/<worktree>`，会话开在那里。 */
+      worktree?: string
+      worktreeBranch?: string
+    }) =>
       request<Session>("/sessions", {
         method: "POST",
         body: JSON.stringify(input),
@@ -437,6 +459,60 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ elicitationId, action, content }),
       }),
+  },
+
+  /** 身份（adr-007）。凭证是 HttpOnly cookie，请求不用手动带。 */
+  auth: {
+    /** 未认证时同样 200（authenticated=false），前端据此渲染邀请页。 */
+    me: () => request<Identity>("/auth/me"),
+    /** 用邀请链接里的 token 换 cookie。 */
+    redeem: (token: string) =>
+      request<Identity>("/auth/redeem", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+    logout: () => request<Identity>("/auth/logout", { method: "POST" }),
+  },
+
+  /** 租户管理（owner 专属）。 */
+  tenants: {
+    list: () => request<Paged<Tenant>>("/tenants"),
+    create: (name: string) =>
+      request<Tenant>("/tenants", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    /** 停用/启用，或改工作目录根。 */
+    update: (id: number, patch: { disabled?: boolean; root?: string }) =>
+      request<Tenant>(`/tenants/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    /** 重新生成分享链接：旧链接立刻作废，会话与目录不动。 */
+    rotate: (id: number) =>
+      request<Tenant>(`/tenants/${id}/rotate`, { method: "POST" }),
+    remove: (id: number) => request<null>(`/tenants/${id}`, { method: "DELETE" }),
+  },
+
+  /** 工作区项目：磁盘即事实源，克隆是后台任务。 */
+  projects: {
+    list: () => request<Paged<Project>>("/projects"),
+    create: (name: string) =>
+      request<Project>("/projects", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    remove: (name: string) =>
+      request<null>(`/projects/${name}`, { method: "DELETE" }),
+    /** 起一个后台克隆，进度轮询 clones。 */
+    clone: (input: { url: string; name?: string }) =>
+      request<CloneTask>("/projects/clone", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    clones: () => request<Paged<CloneTask>>("/projects/clones"),
+    /** 克隆对话框的可选仓库（gh CLI，不含个人账号名下的仓库）。 */
+    repos: () => request<Paged<RemoteRepo>>("/projects/repos"),
   },
 
   fs: {

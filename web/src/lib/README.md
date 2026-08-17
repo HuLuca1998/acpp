@@ -27,6 +27,7 @@
 | --- | --- | --- |
 | use-async-data.ts | 「进页面拉一次」的加载样板：cancelled 守卫 + data/error；轮询和分页不适用 | `useAsyncData` |
 | use-chat.ts | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决 | `useChat` |
+| identity-context.ts | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话 | `useDraftSession` |
 | use-mobile.ts | 移动端断点判断（shadcn 生成） | `useIsMobile` |
 | use-orch-chat.ts | 编排主会话流状态机（adr-006）：复用 chat-events reducer + task_update 任务列表；返回形状与 useChat 结构兼容 | `useOrchChat` |

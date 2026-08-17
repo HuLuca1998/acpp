@@ -10,6 +10,7 @@ import { Placeholder } from "@/routes/placeholder"
 import { Roles } from "@/routes/roles"
 import { SessionChat } from "@/routes/session-chat"
 import { Sessions } from "@/routes/sessions"
+import { Tenants } from "@/routes/tenants"
 import { Settings } from "@/routes/settings"
 import { SkillDetail } from "@/routes/skill-detail"
 import { Skills } from "@/routes/skills"
@@ -18,11 +19,6 @@ import { Skills } from "@/routes/skills"
 const PLACEHOLDERS = [
   { path: "tools", titleKey: "nav.tools", descKey: "placeholderPage.tools" },
   { path: "logs", titleKey: "nav.logs", descKey: "placeholderPage.logs" },
-  {
-    path: "connections",
-    titleKey: "nav.connections",
-    descKey: "placeholderPage.connections",
-  },
   { path: "help", titleKey: "nav.help", descKey: "placeholderPage.help" },
   { path: "search", titleKey: "nav.search", descKey: "placeholderPage.search" },
 ] as const
@@ -49,6 +45,8 @@ export function App() {
         <Route path="orchestrator/new" element={<OrchestratorChat />} />
         <Route path="orchestrator/:id" element={<OrchestratorChat />} />
         <Route path="settings" element={<Settings />} />
+        {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
+        <Route path="connections" element={<Tenants />} />
         {PLACEHOLDERS.map(({ path, titleKey, descKey }) => (
           <Route
             key={path}

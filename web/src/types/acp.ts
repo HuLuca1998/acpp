@@ -572,3 +572,93 @@ export interface OrchTask {
   createdAt: string
   updatedAt: string
 }
+
+// ── 多租户与项目（adr-007）────────────────────────────────────
+
+/** 当前身份。owner 是本机访问，租户凭邀请链接换来的 cookie 认。 */
+export interface Identity {
+  authenticated: boolean
+  owner: boolean
+  /** 凭证认识但被 owner 关停——界面显示「无权访问」而不是「请用邀请链接」。 */
+  revoked?: boolean
+  tenantName?: string
+  /** 租户的最上层工作目录；owner 不受目录限制，为空。 */
+  root?: string
+}
+
+/** 一个局域网访客的身份与隔离单元（owner 视角，带邀请凭证）。 */
+export interface Tenant {
+  id: number
+  name: string
+  root: string
+  disabled: boolean
+  lastSeenAt?: string
+  createdAt: string
+  updatedAt: string
+  /** 邀请凭证本身；只有 owner 拿得到。 */
+  inviteToken: string
+  /** 可直接转发的邀请链接（后端拼好局域网 IP 与端口）。 */
+  inviteUrl: string
+  sessionCount: number
+}
+
+/** 工作区里的一个仓库目录，名字是相对工作区根的路径（`组织/仓库`）。 */
+export interface Project {
+  name: string
+  path: string
+  remote?: string
+  branch?: string
+  sessionCount: number
+  updatedAt: string
+}
+
+export type CloneState = "running" | "done" | "failed"
+
+/** 一次后台克隆任务（内存态，服务重启即消失）。 */
+export interface CloneTask {
+  id: string
+  name: string
+  url: string
+  path: string
+  state: CloneState
+  error?: string
+  startedAt: string
+  endedAt?: string
+}
+
+/** gh 能看到的可克隆仓库（个人账号名下的不在其中）。 */
+export interface RemoteRepo {
+  name: string
+  description?: string
+  private: boolean
+  cloneUrl: string
+  updatedAt: string
+}
+
+/** 分支清单里的一条。worktree 非空表示已被别的工作区占用，不能切。 */
+export interface GitBranch {
+  name: string
+  current: boolean
+  worktree?: string
+}
+
+/** 一个 git 工作区（含主工作区）。 */
+export interface GitWorktree {
+  path: string
+  branch?: string
+  main: boolean
+  current: boolean
+}
+
+/** 会话底部分支控件的全部数据。 */
+export interface GitBranchView {
+  isRepo: boolean
+  current?: string
+  /** detached 时 current 是短 hash，不是分支名。 */
+  detached: boolean
+  /** 有未提交改动：脏工作区不允许切分支。 */
+  dirty: boolean
+  local: GitBranch[]
+  remote: string[]
+  worktrees: GitWorktree[]
+}

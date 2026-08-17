@@ -57,7 +57,14 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		return &GitBranchView{}, nil
 	}
 
-	view := &GitBranchView{IsRepo: true}
+	// 三个清单一律给空切片而不是 nil：JSON 里 null 与 [] 对前端是两种东西，
+	// 让界面到处写 `?? []` 不如后端一次性给干净。
+	view := &GitBranchView{
+		IsRepo:    true,
+		Local:     []GitBranch{},
+		Remote:    []string{},
+		Worktrees: []GitWorktree{},
+	}
 
 	head, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
@@ -75,7 +82,9 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		view.Dirty = strings.TrimSpace(status) != ""
 	}
 
-	view.Worktrees = parseWorktrees(ctx, cwd)
+	if worktrees := parseWorktrees(ctx, cwd); worktrees != nil {
+		view.Worktrees = worktrees
+	}
 	byBranch := map[string]string{}
 	for _, wt := range view.Worktrees {
 		if wt.Branch != "" {

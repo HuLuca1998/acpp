@@ -6,6 +6,7 @@ import "./index.css"
 import "./i18n"
 import App from "./App.tsx"
 import { ThemeProvider } from "@/components/shell/theme-provider.tsx"
+import { IdentityProvider } from "@/components/shell/identity-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { applyPalette, loadPalette } from "@/lib/palette"
@@ -17,10 +18,14 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <TooltipProvider>
-        <BrowserRouter>
-          <App />
-          <Toaster />
-        </BrowserRouter>
+        {/* 身份要在路由之上：邀请链接是 `/?invite=<token>`，兑换发生在
+            任何页面渲染之前（adr-007）。 */}
+        <IdentityProvider>
+          <BrowserRouter>
+            <App />
+            <Toaster />
+          </BrowserRouter>
+        </IdentityProvider>
       </TooltipProvider>
     </ThemeProvider>
   </StrictMode>

@@ -58,7 +58,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/auth/logout", auth.logout)
 
 	// 租户管理：owner 专属（isOwnerOnly 按前缀覆盖）。
-	tenants := tenantHandler{tenants: svcs.Tenants}
+	tenants := tenantHandler{tenants: svcs.Tenants, addr: cfg.Addr}
 	api.HandleFunc("GET /api/tenants", tenants.list)
 	api.HandleFunc("POST /api/tenants", tenants.create)
 	api.HandleFunc("PUT /api/tenants/{id}", tenants.update)

@@ -18,6 +18,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { useIsOwner } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import type { Session } from "@/types/acp"
 import {
@@ -37,6 +38,7 @@ const RECENT_LIMIT = 10
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation()
   const { pathname } = useLocation()
+  const isOwner = useIsOwner()
   const [recent, setRecent] = React.useState<Session[]>([])
 
   // 随路由变化刷新：新建/删除会话后列表立即跟上，不留已删会话的死链接。
@@ -55,28 +57,44 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }, [pathname])
 
-  const navMain = [
-    { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },
-    { title: t("nav.skills"), url: "/skills", icon: <PuzzleIcon /> },
-    {
-      title: t("nav.sessions"),
-      url: "/sessions",
-      icon: <MessagesSquareIcon />,
-    },
-    {
-      title: t("nav.orchestrator"),
-      url: "/orchestrator",
-      icon: <NetworkIcon />,
-    },
-    { title: t("nav.roles"), url: "/roles", icon: <DramaIcon /> },
-    { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
-    { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
-  ]
+  // 租户只留会话与项目：编排、技能、角色、设置、连接都是 owner 的东西，
+  // 后端也已按 owner-only 拦截，导航里直接不出现（adr-007）。
+  const navMain = isOwner
+    ? [
+        { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },
+        { title: t("nav.skills"), url: "/skills", icon: <PuzzleIcon /> },
+        {
+          title: t("nav.sessions"),
+          url: "/sessions",
+          icon: <MessagesSquareIcon />,
+        },
+        {
+          title: t("nav.orchestrator"),
+          url: "/orchestrator",
+          icon: <NetworkIcon />,
+        },
+        { title: t("nav.roles"), url: "/roles", icon: <DramaIcon /> },
+        { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
+        { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
+      ]
+    : [
+        {
+          title: t("nav.sessions"),
+          url: "/sessions",
+          icon: <MessagesSquareIcon />,
+        },
+      ]
 
-  const navSecondary = [
-    { title: t("nav.settings"), url: "/settings", icon: <Settings2Icon /> },
-    { title: t("nav.connections"), url: "/connections", icon: <PlugZapIcon /> },
-  ]
+  const navSecondary = isOwner
+    ? [
+        { title: t("nav.settings"), url: "/settings", icon: <Settings2Icon /> },
+        {
+          title: t("nav.connections"),
+          url: "/connections",
+          icon: <PlugZapIcon />,
+        },
+      ]
+    : []
 
   // 品牌图标标出会话属于哪个 agent，一眼可辨。
   const recentItems = recent.map((session) => ({
