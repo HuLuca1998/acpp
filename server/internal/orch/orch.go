@@ -46,15 +46,15 @@ type Service struct {
 	stopped map[uint]bool
 }
 
-// 编排护栏的默认值：并发任务数是「一个人的注意力」尺度而不是资源上限；
-// 任务硬超时兜底 MCP 侧超时（MCP_TOOL_TIMEOUT/tool_timeout_sec 配得更大，
-// 让我们先了断并给主会话一个可解释的错误）。
+// 编排护栏的默认值：并发任务数是「一个人的注意力」尺度而不是资源上限。
+// 任务不设硬超时（用户拍板：长程任务跑几个小时是正常使用方式，与
+// ACP_TURN_TIMEOUT 默认不限时同哲学）——失控的兜底是界面上的急停。
 const (
 	orchMaxConcurrentTasks = 4
-	orchTaskTimeoutMinutes = 30
-	// mcpToolTimeoutMS 是注给 runtime 侧的工具调用超时（毫秒/秒各自换算），
-	// 必须大于我们的硬超时，保证「谁先了断」的主动权在我们手里。
-	mcpToolTimeoutMS = 3600_000
+	// mcpToolTimeoutMS 是注给 runtime 侧的工具调用超时（约 24 小时 ≈
+	// 实际不限）。claude 的 MCP_TOOL_TIMEOUT env 有一层 5 分钟 clamp
+	// 兜不住长任务，真正的入口是 per-server timeout 字段（options 注入）。
+	mcpToolTimeoutMS = 86_400_000
 )
 
 func NewService(db *gorm.DB, roles *RoleService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *service.SkillUsageService, dataDir, skillpackDir, addr string) *Service {

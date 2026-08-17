@@ -108,9 +108,19 @@ func (s *Service) mainInjection(orch *model.OrchSession, agent *model.Agent, pro
 					// 每次 spawn 都弹权限卡没有意义（事件层另有自动放行兜底）。
 					"disallowedTools": []string{"Task"},
 					"allowedTools":    []string{"mcp__acpp__hire_role"},
+					// acpp server 走 SDK options 注入而不是 session/new 的
+					// mcpServers：只有这条路能带 per-server timeout——
+					// MCP_TOOL_TIMEOUT env 存在一层 5 分钟 clamp（实测
+					// 318s/339s 超时），长任务全靠这里的 timeout 突破。
+					"mcpServers": map[string]any{
+						"acpp": map[string]any{
+							"type":    "http",
+							"url":     mcpURL,
+							"timeout": mcpToolTimeoutMS,
+						},
+					},
 				}},
 			},
-			MCPServers: mcpServers,
 		}, nil
 	case "codex":
 		home := filepath.Join(s.dataDir, "orch", fmt.Sprintf("home-%d", orch.ID))

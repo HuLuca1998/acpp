@@ -100,9 +100,11 @@ func (s *Service) runTask(ctx context.Context, orch *model.OrchSession, role *mo
 	key := orchTaskKey(task.ID)
 	br := s.brokerFor(key)
 
-	// 任务硬超时：MCP 侧超时配得更大，主动权在我们手里——超时后取消
-	// 子会话 turn 并给主会话一个可解释的错误。
-	taskCtx, cancel := context.WithTimeout(ctx, orchTaskTimeoutMinutes*time.Minute)
+	// 任务不限时（与单轮 ACP_TURN_TIMEOUT 默认不限的哲学一致），且与
+	// MCP 调用方的 HTTP 连接解耦：主控侧就算超时放弃，任务照跑到底、
+	// 成果照常落盘落库——主控事后可从任务列表/现场捡回结果（实测它
+	// 真会这么自救）。任务的死期只有用户急停与会话删除。
+	taskCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	cwd := orch.Cwd
@@ -171,7 +173,7 @@ func (s *Service) runTask(ctx context.Context, orch *model.OrchSession, role *mo
 	br.EndTurn()
 	if err != nil {
 		if taskCtx.Err() != nil {
-			return "", fmt.Errorf("task timed out after %d minutes", orchTaskTimeoutMinutes)
+			return "", fmt.Errorf("task cancelled: %w", taskCtx.Err())
 		}
 		return "", err
 	}

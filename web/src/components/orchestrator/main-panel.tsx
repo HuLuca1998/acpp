@@ -120,13 +120,14 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
               className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-3 py-1.5 text-left text-xs transition-colors duration-150 ease-snappy hover:bg-accent"
             >
               <StatusDot tone="success" pulse />
-              <span className="font-medium">
+              {/* 主标签不可被 flex 压缩成竖排字；摘要吃掉剩余空间单行截断。 */}
+              <span className="shrink-0 font-medium whitespace-nowrap">
                 {t("orch.working", { role: task.roleName })}
               </span>
-              <span className="truncate text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
                 {task.task}
               </span>
-              <span className="ml-auto shrink-0 text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground">
                 {t("orch.viewTask")}
               </span>
             </button>
