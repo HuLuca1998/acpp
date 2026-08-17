@@ -10,6 +10,7 @@ import (
 
 	"acpp/server/internal/config"
 	"acpp/server/internal/orch"
+	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
 )
@@ -28,6 +29,7 @@ type Services struct {
 	Roles      *orch.RoleService
 	Orch       *orch.Service
 	Tenants    *service.TenantService
+	Projects   *project.Service
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -91,6 +93,16 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		}
 		writeData(w, http.StatusCreated, entry)
 	})
+
+	// 项目：工作区根下的仓库目录（磁盘即事实源）。克隆是后台任务，
+	// 进度轮询 clones；repos 是克隆对话框的远端仓库清单（gh CLI）。
+	projects := projectHandler{projects: svcs.Projects}
+	api.HandleFunc("GET /api/projects", projects.list)
+	api.HandleFunc("POST /api/projects", projects.create)
+	api.HandleFunc("GET /api/projects/repos", projects.repos)
+	api.HandleFunc("GET /api/projects/clones", projects.clones)
+	api.HandleFunc("POST /api/projects/clone", projects.clone)
+	api.HandleFunc("DELETE /api/projects/{name...}", projects.remove)
 
 	// 系统配置：数据目录查看 / 迁移（拷贝式，重启后生效）。
 	api.HandleFunc("GET /api/system", system.get)

@@ -130,4 +130,3 @@ func TestTenantService_Rotate_InvalidatesOldToken(t *testing.T) {
 		t.Fatalf("Authenticate(rotated): %v", err)
 	}
 }
-

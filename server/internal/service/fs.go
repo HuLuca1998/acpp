@@ -65,7 +65,7 @@ func CreateDir(scope Scope, parent, name string) (*DirEntry, error) {
 //
 // path 为空时从 scope 的起点开始：owner 是家目录，租户是自己的 root。
 // 租户站在 root 上时不给 Parent——「上一层」按钮不该把人带出自己的地盘
-//（后端即使被绕过也会在 GuardPath 拒掉，这里是让界面别显示假入口）。
+// （后端即使被绕过也会在 GuardPath 拒掉，这里是让界面别显示假入口）。
 func ListDirs(scope Scope, path string, withFiles bool) (*DirListing, error) {
 	path, err := scope.GuardPath(path)
 	if err != nil {

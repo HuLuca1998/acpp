@@ -17,6 +17,7 @@ import (
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/model"
 	"acpp/server/internal/orch"
+	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
 	"acpp/server/internal/transcript"
@@ -119,6 +120,9 @@ func run() error {
 	// 工作区下（~/acpp/<租户>），owner 由 loopback 判定，不入表。
 	tenantService := service.NewTenantService(gdb, service.DefaultCwd())
 
+	// 项目面：扫工作区根下的 git 仓库，克隆落到 <root>/<组织>/<仓库>。
+	projectService := project.NewService(gdb)
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -139,6 +143,7 @@ func run() error {
 		Roles:      roleService,
 		Orch:       orchService,
 		Tenants:    tenantService,
+		Projects:   projectService,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
