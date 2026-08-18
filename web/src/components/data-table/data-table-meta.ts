@@ -12,5 +12,10 @@ declare module "@tanstack/react-table" {
   interface ColumnMeta<TFeatures, TData, TValue> {
     /** 列显隐菜单里的显示名。 */
     label?: string
+    /**
+     * 同时贴到该列的表头与单元格。对齐与列宽必须两边一致，分开写迟早会
+     * 有一边忘记改。
+     */
+    className?: string
   }
 }

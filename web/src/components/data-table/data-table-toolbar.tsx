@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -47,17 +48,21 @@ export function DataTableToolbar<TData extends RowData>({
             }
           />
           <DropdownMenuContent align="end" className="min-w-40">
-            <DropdownMenuLabel>{t("table.columns")}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {columns.map((column) => (
-              <DropdownMenuCheckboxItem
-                key={column.id}
-                checked={column.getIsVisible()}
-                onCheckedChange={(v) => column.toggleVisibility(Boolean(v))}
-              >
-                {column.columnDef.meta?.label}
-              </DropdownMenuCheckboxItem>
-            ))}
+            {/* Label 必须待在 Group 里：Base UI 的 GroupLabel 要从
+                MenuGroupContext 取 id 去挂 aria-labelledby，裸放会直接抛。 */}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t("table.columns")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {columns.map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(v) => column.toggleVisibility(Boolean(v))}
+                >
+                  {column.columnDef.meta?.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}

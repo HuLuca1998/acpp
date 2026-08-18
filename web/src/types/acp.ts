@@ -451,6 +451,17 @@ export interface Paged<T> {
   pageSize: number
 }
 
+/**
+ * 分页列表的请求参数，`Paged` 的对偶。跨端契约：六个列表端点都认这四个
+ * （AGENTS.md §2），`sort` 的取值是后端排序白名单里的**数据库列名**。
+ */
+export interface PageQuery {
+  page: number
+  pageSize: number
+  sort?: string
+  order?: "asc" | "desc"
+}
+
 // ---- 技能库（磁盘为事实源，与 server/internal/service/skill*.go 对齐）----
 
 export interface Skill {

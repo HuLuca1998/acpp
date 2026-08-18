@@ -1,11 +1,16 @@
+import { useState } from "react"
 import { useTable, type ColumnDef, type RowData } from "@tanstack/react-table"
-import { useTranslation } from "react-i18next"
+
+import "@/components/data-table/data-table-meta"
 
 import { cn } from "@/lib/utils"
 import { DataPagination } from "@/components/data-pagination"
 import { dataTableFeatures } from "@/components/data-table/data-table-features"
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar"
-import type { SortingState, VisibilityState } from "@/components/data-table/data-table-state"
+import type {
+  SortingState,
+  VisibilityState,
+} from "@/components/data-table/data-table-state"
 import {
   Table,
   TableBody,
@@ -33,13 +38,11 @@ export function DataTable<TData extends RowData>({
   page,
   pageSize,
   sorting,
-  columnVisibility,
   empty,
   toolbar,
   onPage,
   onPageSize,
   onSorting,
-  onColumnVisibility,
   onRowClick,
   rowClassName,
 }: {
@@ -49,19 +52,22 @@ export function DataTable<TData extends RowData>({
   page: number
   pageSize: number
   sorting: SortingState
-  columnVisibility: VisibilityState
-  /** 无数据时显示的内容（三态壳由调用方给，各页文案不同）。 */
+  /**
+   * 没有行可画时整个替换成它。传 ListPageStates：加载中、出错、空列表
+   * 三种都归它管，各页文案不同。
+   */
   empty?: React.ReactNode
   /** 工具栏左侧的自定义内容（搜索框、筛选等）。 */
   toolbar?: React.ReactNode
   onPage: (page: number) => void
   onPageSize: (size: number) => void
   onSorting: (sorting: SortingState) => void
-  onColumnVisibility: (visibility: VisibilityState) => void
   onRowClick?: (row: TData) => void
   rowClassName?: (row: TData) => string | undefined
 }) {
-  const { t } = useTranslation()
+  // 列显隐自己持有：它不进请求，是一个人此刻想看什么，不是配置也不是
+  // 页面状态。放出去只会让六个列表页各写一遍同样的 useState。
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const table = useTable({
     features: dataTableFeatures,
     data: data ?? [],
@@ -69,15 +75,15 @@ export function DataTable<TData extends RowData>({
     state: { sorting, columnVisibility },
     onSortingChange: (updater) =>
       onSorting(typeof updater === "function" ? updater(sorting) : updater),
-    onColumnVisibilityChange: (updater) =>
-      onColumnVisibility(
-        typeof updater === "function" ? updater(columnVisibility) : updater
-      ),
+    onColumnVisibilityChange: setColumnVisibility,
     // 排序由服务端做，表格只负责把状态交出去。
     manualSorting: true,
   })
 
-  if (data !== null && data.length === 0) {
+  // 没有行可画就整个让给三态壳：加载中的骨架、出错的说明、空列表的
+  // 下一步 CTA 都在 ListPageStates 里（AGENTS.md 的硬规则），表格自己
+  // 不该再造一套。
+  if (data === null || data.length === 0) {
     return <>{empty}</>
   }
 
@@ -90,7 +96,10 @@ export function DataTable<TData extends RowData>({
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>
               {group.headers.map((header) => (
-                <TableHead key={header.id}>
+                <TableHead
+                  key={header.id}
+                  className={header.column.columnDef.meta?.className}
+                >
                   {header.isPlaceholder ? null : (
                     <table.FlexRender header={header} />
                   )}
@@ -104,29 +113,24 @@ export function DataTable<TData extends RowData>({
             <TableRow
               key={row.id}
               className={cn(
-                "group",
+                // relative 是拉伸链接（after:absolute inset-0）的落脚点，
+                // 本项目所有列表行的主链接都是这个模式（AGENTS.md §5.5）。
+                "group relative",
                 onRowClick && "cursor-pointer",
                 rowClassName?.(row.original)
               )}
               onClick={onRowClick ? () => onRowClick(row.original) : undefined}
             >
               {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>
+                <TableCell
+                  key={cell.id}
+                  className={cell.column.columnDef.meta?.className}
+                >
                   <table.FlexRender cell={cell} />
                 </TableCell>
               ))}
             </TableRow>
           ))}
-          {data === null ? (
-            <TableRow>
-              <TableCell
-                colSpan={columns.length}
-                className="h-20 text-center text-sm text-muted-foreground"
-              >
-                {t("common.loadFailed")}
-              </TableCell>
-            </TableRow>
-          ) : null}
         </TableBody>
       </Table>
 

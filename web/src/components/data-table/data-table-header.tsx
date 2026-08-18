@@ -3,11 +3,7 @@ import type { Column, RowData } from "@tanstack/react-table"
 import { cn } from "@/lib/utils"
 import type { DataTableFeatures } from "@/components/data-table/data-table-features"
 import { Button } from "@/components/ui/button"
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  ChevronsUpDownIcon,
-} from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react"
 
 /**
  * 可排序的表头单元。不可排序的列直接给文字——一个点了没反应的按钮

@@ -26,6 +26,7 @@ import type {
   OrchTask,
   OverviewStats,
   Paged,
+  PageQuery,
   Project,
   RemoteRepo,
   Role,
@@ -144,7 +145,10 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
       request<DbDatabase[]>(at(id, `/datasources/${dsid}/databases`)),
     datasourceTables: (id: number, dsid: number, database: string) =>
       request<DbTable[]>(
-        at(id, `/datasources/${dsid}/tables?database=${encodeURIComponent(database)}`)
+        at(
+          id,
+          `/datasources/${dsid}/tables?database=${encodeURIComponent(database)}`
+        )
       ),
 
     /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
@@ -290,6 +294,25 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
 /** 工作区作用域 API 的类型（面板与 provider 消费）。 */
 export type WorkspaceScopeApi = ReturnType<typeof workspaceScopeApi>
 
+/**
+ * 分页 + 排序的查询串。六个列表端点共用同一套协议（AGENTS.md §2），
+ * 各写一遍必然会有漏掉排序参数的那一个。
+ *
+ * 空值一律不落进 URL：`0` 对 page/pageSize/agentId 都不是合法取值，
+ * 当成「没给」处理。
+ */
+function pageQuery(
+  params?: Record<string, string | number | undefined>
+): string {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value === undefined || value === "" || value === 0) continue
+    qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return s ? `?${s}` : ""
+}
+
 export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
 
@@ -354,14 +377,8 @@ export const api = {
     overview: (days = 14) =>
       request<OverviewStats>(`/sessions/overview?days=${days}`),
 
-    list: (params?: { agentId?: number; page?: number; pageSize?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.agentId) qs.set("agentId", String(params.agentId))
-      if (params?.page) qs.set("page", String(params.page))
-      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
-      const s = qs.toString()
-      return request<Paged<Session>>(`/sessions${s ? `?${s}` : ""}`)
-    },
+    list: (params?: Partial<PageQuery> & { agentId?: number }) =>
+      request<Paged<Session>>(`/sessions${pageQuery(params)}`),
     get: (id: number) => request<Session>(`/sessions/${id}`),
     create: (input: {
       agentId: number
@@ -430,13 +447,8 @@ export const api = {
   },
 
   skills: {
-    list: (params?: { page?: number; pageSize?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.page) qs.set("page", String(params.page))
-      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
-      const s = qs.toString()
-      return request<Paged<Skill>>(`/skills${s ? `?${s}` : ""}`)
-    },
+    list: (params?: Partial<PageQuery>) =>
+      request<Paged<Skill>>(`/skills${pageQuery(params)}`),
     get: (name: string) => request<SkillDetail>(`/skills/${name}`),
     create: (input: SkillCreateInput) =>
       request<SkillDetail>("/skills", {
@@ -476,13 +488,8 @@ export const api = {
   },
 
   roles: {
-    list: (params?: { page?: number; pageSize?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.page) qs.set("page", String(params.page))
-      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
-      const s = qs.toString()
-      return request<Paged<Role>>(`/roles${s ? `?${s}` : ""}`)
-    },
+    list: (params?: Partial<PageQuery>) =>
+      request<Paged<Role>>(`/roles${pageQuery(params)}`),
     get: (id: number) => request<Role>(`/roles/${id}`),
     create: (input: RoleInput) =>
       request<Role>("/roles", { method: "POST", body: JSON.stringify(input) }),
@@ -495,15 +502,8 @@ export const api = {
   },
 
   orchestrator: {
-    list: (params?: { page?: number; pageSize?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.page) qs.set("page", String(params.page))
-      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
-      const s = qs.toString()
-      return request<Paged<OrchSession>>(
-        `/orchestrator/sessions${s ? `?${s}` : ""}`
-      )
-    },
+    list: (params?: Partial<PageQuery>) =>
+      request<Paged<OrchSession>>(`/orchestrator/sessions${pageQuery(params)}`),
     get: (id: number) => request<OrchSession>(`/orchestrator/sessions/${id}`),
     create: (input: { agentId: number; cwd?: string; title?: string }) =>
       request<OrchSession>("/orchestrator/sessions", {
@@ -614,13 +614,8 @@ export const api = {
 
   /** 租户管理（owner 专属）。 */
   tenants: {
-    list: (params?: { page?: number; pageSize?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.page) qs.set("page", String(params.page))
-      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
-      const s = qs.toString()
-      return request<Paged<Tenant>>(`/tenants${s ? `?${s}` : ""}`)
-    },
+    list: (params?: Partial<PageQuery>) =>
+      request<Paged<Tenant>>(`/tenants${pageQuery(params)}`),
     create: (name: string) =>
       request<Tenant>("/tenants", {
         method: "POST",
@@ -683,13 +678,8 @@ export const api = {
    * 免得在会话里误用别的项目的连接。
    */
   datasources: {
-    list: (params?: { page?: number; pageSize?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.page) qs.set("page", String(params.page))
-      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
-      const s = qs.toString()
-      return request<Paged<DataSource>>(`/datasources${s ? `?${s}` : ""}`)
-    },
+    list: (params?: Partial<PageQuery>) =>
+      request<Paged<DataSource>>(`/datasources${pageQuery(params)}`),
     /** 配置页选库用：列出这组连接参数能看到的全部库（连接还没绑定库）。 */
     probeDatabases: (input: DataSourceInput & { id?: number }) =>
       request<DbDatabase[]>("/datasources/probe-databases", {
@@ -725,7 +715,10 @@ export const api = {
         `/datasources/${id}/schema?database=${encodeURIComponent(database)}&table=${encodeURIComponent(table)}`
       ),
     /** 执行一段 SQL，可含多条语句（按顺序执行、遇错即停）。 */
-    query: (id: number, input: { database?: string; sql: string; maxRows?: number }) =>
+    query: (
+      id: number,
+      input: { database?: string; sql: string; maxRows?: number }
+    ) =>
       request<SqlExecResult>(`/datasources/${id}/query`, {
         method: "POST",
         body: JSON.stringify(input),
