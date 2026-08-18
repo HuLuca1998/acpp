@@ -393,8 +393,10 @@ export default {
     elicitation: {
       title: "Agent 请求你的输入",
       otherPlaceholder: "输入自定义回答，Enter 确认…",
+      progress: "第 {{current}} / {{total}} 题",
       submit: "提交",
-      skip: "跳过",
+      skip: "跳过本题",
+      dismiss: "不回答",
       back: "上一题",
       next: "下一题",
       skipped: "已跳过",

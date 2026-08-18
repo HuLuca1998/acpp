@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState, type FormEvent, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { Message, PendingElicitation } from "@/types/acp"
@@ -10,12 +10,39 @@ import {
 } from "@/lib/elicitation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { CircleHelpIcon } from "lucide-react"
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
+import {
+  Questionnaire,
+  QuestionnaireActions,
+  QuestionnaireChoice,
+  QuestionnaireChoiceDescription,
+  QuestionnaireChoices,
+  QuestionnaireDescription,
+  QuestionnaireInput,
+  QuestionnaireItem,
+  QuestionnaireNext,
+  QuestionnairePrevious,
+  QuestionnaireProgress,
+  QuestionnaireSkip,
+  QuestionnaireSubmit,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire"
+import { CheckIcon, CircleHelpIcon } from "lucide-react"
 
 /**
- * agent 的交互式提问卡片：每道题渲染选项按钮组，可附自由输入；
- * 选选项和填「其他」互斥。提交走 accept，跳过走 decline。
+ * agent 的交互式提问卡片，用 shadcn 的 Questionnaire 原语搭：一次一题，
+ * 选项与自由输入共用题目 id 作字段名——**互斥由原语保证**（选选项会摘掉
+ * 输入框的 name，反之亦然），我们只管在提交时按值判断该写回哪个字段。
+ *
+ * 提交走 accept，整份不答走 decline；单题的「跳过」是原语自带的三态之一
+ * （未答 / 已答 / 已跳过），跳过的题不会出现在表单值里。
  */
 export function ElicitationCard({
   elicitation,
@@ -28,178 +55,168 @@ export function ElicitationCard({
   ) => void
 }) {
   const { t } = useTranslation()
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [others, setOthers] = useState<Record<string, string>>({})
-  const [step, setStep] = useState(0)
   const [submitted, setSubmitted] = useState(false)
-
-  type Answers = Record<string, string>
-
   const questions = elicitation.questions
-  const total = questions.length
-  const q = questions[Math.min(step, total - 1)]
-  const isLast = step >= total - 1
 
-  const isAnswered = (
-    question: PendingElicitation["questions"][number],
-    a: Answers,
-    o: Answers
-  ) => Boolean(a[question.id]) || (o[question.id]?.trim() ?? "") !== ""
+  // 把整份问卷声明给 Root：它据此分配数字快捷键，并在开发期核对渲染出来的
+  // 题目与选项跟声明一致（漏一个选项会在控制台点名）。
+  const items = useMemo(
+    () =>
+      questions.map((q) => ({
+        name: q.id,
+        required: q.required,
+        choices: q.options.map((o) => ({ value: o.value })),
+      })),
+    [questions]
+  )
 
-  const isComplete = (a: Answers, o: Answers) =>
-    questions.some((question) => isAnswered(question, a, o)) &&
-    questions.every(
-      (question) => !question.required || isAnswered(question, a, o)
-    )
-
-  function submitWith(a: Answers, o: Answers) {
-    const content: Record<string, string> = {}
-    for (const question of questions) {
-      const other = o[question.id]?.trim() ?? ""
-      if (other !== "") {
-        // 纯自由输入题没有独立的 other 字段，答案直接写回题目本身。
-        content[question.otherFieldId ?? question.id] = other
-        continue
-      }
-      if (a[question.id]) content[question.id] = a[question.id]
-    }
+  function decline() {
+    if (submitted) return
     setSubmitted(true)
+    onResolve("decline")
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (submitted) return
+
+    const data = new FormData(event.currentTarget)
+    const content: Record<string, string> = {}
+    for (const q of questions) {
+      const value = data.get(q.id)
+      if (typeof value !== "string" || value.trim() === "") continue
+      // 自由输入与选项同名，靠「是不是某个选项的值」区分该写回哪个字段：
+      // 纯自由输入题没有独立的 other 字段，答案直接写回题目本身。
+      const isOption = q.options.some((o) => o.value === value)
+      content[isOption ? q.id : (q.otherFieldId ?? q.id)] = value
+    }
+
+    setSubmitted(true)
+    // 一题没答就别拿空答案糊弄 agent，按「不回答」处理。
+    if (Object.keys(content).length === 0) {
+      onResolve("decline")
+      return
+    }
     onResolve("accept", content)
   }
 
-  /** 记录答案后前进：非末题翻页，末题在必答齐时立即提交。 */
-  function advance(a: Answers, o: Answers) {
-    if (!isLast) {
-      setStep(step + 1)
-      return
-    }
-    if (isComplete(a, o)) submitWith(a, o)
-  }
-
-  function pickOption(value: string) {
-    const nextAnswers = { ...answers, [q.id]: value }
-    const nextOthers = { ...others, [q.id]: "" }
-    setAnswers(nextAnswers)
-    setOthers(nextOthers)
-    advance(nextAnswers, nextOthers)
-  }
-
-  const currentAnswered = isAnswered(q, answers, others)
-  const canFinish = isComplete(answers, others)
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <CircleHelpIcon className="size-4 text-primary" />
-        {t("chat.elicitation.title")}
-        {total > 1 ? (
-          <span className="ml-auto text-xs font-normal text-muted-foreground">
-            {step + 1} / {total}
-          </span>
-        ) : null}
-      </div>
-
-      {/* key 换题触发 remount，@starting-style 做轻快的换页淡入。 */}
-      <div
-        key={q.id}
-        className="flex flex-col gap-2 transition-[opacity,translate] duration-200 ease-snappy starting:translate-x-1.5 starting:opacity-0 motion-reduce:starting:translate-x-0"
-      >
-        <div>
-          <div className="text-sm font-medium">{q.title}</div>
-          {q.description ? (
-            <div className="text-sm text-muted-foreground">{q.description}</div>
-          ) : null}
+  // 解析不出题目时（schema 为空或形状不认识）退回纯文本 + 两个按钮，
+  // 至少别把 agent 卡在那儿等一个永远点不出来的答复。
+  if (questions.length === 0) {
+    return (
+      <ElicitationShell title={t("chat.elicitation.title")}>
+        <div className="text-sm text-muted-foreground">
+          {elicitation.message}
         </div>
-
-        {q.options.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {q.options.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={answers[q.id] === option.value ? "default" : "outline"}
-                className="h-7 rounded-full text-xs"
-                title={option.description}
-                disabled={submitted}
-                onClick={() => pickOption(option.value)}
-              >
-                {option.value}
-              </Button>
-            ))}
-          </div>
-        ) : null}
-
-        {q.otherFieldId || q.options.length === 0 ? (
-          <Input
-            value={others[q.id] ?? ""}
-            placeholder={t("chat.elicitation.otherPlaceholder")}
-            className="h-8 text-sm"
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
             disabled={submitted}
-            onChange={(e) => {
-              const value = e.target.value
-              setOthers((prev) => ({ ...prev, [q.id]: value }))
-              if (value.trim() !== "") {
-                setAnswers((prev) => ({ ...prev, [q.id]: "" }))
-              }
+            onClick={() => {
+              setSubmitted(true)
+              onResolve("accept", {})
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (others[q.id]?.trim() ?? "") !== "") {
-                e.preventDefault()
-                advance(answers, others)
-              }
-            }}
-          />
-        ) : null}
-      </div>
-
-      <div className="mt-4 flex items-center gap-2">
-        {step > 0 ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={submitted}
-            onClick={() => setStep(step - 1)}
-          >
-            {t("chat.elicitation.back")}
-          </Button>
-        ) : null}
-        {!isLast ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={submitted || (q.required && !currentAnswered)}
-            onClick={() => setStep(step + 1)}
-          >
-            {t("chat.elicitation.next")}
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            disabled={!canFinish || submitted}
-            onClick={() => submitWith(answers, others)}
           >
             {t("chat.elicitation.submit")}
           </Button>
-        )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto text-muted-foreground"
+            disabled={submitted}
+            onClick={decline}
+          >
+            {t("chat.elicitation.dismiss")}
+          </Button>
+        </div>
+      </ElicitationShell>
+    )
+  }
+
+  return (
+    <Questionnaire
+      items={items}
+      shortcuts="numbers"
+      inert={submitted}
+      className="rounded-xl border border-border bg-card p-4 shadow-sm"
+      onSubmit={handleSubmit}
+    >
+      <ElicitationHeader title={t("chat.elicitation.title")}>
+        <QuestionnaireProgress
+          className="ml-auto"
+          render={(props, state) =>
+            // 只有一题时进度条是废话，不渲染。
+            state.total > 1 ? (
+              <div {...props}>
+                {t("chat.elicitation.progress", {
+                  current: state.current,
+                  total: state.total,
+                })}
+              </div>
+            ) : null
+          }
+        />
         <Button
+          type="button"
           size="sm"
           variant="ghost"
-          className="ml-auto text-muted-foreground"
+          className="-my-1 text-muted-foreground"
           disabled={submitted}
-          onClick={() => {
-            setSubmitted(true)
-            onResolve("decline")
-          }}
+          onClick={decline}
         >
-          {t("chat.elicitation.skip")}
+          {t("chat.elicitation.dismiss")}
         </Button>
-      </div>
-    </div>
+      </ElicitationHeader>
+
+      {questions.map((q) => (
+        <QuestionnaireItem key={q.id} name={q.id} required={q.required}>
+          <QuestionnaireTitle>{q.title}</QuestionnaireTitle>
+          {q.description ? (
+            <QuestionnaireDescription>{q.description}</QuestionnaireDescription>
+          ) : null}
+
+          {q.options.length > 0 ? (
+            <QuestionnaireChoices>
+              {q.options.map((option) => (
+                <QuestionnaireChoice key={option.value} value={option.value}>
+                  {option.value}
+                  {option.description ? (
+                    <QuestionnaireChoiceDescription>
+                      {option.description}
+                    </QuestionnaireChoiceDescription>
+                  ) : null}
+                </QuestionnaireChoice>
+              ))}
+            </QuestionnaireChoices>
+          ) : null}
+
+          {q.otherFieldId || q.options.length === 0 ? (
+            <QuestionnaireInput
+              placeholder={t("chat.elicitation.otherPlaceholder")}
+            />
+          ) : null}
+        </QuestionnaireItem>
+      ))}
+
+      <QuestionnaireActions>
+        <QuestionnairePrevious size="sm" variant="ghost">
+          {t("chat.elicitation.back")}
+        </QuestionnairePrevious>
+        <QuestionnaireSkip size="sm" variant="ghost">
+          {t("chat.elicitation.skip")}
+        </QuestionnaireSkip>
+        <QuestionnaireNext size="sm">
+          {t("chat.elicitation.next")}
+        </QuestionnaireNext>
+        <QuestionnaireSubmit size="sm">
+          {t("chat.elicitation.submit")}
+        </QuestionnaireSubmit>
+      </QuestionnaireActions>
+    </Questionnaire>
   )
 }
 
-/** 已完成的交互式提问：每题显示全部选项，标出用户的选择，可随时回看。 */
+/** 已完成的交互式提问：每题列出全部选项并标出用户的选择，可随时回看。 */
 export function ElicitationAnsweredCard({ message }: { message: Message }) {
   const { t } = useTranslation()
   const payload = message.payload as {
@@ -214,61 +231,124 @@ export function ElicitationAnsweredCard({ message }: { message: Message }) {
   const accepted = payload?.action === "accept"
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <CircleHelpIcon className="size-4 text-primary" />
-        {t("chat.elicitation.title")}
-        {!accepted ? (
+    <ElicitationShell
+      title={t("chat.elicitation.title")}
+      badge={
+        !accepted ? (
           <Badge variant="secondary" className="ml-auto">
             {t("chat.elicitation.skipped")}
           </Badge>
-        ) : null}
-      </div>
-
+        ) : null
+      }
+    >
       {questions.length === 0 ? (
         <div className="text-sm text-muted-foreground">{message.content}</div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {questions.map((q) => {
-            const answer = answerFor(q, payload?.answers)
-            const isCustom =
-              answer !== "" && !q.options.some((o) => o.value === answer)
-            return (
-              <div key={q.id} className="flex flex-col gap-1.5">
-                <div>
-                  <div className="text-sm font-medium">{q.title}</div>
-                  {q.description ? (
-                    <div className="text-sm text-muted-foreground">
-                      {q.description}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {q.options.map((option) => (
-                    <span
-                      key={option.value}
-                      title={option.description}
-                      className={cn(
-                        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs",
-                        option.value === answer
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border text-muted-foreground/70"
-                      )}
-                    >
-                      {option.value}
-                    </span>
-                  ))}
-                  {isCustom ? (
-                    <span className="inline-flex h-7 items-center rounded-full border border-primary bg-primary px-2.5 text-xs text-primary-foreground">
-                      {answer}
-                    </span>
-                  ) : null}
-                </div>
+        questions.map((q) => {
+          const answer = answerFor(q, payload?.answers)
+          // 答案不在选项里 = 用户自己填的，补一行显示出来。
+          const custom =
+            answer !== "" && !q.options.some((o) => o.value === answer)
+          return (
+            <div key={q.id} className="flex flex-col gap-2">
+              <div>
+                <div className="text-sm font-medium">{q.title}</div>
+                {q.description ? (
+                  <div className="text-sm text-muted-foreground">
+                    {q.description}
+                  </div>
+                ) : null}
               </div>
-            )
-          })}
-        </div>
+              <ItemGroup className="gap-2">
+                {q.options.map((option) => (
+                  <AnsweredChoice
+                    key={option.value}
+                    label={option.value}
+                    description={option.description}
+                    picked={option.value === answer}
+                  />
+                ))}
+                {custom ? <AnsweredChoice label={answer} picked /> : null}
+                {answer === "" ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t("chat.elicitation.skipped")}
+                  </p>
+                ) : null}
+              </ItemGroup>
+            </div>
+          )
+        })
       )}
+    </ElicitationShell>
+  )
+}
+
+/** 回看态的一行选项：形状照 QuestionnaireChoice，只是不可交互。 */
+function AnsweredChoice({
+  label,
+  description,
+  picked,
+}: {
+  label: string
+  description?: string
+  picked: boolean
+}) {
+  return (
+    <Item
+      variant="outline"
+      size="sm"
+      className={cn(
+        picked ? "border-primary/40 bg-muted" : "text-muted-foreground/70"
+      )}
+    >
+      <ItemMedia
+        variant="icon"
+        className={cn(
+          "size-4 self-start rounded-full border",
+          picked
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-input"
+        )}
+      >
+        {picked ? <CheckIcon className="size-3" /> : null}
+      </ItemMedia>
+      <ItemContent className="gap-0.5">
+        <ItemTitle className="font-normal">{label}</ItemTitle>
+        {description ? <ItemDescription>{description}</ItemDescription> : null}
+      </ItemContent>
+    </Item>
+  )
+}
+
+function ElicitationShell({
+  title,
+  badge,
+  children,
+}: {
+  title: string
+  badge?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+      <ElicitationHeader title={title}>{badge}</ElicitationHeader>
+      {children}
+    </div>
+  )
+}
+
+function ElicitationHeader({
+  title,
+  children,
+}: {
+  title: string
+  children?: ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2 text-sm font-medium">
+      <CircleHelpIcon className="size-4 text-primary" />
+      {title}
+      {children}
     </div>
   )
 }

@@ -414,8 +414,10 @@ export default {
     elicitation: {
       title: "The agent needs your input",
       otherPlaceholder: "Type your own answer, Enter to confirm…",
+      progress: "Question {{current}} of {{total}}",
       submit: "Submit",
-      skip: "Skip",
+      skip: "Skip question",
+      dismiss: "Dismiss",
       back: "Back",
       next: "Next",
       skipped: "Skipped",
