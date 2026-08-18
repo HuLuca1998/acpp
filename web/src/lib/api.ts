@@ -123,8 +123,10 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
         headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
         cache: "no-store",
       })
-      // 416：偏移已到文件末尾，没有新内容。
-      if (res.status === 416) return null
+      // 204：偏移已到文件末尾，没有新内容——后端刻意不用 416，那会让
+      // 浏览器按失败资源在控制台刷红字（尾随读每 2 秒一次）。416 仍然
+      // 认，中间层可能自己就把越界的 Range 拦下来了。
+      if (res.status === 204 || res.status === 416) return null
       if (!res.ok) throw new ApiError(res.status, res.statusText)
       const chunk = await res.text()
       if (chunk === "") return null

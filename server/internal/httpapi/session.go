@@ -2,6 +2,9 @@ package httpapi
 
 import (
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
@@ -156,6 +159,71 @@ func (h sessionHandler) transcript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 日志面板每 2 秒带 Range 尾随读一次转录。「已经读到末尾」是这条路径上
+	// 最常见的结果，不是错误——交给 ServeFile 它会回 416，浏览器把那当失败
+	// 资源在控制台刷红字，一分钟三十条，真正的报错反而被淹掉。
+	path := h.chat.TranscriptPath(id)
+	switch tailState(r, path) {
+	case tailEmpty:
+		// 没有新内容（或转录还没落盘）。204 才是这件事的名字。
+		w.WriteHeader(http.StatusNoContent)
+		return
+	case tailRewound:
+		// 文件比偏移还短，说明被重建过。摘掉 Range 让 ServeFile 回全量，
+		// 前端的 reset 分支会整体替换而不是接着往后追加。
+		r.Header.Del("Range")
+	}
+
 	w.Header().Set("Content-Type", "application/x-ndjson")
-	http.ServeFile(w, r, h.chat.TranscriptPath(id))
+	http.ServeFile(w, r, path)
+}
+
+// 尾随读的三种局面。
+type tailKind int
+
+const (
+	// tailNormal：有内容可读，照常交给 ServeFile。
+	tailNormal tailKind = iota
+	// tailEmpty：偏移已在末尾，或者转录还没落盘。
+	tailEmpty
+	// tailRewound：文件比偏移还短，被重建过，得重新给全量。
+	tailRewound
+)
+
+func tailState(r *http.Request, path string) tailKind {
+	info, err := os.Stat(path)
+	if err != nil {
+		// 会话本身已经校验过存在，那这里就是「还没写过转录」。
+		return tailEmpty
+	}
+	start, ok := rangeStart(r.Header.Get("Range"))
+	if !ok {
+		return tailNormal
+	}
+	switch {
+	case start == info.Size():
+		return tailEmpty
+	case start > info.Size():
+		return tailRewound
+	default:
+		return tailNormal
+	}
+}
+
+// rangeStart 取 `bytes=N-` 里的 N。只认这一种写法——转录是 append-only，
+// 前端只会「从某个偏移读到末尾」；别的写法交回 ServeFile 按标准处理。
+func rangeStart(header string) (int64, bool) {
+	spec, ok := strings.CutPrefix(strings.TrimSpace(header), "bytes=")
+	if !ok {
+		return 0, false
+	}
+	digits, ok := strings.CutSuffix(spec, "-")
+	if !ok {
+		return 0, false
+	}
+	start, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil || start < 0 {
+		return 0, false
+	}
+	return start, true
 }
