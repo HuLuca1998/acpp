@@ -2,9 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "web",
-      "url": "http://localhost:45173",
-      "port": 45173
+      "name": "acpp",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["preview"],
+      "port": 45173,
+      "autoPort": false
     }
   ]
 }

@@ -19,16 +19,16 @@ import (
 // Services 是路由需要的全部业务服务，由装配层（cmd/server）构建后传入——
 // HTTP 层只做路由与编解码，不负责连库与组装依赖。
 type Services struct {
-	Agents     *service.AgentService
-	Sessions   *service.SessionService
-	Chat       *service.ChatService
-	Terminals  *service.TerminalService
-	System     *system.Service
-	Skills     *service.SkillService
-	SkillUsage *service.SkillUsageService
-	Update     *system.Updater
-	Roles      *orch.RoleService
-	Orch       *orch.Service
+	Agents      *service.AgentService
+	Sessions    *service.SessionService
+	Chat        *service.ChatService
+	Terminals   *service.TerminalService
+	System      *system.Service
+	Skills      *service.SkillService
+	SkillUsage  *service.SkillUsageService
+	Update      *system.Updater
+	Roles       *orch.RoleService
+	Orch        *orch.Service
 	Tenants     *service.TenantService
 	Projects    *project.Service
 	DataSources *datasource.Service
@@ -249,10 +249,15 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/datasources/{id}/tables", datasources.tables)
 	api.HandleFunc("GET /api/datasources/{id}/schema", datasources.schema)
 	api.HandleFunc("POST /api/datasources/{id}/query", datasources.query)
-	// 会话侧（斜杠命令的数据源）：只列当前项目的，id 不在项目内按不存在处理。
+	// 会话侧（斜杠命令与 @ 引用的数据源）：只列当前项目的，id 不在项目内
+	// 按不存在处理。编排主会话同形状同实现，只差路径前缀（升级不降级）。
 	api.HandleFunc("GET /api/sessions/{id}/datasources", datasources.sessionList)
 	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/databases", datasources.sessionDatabases)
 	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/tables", datasources.sessionTables)
+	orchDatasources := datasourceHandler{sources: svcs.DataSources, cwdOf: orchCwd}
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources", orchDatasources.sessionList)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources/{dsid}/databases", orchDatasources.sessionDatabases)
+	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources/{dsid}/tables", orchDatasources.sessionTables)
 	// agent 回连的数据库工具端点。路径比编排的 /api/mcp/{token} 更具体，
 	// ServeMux 会优先命中这条。
 	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)

@@ -24,6 +24,12 @@ stop: ## 停止前后端开发服务
 status: ## 查看前后端开发服务状态
 	scripts/dev.sh status
 
+.PHONY: preview
+preview: ## 一条命令起全栈供预览（后端后台常驻，前端前台跑日志）
+	scripts/dev.sh restart server
+	scripts/dev.sh stop web
+	npm run dev --prefix web
+
 .PHONY: dev-web
 dev-web: ## 前台启动前端开发服务器 (http://localhost:45173)
 	cd $(WEB_DIR) && npm run dev

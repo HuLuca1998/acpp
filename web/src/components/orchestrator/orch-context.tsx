@@ -21,11 +21,15 @@ export interface OrchChatValue {
   /** 待发送附件：图片与 @ 引用文件。 */
   images: ImageAttachment[]
   files: string[]
+  /** @ 引用的数据库（`<项目>/<环境>[/<库>[/<表>]]`）。 */
+  dbRefs: string[]
   removeImage: (index: number) => void
   removeFile: (index: number) => void
+  removeDbRef: (index: number) => void
   addImages: (picked: File[]) => void
   openImagePicker: () => void
   openFilePicker: () => void
+  openDbRefPicker: () => void
   /** 排队插话：撤回回填 / 立即插入当前轮。 */
   recallQueued: (id: number) => void
   steerQueued: (id: number) => void

@@ -16,8 +16,11 @@ export interface ChatPanelData {
   setDraft: (v: string) => void
   images: ImageAttachment[]
   files: string[]
+  /** @ 引用的数据库（`<项目>/<环境>[/<库>[/<表>]]`）。 */
+  dbRefs: string[]
   removeImage: (index: number) => void
   removeFile: (index: number) => void
+  removeDbRef: (index: number) => void
   addImages: (picked: File[]) => void
   submit: () => void
   sendSuggestion: (text: string) => void
@@ -27,6 +30,7 @@ export interface ChatPanelData {
   steerQueued: (id: number) => void
   openImagePicker: () => void
   openFilePicker: () => void
+  openDbRefPicker: () => void
   openCwdPicker: () => void
   /** 草稿态显示的待选工作目录。 */
   draftCwd: string

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,13 +43,18 @@ type SendInput struct {
 	// Files 是 @ 引用的文件（绝对路径或相对会话 cwd），内容由后端读出
 	// 以 resource 块嵌进 prompt（两端 embeddedContext 都支持）。
 	Files []string `json:"files,omitempty"`
+	// DataSources 是 @ 引用的数据库（`<项目>/<环境>[/<库>[/<表>]]`），
+	// 现状由后端查出后同样以 resource 块嵌入。与文件引用是同一个动作，
+	// 只是内容来自库而不是磁盘。
+	DataSources []string `json:"datasources,omitempty"`
 }
 
 // Send 广播用户消息并异步跑一轮。消息本身不落库——session/prompt 请求会
 // 原样进转录，重建时从那里读回；这里广播的临时消息只为界面即时显示。
 func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*model.Message, error) {
 	text := in.Content
-	if strings.TrimSpace(text) == "" && len(in.Images) == 0 && len(in.Files) == 0 {
+	if strings.TrimSpace(text) == "" && len(in.Images) == 0 && len(in.Files) == 0 &&
+		len(in.DataSources) == 0 {
 		return nil, fmt.Errorf("%w: message content is required", ErrInvalid)
 	}
 
@@ -58,7 +64,7 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	}
 
 	// 组 prompt 内容块：@ 文件 → resource（后端读内容），图片 → image，正文 → text。
-	blocks, payload, err := s.buildBlocks(view.Cwd, in)
+	blocks, payload, err := s.buildBlocks(ctx, view.Cwd, in)
 	if err != nil {
 		return nil, err
 	}
@@ -99,9 +105,58 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	return msg, nil
 }
 
-// buildBlocks 把发送入参翻译成 prompt 内容块（见 BuildPromptBlocks）。
-func (s *ChatService) buildBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSONMap, error) {
-	return BuildPromptBlocks(cwd, in)
+// buildBlocks 把发送入参翻译成 prompt 内容块（见 BuildPromptBlocks），
+// 再补上 @ 数据库引用——那部分要现查库，纯函数拿不到数据源服务。
+func (s *ChatService) buildBlocks(ctx context.Context, cwd string, in SendInput) ([]acp.ContentBlock, model.JSONMap, error) {
+	blocks, payload, err := BuildPromptBlocks(cwd, in)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(in.DataSources) == 0 {
+		return blocks, payload, nil
+	}
+	if s.sources == nil {
+		return nil, nil, fmt.Errorf("%w: 数据库能力未启用", ErrInvalid)
+	}
+	refs, err := s.sources.Reference(ctx, cwd, in.DataSources)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	blocks, payload = AppendDBReferences(blocks, payload, refs, strings.TrimSpace(in.Content) != "")
+	return blocks, payload, nil
+}
+
+// AppendDBReferences 把展开好的数据库引用插进内容块。普通会话与编排共用。
+//
+// 插在正文之前而不是追加到末尾：BuildPromptBlocks 的约定是正文永远是
+// 最后一块，先上下文后要求读起来才顺。
+func AppendDBReferences(blocks []acp.ContentBlock, payload model.JSONMap,
+	refs []DBReference, hasText bool) ([]acp.ContentBlock, model.JSONMap) {
+	if len(refs) == 0 {
+		return blocks, payload
+	}
+
+	refBlocks := make([]acp.ContentBlock, 0, len(refs))
+	uris := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		refBlocks = append(refBlocks, acp.ResourceBlock(ref.URI, ref.Text))
+		uris = append(uris, ref.URI)
+	}
+
+	at := len(blocks)
+	if hasText && at > 0 {
+		at--
+	}
+	blocks = slices.Insert(blocks, at, refBlocks...)
+
+	// payload 在没有任何附件时是 nil（BuildPromptBlocks 的收尾），
+	// 往 nil map 里写会 panic。
+	if payload == nil {
+		payload = model.JSONMap{}
+	}
+	payload["datasources"] = uris
+	return blocks, payload
 }
 
 // BuildPromptBlocks 把发送入参翻译成 prompt 内容块，并给临时消息组展示

@@ -28,24 +28,39 @@ type ChatService struct {
 	//（不启用统计）。
 	skillUsage *SkillUsageService
 
-	// mounter 由装配层注入，为会话算出要挂载的 MCP 工具面（目前是数据库
-	// 数据源）。用接口而不是直接 import 那个业务包——依赖只允许单向，
-	// 而它反过来要用 SessionService 解析 token。可为 nil（不挂任何工具）。
-	mounter MCPMounter
+	// sources 由装配层注入的数据源能力面：为会话挂 MCP 工具、把 @ 数据库
+	// 引用展开成 prompt 内容。用接口而不是直接 import 那个业务包——依赖
+	// 只允许单向，而它反过来要用 SessionService 解析 token。
+	// 可为 nil（没有数据库能力，会话照常可用）。
+	sources DataSources
 
 	mu      sync.Mutex
 	brokers map[uint]*stream.Broker
 }
 
-// MCPMounter 为一条会话算出要挂载的 MCP server 清单与 _meta 追加内容。
-// 两个返回值对应 acp.OpenOptions 的 MCPServers 与 MetaExtra——哪个有值
-// 取决于 runtime 方言，实现方自己判断。
-type MCPMounter interface {
+// DataSources 是数据源能力的注入口。
+//
+// MountsFor 为一条会话算出要挂载的 MCP server 清单与 _meta 追加内容
+// （两个返回值对应 acp.OpenOptions 的 MCPServers 与 MetaExtra，哪个有值
+// 取决于 runtime 方言）；Reference 把 @ 数据库引用展开成可嵌进 prompt 的
+// 文本。两者都按 cwd 所属项目过滤，会话看不见别的项目的库。
+type DataSources interface {
 	MountsFor(ctx context.Context, sessionID uint, cwd, flavor string) ([]any, map[string]any, error)
+	Reference(ctx context.Context, cwd string, refs []string) ([]DBReference, error)
 }
 
-// SetMCPMounter 装上工具面来源。装配期调用一次，之后只读。
-func (s *ChatService) SetMCPMounter(m MCPMounter) { s.mounter = m }
+// DBReference 是一条展开后的 @ 数据库引用，形状对齐 @ 文件引用的
+// resource 块。类型定义在这一侧而不是数据源包里：数据源包已经 import
+// 了本包（借哨兵错误），反过来再 import 就成环了。
+type DBReference struct {
+	// URI 进 resource 块的 uri，让 AI 看得出这段内容的出处
+	// （`mysql://<项目>/<环境>/<库>/<表>`）。
+	URI  string
+	Text string
+}
+
+// SetDataSources 装上数据源能力面。装配期调用一次，之后只读。
+func (s *ChatService) SetDataSources(d DataSources) { s.sources = d }
 
 func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
 	return &ChatService{
@@ -137,12 +152,12 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	// 照样是一条正常会话。
 	var mcpServers []any
 	var metaExtra map[string]any
-	if s.mounter != nil {
+	if s.sources != nil {
 		flavor := agent.Flavor
 		if flavor == "" {
 			flavor = string(acp.FlavorOf(agent.Name, agent.Command))
 		}
-		mcpServers, metaExtra, err = s.mounter.MountsFor(ctx, sessionID, cwd, flavor)
+		mcpServers, metaExtra, err = s.sources.MountsFor(ctx, sessionID, cwd, flavor)
 		if err != nil {
 			slog.Warn("mount session mcp", "session", sessionID, "err", err)
 			mcpServers, metaExtra = nil, nil

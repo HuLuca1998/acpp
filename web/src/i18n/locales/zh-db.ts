@@ -2,6 +2,12 @@
 // 文件已到行数硬线——按域拆分，不是按语言再切一刀。
 export const zhDb = {
   title: "数据库",
+  refTitle: "引用数据库",
+  refHint: "选一个数据源、库或表交给 AI——发送时把它的现状（表清单或表结构）一并带上。",
+  refPick: "引用",
+  refNeedsSession: "发出第一条消息后才能引用数据库",
+  refFile: "文件",
+  refDatabase: "数据库",
   description:
     "按项目与环境管理 MySQL 连接。会话只看得到自己项目的数据源——AI 与斜杠命令都一样。",
   add: "新建连接",

@@ -1,6 +1,10 @@
 import { memo, useContext, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+  AttachmentButton,
+  ReferenceMenu,
+} from "@/components/chat/composer/attachment-buttons"
 import { AttachmentTray } from "@/components/chat/composer/attachment-tray"
 import { DbSlashPanel } from "@/components/db/db-slash-panel"
 import { ChatEmptyState } from "@/components/chat/chat-empty-state"
@@ -19,34 +23,12 @@ import {
 } from "@/components/workspace/chat-panel-context"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { cn } from "@/lib/utils"
-import { AtSignIcon, ImageIcon } from "lucide-react"
+import { ImageIcon } from "lucide-react"
 
 function useChatPanel(): ChatPanelData {
   const value = useContext(ChatPanelContext)
   if (!value) throw new Error("ChatPanel must be used within ChatPanelContext")
   return value
-}
-
-/** composer 里的附件圆钮（图片上传 / @ 文件引用共用）。 */
-function AttachmentButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  )
 }
 
 /** 对话面板：消息流 + composer。工作区里唯一不可关闭的面板。 */
@@ -60,14 +42,17 @@ export const ChatPanel = memo(function ChatPanel() {
     setDraft,
     images,
     files,
+    dbRefs,
     removeImage,
     removeFile,
+    removeDbRef,
     submit,
     sendSuggestion,
     recallQueued,
     steerQueued,
     openImagePicker,
     openFilePicker,
+    openDbRefPicker,
     openCwdPicker,
     addImages,
     draftCwd,
@@ -172,8 +157,10 @@ export const ChatPanel = memo(function ChatPanel() {
           <AttachmentTray
             images={images}
             files={files}
+            dbRefs={dbRefs}
             onRemoveImage={removeImage}
             onRemoveFile={removeFile}
+            onRemoveDbRef={removeDbRef}
           />
         }
         onPasteImages={(picked) => void addImages(picked)}
@@ -238,12 +225,10 @@ export const ChatPanel = memo(function ChatPanel() {
         >
           <ImageIcon className="size-3.5" />
         </AttachmentButton>
-        <AttachmentButton
-          label={t("chat.attachments.file")}
-          onClick={openFilePicker}
-        >
-          <AtSignIcon className="size-3.5" />
-        </AttachmentButton>
+        <ReferenceMenu
+          onPickFile={openFilePicker}
+          onPickDatabase={openDbRefPicker}
+        />
       </Composer>
     </div>
   )

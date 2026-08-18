@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"gorm.io/gorm"
@@ -42,6 +44,10 @@ type SessionView struct {
 	// GitBranch 是工作目录当前的 git 分支（detached 时是短 hash），
 	// 非 git 目录为空。每次取视图时现读，agent 切分支后刷新即可见。
 	GitBranch string `json:"gitBranch,omitempty"`
+	// TenantName 是会话创建者的名字；**空表示 owner 自己**（他不在租户表
+	// 里，见 model.Tenant 的注释）。租户只看得见自己的会话，这个字段对他
+	// 恒为自己，真正用它的是 owner 的列表。
+	TenantName string `json:"tenantName,omitempty"`
 }
 
 // SessionInput 是创建会话的入参。
@@ -94,7 +100,39 @@ func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, pa
 	for i := range sessions {
 		views = append(views, *s.toView(&sessions[i]))
 	}
+	s.fillTenantNames(ctx, views)
 	return views, total, nil
+}
+
+// fillTenantNames 批量补上创建者名字（owner 的会话留空）。
+//
+// 刻意不用 GORM 关联：owner 的会话记 tenant_id = 0，而 owner 不在 tenants
+// 表里（他由 loopback 判定，见 model.Tenant）。声明成关联会让 AutoMigrate
+// 建出一条外键约束，那条约束对着 0 永远不成立——服务连启动都启动不了。
+func (s *SessionService) fillTenantNames(ctx context.Context, views []SessionView) {
+	ids := make([]uint, 0, len(views))
+	for i := range views {
+		if id := views[i].TenantID; id != 0 && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	var tenants []model.Tenant
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&tenants).Error; err != nil {
+		// 名字取不到不影响列表本身：创建者列留空好过整页报错。
+		slog.Warn("load tenant names", "err", err)
+		return
+	}
+	byID := make(map[uint]string, len(tenants))
+	for _, t := range tenants {
+		byID[t.ID] = t.Name
+	}
+	for i := range views {
+		views[i].TenantName = byID[views[i].TenantID]
+	}
 }
 
 // Get 按 scope 取会话：不属于当前身份的会话一律当作**不存在**（404 而不是
@@ -110,7 +148,14 @@ func (s *SessionService) Get(ctx context.Context, scope Scope, id uint) (*Sessio
 	if err != nil {
 		return nil, fmt.Errorf("get session %d: %w", id, err)
 	}
-	return s.toView(&session), nil
+	view := s.toView(&session)
+	if session.TenantID != 0 {
+		var tenant model.Tenant
+		if err := s.db.WithContext(ctx).First(&tenant, session.TenantID).Error; err == nil {
+			view.TenantName = tenant.Name
+		}
+	}
+	return view, nil
 }
 
 func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInput) (*SessionView, error) {

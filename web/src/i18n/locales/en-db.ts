@@ -2,6 +2,12 @@
 // 文件已到行数硬线——按域拆分，不是按语言再切一刀。
 export const enDb = {
   title: "Databases",
+  refTitle: "Reference a database",
+  refHint: "Pick a source, database or table — its current shape (table list or schema) is sent along with your message.",
+  refPick: "Reference",
+  refNeedsSession: "Send your first message before referencing a database",
+  refFile: "File",
+  refDatabase: "Database",
   description:
     "Manage MySQL connections by project and environment. A session only sees its own project's sources — for you and for the AI alike.",
   add: "New connection",

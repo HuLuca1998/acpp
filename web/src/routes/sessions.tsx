@@ -4,6 +4,7 @@ import { Link } from "react-router"
 
 import { ListPageStates } from "@/components/list-page-states"
 import { useAsyncData } from "@/hooks/use-async-data"
+import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { Session } from "@/types/acp"
@@ -43,6 +44,9 @@ const PAGE_SIZE = 50
 
 export function Sessions() {
   const { t, i18n } = useTranslation()
+  // 创建者列只对 owner 有意义：租户只看得见自己的会话，那一列对他恒为
+  // 自己，白占一列宽度（adr-007 的隔离已经保证了这一点）。
+  const isOwner = useIdentity().identity?.owner ?? false
   const { data, error, setData, setError } = useAsyncData(
     () => api.sessions.list({ pageSize: PAGE_SIZE }),
     []
@@ -141,6 +145,9 @@ export function Sessions() {
                   <TableRow>
                     <TableHead>{t("sessions.columnTitle")}</TableHead>
                     <TableHead>{t("sessions.agent")}</TableHead>
+                    {isOwner ? (
+                      <TableHead>{t("sessions.creator")}</TableHead>
+                    ) : null}
                     <TableHead className="text-right">
                       {t("sessions.messages")}
                     </TableHead>
@@ -167,6 +174,15 @@ export function Sessions() {
                         <TableCell className="text-muted-foreground">
                           {session.agentName}
                         </TableCell>
+                        {isOwner ? (
+                          <TableCell className="text-muted-foreground">
+                            {/* 空的 tenantName 就是 owner 自己——他不在租户
+                                表里，没有记录可查（adr-007）。 */}
+                            {session.tenantName
+                              ? capitalize(session.tenantName)
+                              : t("identity.admin")}
+                          </TableCell>
+                        ) : null}
                         <TableCell className="text-right text-muted-foreground tabular-nums">
                           {session.messageCount}
                         </TableCell>

@@ -7,6 +7,8 @@ import { useDraftSession } from "@/hooks/use-draft-session"
 import { useIdentity } from "@/hooks/identity-context"
 import type { ImageAttachment } from "@/types/acp"
 import { fileToImageAttachment } from "@/lib/files"
+import { api } from "@/lib/api"
+import { DbRefPicker } from "@/components/db/db-ref-picker"
 import { DirPicker } from "@/components/dir-picker"
 import {
   ChatPanelContext,
@@ -51,7 +53,9 @@ export function SessionChat() {
   const { identity } = useIdentity()
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
+  const [dbRefs, setDbRefs] = useState<string[]>([])
   const [filePickerOpen, setFilePickerOpen] = useState(false)
+  const [dbRefPickerOpen, setDbRefPickerOpen] = useState(false)
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
@@ -68,20 +72,28 @@ export function SessionChat() {
 
   function submit() {
     const content = draft.trim()
-    if (!content && images.length === 0 && files.length === 0) return
-    const input = { content, images, files }
+    if (
+      !content &&
+      images.length === 0 &&
+      files.length === 0 &&
+      dbRefs.length === 0
+    )
+      return
+    const input = { content, images, files, datasources: dbRefs }
     if (isNew) {
       if (!newSession.selected || newSession.creating) return
       // 组件跨 /sessions/new → /sessions/:id 复用不重挂，不清会残留到会话页。
       setDraft("")
       setImages([])
       setFiles([])
+      setDbRefs([])
       void newSession.start(input)
       return
     }
     setDraft("")
     setImages([])
     setFiles([])
+    setDbRefs([])
     // 一轮进行中：插话不直接发，先排队浮在输入框上方，轮次结束自动发出；
     // 排队条上可「调整方向」立即插入当前轮，或撤回回填输入框。
     if (chat.busy) {
@@ -96,7 +108,12 @@ export function SessionChat() {
     const item = chat.queued.find((q) => q.id === id)
     if (!item) return
     chat.removeQueued(id)
-    const { content, images: qImages, files: qFiles } = item.input
+    const {
+      content,
+      images: qImages,
+      files: qFiles,
+      datasources: qRefs,
+    } = item.input
     if (content) {
       setDraft((prev) => (prev ? `${prev}\n${content}` : content))
     }
@@ -105,6 +122,9 @@ export function SessionChat() {
     }
     if (qFiles?.length) {
       setFiles((prev) => [...prev, ...qFiles.filter((f) => !prev.includes(f))])
+    }
+    if (qRefs?.length) {
+      setDbRefs((prev) => [...prev, ...qRefs.filter((r) => !prev.includes(r))])
     }
   }
 
@@ -163,8 +183,10 @@ export function SessionChat() {
     setDraft,
     images,
     files,
+    dbRefs,
     removeImage: (i) => setImages((prev) => prev.filter((_, idx) => idx !== i)),
     removeFile: (i) => setFiles((prev) => prev.filter((_, idx) => idx !== i)),
+    removeDbRef: (i) => setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
     addImages: (picked) => void addImages(picked),
     submit,
     sendSuggestion,
@@ -172,6 +194,7 @@ export function SessionChat() {
     steerQueued,
     openImagePicker: () => imageInputRef.current?.click(),
     openFilePicker: () => setFilePickerOpen(true),
+    openDbRefPicker: () => setDbRefPickerOpen(true),
     openCwdPicker: () => setCwdPickerOpen(true),
     draftCwd,
   }
@@ -235,6 +258,17 @@ export function SessionChat() {
         }
         onSelect={(path) =>
           setFiles((prev) => (prev.includes(path) ? prev : [...prev, path]))
+        }
+      />
+
+      {/* @ 数据库引用：选中的数据源/库/表随消息一起发出，后端查现状嵌入。 */}
+      <DbRefPicker
+        open={dbRefPickerOpen}
+        sessionId={isNew ? 0 : sessionId}
+        scope={api.sessions}
+        onOpenChange={setDbRefPickerOpen}
+        onSelect={(ref) =>
+          setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
         }
       />
 

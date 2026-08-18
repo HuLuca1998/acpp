@@ -1,25 +1,31 @@
 import { useTranslation } from "react-i18next"
 
 import type { ImageAttachment } from "@/types/acp"
-import { FileIcon, XIcon } from "lucide-react"
+import { DatabaseIcon, FileIcon, XIcon } from "lucide-react"
 
 /**
- * 待发送附件预览条：图片缩略图 + @ 引用文件名，各带移除按钮。
+ * 待发送附件预览条：图片缩略图 + @ 引用的文件与数据库，各带移除按钮。
  * 渲染在输入卡内 textarea 上方，空时不占位。
  */
 export function AttachmentTray({
   images,
   files,
+  dbRefs,
   onRemoveImage,
   onRemoveFile,
+  onRemoveDbRef,
 }: {
   images: ImageAttachment[]
   files: string[]
+  dbRefs: string[]
   onRemoveImage: (index: number) => void
   onRemoveFile: (index: number) => void
+  onRemoveDbRef: (index: number) => void
 }) {
   const { t } = useTranslation()
-  if (images.length === 0 && files.length === 0) return null
+  if (images.length === 0 && files.length === 0 && dbRefs.length === 0) {
+    return null
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
@@ -55,6 +61,28 @@ export function AttachmentTray({
             aria-label={t("chat.attachments.remove")}
             className="text-muted-foreground transition-colors hover:text-foreground"
             onClick={() => onRemoveFile(index)}
+          >
+            <XIcon className="size-3" />
+          </button>
+        </span>
+      ))}
+      {dbRefs.map((ref, index) => (
+        <span
+          key={ref}
+          className="flex h-7 items-center gap-1.5 rounded-full border border-border px-2.5 text-xs text-muted-foreground"
+          title={ref}
+        >
+          <DatabaseIcon className="size-3.5 shrink-0" />
+          {/* 只显示最后一段（库名或表名）：前缀是项目/环境，同一条会话里
+              基本恒定，完整引用留给悬停。 */}
+          <span className="max-w-40 truncate font-mono">
+            {ref.split("/").pop()}
+          </span>
+          <button
+            type="button"
+            aria-label={t("chat.attachments.remove")}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => onRemoveDbRef(index)}
           >
             <XIcon className="size-3" />
           </button>

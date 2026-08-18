@@ -17,9 +17,11 @@ import (
 )
 
 // Send 向编排主会话发一轮。语义对齐 ChatService.Send：广播用户消息、
-// 异步跑轮、懒连接；@ 文件与图片经共享的 BuildPromptBlocks 组块。
+// 异步跑轮、懒连接；@ 文件与图片经共享的 BuildPromptBlocks 组块，
+// @ 数据库引用经共享的 AppendDBReferences。
 func (s *Service) Send(ctx context.Context, id uint, in service.SendInput) (*model.Message, error) {
-	if strings.TrimSpace(in.Content) == "" && len(in.Images) == 0 && len(in.Files) == 0 {
+	if strings.TrimSpace(in.Content) == "" && len(in.Images) == 0 && len(in.Files) == 0 &&
+		len(in.DataSources) == 0 {
 		return nil, fmt.Errorf("%w: message content is required", service.ErrInvalid)
 	}
 	orch, err := s.Get(ctx, id)
@@ -35,6 +37,18 @@ func (s *Service) Send(ctx context.Context, id uint, in service.SendInput) (*mod
 	blocks, payload, err := service.BuildPromptBlocks(orch.Cwd, in)
 	if err != nil {
 		return nil, err
+	}
+	// @ 数据库引用要现查库，纯函数拿不到数据源服务，在这里补。
+	if len(in.DataSources) > 0 {
+		if s.sources == nil {
+			return nil, fmt.Errorf("%w: 数据库能力未启用", service.ErrInvalid)
+		}
+		refs, err := s.sources.Reference(ctx, orch.Cwd, in.DataSources)
+		if err != nil {
+			return nil, err
+		}
+		blocks, payload = service.AppendDBReferences(blocks, payload, refs,
+			strings.TrimSpace(in.Content) != "")
 	}
 
 	if orch.Title == "" {

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams } from "react-router"
 import { useRef } from "react"
 
+import { DbRefPicker } from "@/components/db/db-ref-picker"
 import { DirPicker } from "@/components/dir-picker"
 import {
   OrchChatContext,
@@ -56,9 +57,11 @@ export function OrchestratorChat() {
   const [cwd, setCwd] = useState("")
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const [filePickerOpen, setFilePickerOpen] = useState(false)
+  const [dbRefPickerOpen, setDbRefPickerOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
+  const [dbRefs, setDbRefs] = useState<string[]>([])
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   const effectiveAgentId = agentId || agents?.[0]?.id || 0
@@ -72,11 +75,18 @@ export function OrchestratorChat() {
 
   function submit() {
     const content = draft.trim()
-    if (!content && images.length === 0 && files.length === 0) return
-    const input: SendInput = { content, images, files }
+    if (
+      !content &&
+      images.length === 0 &&
+      files.length === 0 &&
+      dbRefs.length === 0
+    )
+      return
+    const input: SendInput = { content, images, files, datasources: dbRefs }
     setDraft("")
     setImages([])
     setFiles([])
+    setDbRefs([])
     if (isNew) {
       if (!effectiveAgentId || creating) return
       setCreating(true)
@@ -102,11 +112,19 @@ export function OrchestratorChat() {
     const item = chat.queued.find((q) => q.id === id)
     if (!item) return
     chat.removeQueued(id)
-    const { content, images: qImages, files: qFiles } = item.input
+    const {
+      content,
+      images: qImages,
+      files: qFiles,
+      datasources: qRefs,
+    } = item.input
     if (content) {
       setDraft((prev) => (prev ? `${prev}\n${content}` : content))
     }
     if (qImages?.length) setImages((prev) => [...prev, ...qImages])
+    if (qRefs?.length) {
+      setDbRefs((prev) => [...prev, ...qRefs.filter((r) => !prev.includes(r))])
+    }
     if (qFiles?.length) {
       setFiles((prev) => [...prev, ...qFiles.filter((f) => !prev.includes(f))])
     }
@@ -161,11 +179,14 @@ export function OrchestratorChat() {
     openCwdPicker: () => setCwdPickerOpen(true),
     images,
     files,
+    dbRefs,
     removeImage: (i) => setImages((prev) => prev.filter((_, idx) => idx !== i)),
     removeFile: (i) => setFiles((prev) => prev.filter((_, idx) => idx !== i)),
+    removeDbRef: (i) => setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
     addImages: (picked) => void addImages(picked),
     openImagePicker: () => imageInputRef.current?.click(),
     openFilePicker: () => setFilePickerOpen(true),
+    openDbRefPicker: () => setDbRefPickerOpen(true),
     recallQueued,
     steerQueued,
   }
@@ -201,6 +222,17 @@ export function OrchestratorChat() {
       <WorkspaceReferenceSink
         onAdd={(path) =>
           setFiles((prev) => (prev.includes(path) ? prev : [...prev, path]))
+        }
+      />
+
+      {/* @ 数据库引用：编排与普通会话同一套（编排是升级不是降级）。 */}
+      <DbRefPicker
+        open={dbRefPickerOpen}
+        sessionId={isNew ? 0 : orchId}
+        scope={api.orchestrator}
+        onOpenChange={setDbRefPickerOpen}
+        onSelect={(ref) =>
+          setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
         }
       />
 

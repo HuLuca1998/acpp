@@ -128,7 +128,8 @@ func run() error {
 	// 装配——chat 只认得 MCPMounter 接口，datasource 只认得 Sessions 接口，
 	// 两个业务包因此不互相 import。
 	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr)
-	chatService.SetMCPMounter(datasourceService)
+	chatService.SetDataSources(datasourceService)
+	orchService.SetDataSources(datasourceService)
 
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。

@@ -132,6 +132,19 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
       return { chunk, nextOffset: reset ? bytes : offset + bytes, reset }
     },
 
+    /**
+     * 会话可见的数据源：只有当前工作目录所属项目的那几条（adr-008）。
+     * 斜杠命令与 @ 数据库引用都读它——界面能看到的范围与 AI 能操作的
+     * 范围必须是同一个。
+     */
+    datasources: (id: number) => request<DataSource[]>(at(id, "/datasources")),
+    datasourceDatabases: (id: number, dsid: number) =>
+      request<DbDatabase[]>(at(id, `/datasources/${dsid}/databases`)),
+    datasourceTables: (id: number, dsid: number, database: string) =>
+      request<DbTable[]>(
+        at(id, `/datasources/${dsid}/tables?database=${encodeURIComponent(database)}`)
+      ),
+
     /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
     workspaceTree: (id: number, params?: { path?: string; depth?: number }) => {
       const qs = new URLSearchParams()
@@ -335,19 +348,6 @@ export const api = {
   },
 
   sessions: {
-    /**
-     * 会话可见的数据源：只有当前工作目录所属项目的那几条。斜杠命令读它
-     * ——界面能看到的范围与 AI 能操作的范围必须是同一个。
-     */
-    datasources: (id: number) =>
-      request<DataSource[]>(`/sessions/${id}/datasources`),
-    datasourceDatabases: (id: number, dsid: number) =>
-      request<DbDatabase[]>(`/sessions/${id}/datasources/${dsid}/databases`),
-    datasourceTables: (id: number, dsid: number, database: string) =>
-      request<DbTable[]>(
-        `/sessions/${id}/datasources/${dsid}/tables?database=${encodeURIComponent(database)}`
-      ),
-
     list: (params?: { agentId?: number; page?: number; pageSize?: number }) => {
       const qs = new URLSearchParams()
       if (params?.agentId) qs.set("agentId", String(params.agentId))

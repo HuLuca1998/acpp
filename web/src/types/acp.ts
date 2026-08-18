@@ -180,6 +180,8 @@ export interface Session {
   commands?: SlashCommand[]
   /** 工作目录当前的 git 分支（detached 时是短 hash），非 git 目录为空。 */
   gitBranch?: string
+  /** 会话创建者的名字；**空表示 owner 自己**（他不在租户表里）。 */
+  tenantName?: string
   createdAt: string
   updatedAt: string
 }
@@ -327,6 +329,8 @@ export interface SendInput {
   content: string
   images?: ImageAttachment[]
   files?: string[]
+  /** @ 引用的数据库：`<项目>/<环境>[/<库>[/<表>]]`，现状由后端查出后嵌入。 */
+  datasources?: string[]
 }
 
 /** SSE 推来的事件类型。 */

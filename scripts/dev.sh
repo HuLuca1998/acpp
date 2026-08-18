@@ -23,7 +23,7 @@ kill_port() {
   local pids
   pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
   if [ -n "$pids" ]; then
-    echo "端口 $port 被占（pid $pids），清掉旧进程"
+    echo "端口 $port 被占（pid ${pids}），清掉旧进程"
     kill $pids 2>/dev/null || true
     sleep 1
     pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
@@ -51,7 +51,7 @@ start_server() {
   # 每次启动前重新编译：restart 即更新，跑的永远是当前代码。产物统一进顶层 build/。
   echo "编译后端…"
   (cd "$ROOT/server" && go build -o ../build/server/acp-server ./cmd/server)
-  echo "启动后端 :$SERVER_PORT（日志 $LOG_DIR/server.log）"
+  echo "启动后端 :${SERVER_PORT}（日志 $LOG_DIR/server.log）"
   # </dev/null 切断与调用方 stdio 的关联，否则 make dev | tail 这类管道会被挂住。
   (cd "$ROOT/server" && ACP_DEBUG=1 nohup ../build/server/acp-server >"$LOG_DIR/server.log" 2>&1 </dev/null &)
   wait_http "http://127.0.0.1:$SERVER_PORT/api/health" "后端"
@@ -59,7 +59,7 @@ start_server() {
 
 start_web() {
   kill_port "$WEB_PORT"
-  echo "启动前端 :$WEB_PORT（日志 $LOG_DIR/web.log）"
+  echo "启动前端 :${WEB_PORT}（日志 $LOG_DIR/web.log）"
   (cd "$ROOT" && nohup npm run dev --prefix web >"$LOG_DIR/web.log" 2>&1 </dev/null &)
   wait_http "http://localhost:$WEB_PORT" "前端"
 }
@@ -71,9 +71,9 @@ status() {
     port=${pair##*:}
     pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
     if [ -n "$pids" ]; then
-      echo "$name：运行中（端口 $port，pid $pids）"
+      echo "${name}：运行中（端口 ${port}，pid ${pids}）"
     else
-      echo "$name：未运行（端口 $port）"
+      echo "${name}：未运行（端口 ${port}）"
     fi
   done
 }

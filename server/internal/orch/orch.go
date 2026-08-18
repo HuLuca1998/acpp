@@ -36,6 +36,9 @@ type Service struct {
 	// mcpBase 是本机 MCP 端点前缀（http://127.0.0.1:<port>/api/mcp/），
 	// agent 子进程从本机回连，host 固定 127.0.0.1。
 	mcpBase string
+	// sources 由装配层注入，把 @ 数据库引用展开成 prompt 内容。可为 nil。
+	// 编排会话与普通会话在这件事上不该有差别（编排是升级不是降级）。
+	sources service.DataSources
 
 	mu sync.Mutex
 	// brokers 按流 key 索引：主会话 orchKey(id)、任务 orchTaskKey(id)。
@@ -45,6 +48,9 @@ type Service struct {
 	// stopped 标记被急停的主会话：在途 spawn 返回错误，不再接受新 spawn。
 	stopped map[uint]bool
 }
+
+// SetDataSources 装上数据源能力面（@ 数据库引用）。装配期调用一次。
+func (s *Service) SetDataSources(d service.DataSources) { s.sources = d }
 
 // 编排护栏的默认值：并发任务数是「一个人的注意力」尺度而不是资源上限。
 // 任务不设硬超时（用户拍板：长程任务跑几个小时是正常使用方式，与

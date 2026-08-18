@@ -243,6 +243,7 @@ export default {
     emptyHint: "选择一个 agent 并新建会话后，这里会列出全部对话记录。",
     columnTitle: "标题",
     agent: "Agent",
+    creator: "创建者",
     messages: "消息数",
     state: "状态",
     updated: "更新时间",

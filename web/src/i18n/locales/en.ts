@@ -261,6 +261,7 @@ export default {
       "Pick an agent and start a session — every conversation shows up here.",
     columnTitle: "Title",
     agent: "Agent",
+    creator: "Created by",
     messages: "Messages",
     state: "State",
     updated: "Updated",
