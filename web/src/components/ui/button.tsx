@@ -40,15 +40,34 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * render 给的是不是一个原生 <button>。
+ *
+ * Base UI 用 nativeButton 决定要不要补上 button 的语义（type、role、
+ * 空格/回车激活）；标错了它会在控制台报错。项目里最常见的是
+ * `render={<Link/>}`——那渲染出来是 <a>，不是 button。
+ *
+ * 函数形式的 render 看不出最终标签，保守按原生处理（与 Base UI 的默认
+ * 一致），需要时调用方显式传 nativeButton。
+ */
+function isNativeButton(render: ButtonPrimitive.Props["render"]): boolean {
+  if (!render || typeof render === "function") return true
+  return render.type === "button"
+}
+
 function Button({
   className,
   variant = "default",
   size = "default",
+  render,
+  nativeButton,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
     <ButtonPrimitive
       data-slot="button"
+      render={render}
+      nativeButton={nativeButton ?? isNativeButton(render)}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
