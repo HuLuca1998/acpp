@@ -123,6 +123,15 @@ export default {
         "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
     },
   },
+  upload: {
+    title: "Upload a local file",
+    hint: "Files land in your own workspace and work like any @ reference. Past uploads stay here — the same file is never uploaded twice.",
+    drop: "Drop files here, or click to choose",
+    uploading: "Uploading…",
+    done: "Referenced {{count}} file(s)",
+    history: "Past uploads",
+    empty: "Nothing uploaded yet.",
+  },
   db: enDb,
   roles: {
     title: "Roles",

@@ -54,3 +54,16 @@ export function displayPath(path: string, root?: string): string {
   const prefix = root.endsWith("/") ? root : `${root}/`
   return path.startsWith(prefix) ? `~/${path.slice(prefix.length)}` : path
 }
+
+/**
+ * 字节数转人话。二进制单位（1024 进制）——这些数字来自文件系统，
+ * 与 Finder / ls -lh 看到的对得上比「更标准」重要。
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}

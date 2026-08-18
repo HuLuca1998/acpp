@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
-import { formatDateTime, formatRelativeTime } from "@/lib/format"
+import { formatBytes, formatDateTime, formatRelativeTime } from "@/lib/format"
 import type { SkillFile } from "@/types/acp"
 import {
   AlertDialog,
@@ -101,7 +101,7 @@ export function SkillFiles({
                 <Badge variant="secondary">{t("skills.detail.binary")}</Badge>
               )}
               <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-                {formatSize(file.size)}
+                {formatBytes(file.size)}
               </span>
               <span
                 className="text-xs text-muted-foreground tabular-nums"
@@ -254,10 +254,4 @@ function FileEditorDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }

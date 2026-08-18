@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router"
 import { useRef } from "react"
 
 import { DbRefPicker } from "@/components/db/db-ref-picker"
+import { UploadDialog } from "@/components/chat/composer/upload-dialog"
 import { DirPicker } from "@/components/dir-picker"
 import {
   OrchChatContext,
@@ -58,6 +59,7 @@ export function OrchestratorChat() {
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   const [dbRefPickerOpen, setDbRefPickerOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
@@ -193,6 +195,7 @@ export function OrchestratorChat() {
     openImagePicker: () => imageInputRef.current?.click(),
     openFilePicker: () => setFilePickerOpen(true),
     openDbRefPicker: () => setDbRefPickerOpen(true),
+    openUpload: () => setUploadOpen(true),
     recallQueued,
     steerQueued,
   }
@@ -238,6 +241,15 @@ export function OrchestratorChat() {
         scope={api.orchestrator}
         onOpenChange={setDbRefPickerOpen}
         onSelect={addDbRef}
+      />
+
+      {/* 上传本机文件：落盘之后就是一条普通的 @ 文件引用。 */}
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onSelect={(path) =>
+          setFiles((prev) => (prev.includes(path) ? prev : [...prev, path]))
+        }
       />
 
       <input

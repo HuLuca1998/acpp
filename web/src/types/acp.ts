@@ -186,6 +186,22 @@ export interface Session {
   updatedAt: string
 }
 
+/**
+ * 一个已落盘的上传件（与 server/internal/service.UploadedFile 对齐）。
+ * 上传件存在各自身份的家目录下，隔离由路径本身给。
+ */
+export interface UploadedFile {
+  name: string
+  /** 绝对路径，当普通的 @ 文件引用用。 */
+  path: string
+  size: number
+  /** 内容 sha256（十六进制）。 */
+  hash: string
+  /** true 表示这次上传命中了已有的同内容文件，没有重新写盘。 */
+  reused?: boolean
+  uploadedAt: string
+}
+
 /** 概览页的聚合统计（后端算，前端只画）。 */
 export interface OverviewStats {
   /** 全量口径的总计（不是当前页的和）。 */

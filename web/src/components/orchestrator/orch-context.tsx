@@ -32,6 +32,8 @@ export interface OrchChatValue {
   openImagePicker: () => void
   openFilePicker: () => void
   openDbRefPicker: () => void
+  /** 打开上传本机文件的对话框。 */
+  openUpload: () => void
   /** 排队插话：撤回回填 / 立即插入当前轮。 */
   recallQueued: (id: number) => void
   steerQueued: (id: number) => void

@@ -176,6 +176,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		}
 		return orchSession.Cwd, nil
 	}
+	// 本地文件上传：落在各自身份的家目录下，@ 引用直接用它的路径。
+	uploads := uploadHandler{}
+	api.HandleFunc("GET /api/uploads", uploads.list)
+	api.HandleFunc("POST /api/uploads", uploads.create)
+	api.HandleFunc("DELETE /api/uploads", uploads.remove)
+
 	workspace := workspaceHandler{cwdOf: sessionCwd}
 
 	// 草稿态工作区：会话还没建，目录由 `?cwd=` 给。看文件与 git 状态只需要

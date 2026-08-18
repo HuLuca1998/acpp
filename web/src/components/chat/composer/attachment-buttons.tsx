@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { AtSignIcon, DatabaseIcon, FileIcon } from "lucide-react"
+import { AtSignIcon, DatabaseIcon, FileIcon, FileUpIcon } from "lucide-react"
 
 /**
  * composer 左下角的附件圆钮与 @ 引用菜单。普通会话面板与编排面板共用
@@ -37,17 +37,19 @@ export function AttachmentButton({
 }
 
 /**
- * @ 引用菜单：文件与数据库两种。
+ * @ 引用菜单：工作区文件、数据库、上传本机文件。
  *
  * 收在同一个入口下是因为它们是同一个动作——「把这个交给 AI 看」，
- * 只是内容一个来自磁盘、一个来自库。
+ * 只是内容一个来自工作区、一个来自库、一个来自你自己的机器。
  */
 export function ReferenceMenu({
   onPickFile,
   onPickDatabase,
+  onUpload,
 }: {
   onPickFile: () => void
   onPickDatabase: () => void
+  onUpload: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -71,6 +73,10 @@ export function ReferenceMenu({
         <DropdownMenuItem onClick={onPickDatabase}>
           <DatabaseIcon />
           {t("db.refDatabase")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onUpload}>
+          <FileUpIcon />
+          {t("upload.title")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

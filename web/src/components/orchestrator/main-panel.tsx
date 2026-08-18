@@ -50,6 +50,7 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
     openImagePicker,
     openFilePicker,
     openDbRefPicker,
+    openUpload,
     recallQueued,
     steerQueued,
     openTaskPanel,
@@ -217,6 +218,7 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
         <ReferenceMenu
           onPickFile={openFilePicker}
           onPickDatabase={openDbRefPicker}
+          onUpload={openUpload}
         />
       </Composer>
     </div>

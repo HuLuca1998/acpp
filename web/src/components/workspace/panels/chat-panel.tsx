@@ -54,6 +54,7 @@ export const ChatPanel = memo(function ChatPanel() {
     openImagePicker,
     openFilePicker,
     openDbRefPicker,
+    openUpload,
     openCwdPicker,
     addImages,
     draftCwd,
@@ -230,6 +231,7 @@ export const ChatPanel = memo(function ChatPanel() {
         <ReferenceMenu
           onPickFile={openFilePicker}
           onPickDatabase={openDbRefPicker}
+          onUpload={openUpload}
         />
       </Composer>
     </div>

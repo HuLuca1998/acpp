@@ -121,6 +121,15 @@ export default {
         "关闭后「快速」按钮不再出现；claude 的快速模式额外计费，默认关闭。",
     },
   },
+  upload: {
+    title: "上传本地文件",
+    hint: "文件存到你自己的工作目录下，之后当普通的 @ 引用用；传过的会留着，同一份不会传第二遍。",
+    drop: "把文件拖进来，或点这里选择",
+    uploading: "上传中…",
+    done: "已引用 {{count}} 个文件",
+    history: "传过的文件",
+    empty: "还没传过文件。",
+  },
   db: zhDb,
   roles: {
     title: "角色",

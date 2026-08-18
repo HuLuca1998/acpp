@@ -20,6 +20,7 @@
 | service | 普通会话的业务规则：会话/对话/技能/工作区/终端/agent 配置；多租户身份与隔离范围（Scope） | 业务 |
 | project | 工作区项目（adr-007）：git 仓库发现、克隆（租户禁用凭证助手）、gh 远端仓库清单。磁盘即事实源，不入库；借 service 的哨兵错误与 Scope | 业务 |
 | datasource | 外部 MySQL 数据源（adr-008）：连接配置（项目 + 环境两级）、SSH 隧道拨号、库表探查、多段语句执行，以及挂给会话的 MCP 工具面。连接一次性、可见性按会话 cwd 所属项目过滤。借 service 的哨兵错误与 DefaultCwd | 业务 |
+| upload | 本机文件上传：落盘、按内容 hash 去重、列举与删除。上传件存在各自身份的家目录下，**隔离由路径本身给**——没有归属过滤这回事。借 service 的 Scope 与哨兵错误 | 业务 |
 | orch | 编排（adr-006）：角色、编排主会话、spawn 任务子会话、系统 MCP 端点。借 service 的哨兵错误与导出工具（DegradedSettings/DeriveTitle/TruncateError/RebuildMessages），不被 service 反向依赖 | 业务 |
 | system | 系统平台面：数据目录迁移、环境体检与依赖安装、版本检查与自更新。哨兵错误借 service 的（错误映射一套） | 业务 |
 | httpapi | 路由、handler、中间件、统一响应。不碰 db，服务由 cmd/server 装配后传入 | HTTP |

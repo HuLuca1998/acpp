@@ -9,6 +9,7 @@ import type { ImageAttachment } from "@/types/acp"
 import { fileToImageAttachment } from "@/lib/files"
 import { api } from "@/lib/api"
 import { DbRefPicker } from "@/components/db/db-ref-picker"
+import { UploadDialog } from "@/components/chat/composer/upload-dialog"
 import { DirPicker } from "@/components/dir-picker"
 import {
   ChatPanelContext,
@@ -61,6 +62,7 @@ export function SessionChat() {
   }, [])
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   const [dbRefPickerOpen, setDbRefPickerOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
@@ -201,6 +203,7 @@ export function SessionChat() {
     openImagePicker: () => imageInputRef.current?.click(),
     openFilePicker: () => setFilePickerOpen(true),
     openDbRefPicker: () => setDbRefPickerOpen(true),
+    openUpload: () => setUploadOpen(true),
     openCwdPicker: () => setCwdPickerOpen(true),
     draftCwd,
   }
@@ -274,6 +277,15 @@ export function SessionChat() {
         scope={api.sessions}
         onOpenChange={setDbRefPickerOpen}
         onSelect={addDbRef}
+      />
+
+      {/* 上传本机文件：落盘之后就是一条普通的 @ 文件引用。 */}
+      <UploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        onSelect={(path) =>
+          setFiles((prev) => (prev.includes(path) ? prev : [...prev, path]))
+        }
       />
 
       {/* 草稿态：点状态栏里的工作目录换目录。 */}

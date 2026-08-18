@@ -33,6 +33,8 @@ export interface ChatPanelData {
   openImagePicker: () => void
   openFilePicker: () => void
   openDbRefPicker: () => void
+  /** 打开上传本机文件的对话框。 */
+  openUpload: () => void
   openCwdPicker: () => void
   /** 草稿态显示的待选工作目录。 */
   draftCwd: string

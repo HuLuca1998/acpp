@@ -27,6 +27,7 @@ import type {
   OverviewStats,
   Paged,
   PageQuery,
+  UploadedFile,
   Project,
   RemoteRepo,
   Role,
@@ -372,6 +373,28 @@ export const api = {
     /** 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。 */
     updateApply: () =>
       request<{ message: string }>("/system/update/apply", { method: "POST" }),
+  },
+
+  /**
+   * 本地文件上传。落在各自身份的家目录下（owner 是工作区根，租户是自己
+   * 的 root），拿到 path 之后就是一个普通的 @ 文件引用。
+   */
+  uploads: {
+    list: () => request<Paged<UploadedFile>>("/uploads"),
+    create: async (file: File) => {
+      const body = new FormData()
+      body.append("file", file)
+      // 不设 Content-Type：multipart 的 boundary 得让浏览器自己填。
+      const res = await fetch(`${BASE}/uploads`, { method: "POST", body })
+      const json = (await res.json()) as { data?: UploadedFile; error?: string }
+      if (!res.ok) throw new ApiError(res.status, json.error ?? res.statusText)
+      return json.data as UploadedFile
+    },
+    remove: (hash: string, name: string) =>
+      request<{ deleted: boolean }>(
+        `/uploads?hash=${encodeURIComponent(hash)}&name=${encodeURIComponent(name)}`,
+        { method: "DELETE" }
+      ),
   },
 
   sessions: {
