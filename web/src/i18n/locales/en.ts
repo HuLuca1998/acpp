@@ -707,6 +707,7 @@ export default {
       env: "Environment",
       claude: "Claude",
       codex: "Codex",
+      ollama: "Ollama",
       about: "About & Updates",
     },
     about: {

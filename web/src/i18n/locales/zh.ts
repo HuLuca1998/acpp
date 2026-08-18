@@ -671,6 +671,7 @@ export default {
       env: "环境",
       claude: "Claude",
       codex: "Codex",
+      ollama: "Ollama",
       about: "关于与更新",
     },
     about: {

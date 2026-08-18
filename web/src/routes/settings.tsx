@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { api } from "@/lib/api"
 import type { SystemInfo } from "@/types/acp"
 import { cn } from "@/lib/utils"
-import { AgentIcon } from "@/components/agent-icon"
+import { AgentIcon, OllamaIcon } from "@/components/agent-icon"
 import { DirPicker } from "@/components/dir-picker"
 import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
@@ -43,12 +43,17 @@ import {
   SettingsIcon,
 } from "lucide-react"
 
-/** 设置分区：系统 / 环境体检 + 两个内置工具（claude/codex 是产品固定形态，见 adr-005）。 */
+/**
+ * 设置分区：系统 / 环境体检 + 两个内置工具（claude/codex 是产品固定形态，
+ * 见 adr-005）+ ollama。ollama 与前两者并列而不是塞进系统分区：它同样是
+ * 一个外部模型提供方，只是干的活不是对话而是标题这类后台小任务。
+ */
 const SECTIONS = [
   { key: "system", icon: <SettingsIcon className="size-4" /> },
   { key: "env", icon: <ActivityIcon className="size-4" /> },
   { key: "claude", icon: <AgentIcon flavor="claude" className="size-4" /> },
   { key: "codex", icon: <AgentIcon flavor="codex" className="size-4" /> },
+  { key: "ollama", icon: <OllamaIcon className="size-4" /> },
   { key: "about", icon: <InfoIcon className="size-4" /> },
 ] as const
 
@@ -139,8 +144,14 @@ export function Settings() {
         <div className="flex min-w-0 flex-1 flex-col">
           <AboutUpdate />
         </div>
+      ) : section === "ollama" ? (
+        /* ollama 分区：本机模型运行时，目前只服务于会话标题生成。 */
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TitleModelCard />
+        </div>
       ) : section !== "system" ? (
-        /* 工具分区：内置 claude / codex 的配置面。 */
+        /* 工具分区：内置 claude / codex 的配置面。这条是兜底分支，
+           新分区必须排在它前面，否则会被当成 agent 名传下去。 */
         <div className="flex min-w-0 flex-1 flex-col">
           <AgentToolConfig name={section} />
         </div>
@@ -158,8 +169,6 @@ export function Settings() {
             <>
               {/* 工作区根在数据目录之上：它才是每天要打交道的那个目录。 */}
               <WorkspaceDirCard info={info} onChange={setInfo} />
-              {/* 标题生成不依赖 SystemInfo，自己拉配置，放这里只为归到「系统」分区。 */}
-              <TitleModelCard />
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
