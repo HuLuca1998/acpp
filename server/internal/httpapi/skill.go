@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"cmp"
 	"net/http"
+	"slices"
+	"strings"
 
 	"acpp/server/internal/service"
 )
@@ -23,9 +26,14 @@ func (h skillHandler) list(w http.ResponseWriter, r *http.Request) {
 			skills[i].UsageCount = counts[skills[i].Name]
 		}
 	}
-	// 技能是扫盘得来的（磁盘即事实源），没有 SQL 可以 LIMIT——在内存里切。
-	// 目录读取本身是 O(n)，但那部分快得多，真正会拖慢页面的是把几百条
-	// 连同正文一起塞进一次响应。
+	// 技能是扫盘得来的（磁盘即事实源），没有 SQL 可以 ORDER BY / LIMIT——
+	// 排序和切页都在内存里做。目录读取本身是 O(n)，但那部分快得多，真正会
+	// 拖慢页面的是把几百条连同正文一起塞进一次响应。
+	//
+	// 顺序必须是「先排后切」：反过来就只排了当前这一页，用户以为看到的是
+	// 「全部里用得最多的」，其实是「这 20 条里用得最多的」。
+	sortSkills(skills, sortParams(r, "name", "enabled", "updated_at", "usage_count"))
+
 	pageNum, pageSize := pageParams(r)
 	total := len(skills)
 	writeData(w, http.StatusOK, page[service.Skill]{
@@ -163,4 +171,48 @@ func (h skillHandler) removeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+// sortSkills 按请求的字段就地排序。字段名与其他列表端点保持同一套写法
+// （snake_case），前端不必知道哪个端点背后是数据库、哪个是磁盘。
+func sortSkills(skills []service.Skill, spec SortSpec) {
+	if spec.Column == "" {
+		// 没指定就用 List 给的顺序（按名字），不做多余的重排。
+		return
+	}
+	compare := skillComparator(spec.Column)
+	slices.SortStableFunc(skills, func(a, b service.Skill) int {
+		if spec.Desc {
+			return compare(b, a)
+		}
+		return compare(a, b)
+	})
+}
+
+func skillComparator(column string) func(a, b service.Skill) int {
+	switch column {
+	case "enabled":
+		return func(a, b service.Skill) int {
+			return cmp.Compare(boolRank(a.Enabled), boolRank(b.Enabled))
+		}
+	case "updated_at":
+		return func(a, b service.Skill) int { return a.UpdatedAt.Compare(b.UpdatedAt) }
+	case "usage_count":
+		return func(a, b service.Skill) int {
+			return cmp.Compare(a.UsageCount, b.UsageCount)
+		}
+	default:
+		// 名字大小写不敏感：技能名多是小写，混进一个大写开头的会排到最前，
+		// 看起来像乱序。
+		return func(a, b service.Skill) int {
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		}
+	}
+}
+
+func boolRank(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }

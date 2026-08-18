@@ -130,7 +130,9 @@ func (s *Service) Create(ctx context.Context, in SessionInput) (*model.OrchSessi
 	return &orch, nil
 }
 
-func (s *Service) List(ctx context.Context, page, pageSize int) ([]model.OrchSession, int64, error) {
+// List 按页取编排会话。orderBy 由 handler 从白名单拼好传进来（那是不能用
+// 占位符的位置），空则按最近更新倒序。
+func (s *Service) List(ctx context.Context, page, pageSize int, orderBy string) ([]model.OrchSession, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -141,8 +143,11 @@ func (s *Service) List(ctx context.Context, page, pageSize int) ([]model.OrchSes
 	if err := s.db.WithContext(ctx).Model(&model.OrchSession{}).Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count orch sessions: %w", err)
 	}
+	if orderBy == "" {
+		orderBy = "updated_at desc"
+	}
 	var items []model.OrchSession
-	err := s.db.WithContext(ctx).Order("updated_at desc").
+	err := s.db.WithContext(ctx).Order(orderBy).
 		Offset((page - 1) * pageSize).Limit(pageSize).Find(&items).Error
 	if err != nil {
 		return nil, 0, fmt.Errorf("list orch sessions: %w", err)

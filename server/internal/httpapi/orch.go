@@ -18,7 +18,9 @@ type orchHandler struct {
 
 func (h orchHandler) list(w http.ResponseWriter, r *http.Request) {
 	pageNum, pageSize := pageParams(r)
-	items, total, err := h.orch.List(r.Context(), pageNum, pageSize)
+	// 排序字段走白名单再拼进 ORDER BY（见 sort.go）。
+	sort := sortParams(r, "title", "agent_id", "state", "message_count", "tokens_used", "updated_at", "created_at")
+	items, total, err := h.orch.List(r.Context(), pageNum, pageSize, sort.OrderBy(""))
 	if err != nil {
 		writeError(w, err)
 		return
