@@ -69,7 +69,8 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 
 - **先查 shadcn 有没有，再决定写不写**。这是硬规则，不是建议：动手写任何 UI 之前，对着 [shadcn 组件清单](https://ui.shadcn.com/docs/components) 找一遍，有对应的就 `npx shadcn@latest add <component>` 装来用；确认没有，才自己写。手写一个「差不多的」下拉建议框、滚动区、快捷键徽标，看起来省事，实际是把别人打磨过的键盘可达性、无障碍属性、暗色适配全部重做一遍——而且多半做得更差。
   - 装组件时 CLI 会问要不要覆盖已存在的文件：**一律回答 no**，再按下一条的 `--diff` 流程手动合并。
-  - 已装组件见 `components/ui/`；常被漏掉的有 `combobox`（带建议的输入）、`command`（命令面板与补全菜单）、`item`（列表行）、`kbd`（快捷键徽标）、`scroll-area`（滚动区）、`attachment`（附件芯片）、`questionnaire`（一次一问的表单流，AI 追问卡用它）、`data-table`（TanStack Table，排序/列显隐/分页）。
+  - 已装组件见 `components/ui/`；常被漏掉的有 `combobox`（带建议的输入）、`command`（命令面板）、`item`（列表行）、`kbd`（快捷键徽标）、`scroll-area`（滚动区）、`attachment`（附件芯片）、`questionnaire`（一次一问的表单流，AI 追问卡用它）、`data-table`（TanStack Table，排序/列显隐/分页）。
+  - **查过之后判断「不合适」也是合格的结论**，但要把理由写在代码里，别让下一个人再查一遍。已有的判例：输入框的斜杠补全菜单不用 `command`——cmdk 的 Root 无条件吞掉方向键与 Enter，而 composer 是多行 textarea，套上去光标就动不了了（见 `chat/composer/composer.tsx`）。
 - **优先组合现有 `components/ui/`**。基于 **Base UI**（不是 Radix）：自定义触发元素用 `render={<Link to="..." />}`，**没有 `asChild`**。
 - **`ui/` 以 shadcn 生成为起点，允许直接修改**——组件代码归我们所有，动效、细节不合基调就直接改（Dialog 的入出场就是这么调的）。约束两条：
   1. 升级组件必须 `npx shadcn add <c> --diff` 对比后**手动合并**，禁止盲目 `--overwrite` 冲掉本地打磨；

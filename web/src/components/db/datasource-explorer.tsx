@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource, DbTable, SqlExecResult } from "@/types/acp"
 import { SqlResultView } from "@/components/db/sql-result-view"
+import { Kbd } from "@/components/ui/kbd"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
@@ -274,7 +275,7 @@ function SqlConsole({
           {running ? <Spinner /> : <PlayIcon data-icon="inline-start" />}
           {running ? t("db.running") : t("db.run")}
         </Button>
-        <span className="font-mono text-xs text-muted-foreground">⌘↵</span>
+        <Kbd>⌘↵</Kbd>
       </div>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       {result ? <SqlResultView results={result.results} /> : null}

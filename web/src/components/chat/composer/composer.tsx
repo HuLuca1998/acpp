@@ -69,6 +69,12 @@ export function Composer({
   const canSend = !disabled && !pending && value.trim() !== ""
 
   // "/" 补全：只在整条输入是一个未完成的命令词时出现。
+  //
+  // 这里**不用 ui/command**（cmdk），查过了，形态对不上：它的 Root 无条件
+  // 吞掉 ArrowUp/Down/Home/End/Enter，而我们的输入是多行 textarea——把它
+  // 放进 Command 里让事件冒泡，菜单没开的时候光标也别想上下移动了。它的
+  // 输入模型也是自带的单行 CommandInput，接不上这块带粘贴图片、Shift+Enter
+  // 换行、[field-sizing:content] 的输入区。
   const slashQuery =
     value.startsWith("/") && !/\s/.test(value) ? value.slice(1) : null
   const matches =
