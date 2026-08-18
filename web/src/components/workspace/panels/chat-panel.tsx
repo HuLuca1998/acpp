@@ -46,6 +46,7 @@ export const ChatPanel = memo(function ChatPanel() {
     removeImage,
     removeFile,
     removeDbRef,
+    addDbRef,
     submit,
     sendSuggestion,
     recallQueued,
@@ -169,6 +170,7 @@ export const ChatPanel = memo(function ChatPanel() {
             <DbSlashPanel
               sessionId={sessionId}
               args={localCommand}
+              onPick={addDbRef}
               onClose={() => setLocalCommand(null)}
             />
           ) : null

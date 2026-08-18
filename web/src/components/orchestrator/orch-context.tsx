@@ -26,6 +26,8 @@ export interface OrchChatValue {
   removeImage: (index: number) => void
   removeFile: (index: number) => void
   removeDbRef: (index: number) => void
+  /** 加一条数据库引用（/db 面板与 @ 菜单共用，重复的不再加）。 */
+  addDbRef: (ref: string) => void
   addImages: (picked: File[]) => void
   openImagePicker: () => void
   openFilePicker: () => void

@@ -18,6 +18,9 @@ import { DatabaseIcon, TableIcon, XIcon } from "lucide-react"
  * 刻意不进对话流：查一眼有哪些库是「顺手看看」，不该变成一条消息占着
  * 上下文，也不该等 agent 响应。关掉即走，刷新不留痕。
  *
+ * 每行右侧有「引用」——看到想问的那张表，就在这里带走，不必关掉面板再去
+ * @ 菜单把同一条路重走一遍。
+ *
  * 能看到什么与 AI 能操作什么是同一个范围——都只有当前工作目录所属项目的
  * 数据源（后端 /sessions/{id}/datasources 已按项目过滤）。
  */
@@ -25,10 +28,13 @@ export function DbSlashPanel({
   sessionId,
   /** 命令参数：空 = 列数据源，`<env>` = 列那条连接的表。 */
   args,
+  onPick,
   onClose,
 }: {
   sessionId: number
   args: string
+  /** 把这条引用带进输入框的附件区（与 @ 菜单同一个入口）。 */
+  onPick: (ref: string) => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -69,7 +75,7 @@ export function DbSlashPanel({
             {t("db.noSourceForProject")}
           </p>
         ) : !envArg ? (
-          <SourceList sources={sources} />
+          <SourceList sources={sources} onPick={onPick} />
         ) : !picked ? (
           <p className="px-1 py-2 text-muted-foreground">
             {t("db.pickSource")}：{sources.map((s) => s.env).join(" / ")}
@@ -79,6 +85,7 @@ export function DbSlashPanel({
             sessionId={sessionId}
             source={picked}
             database={picked.database}
+            onPick={onPick}
           />
         )}
       </ScrollArea>
@@ -86,12 +93,18 @@ export function DbSlashPanel({
   )
 }
 
-function SourceList({ sources }: { sources: DataSource[] }) {
+function SourceList({
+  sources,
+  onPick,
+}: {
+  sources: DataSource[]
+  onPick: (ref: string) => void
+}) {
   const { t } = useTranslation()
   return (
     <ul className="flex flex-col gap-0.5">
       {sources.map((s) => (
-        <li key={s.id} className="flex items-center gap-2 px-1 py-1">
+        <Row key={s.id} refValue={s.ref} onPick={onPick}>
           <StatusDot tone={s.disabled ? "muted" : "success"} />
           <span className="shrink-0 font-mono font-medium">{s.env}</span>
           <span className="min-w-0 truncate font-mono text-muted-foreground">
@@ -103,9 +116,41 @@ function SourceList({ sources }: { sources: DataSource[] }) {
               {t("db.disabled")}
             </span>
           ) : null}
-        </li>
+        </Row>
       ))}
     </ul>
+  )
+}
+
+/**
+ * 一行：内容照旧，右侧跟一个默认隐身的「引用」按钮。
+ *
+ * 按钮**占位**（只改 opacity，不用 absolute）：行右侧本来就排着注释与
+ * 行数，绝对定位会直接压在上面；而且占位后 hover 不会让文字重排。
+ * 与 @ 菜单里那行是同一套做法。
+ */
+function Row({
+  refValue,
+  onPick,
+  children,
+}: {
+  refValue: string
+  onPick: (ref: string) => void
+  children: React.ReactNode
+}) {
+  const { t } = useTranslation()
+  return (
+    <li className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-muted/60">
+      {children}
+      <Button
+        size="xs"
+        variant="ghost"
+        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        onClick={() => onPick(refValue)}
+      >
+        {t("db.refPick")}
+      </Button>
+    </li>
   )
 }
 
@@ -113,10 +158,12 @@ function TableList({
   sessionId,
   source,
   database,
+  onPick,
 }: {
   sessionId: number
   source: DataSource
   database: string
+  onPick: (ref: string) => void
 }) {
   const { t } = useTranslation()
   const { data, error } = useAsyncData(
@@ -137,7 +184,12 @@ function TableList({
   return (
     <ul className="flex flex-col gap-0.5">
       {data.map((tb) => (
-        <li key={tb.name} className="flex items-center gap-2 px-1 py-1">
+        // 引用值与 @ 菜单里那条完全一致：`<项目>/<环境>/<库>/<表>`。
+        <Row
+          key={tb.name}
+          refValue={`${source.ref}/${database}/${tb.name}`}
+          onPick={onPick}
+        >
           <TableIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate font-mono">{tb.name}</span>
           {tb.comment ? (
@@ -148,7 +200,7 @@ function TableList({
           <span className="shrink-0 text-muted-foreground tabular-nums">
             {tb.rows}
           </span>
-        </li>
+        </Row>
       ))}
     </ul>
   )

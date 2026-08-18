@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams } from "react-router"
 import { useRef } from "react"
@@ -62,6 +62,11 @@ export function OrchestratorChat() {
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
   const [dbRefs, setDbRefs] = useState<string[]>([])
+
+  // 加引用的唯一入口：@ 菜单与 /db 面板都走它，重复的不再加一遍。
+  const addDbRef = useCallback((ref: string) => {
+    setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
+  }, [])
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   const effectiveAgentId = agentId || agents?.[0]?.id || 0
@@ -183,6 +188,7 @@ export function OrchestratorChat() {
     removeImage: (i) => setImages((prev) => prev.filter((_, idx) => idx !== i)),
     removeFile: (i) => setFiles((prev) => prev.filter((_, idx) => idx !== i)),
     removeDbRef: (i) => setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
+    addDbRef,
     addImages: (picked) => void addImages(picked),
     openImagePicker: () => imageInputRef.current?.click(),
     openFilePicker: () => setFilePickerOpen(true),
@@ -231,9 +237,7 @@ export function OrchestratorChat() {
         sessionId={isNew ? 0 : orchId}
         scope={api.orchestrator}
         onOpenChange={setDbRefPickerOpen}
-        onSelect={(ref) =>
-          setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
-        }
+        onSelect={addDbRef}
       />
 
       <input

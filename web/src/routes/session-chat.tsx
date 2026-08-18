@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
 
@@ -54,6 +54,11 @@ export function SessionChat() {
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
   const [dbRefs, setDbRefs] = useState<string[]>([])
+
+  // 加引用的唯一入口：@ 菜单与 /db 面板都走它，重复的不再加一遍。
+  const addDbRef = useCallback((ref: string) => {
+    setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
+  }, [])
   const [filePickerOpen, setFilePickerOpen] = useState(false)
   const [dbRefPickerOpen, setDbRefPickerOpen] = useState(false)
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
@@ -187,6 +192,7 @@ export function SessionChat() {
     removeImage: (i) => setImages((prev) => prev.filter((_, idx) => idx !== i)),
     removeFile: (i) => setFiles((prev) => prev.filter((_, idx) => idx !== i)),
     removeDbRef: (i) => setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
+    addDbRef,
     addImages: (picked) => void addImages(picked),
     submit,
     sendSuggestion,
@@ -267,9 +273,7 @@ export function SessionChat() {
         sessionId={isNew ? 0 : sessionId}
         scope={api.sessions}
         onOpenChange={setDbRefPickerOpen}
-        onSelect={(ref) =>
-          setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
-        }
+        onSelect={addDbRef}
       />
 
       {/* 草稿态：点状态栏里的工作目录换目录。 */}
