@@ -7,6 +7,7 @@ import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { displayPath } from "@/lib/format"
 import type { DirListing } from "@/types/acp"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -225,7 +226,7 @@ export function DirPicker({
           </form>
         ) : null}
 
-        <div className="h-64 overflow-y-auto rounded-lg border border-border">
+        <ScrollArea className="h-64 rounded-lg border border-border">
           {loading ? (
             <div className="flex h-full items-center justify-center">
               <Spinner className="size-5" />
@@ -279,7 +280,7 @@ export function DirPicker({
               ))}
             </ul>
           )}
-        </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

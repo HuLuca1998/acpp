@@ -15,7 +15,10 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        // max-h-[inherit] 是为了让 `<ScrollArea className="max-h-64">` 能用：
+        // Root 只是个 relative 盒子，真正滚动的是 Viewport。不继承的话
+        // Viewport 会长到内容那么高，Root 的 max-height 白设，内容直接溢出去。
+        className="size-full max-h-[inherit] rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

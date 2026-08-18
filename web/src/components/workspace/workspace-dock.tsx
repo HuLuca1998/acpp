@@ -62,7 +62,6 @@ const COMPONENTS: Record<
   terminal: TerminalPanel,
 }
 
-
 /**
  * 自定义 tab：图标 + 标题 + 关闭钮（chat 无）。窄栏时标题由容器查询
  * 隐藏、只剩图标（见 index.css）。拖动期间零 setState——悬停态全靠 CSS。

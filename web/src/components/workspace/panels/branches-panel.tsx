@@ -23,6 +23,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import type { GitBranchView, GitOpResult } from "@/types/acp"
@@ -225,7 +226,7 @@ export const BranchesPanel = memo(function BranchesPanel() {
         hint={compareHint}
         onRefresh={load}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto py-1 text-sm">
+      <ScrollArea className="min-h-0 flex-1 py-1 text-sm">
         <Group
           label={t("workspace.git.local")}
           collapsed={collapsed.local}
@@ -297,7 +298,7 @@ export const BranchesPanel = memo(function BranchesPanel() {
             ))}
           </Group>
         ) : null}
-      </div>
+      </ScrollArea>
 
       {/* key 让每个操作拿到自己的输入框实例：换操作即重挂，输入不残留。 */}
       <GitPromptDialog

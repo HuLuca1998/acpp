@@ -12,14 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusDot } from "@/components/status-dot"
-import {
-  ChevronRightIcon,
-  DatabaseIcon,
-  TableIcon,
-} from "lucide-react"
+import { ChevronRightIcon, DatabaseIcon, TableIcon } from "lucide-react"
 
 /**
  * 选一个数据库引用交给 AI，与 @ 文件引用是同一个动作。
@@ -102,7 +99,7 @@ function Picker({
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <Breadcrumb source={source} onReset={() => setSource(null)} />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <ScrollArea className="min-h-0 flex-1">
         {!source ? (
           <SourceLevel sources={sources} onOpen={setSource} onPick={onPick} />
         ) : (
@@ -114,7 +111,7 @@ function Picker({
             onPick={onPick}
           />
         )}
-      </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -249,7 +246,9 @@ function TableLevel({
       {data.map((tb) => (
         <Row
           key={tb.name}
-          icon={<TableIcon className="size-3.5 shrink-0 text-muted-foreground" />}
+          icon={
+            <TableIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          }
           name={tb.name}
           meta={tb.comment || String(tb.rows)}
           refValue={`${source.ref}/${database}/${tb.name}`}

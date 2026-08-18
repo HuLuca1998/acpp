@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { api } from "@/lib/api"
 import type { CloneTask } from "@/types/acp"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -94,7 +95,7 @@ export function CloneDialog({
           />
         </div>
 
-        <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
+        <ScrollArea className="max-h-72 rounded-lg border border-border">
           {error ? (
             <Alert variant="destructive" className="border-0">
               <TriangleAlertIcon />
@@ -144,7 +145,7 @@ export function CloneDialog({
               ))}
             </ul>
           )}
-        </div>
+        </ScrollArea>
 
         <div className="flex flex-col gap-1">
           <Input

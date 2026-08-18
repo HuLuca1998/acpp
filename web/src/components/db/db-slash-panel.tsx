@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { api } from "@/lib/api"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource } from "@/types/acp"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusDot } from "@/components/status-dot"
@@ -58,7 +59,7 @@ export function DbSlashPanel({
         </Button>
       </div>
 
-      <div className="max-h-64 overflow-y-auto p-2 text-xs">
+      <ScrollArea className="max-h-64 p-2 text-xs">
         {error ? (
           <p className="px-1 py-2 text-destructive">{error}</p>
         ) : !sources ? (
@@ -71,8 +72,7 @@ export function DbSlashPanel({
           <SourceList sources={sources} />
         ) : !picked ? (
           <p className="px-1 py-2 text-muted-foreground">
-            {t("db.pickSource")}：
-            {sources.map((s) => s.env).join(" / ")}
+            {t("db.pickSource")}：{sources.map((s) => s.env).join(" / ")}
           </p>
         ) : (
           <TableList
@@ -81,7 +81,7 @@ export function DbSlashPanel({
             database={picked.database}
           />
         )}
-      </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -141,7 +141,7 @@ function TableList({
           <TableIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate font-mono">{tb.name}</span>
           {tb.comment ? (
-            <span className="min-w-0 max-w-40 truncate text-muted-foreground">
+            <span className="max-w-40 min-w-0 truncate text-muted-foreground">
               {tb.comment}
             </span>
           ) : null}

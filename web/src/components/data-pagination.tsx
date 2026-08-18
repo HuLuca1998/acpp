@@ -122,7 +122,9 @@ export function DataPagination({
               <PaginationNext
                 text={t("pagination.next")}
                 aria-disabled={page >= pages}
-                className={cn(page >= pages && "pointer-events-none opacity-40")}
+                className={cn(
+                  page >= pages && "pointer-events-none opacity-40"
+                )}
                 onClick={() => onPage(page + 1)}
               />
             </PaginationItem>

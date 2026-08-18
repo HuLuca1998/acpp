@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import { useOrchCtx } from "@/components/orchestrator/orch-context"
 import { StatusDot } from "@/components/status-dot"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -59,7 +60,7 @@ export const OrchTasksPanel = memo(function OrchTasksPanel() {
   const tasks = [...chat.tasks].reverse()
 
   return (
-    <div className="h-full overflow-y-auto bg-background">
+    <ScrollArea className="h-full bg-background">
       <ul className="flex flex-col gap-1 p-2">
         {tasks.map((task) => (
           <li key={task.id} className="group relative">
@@ -107,6 +108,6 @@ export const OrchTasksPanel = memo(function OrchTasksPanel() {
           </li>
         ))}
       </ul>
-    </div>
+    </ScrollArea>
   )
 })

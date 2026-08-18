@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource, DbTable, SqlExecResult } from "@/types/acp"
 import { SqlResultView } from "@/components/db/sql-result-view"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Kbd } from "@/components/ui/kbd"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -105,7 +106,7 @@ function TableList({
   }
 
   return (
-    <div className="max-h-96 overflow-y-auto rounded-lg border border-border p-1">
+    <ScrollArea className="max-h-96 rounded-lg border border-border p-1">
       {tables.map((tb) => (
         <button
           key={tb.name}
@@ -126,7 +127,7 @@ function TableList({
           </span>
         </button>
       ))}
-    </div>
+    </ScrollArea>
   )
 }
 

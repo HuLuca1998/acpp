@@ -5,6 +5,7 @@ import { toast } from "sonner"
 
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import type { GitBranchView } from "@/types/acp"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -122,7 +123,7 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
               </p>
             ) : null}
 
-            <div className="max-h-56 overflow-y-auto py-1">
+            <ScrollArea className="max-h-56 py-1">
               {view.local.map((branch) => {
                 const taken = Boolean(branch.worktree)
                 return (
@@ -147,7 +148,7 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
                   </button>
                 )
               })}
-            </div>
+            </ScrollArea>
 
             <Separator />
             <div className="flex items-center gap-1.5 p-2">

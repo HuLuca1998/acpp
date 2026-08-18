@@ -21,6 +21,7 @@ import {
   useGitOverview,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
@@ -146,7 +147,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
           <RotateCwIcon className="size-3.5" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-1 pb-2">
+      <ScrollArea className="min-h-0 flex-1 px-1 pb-2">
         {entries.length === 0 ? (
           <div className="px-2 py-4 text-xs text-muted-foreground">
             {t("workspace.tree.empty")}
@@ -172,7 +173,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
             {t("workspace.tree.truncated")}
           </div>
         ) : null}
-      </div>
+      </ScrollArea>
     </div>
   )
 })

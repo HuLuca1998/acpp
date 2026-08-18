@@ -25,6 +25,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { buildPathTree, countFiles, type PathTreeNode } from "@/lib/path-tree"
 import { cn } from "@/lib/utils"
@@ -187,7 +188,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
           load()
         }}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+      <ScrollArea className="min-h-0 flex-1 py-1">
         {list === null || tree === null ? (
           <div className="flex items-center justify-center py-6">
             <Spinner className="size-4 text-muted-foreground" />
@@ -208,7 +209,7 @@ export const ChangesPanel = memo(function ChangesPanel() {
             onAskDir={(dir) => ws.askAI(t("workspace.git.promptDir", { dir }))}
           />
         )}
-      </div>
+      </ScrollArea>
 
       <GitConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
     </div>

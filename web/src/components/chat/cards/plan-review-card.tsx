@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import type { PendingPermission } from "@/types/acp"
 import { MarkdownContent } from "@/components/chat/markdown"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { ClipboardCheckIcon } from "lucide-react"
 
@@ -39,9 +40,9 @@ export function PlanReviewCard({
         {t("chat.planReview.title")}
       </div>
 
-      <div className="mb-3 max-h-80 overflow-y-auto rounded-lg border border-border bg-background/50 px-3 py-2">
+      <ScrollArea className="mb-3 max-h-80 rounded-lg border border-border bg-background/50 px-3 py-2">
         <MarkdownContent>{review.plan}</MarkdownContent>
-      </div>
+      </ScrollArea>
 
       <div className="flex flex-wrap items-center gap-2">
         {runChoices.map((choice) => {

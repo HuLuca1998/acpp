@@ -23,6 +23,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -140,7 +141,7 @@ export const HistoryPanel = memo(function HistoryPanel() {
         }}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <ScrollArea className="min-h-0 flex-1">
         {/* 时间线的第一段：尚未提交的改动。 */}
         <button
           type="button"
@@ -229,7 +230,7 @@ export const HistoryPanel = memo(function HistoryPanel() {
             {t("workspace.git.loadMore")}
           </button>
         ) : null}
-      </div>
+      </ScrollArea>
 
       <GitPromptDialog
         key={prompt?.title ?? "closed"}
