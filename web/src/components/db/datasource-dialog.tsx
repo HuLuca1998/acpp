@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SuggestInput } from "@/components/db/suggest-input"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
@@ -186,20 +187,15 @@ function DataSourceForm({
             <div className="grid grid-cols-2 gap-4">
               <Field>
                 <FieldLabel htmlFor="ds-project">{t("db.project")}</FieldLabel>
-                <Input
+                {/* 建议而非限制：库常常先于代码存在，本机还没 clone 也得能配。 */}
+                <SuggestInput
                   id="ds-project"
-                  list="ds-projects"
                   required
                   value={form.project}
+                  options={projects}
                   placeholder={t("db.projectPlaceholder")}
-                  onChange={(e) => set("project", e.target.value)}
+                  onChange={(v) => set("project", v)}
                 />
-                {/* 建议而非限制：库常常先于代码存在，本机还没 clone 也得能配。 */}
-                <datalist id="ds-projects">
-                  {projects.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
               </Field>
               <Field>
                 <FieldLabel htmlFor="ds-env">{t("db.env")}</FieldLabel>
