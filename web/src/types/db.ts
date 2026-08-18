@@ -19,6 +19,8 @@ export interface DataSource {
   port: number
   user: string
   database: string
+  /** 允许访问的库（逗号分隔）；空=沿用默认库，`*`=不限。 */
+  databases: string
   params: string
   note: string
   sshEnabled: boolean
@@ -27,6 +29,8 @@ export interface DataSource {
   sshUser: string
   sshAuth: SSHAuth
   sshKeyPath: string
+  /** 只读连接：软件层拒绝写语句，AI 侧连执行工具都不挂。 */
+  readOnly: boolean
   disabled: boolean
   hasPassword: boolean
   hasSSHPassword: boolean
@@ -47,6 +51,7 @@ export interface DataSourceInput {
   user: string
   password?: string
   database?: string
+  databases?: string
   params?: string
   note?: string
   sshEnabled?: boolean
@@ -57,6 +62,7 @@ export interface DataSourceInput {
   sshPassword?: string
   sshKeyPath?: string
   sshPassphrase?: string
+  readOnly?: boolean
   disabled?: boolean
 }
 

@@ -79,6 +79,7 @@ type Input struct {
 	User          string  `json:"user"`
 	Password      *string `json:"password"`
 	Database      string  `json:"database"`
+	Databases     string  `json:"databases"`
 	Params        string  `json:"params"`
 	Note          string  `json:"note"`
 	SSHEnabled    *bool   `json:"sshEnabled"`
@@ -89,6 +90,7 @@ type Input struct {
 	SSHPassword   *string `json:"sshPassword"`
 	SSHKeyPath    string  `json:"sshKeyPath"`
 	SSHPassphrase *string `json:"sshPassphrase"`
+	ReadOnly      *bool   `json:"readOnly"`
 	Disabled      *bool   `json:"disabled"`
 }
 
@@ -195,7 +197,8 @@ func (s *Service) Get(ctx context.Context, id uint) (*model.DataSource, error) {
 }
 
 func (s *Service) Create(ctx context.Context, in Input) (*model.DataSource, error) {
-	src := model.DataSource{Port: 3306, SSHPort: 22}
+	// 新连接默认只读：要写是明确的一次决定。
+	src := model.DataSource{Port: 3306, SSHPort: 22, ReadOnly: true}
 	if err := apply(&src, in); err != nil {
 		return nil, err
 	}
@@ -238,7 +241,7 @@ func (s *Service) Test(ctx context.Context, id uint) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	res, err := Execute(ctx, src, "", "SELECT VERSION()", 1)
+	res, err := Execute(ctx, src, "", "SELECT VERSION()", 1, false)
 	if err != nil {
 		return "", err
 	}
@@ -261,6 +264,7 @@ func apply(src *model.DataSource, in Input) error {
 	src.Host = strings.TrimSpace(in.Host)
 	src.User = strings.TrimSpace(in.User)
 	src.Database = strings.TrimSpace(in.Database)
+	src.Databases = strings.TrimSpace(in.Databases)
 	src.Params = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(in.Params), "?"))
 	src.Note = strings.TrimSpace(in.Note)
 	src.SSHHost = strings.TrimSpace(in.SSHHost)
@@ -290,6 +294,9 @@ func apply(src *model.DataSource, in Input) error {
 	}
 	if in.Disabled != nil {
 		src.Disabled = *in.Disabled
+	}
+	if in.ReadOnly != nil {
+		src.ReadOnly = *in.ReadOnly
 	}
 
 	switch {

@@ -13,8 +13,10 @@ import "time"
 // （含 SSH 隧道），因此这张表里没有任何运行态字段——面板重启、隧道断掉
 // 都不需要对账。
 //
-// 权限边界刻意不做在这里：能跑什么 SQL 由数据库账号决定（要只读就配只读
-// 账号），软件层不做语句白名单——半吊子的语句过滤只会给人错误的安全感。
+// 读写边界有两道：数据源上的 ReadOnly 开关（软件层闸门，见其注释）与
+// 连接账号的授权范围（真正的边界）。前者让「这条连接只用来查」成为一个
+// 可配置的事实，后者保证就算闸门被绕过也改不动东西——要绝对安全，
+// 就给这条连接配一个只有 SELECT 的账号。
 type DataSource struct {
 	ID uint `gorm:"primaryKey" json:"id"`
 	// Project 是数据源归属的项目，建议与工作区项目同名（`pp-game`），
@@ -31,6 +33,16 @@ type DataSource struct {
 	Password string `gorm:"size:512" json:"-"`
 	// Database 是默认库，可空（空则连上后再按需选库）。
 	Database string `gorm:"size:128" json:"database"`
+	// Databases 是这个数据源允许访问的库，逗号分隔。
+	//
+	// 空表示**沿用 Database**——配了默认库就只看那一个。这是有意的默认：
+	// 一个账号常常能连到整台实例上的全部库，而用户配数据源时心里想的
+	// 是「这个项目的库」，不是「这台机器上的所有库」。要跨库就把库都
+	// 列在这里，或者填 `*` 显式放开。
+	//
+	// **这是收窄视野，不是安全边界**：明写 `别的库.表` 的 SQL 会被挡，
+	// 但动态 SQL、存储过程绕得过去。真正的边界是连接账号的授权范围。
+	Databases string `gorm:"size:512" json:"databases"`
 	// Params 是追加到 DSN 的额外参数（如 `charset=utf8mb4&tls=skip-verify`）。
 	Params string `gorm:"size:512" json:"params"`
 	Note   string `gorm:"size:512" json:"note"`
@@ -49,6 +61,15 @@ type DataSource struct {
 	// SSHKeyPath 是私钥文件路径（不把私钥内容搬进库，权限跟着文件系统走）。
 	SSHKeyPath    string `gorm:"size:512" json:"sshKeyPath"`
 	SSHPassphrase string `gorm:"size:512" json:"-"`
+
+	// ReadOnly 决定这条连接能不能改数据：只读时软件层拒绝执行写语句
+	// （INSERT/UPDATE/DELETE/DDL 等）。默认开——新配的连接先按不能写
+	// 对待，要写是明确的一次决定。
+	//
+	// **这是闸门不是边界**：它按首关键字判断语句类型，挡不住存储过程里
+	// 的写操作、动态拼出来再执行的 SQL、以及有副作用的函数。真正的边界
+	// 仍是连接账号的授权范围——要绝对不可写，就配一个只有 SELECT 的账号。
+	ReadOnly bool `gorm:"not null;default:true" json:"readOnly"`
 
 	// Disabled 的数据源不会挂进会话的 MCP 工具面，页面里仍可编辑。
 	Disabled  bool      `gorm:"not null;default:false" json:"disabled"`

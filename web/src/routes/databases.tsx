@@ -231,6 +231,11 @@ function EnvRow({
           {source.host}:{source.port}
           {source.database ? `/${source.database}` : ""}
         </span>
+        {source.readOnly ? (
+          <span className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground">
+            {t("db.readOnlyBadge")}
+          </span>
+        ) : null}
         {source.sshEnabled ? (
           <NetworkIcon
             className="size-3.5 shrink-0 text-muted-foreground"

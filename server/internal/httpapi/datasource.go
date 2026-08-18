@@ -159,7 +159,9 @@ func (h datasourceHandler) query(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	res, err := datasource.Execute(r.Context(), src, req.Database, req.SQL, req.MaxRows)
+	// 界面上的 SQL 控制台按数据源的只读开关放行：连接配成只读时，
+	// 人在这里也跑不了写语句——一个开关管住所有入口。
+	res, err := datasource.Execute(r.Context(), src, req.Database, req.SQL, req.MaxRows, !src.ReadOnly)
 	if err != nil {
 		writeError(w, err)
 		return

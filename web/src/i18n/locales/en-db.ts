@@ -23,12 +23,20 @@ export const enDb = {
   password: "Password",
   passwordKeep: "Leave empty to keep current",
   database: "Default database",
+  databasesScope: "Accessible databases",
+  databasesScopePlaceholder: "Empty = default database only; comma-separated; * = no limit",
+  databasesScopeHint:
+    "One account usually reaches every database on the instance. Left empty, the scope is the default database above — that is all the AI and the UI can see. This narrows visibility, it is not a security boundary: SQL that spells out another-db.table is rejected, but dynamic SQL gets around it. The real boundary is what the account is granted.",
   databaseOptional: "Optional",
   params: "Parameters",
   paramsPlaceholder: "charset=utf8mb4&tls=skip-verify",
   note: "Note",
   enabled: "Enabled",
   disabled: "Disabled",
+  readOnly: "Read-only connection",
+  readOnlyHint:
+    "While on, write statements are rejected and the AI is not even given the execute tool — only the query one. Turn it off to allow changing data or schema. This is a gate, not a boundary: stored procedures and dynamic SQL get around it; for a hard guarantee, give this connection an account that only has SELECT.",
+  readOnlyBadge: "read-only",
   disabledHint:
     "Disabled sources are not exposed to the AI, but stay editable here.",
   tabGeneral: "General",

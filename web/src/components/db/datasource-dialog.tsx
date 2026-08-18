@@ -100,6 +100,7 @@ function DataSourceForm({
     user: source?.user ?? "root",
     password: "",
     database: source?.database ?? "",
+    databases: source?.databases ?? "",
     params: source?.params ?? "",
     note: source?.note ?? "",
     sshEnabled: source?.sshEnabled ?? false,
@@ -110,6 +111,7 @@ function DataSourceForm({
     sshPassword: "",
     sshKeyPath: source?.sshKeyPath ?? "",
     sshPassphrase: "",
+    readOnly: source?.readOnly ?? true,
     disabled: source?.disabled ?? false,
   }))
   const [saving, setSaving] = useState(false)
@@ -261,6 +263,22 @@ function DataSourceForm({
                 placeholder={t("db.databaseOptional")}
                 onChange={(e) => set("database", e.target.value)}
               />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="ds-databases">
+                {t("db.databasesScope")}
+              </FieldLabel>
+              <Input
+                id="ds-databases"
+                className="font-mono"
+                value={form.databases}
+                placeholder={t("db.databasesScopePlaceholder")}
+                onChange={(e) => set("databases", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("db.databasesScopeHint")}
+              </p>
             </Field>
           </FieldGroup>
         </TabsContent>
@@ -420,6 +438,18 @@ function DataSourceForm({
                 onChange={(e) => set("note", e.target.value)}
               />
             </Field>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="ds-readonly"
+                checked={form.readOnly}
+                onCheckedChange={(v) => set("readOnly", v)}
+              />
+              <FieldLabel htmlFor="ds-readonly">{t("db.readOnly")}</FieldLabel>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("db.readOnlyHint")}
+            </p>
+
             <div className="flex items-center gap-2">
               <Switch
                 id="ds-enabled"

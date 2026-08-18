@@ -54,7 +54,10 @@ type ExecResult struct {
 // 出错那条带上错误文本，后面的不执行——半截脚本继续跑下去只会把数据
 // 搞得更乱。全部语句共用同一条物理连接，所以事务、临时表、会话变量
 // 跨语句有效。
-func Execute(ctx context.Context, src *model.DataSource, database, script string, maxRows int) (*ExecResult, error) {
+// allowWrite 表示这次调用是否允许改数据：查询通道（db_query、界面的查询）
+// 传 false，执行通道（db_execute）传 `!src.ReadOnly`。
+func Execute(ctx context.Context, src *model.DataSource, database, script string,
+	maxRows int, allowWrite bool) (*ExecResult, error) {
 	stmts := Split(script)
 	if len(stmts) == 0 {
 		return nil, fmt.Errorf("%w: 没有可执行的语句", service.ErrInvalid)
@@ -63,6 +66,18 @@ func Execute(ctx context.Context, src *model.DataSource, database, script string
 		maxRows = defaultMaxRows
 	}
 	maxRows = min(maxRows, maxRowsHard)
+
+	// 库级范围：指定的库要在范围内，语句里也不能明写范围外的库
+	//（收窄视野而非安全边界，边界说明见 allow.go）。
+	if err := guardDatabase(src, database); err != nil {
+		return nil, err
+	}
+	if err := guardStatements(src, stmts); err != nil {
+		return nil, err
+	}
+	if err := guardWrites(src, stmts, allowWrite); err != nil {
+		return nil, err
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

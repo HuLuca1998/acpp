@@ -47,12 +47,26 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 		if err != nil {
 			return nil, err
 		}
-		return s.tools(cwd), nil
+		// 执行工具只在**存在可写数据源**时才出现在清单里：全是只读连接
+		// 的会话，模型连这个工具都看不到，也就不会去试。
+		sources, err := s.ForCwd(ctx, cwd, true)
+		if err != nil {
+			return nil, err
+		}
+		writable := false
+		for i := range sources {
+			if !sources[i].ReadOnly {
+				writable = true
+				break
+			}
+		}
+		return s.tools(cwd, writable), nil
 	})
 }
 
-// tools 构造这条会话可用的工具集。cwd 决定项目，项目决定数据源。
-func (s *Service) tools(cwd string) []mcp.Tool {
+// tools 构造这条会话可用的工具集。cwd 决定项目，项目决定数据源；
+// writable 决定要不要挂执行工具。
+func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 	// 每个工具都现取数据源而不是闭包捕获一份：配置页刚改完的连接，
 	// 下一次调用就该生效，不该等会话重开。
 	sources := func(ctx context.Context) ([]model.DataSource, error) {
@@ -66,7 +80,7 @@ func (s *Service) tools(cwd string) []mcp.Tool {
 		return Resolve(list, ref)
 	}
 
-	return []mcp.Tool{{
+	tools := []mcp.Tool{{
 		Name: "db_sources",
 		Description: "列出当前项目可用的数据库数据源（每个环境一条：local/dev/pre…）。" +
 			"不确定要连哪个环境时先调它。只能看到当前工作目录所属项目的数据源。",
@@ -79,8 +93,9 @@ func (s *Service) tools(cwd string) []mcp.Tool {
 			return renderSources(list), nil
 		},
 	}, {
-		Name:        "db_databases",
-		Description: "列出一个数据源上的全部数据库（库名、字符集、表数量）。",
+		Name: "db_databases",
+		Description: "列出这个数据源允许访问的数据库（库名、字符集、表数量）。" +
+			"数据源可能限定了范围，列出来的就是全部可用的库——不在其中的库访问会被拒绝。",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"source": sourceArg()},
@@ -146,35 +161,70 @@ func (s *Service) tools(cwd string) []mcp.Tool {
 		},
 	}, {
 		Name: "db_query",
-		Description: "在数据源上执行 SQL，支持一次提交多条语句（用分号分隔，按顺序执行，" +
-			"遇错即停，前面成功的结果照常返回）。查询结果默认最多返回 " +
-			itoa(defaultMaxRows) + " 行——需要总量用 COUNT(*)，不要靠翻页硬取。" +
-			"能改数据也能改结构，权限由连接账号决定；跑写操作前先确认这是不是用户要的环境。",
+		Description: "在数据源上查询数据（只能跑 SELECT / SHOW / DESC / EXPLAIN 一类语句，" +
+			"写语句会被拒绝——改数据用 db_execute）。可一次提交多条语句（分号分隔，" +
+			"按序执行、遇错即停）。结果默认最多 " + itoa(defaultMaxRows) +
+			" 行——要总量用 COUNT(*)，不要靠翻页硬取。",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"source":   sourceArg(),
 				"database": databaseArg(),
-				"sql":      map[string]any{"type": "string", "description": "要执行的 SQL，可含多条语句"},
+				"sql":      map[string]any{"type": "string", "description": "要执行的查询，可含多条语句"},
 			},
 			"required": []string{"sql"},
 		},
 		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			args := parseArgs(raw)
-			if strings.TrimSpace(args.SQL) == "" {
-				return "", fmt.Errorf("sql 不能为空")
-			}
-			src, err := pick(ctx, args.Source)
-			if err != nil {
-				return "", err
-			}
-			res, err := Execute(ctx, src, args.Database, args.SQL, defaultMaxRows)
-			if err != nil {
-				return "", err
-			}
-			return renderExec(src, res), nil
+			return runSQL(ctx, pick, raw, false)
 		},
 	}}
+
+	if !writable {
+		return tools
+	}
+	return append(tools, mcp.Tool{
+		Name: "db_execute",
+		Description: "在数据源上执行**会改变数据或结构**的 SQL（INSERT / UPDATE / DELETE / DDL）。" +
+			"只对没有开启只读的数据源可用，只读数据源上调用会被拒绝。" +
+			"可一次提交多条语句（分号分隔，按序执行、遇错即停；前面成功的不会回滚）。" +
+			"跑之前先确认这是不是用户要的环境——`local` 和 `pre` 只差两个字母。",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"source":   sourceArg(),
+				"database": databaseArg(),
+				"sql":      map[string]any{"type": "string", "description": "要执行的语句，可含多条"},
+			},
+			"required": []string{"sql"},
+		},
+		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			return runSQL(ctx, pick, raw, true)
+		},
+	})
+}
+
+// runSQL 是两个执行工具的共同实现。write 为 true 时走执行通道——那时
+// 数据源必须没开只读，否则连跑都不跑。
+func runSQL(ctx context.Context, pick func(context.Context, string) (*model.DataSource, error),
+	raw json.RawMessage, write bool) (string, error) {
+	args := parseArgs(raw)
+	if strings.TrimSpace(args.SQL) == "" {
+		return "", fmt.Errorf("sql 不能为空")
+	}
+	src, err := pick(ctx, args.Source)
+	if err != nil {
+		return "", err
+	}
+	if write && src.ReadOnly {
+		return "", fmt.Errorf("数据源 %s 配置为只读，不能执行写语句。"+
+			"要改数据得先去数据库页把这条连接的「只读」关掉——这是用户的决定，不要绕过它",
+			src.Ref)
+	}
+	res, err := Execute(ctx, src, args.Database, args.SQL, defaultMaxRows, write)
+	if err != nil {
+		return "", err
+	}
+	return renderExec(src, res), nil
 }
 
 type toolArgs struct {

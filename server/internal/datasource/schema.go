@@ -98,7 +98,12 @@ func Databases(ctx context.Context, src *model.DataSource) ([]Database, error) {
 		d.System = systemSchemas[strings.ToLower(d.Name)]
 		out = append(out, d)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// 收窄到数据源允许的范围：一个账号常能连到整台实例，但用户配这条
+	// 连接时想的是「这个项目的库」（见 allow.go）。
+	return filterDatabases(src, out), nil
 }
 
 // Tables 列出一个库里的表与视图。
@@ -108,6 +113,9 @@ func Tables(ctx context.Context, src *model.DataSource, database string) ([]Tabl
 	}
 	if strings.TrimSpace(database) == "" {
 		return nil, fmt.Errorf("%w: 未指定数据库", service.ErrInvalid)
+	}
+	if err := guardDatabase(src, database); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
@@ -145,6 +153,9 @@ func Describe(ctx context.Context, src *model.DataSource, database, table string
 	}
 	if strings.TrimSpace(database) == "" || strings.TrimSpace(table) == "" {
 		return nil, fmt.Errorf("%w: 需要同时指定库与表", service.ErrInvalid)
+	}
+	if err := guardDatabase(src, database); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
