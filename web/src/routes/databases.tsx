@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { toast } from "sonner"
 
 import { ListPageStates } from "@/components/list-page-states"
@@ -8,10 +9,14 @@ import { DataSourceExplorer } from "@/components/db/datasource-explorer"
 import { StatusDot } from "@/components/status-dot"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { usePagedData } from "@/hooks/use-paged-data"
-import { DataPagination } from "@/components/data-pagination"
+import { DataTable } from "@/components/data-table/data-table"
+import { DataTableHeader } from "@/components/data-table/data-table-header"
+import type { dataTableFeatures } from "@/components/data-table/data-table-features"
+import type { ColumnDef } from "@tanstack/react-table"
 import { api } from "@/lib/api"
-import { cn } from "@/lib/utils"
 import type { DataSource } from "@/types/acp"
+
+type SourceColumn = ColumnDef<typeof dataTableFeatures, DataSource, unknown>
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,14 +36,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   DatabaseIcon,
   PencilIcon,
@@ -62,8 +59,10 @@ export function Databases() {
     error,
     page,
     pageSize,
+    sorting,
     setPage,
     setPageSize,
+    setSorting,
     replace,
     remove: dropRow,
   } = usePagedData((params) => api.datasources.list(params))
@@ -109,6 +108,8 @@ export function Databases() {
     }
   }
 
+  const columns = sourceColumns(t, openEdit, setDeleting)
+
   return (
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <Card>
@@ -123,56 +124,37 @@ export function Databases() {
           </CardAction>
         </CardHeader>
         <CardContent>
-          {error || sources === null || sources.length === 0 ? (
-            <ListPageStates
-              icon={<DatabaseIcon />}
-              error={error}
-              loading={sources === null}
-              emptyTitle={t("db.empty")}
-              emptyHint={t("db.emptyHint")}
-              emptyAction={
-                <Button size="sm" onClick={() => openEdit(null)}>
-                  <PlusIcon data-icon="inline-start" />
-                  {t("db.add")}
-                </Button>
-              }
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("db.project")}</TableHead>
-                  <TableHead>{t("db.env")}</TableHead>
-                  <TableHead>{t("db.database")}</TableHead>
-                  <TableHead>{t("db.address")}</TableHead>
-                  <TableHead>{t("db.mode")}</TableHead>
-                  <TableHead className="w-20" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sources.map((source) => (
-                  <SourceRow
-                    key={source.id}
-                    source={source}
-                    active={opened?.id === source.id}
-                    onToggle={() =>
-                      setOpened((prev) =>
-                        prev?.id === source.id ? null : source
-                      )
-                    }
-                    onEdit={() => openEdit(source)}
-                    onDelete={() => setDeleting(source)}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          )}
-          <DataPagination
+          <DataTable
+            columns={columns}
+            data={error ? null : sources}
             total={total}
             page={page}
             pageSize={pageSize}
+            sorting={sorting}
             onPage={setPage}
             onPageSize={setPageSize}
+            onSorting={setSorting}
+            onRowClick={(source) =>
+              setOpened((prev) => (prev?.id === source.id ? null : source))
+            }
+            rowClassName={(source) =>
+              opened?.id === source.id ? "bg-accent/50" : undefined
+            }
+            empty={
+              <ListPageStates
+                icon={<DatabaseIcon />}
+                error={error}
+                loading={sources === null}
+                emptyTitle={t("db.empty")}
+                emptyHint={t("db.emptyHint")}
+                emptyAction={
+                  <Button size="sm" onClick={() => openEdit(null)}>
+                    <PlusIcon data-icon="inline-start" />
+                    {t("db.add")}
+                  </Button>
+                }
+              />
+            }
           />
         </CardContent>
       </Card>
@@ -247,53 +229,93 @@ function addressOf(source: DataSource): string {
   return `${jump}:${source.sshPort} → ${target}`
 }
 
-function SourceRow({
-  source,
-  active,
-  onToggle,
-  onEdit,
-  onDelete,
-}: {
-  source: DataSource
-  active: boolean
-  onToggle: () => void
-  onEdit: () => void
-  onDelete: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <TableRow
-      className={cn("group cursor-pointer", active && "bg-accent/50")}
-      onClick={onToggle}
-    >
-      <TableCell className="font-medium">
+/**
+ * 数据源列表的列定义。放在组件外是为了让它读起来就是「这张表长什么样」，
+ * 但它要用 t 与两个回调，所以做成工厂。
+ */
+function sourceColumns(
+  t: TFunction,
+  onEdit: (source: DataSource) => void,
+  onDelete: (source: DataSource) => void
+): SourceColumn[] {
+  return [
+    {
+      id: "project",
+      accessorFn: (source: DataSource) => source.project,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("db.project")} />
+      ),
+      meta: { label: t("db.project"), className: "font-medium" },
+      cell: ({ row }) => (
         <span className="flex items-center gap-2">
-          <StatusDot tone={source.disabled ? "muted" : "success"} />
-          {source.project}
+          <StatusDot tone={row.original.disabled ? "muted" : "success"} />
+          {row.original.project}
         </span>
-      </TableCell>
-      <TableCell className="font-mono">{source.env}</TableCell>
-      <TableCell className="font-mono text-muted-foreground">
-        {source.database}
-      </TableCell>
-      <TableCell
-        className="max-w-72 truncate font-mono text-muted-foreground tabular-nums"
-        title={source.sshEnabled ? t("db.viaSsh") : undefined}
-      >
-        {addressOf(source)}
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        {source.readOnly ? t("db.readOnlyBadge") : t("db.writable")}
-      </TableCell>
-      <TableCell className="py-0">
+      ),
+    },
+    {
+      id: "env",
+      accessorFn: (source: DataSource) => source.env,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("db.env")} />
+      ),
+      meta: { label: t("db.env"), className: "font-mono" },
+      cell: ({ row }) => row.original.env,
+    },
+    {
+      id: "database",
+      accessorFn: (source: DataSource) => source.database,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("db.database")} />
+      ),
+      meta: {
+        label: t("db.database"),
+        className: "font-mono text-muted-foreground",
+      },
+      cell: ({ row }) => row.original.database,
+    },
+    {
+      id: "host",
+      accessorFn: (source: DataSource) => source.host,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("db.address")} />
+      ),
+      meta: {
+        label: t("db.address"),
+        className:
+          "max-w-72 truncate font-mono text-muted-foreground tabular-nums",
+      },
+      cell: ({ row }) => (
+        <span title={row.original.sshEnabled ? t("db.viaSsh") : undefined}>
+          {addressOf(row.original)}
+        </span>
+      ),
+    },
+    {
+      id: "read_only",
+      accessorFn: (source: DataSource) => source.readOnly,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("db.mode")} />
+      ),
+      meta: { label: t("db.mode"), className: "text-muted-foreground" },
+      cell: ({ row }) =>
+        row.original.readOnly ? t("db.readOnlyBadge") : t("db.writable"),
+    },
+    {
+      id: "actions",
+      enableSorting: false,
+      enableHiding: false,
+      meta: { className: "w-20 py-0" },
+      cell: ({ row }) => (
         <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Button
             variant="ghost"
             size="icon"
             aria-label={t("db.editTitle")}
             onClick={(e) => {
+              // 行本身是展开/收起，编辑与删除不该顺带把它也切一下。
               e.stopPropagation()
-              onEdit()
+              onEdit(row.original)
             }}
           >
             <PencilIcon />
@@ -304,13 +326,13 @@ function SourceRow({
             aria-label={t("common.delete")}
             onClick={(e) => {
               e.stopPropagation()
-              onDelete()
+              onDelete(row.original)
             }}
           >
             <Trash2Icon />
           </Button>
         </div>
-      </TableCell>
-    </TableRow>
-  )
+      ),
+    },
+  ]
 }

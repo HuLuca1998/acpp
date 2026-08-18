@@ -14,7 +14,7 @@ type roleHandler struct {
 func (h roleHandler) list(w http.ResponseWriter, r *http.Request) {
 	pageNum, pageSize := pageParams(r)
 
-	sort := sortParams(r, "name", "agent_id", "model", "updated_at")
+	sort := sortParams(r, "name", "agent_id", "model", "level", "updated_at")
 	roles, total, err := h.roles.ListPage(r.Context(), pageNum, pageSize, sort.OrderBy(""))
 	if err != nil {
 		writeError(w, err)
