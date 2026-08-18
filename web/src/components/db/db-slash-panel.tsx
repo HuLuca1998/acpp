@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next"
 
 import { api } from "@/lib/api"
-import { cn } from "@/lib/utils"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource } from "@/types/acp"
 import { Button } from "@/components/ui/button"
@@ -12,6 +11,9 @@ import { DatabaseIcon, TableIcon, XIcon } from "lucide-react"
 /**
  * `/db` 的结果卡：浮在输入框上方，只给用户看。
  *
+ * 两级——`/db` 列本项目的数据源、`/db <环境>` 列那条连接的表。中间没有
+ * 「选库」这一层：一条连接只对应一个库。
+ *
  * 刻意不进对话流：查一眼有哪些库是「顺手看看」，不该变成一条消息占着
  * 上下文，也不该等 agent 响应。关掉即走，刷新不留痕。
  *
@@ -20,7 +22,7 @@ import { DatabaseIcon, TableIcon, XIcon } from "lucide-react"
  */
 export function DbSlashPanel({
   sessionId,
-  /** 命令参数：空 = 列数据源，`<env>` = 列库，`<env> <db>` = 列表。 */
+  /** 命令参数：空 = 列数据源，`<env>` = 列那条连接的表。 */
   args,
   onClose,
 }: {
@@ -29,7 +31,7 @@ export function DbSlashPanel({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const [envArg, dbArg] = args.split(/\s+/).filter(Boolean)
+  const [envArg] = args.split(/\s+/).filter(Boolean)
   const { data: sources, error } = useAsyncData(
     () => api.sessions.datasources(sessionId),
     [sessionId]
@@ -72,10 +74,12 @@ export function DbSlashPanel({
             {t("db.pickSource")}：
             {sources.map((s) => s.env).join(" / ")}
           </p>
-        ) : dbArg ? (
-          <TableList sessionId={sessionId} source={picked} database={dbArg} />
         ) : (
-          <DatabaseList sessionId={sessionId} source={picked} />
+          <TableList
+            sessionId={sessionId}
+            source={picked}
+            database={picked.database}
+          />
         )}
       </div>
     </div>
@@ -99,42 +103,6 @@ function SourceList({ sources }: { sources: DataSource[] }) {
               {t("db.disabled")}
             </span>
           ) : null}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function DatabaseList({
-  sessionId,
-  source,
-}: {
-  sessionId: number
-  source: DataSource
-}) {
-  const { t } = useTranslation()
-  const { data, error } = useAsyncData(
-    () => api.sessions.datasourceDatabases(sessionId, source.id),
-    [sessionId, source.id]
-  )
-
-  if (error) return <p className="px-1 py-2 text-destructive">{error}</p>
-  if (!data) return <Skeleton className="h-16 w-full" />
-
-  return (
-    <ul className="flex flex-col gap-0.5">
-      {data.map((d) => (
-        <li
-          key={d.name}
-          className={cn(
-            "flex items-center gap-2 px-1 py-1",
-            d.system && "text-muted-foreground"
-          )}
-        >
-          <span className="min-w-0 flex-1 truncate font-mono">{d.name}</span>
-          <span className="shrink-0 text-muted-foreground tabular-nums">
-            {t("db.tableCount", { count: d.tables })}
-          </span>
         </li>
       ))}
     </ul>

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -38,6 +38,9 @@ import {
 } from "@/components/ui/table"
 import { DramaIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
+/** 一页多少条：与会话列表同一个尺度。 */
+const PAGE_SIZE = 50
+
 /**
  * 角色页（adr-006）：编排里可雇佣的子代理定义。列表 + Dialog 编辑，
  * 角色是轻量配置对象，不配详情路由。
@@ -45,10 +48,32 @@ import { DramaIcon, PlusIcon, Trash2Icon } from "lucide-react"
 export function Roles() {
   const { t } = useTranslation()
   const {
-    data: roles,
+    data,
     error,
-    setData: setRoles,
-  } = useAsyncData(() => api.roles.list(), [])
+    setData,
+  } = useAsyncData(() => api.roles.list({ pageSize: PAGE_SIZE }), [])
+  const roles = data?.items ?? null
+  const total = data?.total ?? 0
+
+  /** 追加下一页：以已加载条数推算页码，不维护独立游标。 */
+  const loadMore = useCallback(() => {
+    const loaded = roles?.length ?? 0
+    api.roles
+      .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
+      .then((res) => {
+        setData((prev) => {
+          const seen = new Set((prev?.items ?? []).map((r) => r.id))
+          return {
+            ...res,
+            items: [
+              ...(prev?.items ?? []),
+              ...res.items.filter((r) => !seen.has(r.id)),
+            ],
+          }
+        })
+      })
+      .catch((err) => toast.error((err as Error).message))
+  }, [roles, setData])
   const { data: agents } = useAsyncData(
     () => api.agents.list().then((res) => res.items),
     []
@@ -71,13 +96,15 @@ export function Roles() {
   }
 
   function onSaved(saved: Role) {
-    setRoles((prev) => {
-      if (!prev) return [saved]
-      const index = prev.findIndex((r) => r.id === saved.id)
-      if (index < 0) return [...prev, saved]
-      const next = [...prev]
-      next[index] = saved
-      return next
+    setData((prev) => {
+      const items = prev?.items ?? []
+      const at = items.findIndex((r) => r.id === saved.id)
+      return {
+        items: at >= 0 ? items.with(at, saved) : [...items, saved],
+        total: at >= 0 ? (prev?.total ?? items.length) : (prev?.total ?? 0) + 1,
+        page: prev?.page ?? 1,
+        pageSize: prev?.pageSize ?? PAGE_SIZE,
+      }
     })
   }
 
@@ -85,7 +112,15 @@ export function Roles() {
     if (!deleting) return
     try {
       await api.roles.remove(deleting.id)
-      setRoles((prev) => prev?.filter((r) => r.id !== deleting.id) ?? null)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.filter((r) => r.id !== deleting.id),
+              total: Math.max(prev.total - 1, 0),
+            }
+          : prev
+      )
       toast.success(t("roles.deleted"))
     } catch (err) {
       toast.error((err as Error).message)
@@ -191,6 +226,18 @@ export function Roles() {
                 </TableBody>
               </Table>
             )}
+            {roles !== null && roles.length < total ? (
+              <div className="flex justify-center py-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={loadMore}
+                >
+                  {t("roles.loadMore", { loaded: roles.length, total })}
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

@@ -126,6 +126,7 @@ export default {
     cloningHere:
       "Cloning into this directory; files appear once the download finishes.",
     empty: "No roles yet",
+    loadMore: "Loaded {{loaded}} of {{total}} — load more",
     emptyHint:
       "Once created, the conductor can hire roles by name for subtasks.",
     editTitle: "Edit role",

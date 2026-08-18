@@ -11,6 +11,7 @@ package datasource
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net"
 	"strings"
@@ -79,7 +80,6 @@ type Input struct {
 	User          string  `json:"user"`
 	Password      *string `json:"password"`
 	Database      string  `json:"database"`
-	Databases     string  `json:"databases"`
 	Params        string  `json:"params"`
 	Note          string  `json:"note"`
 	SSHEnabled    *bool   `json:"sshEnabled"`
@@ -94,16 +94,38 @@ type Input struct {
 	Disabled      *bool   `json:"disabled"`
 }
 
-// List 返回全部数据源（配置页用，不做项目过滤）。
-func (s *Service) List(ctx context.Context) ([]model.DataSource, error) {
+// List 按项目 + 环境排序分页返回（配置页用，不做项目过滤）。
+//
+// 分页不是为了「现在」——是为了不给未来留一个随数据量线性变慢的读路径。
+// 一次全量返回在几条连接时看不出问题，等到几百条时它已经长在页面加载里了。
+func (s *Service) List(ctx context.Context, page, pageSize int) ([]model.DataSource, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+
+	q := s.db.WithContext(ctx).Model(&model.DataSource{})
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count datasources: %w", err)
+	}
+
 	var out []model.DataSource
-	if err := s.db.WithContext(ctx).Order("project, env").Find(&out).Error; err != nil {
-		return nil, fmt.Errorf("list datasources: %w", err)
+	err := q.Order("project, env").
+		Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&out).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("list datasources: %w", err)
 	}
 	for i := range out {
 		decorate(&out[i])
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // ForCwd 返回某个工作目录所属项目下的数据源——会话侧的**唯一**取数入口。
@@ -235,6 +257,58 @@ func (s *Service) Delete(ctx context.Context, id uint) error {
 	return nil
 }
 
+// ProbeDatabases 列出一组连接参数能看到的全部库——**只给配置页选库用**。
+//
+// 它是唯一不受「一条连接一个库」约束的读法，因为那时连接还没绑定库。
+// 入参是完整连接参数而不是 id：新建连接时还没有 id，总不能逼用户先存
+// 一条没填库的记录。id 非零且没给密码时沿用已存的密码（编辑场景）。
+func (s *Service) ProbeDatabases(ctx context.Context, id uint, in Input) ([]Database, error) {
+	probe := model.DataSource{Port: 3306, SSHPort: 22, Database: "_probe"}
+	if id != 0 {
+		existing, err := s.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		probe = *existing
+	}
+	if err := apply(&probe, in); err != nil {
+		// 库还没选，这一步的「库不能为空」不算错。
+		if !strings.Contains(err.Error(), "数据库不能为空") {
+			return nil, err
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	h, err := connect(ctx, &probe, "")
+	if err != nil {
+		return nil, err
+	}
+	defer h.Close()
+
+	const q = `SELECT s.SCHEMA_NAME, s.DEFAULT_CHARACTER_SET_NAME, s.DEFAULT_COLLATION_NAME,
+		(SELECT COUNT(*) FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA = s.SCHEMA_NAME)
+		FROM information_schema.SCHEMATA s ORDER BY s.SCHEMA_NAME`
+	rows, err := h.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("列出数据库失败: %w", err)
+	}
+	defer rows.Close()
+
+	out := []Database{}
+	for rows.Next() {
+		var d Database
+		var charset, collation sql.NullString
+		if err := rows.Scan(&d.Name, &charset, &collation, &d.Tables); err != nil {
+			return nil, err
+		}
+		d.Charset, d.Collation = charset.String, collation.String
+		d.System = systemSchemas[strings.ToLower(d.Name)]
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 // Test 拨一次连接确认配置可用，返回服务端版本。
 func (s *Service) Test(ctx context.Context, id uint) (string, error) {
 	src, err := s.Get(ctx, id)
@@ -264,7 +338,6 @@ func apply(src *model.DataSource, in Input) error {
 	src.Host = strings.TrimSpace(in.Host)
 	src.User = strings.TrimSpace(in.User)
 	src.Database = strings.TrimSpace(in.Database)
-	src.Databases = strings.TrimSpace(in.Databases)
 	src.Params = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(in.Params), "?"))
 	src.Note = strings.TrimSpace(in.Note)
 	src.SSHHost = strings.TrimSpace(in.SSHHost)
@@ -280,13 +353,19 @@ func apply(src *model.DataSource, in Input) error {
 	if in.SSHPort > 0 {
 		src.SSHPort = in.SSHPort
 	}
-	if in.Password != nil {
+	// 密码类字段：**空串也视为「不修改」**，不是「清空」。
+	//
+	// 编辑时后端不下发密码（响应里只有 hasPassword），表单里那一格就是空的；
+	// 提交时它会原样发回来一个空串。若按字面意思处理，用户改一次备注就把
+	// 生产库密码清了——这个坑踩过一次（探测库列表时连不上才发现）。
+	// 真要清空密码，删了重建即可，那种需求罕见到不值得为它冒这个险。
+	if in.Password != nil && *in.Password != "" {
 		src.Password = *in.Password
 	}
-	if in.SSHPassword != nil {
+	if in.SSHPassword != nil && *in.SSHPassword != "" {
 		src.SSHPassword = *in.SSHPassword
 	}
-	if in.SSHPassphrase != nil {
+	if in.SSHPassphrase != nil && *in.SSHPassphrase != "" {
 		src.SSHPassphrase = *in.SSHPassphrase
 	}
 	if in.SSHEnabled != nil {
@@ -304,6 +383,9 @@ func apply(src *model.DataSource, in Input) error {
 		return fmt.Errorf("%w: 项目不能为空", service.ErrInvalid)
 	case src.Env == "":
 		return fmt.Errorf("%w: 环境不能为空", service.ErrInvalid)
+	case src.Database == "":
+		// 一条连接绑定一个库，这是这套设计的地基（见 model.DataSource）。
+		return fmt.Errorf("%w: 数据库不能为空——一条连接只对应一个库", service.ErrInvalid)
 	case src.Host == "":
 		return fmt.Errorf("%w: 主机不能为空", service.ErrInvalid)
 	case src.User == "":

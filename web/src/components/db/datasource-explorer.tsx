@@ -7,13 +7,6 @@ import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource, DbTable, SqlExecResult } from "@/types/acp"
 import { SqlResultView } from "@/components/db/sql-result-view"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -21,59 +14,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { PlayIcon, TableIcon } from "lucide-react"
 
 /**
- * 一个数据源的浏览与查询面：左边库/表导航，右边表结构或 SQL 控制台。
+ * 一条连接的浏览与查询面：左边表导航，右边表结构或 SQL 控制台。
+ *
+ * 没有「选库」那一层——一条连接绑定一个库（见 model.DataSource），
+ * 界面上就不该给出一个走不通的入口。
  *
  * 这里跑 SQL 的结果与对话里 AI 查询的结果用同一个 SqlResultView——
  * 同一份数据在两处长得不一样是最容易让人读错的那种不一致。
- *
- * 切库、切表靠 key 驱动子组件重挂来归零状态，不在 effect 里逐个清空：
- * 前者是 React 自己的机制，后者会引发级联渲染，还容易漏清一个字段，
- * 把上一个库的表名留在界面上。
+ * 切表靠 key 驱动子组件重挂来归零状态，不在 effect 里逐个清空。
  */
 export function DataSourceExplorer({ source }: { source: DataSource }) {
-  const { t } = useTranslation()
-  const { data: databases, error } = useAsyncData(
-    () => api.datasources.databases(source.id),
-    [source.id]
-  )
-  const [picked, setPicked] = useState("")
-
-  // 用户没选时的落点：数据源配的默认库 > 第一个业务库 > 第一个库。
-  // 省掉「打开就得先选一次」那一步。
-  const database =
-    picked ||
-    source.database ||
-    databases?.find((d) => !d.system)?.name ||
-    databases?.[0]?.name ||
-    ""
-
-  if (error) {
-    return <p className="p-4 text-sm text-destructive">{error}</p>
-  }
-  if (!databases) {
-    return <Skeleton className="h-40 w-full" />
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Select value={database} onValueChange={(v) => setPicked(v ?? "")}>
-        <SelectTrigger className="w-full sm:w-72">
-          <SelectValue placeholder={t("db.databases")} />
-        </SelectTrigger>
-        <SelectContent>
-          {databases.map((d) => (
-            <SelectItem key={d.name} value={d.name}>
-              <span className={cn(d.system && "text-muted-foreground")}>
-                {d.name}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <DatabasePane key={database} source={source} database={database} />
-    </div>
-  )
+  // 一条连接只对应一个库，所以这里没有「选库」这一层——直接进它的表。
+  return <DatabasePane source={source} database={source.database} />
 }
 
 function DatabasePane({

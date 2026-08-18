@@ -26,14 +26,7 @@ func sourceArg() map[string]any {
 	return map[string]any{
 		"type": "string",
 		"description": "数据源，填环境名（如 dev）或 项目/环境（如 pp-game/dev）。" +
-			"当前项目只有一个数据源时可省略。",
-	}
-}
-
-func databaseArg() map[string]any {
-	return map[string]any{
-		"type":        "string",
-		"description": "数据库名。省略则用数据源配置的默认库。",
+			"当前项目只有一个数据源时可省略。每个数据源固定对应一个库，不用也不能另外指定库。",
 	}
 }
 
@@ -93,9 +86,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 			return renderSources(list), nil
 		},
 	}, {
-		Name: "db_databases",
-		Description: "列出这个数据源允许访问的数据库（库名、字符集、表数量）。" +
-			"数据源可能限定了范围，列出来的就是全部可用的库——不在其中的库访问会被拒绝。",
+		Name:        "db_tables",
+		Description: "列出数据源那个库里的表与视图（表名、引擎、估算行数、注释）。",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"source": sourceArg()},
@@ -106,33 +98,11 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 			if err != nil {
 				return "", err
 			}
-			list, err := Databases(ctx, src)
+			list, err := Tables(ctx, src, "")
 			if err != nil {
 				return "", err
 			}
-			return renderDatabases(src, list), nil
-		},
-	}, {
-		Name:        "db_tables",
-		Description: "列出一个数据库里的表与视图（表名、引擎、估算行数、注释）。",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"source":   sourceArg(),
-				"database": databaseArg(),
-			},
-		},
-		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			args := parseArgs(raw)
-			src, err := pick(ctx, args.Source)
-			if err != nil {
-				return "", err
-			}
-			list, err := Tables(ctx, src, args.Database)
-			if err != nil {
-				return "", err
-			}
-			return renderTables(src, firstNonEmpty(args.Database, src.Database), list), nil
+			return renderTables(src, src.Database, list), nil
 		},
 	}, {
 		Name: "db_schema",
@@ -141,9 +111,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"source":   sourceArg(),
-				"database": databaseArg(),
-				"table":    map[string]any{"type": "string", "description": "表名"},
+				"source": sourceArg(),
+				"table":  map[string]any{"type": "string", "description": "表名"},
 			},
 			"required": []string{"table"},
 		},
@@ -153,7 +122,7 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 			if err != nil {
 				return "", err
 			}
-			detail, err := Describe(ctx, src, args.Database, args.Table)
+			detail, err := Describe(ctx, src, "", args.Table)
 			if err != nil {
 				return "", err
 			}
@@ -168,9 +137,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"source":   sourceArg(),
-				"database": databaseArg(),
-				"sql":      map[string]any{"type": "string", "description": "要执行的查询，可含多条语句"},
+				"source": sourceArg(),
+				"sql":    map[string]any{"type": "string", "description": "要执行的查询，可含多条语句"},
 			},
 			"required": []string{"sql"},
 		},
@@ -191,9 +159,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"source":   sourceArg(),
-				"database": databaseArg(),
-				"sql":      map[string]any{"type": "string", "description": "要执行的语句，可含多条"},
+				"source": sourceArg(),
+				"sql":    map[string]any{"type": "string", "description": "要执行的语句，可含多条"},
 			},
 			"required": []string{"sql"},
 		},
@@ -220,7 +187,8 @@ func runSQL(ctx context.Context, pick func(context.Context, string) (*model.Data
 			"要改数据得先去数据库页把这条连接的「只读」关掉——这是用户的决定，不要绕过它",
 			src.Ref)
 	}
-	res, err := Execute(ctx, src, args.Database, args.SQL, defaultMaxRows, write)
+	// 库固定用连接绑定的那个：调用方指定不了，也就走不到别的库去。
+	res, err := Execute(ctx, src, "", args.SQL, defaultMaxRows, write)
 	if err != nil {
 		return "", err
 	}
@@ -228,10 +196,9 @@ func runSQL(ctx context.Context, pick func(context.Context, string) (*model.Data
 }
 
 type toolArgs struct {
-	Source   string `json:"source"`
-	Database string `json:"database"`
-	Table    string `json:"table"`
-	SQL      string `json:"sql"`
+	Source string `json:"source"`
+	Table  string `json:"table"`
+	SQL    string `json:"sql"`
 }
 
 // parseArgs 解析工具参数。解析失败按空参数处理——缺参数的报错由各工具

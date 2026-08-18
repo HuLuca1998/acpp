@@ -67,7 +67,10 @@ type TableDetail struct {
 	DDL      string   `json:"ddl,omitempty"`
 }
 
-// Databases 列出数据源上的全部库，带表数量。
+// Databases 返回这条连接绑定的那个库（带表数量）。
+//
+// 名字是复数但只会有一条——一条连接只对应一个库，这里保留列表形状是为了
+// 让界面与工具的形状不变（以后要支持别的数据库类型时也不用改契约）。
 func Databases(ctx context.Context, src *model.DataSource) ([]Database, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -80,8 +83,8 @@ func Databases(ctx context.Context, src *model.DataSource) ([]Database, error) {
 
 	const q = `SELECT s.SCHEMA_NAME, s.DEFAULT_CHARACTER_SET_NAME, s.DEFAULT_COLLATION_NAME,
 		(SELECT COUNT(*) FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA = s.SCHEMA_NAME)
-		FROM information_schema.SCHEMATA s ORDER BY s.SCHEMA_NAME`
-	rows, err := h.db.QueryContext(ctx, q)
+		FROM information_schema.SCHEMATA s WHERE s.SCHEMA_NAME = ?`
+	rows, err := h.db.QueryContext(ctx, q, src.Database)
 	if err != nil {
 		return nil, fmt.Errorf("列出数据库失败: %w", err)
 	}
@@ -98,12 +101,7 @@ func Databases(ctx context.Context, src *model.DataSource) ([]Database, error) {
 		d.System = systemSchemas[strings.ToLower(d.Name)]
 		out = append(out, d)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// 收窄到数据源允许的范围：一个账号常能连到整台实例，但用户配这条
-	// 连接时想的是「这个项目的库」（见 allow.go）。
-	return filterDatabases(src, out), nil
+	return out, rows.Err()
 }
 
 // Tables 列出一个库里的表与视图。

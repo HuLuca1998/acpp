@@ -21,12 +21,20 @@ type datasourceHandler struct {
 }
 
 func (h datasourceHandler) list(w http.ResponseWriter, r *http.Request) {
-	items, err := h.sources.List(r.Context())
+	pageNum := queryInt(r, "page", 1)
+	pageSize := queryInt(r, "pageSize", 50)
+
+	items, total, err := h.sources.List(r.Context(), pageNum, pageSize)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, items)
+	writeData(w, http.StatusOK, page[model.DataSource]{
+		Items:    items,
+		Total:    total,
+		Page:     pageNum,
+		PageSize: pageSize,
+	})
 }
 
 func (h datasourceHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +106,37 @@ func (h datasourceHandler) test(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, map[string]any{"ok": true, "version": version})
+}
+
+// probeDatabases 列出一组连接参数能看到的库，供配置页选库。
+// 新建时还没有 id，所以连接参数走请求体；编辑时带上 id 就能沿用已存密码。
+func (h datasourceHandler) probeDatabases(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		datasource.Input
+		ID uint `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	list, err := h.sources.ProbeDatabases(r.Context(), req.ID, req.Input)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, list)
+}
+
+// uri 导出连接 URI。**带真实密码**（用户拍板）：不带密码的链接对方还得
+// 再问一次，等于没省事。所以这条响应本身就是凭证——它只在 owner 专属的
+// /api/datasources 前缀下，界面上也标了红。
+func (h datasourceHandler) uri(w http.ResponseWriter, r *http.Request) {
+	src, err := h.byID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, datasource.ExportURI(src))
 }
 
 func (h datasourceHandler) databases(w http.ResponseWriter, r *http.Request) {

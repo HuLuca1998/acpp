@@ -245,6 +245,10 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("PUT /api/datasources/{id}", datasources.update)
 	api.HandleFunc("DELETE /api/datasources/{id}", datasources.remove)
 	api.HandleFunc("POST /api/datasources/{id}/test", datasources.test)
+	// 连接 URI 导出（带密码，owner 专属面）。导入在前端解析，不经后端。
+	api.HandleFunc("GET /api/datasources/{id}/uri", datasources.uri)
+	// 配置页选库用：唯一不受「一条连接一个库」约束的读法（那时还没绑定）。
+	api.HandleFunc("POST /api/datasources/probe-databases", datasources.probeDatabases)
 	api.HandleFunc("GET /api/datasources/{id}/databases", datasources.databases)
 	api.HandleFunc("GET /api/datasources/{id}/tables", datasources.tables)
 	api.HandleFunc("GET /api/datasources/{id}/schema", datasources.schema)

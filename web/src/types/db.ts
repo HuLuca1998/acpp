@@ -18,9 +18,8 @@ export interface DataSource {
   host: string
   port: number
   user: string
+  /** 这条连接绑定的库，必填且唯一——所有入口都锁死在它上面。 */
   database: string
-  /** 允许访问的库（逗号分隔）；空=沿用默认库，`*`=不限。 */
-  databases: string
   params: string
   note: string
   sshEnabled: boolean
@@ -51,7 +50,6 @@ export interface DataSourceInput {
   user: string
   password?: string
   database?: string
-  databases?: string
   params?: string
   note?: string
   sshEnabled?: boolean
@@ -64,6 +62,12 @@ export interface DataSourceInput {
   sshPassphrase?: string
   readOnly?: boolean
   disabled?: boolean
+}
+
+/** 连接 URI 的两种导出写法（**含真实密码**，只在 owner 面可取）。 */
+export interface DataSourceUri {
+  navicat: string
+  standard: string
 }
 
 /** 测试连接的结果：连不上是配置问题，返回 200 带 error 文本。 */

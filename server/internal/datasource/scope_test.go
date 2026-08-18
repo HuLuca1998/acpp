@@ -102,11 +102,11 @@ func TestService_ForCwd_ProjectIsolation(t *testing.T) {
 
 	pw := "secret"
 	for _, in := range []Input{
-		{Project: "pp-game", Env: "local", Host: "127.0.0.1", User: "root", Password: &pw},
-		{Project: "pp-game", Env: "dev", Host: "10.0.0.1", User: "root", Password: &pw},
-		{Project: "other-app", Env: "prod", Host: "10.0.0.2", User: "root", Password: &pw},
+		{Project: "pp-game", Env: "local", Host: "127.0.0.1", User: "root", Password: &pw, Database: "pp_game"},
+		{Project: "pp-game", Env: "dev", Host: "10.0.0.1", User: "root", Password: &pw, Database: "pp_game"},
+		{Project: "other-app", Env: "prod", Host: "10.0.0.2", User: "root", Password: &pw, Database: "other"},
 		{Project: "pp-game", Env: "pre", Host: "10.0.0.3", User: "root", Password: &pw,
-			Disabled: ptr(true)},
+			Database: "pp_game", Disabled: ptr(true)},
 	} {
 		if _, err := svc.Create(ctx, in); err != nil {
 			t.Fatalf("create %s/%s: %v", in.Project, in.Env, err)
@@ -180,13 +180,14 @@ func TestService_Create_Validation(t *testing.T) {
 	ctx := context.Background()
 
 	bad := []Input{
-		{Env: "local", Host: "h", User: "u"},                                      // 缺项目
-		{Project: "p", Host: "h", User: "u"},                                      // 缺环境
-		{Project: "p", Env: "local", User: "u"},                                   // 缺主机
-		{Project: "p", Env: "local", Host: "h"},                                   // 缺用户
-		{Project: "a/b", Env: "local", Host: "h", User: "u"},                      // 项目含斜杠
-		{Project: "p", Env: "local", Host: "h", User: "u", SSHEnabled: ptr(true)}, // 开隧道但没跳板机
-		{Project: "p", Env: "local", Host: "h", User: "u", SSHAuth: "magic"},      // 未知验证方式
+		{Env: "local", Host: "h", User: "u", Database: "d"},                                      // 缺项目
+		{Project: "p", Host: "h", User: "u", Database: "d"},                                      // 缺环境
+		{Project: "p", Env: "local", User: "u", Database: "d"},                                   // 缺主机
+		{Project: "p", Env: "local", Host: "h", Database: "d"},                                   // 缺用户
+		{Project: "p", Env: "local", Host: "h", User: "u"},                                       // 缺库（一条连接必须绑一个库）
+		{Project: "a/b", Env: "local", Host: "h", User: "u", Database: "d"},                      // 项目含斜杠
+		{Project: "p", Env: "local", Host: "h", User: "u", Database: "d", SSHEnabled: ptr(true)}, // 开隧道但没跳板机
+		{Project: "p", Env: "local", Host: "h", User: "u", Database: "d", SSHAuth: "magic"},      // 未知验证方式
 	}
 	for i, in := range bad {
 		if _, err := svc.Create(ctx, in); err == nil {
@@ -194,11 +195,11 @@ func TestService_Create_Validation(t *testing.T) {
 		}
 	}
 
-	if _, err := svc.Create(ctx, Input{Project: "p", Env: "local", Host: "h", User: "u"}); err != nil {
+	if _, err := svc.Create(ctx, Input{Project: "p", Env: "local", Host: "h", User: "u", Database: "d"}); err != nil {
 		t.Fatalf("合法入参: %v", err)
 	}
 	// 同一项目同一环境只能有一条：重复配置只会让人分不清用的是哪个。
-	if _, err := svc.Create(ctx, Input{Project: "p", Env: "local", Host: "h2", User: "u"}); err == nil {
+	if _, err := svc.Create(ctx, Input{Project: "p", Env: "local", Host: "h2", User: "u", Database: "d"}); err == nil {
 		t.Fatal("项目+环境重复应被拒绝")
 	}
 }

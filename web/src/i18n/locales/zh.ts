@@ -120,6 +120,7 @@ export default {
     default: "默认",
     builtin: "内置",
     empty: "还没有角色",
+    loadMore: "已加载 {{loaded}} / {{total}}，继续加载",
     emptyHint: "创建角色后，编排主控就能按名字雇佣它完成子任务。",
     editTitle: "编辑角色",
     addTitle: "新建角色",

@@ -2,133 +2,76 @@ package datasource
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
 )
 
-// 库级范围：一个数据源能碰哪些库。
+// 库绑定：一条连接只对应一个库。
 //
 // 项目隔离原本只做到数据源这一层——会话只拿得到本项目的连接。但一个
-// MySQL 账号通常能连到整台实例上的全部库，于是 db_databases 会把别的
-// 项目的业务库一并列出来，AI 也就看得见、查得动。范围收窄就是补这一刀。
+// MySQL 账号通常能连到整台实例上的全部库，于是列库时别的项目的业务库
+// 一并冒出来，AI 也就看得见、查得动。把连接钉死在一个库上就没这回事了：
+// 所有入口取的都是 src.Database，传别的库名一律拒绝。
 //
-// **诚实的边界**：这里做的是入口过滤——列库时过滤、指定库时校验、SQL 里
-// 明写 `别的库.表` 时拒绝。它挡不住动态 SQL、存储过程、或者把库名拼进
-// 字符串再执行的写法。真正的边界始终是连接账号的授权范围：要让一个项目
-// 只碰得到自己的库，就给它配一个只授权那个库的 MySQL 账号。
+// **诚实的边界**：这里做的是入口过滤——指定库时校验、SQL 里明写
+// `别的库.表` 时拒绝。它挡不住动态 SQL、存储过程、或者把库名拼进字符串
+// 再执行的写法。真正的边界始终是连接账号的授权范围：要让一条连接只碰得到
+// 一个库，就给它配一个只授权那个库的 MySQL 账号。
 
-// allowAll 是显式放开的写法。
-const allowAll = "*"
-
-// allowedDatabases 返回这个数据源允许访问的库；返回 nil 表示不限。
-//
-// 优先级：Databases 显式列出 > Database（配了默认库就只看那一个）> 不限。
-func allowedDatabases(src *model.DataSource) []string {
-	if raw := strings.TrimSpace(src.Databases); raw != "" {
-		var out []string
-		for _, name := range strings.Split(raw, ",") {
-			name = strings.TrimSpace(name)
-			if name == allowAll {
-				return nil
-			}
-			if name != "" {
-				out = append(out, name)
-			}
-		}
-		return out
-	}
-	if db := strings.TrimSpace(src.Database); db != "" {
-		return []string{db}
-	}
-	return nil
-}
-
-// databaseAllowed 判断某个库是否在范围内（库名在 MySQL 里大小写规则随
-// 平台变，这里一律不区分大小写——宽一点不会造成越界，严一点会误伤）。
-func databaseAllowed(src *model.DataSource, database string) bool {
-	allowed := allowedDatabases(src)
-	if allowed == nil {
-		return true
-	}
-	database = strings.TrimSpace(database)
-	if database == "" {
-		return true // 空 = 用默认库，由连接层决定
-	}
-	for _, name := range allowed {
-		if strings.EqualFold(name, database) {
-			return true
-		}
-	}
-	return false
-}
-
-// guardDatabase 是所有「指定了库」的入口的统一校验。
+// guardDatabase 校验调用方指定的库就是这条连接绑定的那个。
+// 空表示「用这条连接的库」，一律放行。
 func guardDatabase(src *model.DataSource, database string) error {
-	if databaseAllowed(src, database) {
+	database = strings.TrimSpace(database)
+	if database == "" || strings.EqualFold(database, strings.TrimSpace(src.Database)) {
 		return nil
 	}
-	return fmt.Errorf("%w: 数据源 %s 的可访问范围不含 %q 库（当前范围：%s）",
-		service.ErrForbidden, src.Ref, database,
-		strings.Join(allowedDatabases(src), "、"))
+	return fmt.Errorf("%w: 连接 %s 只对应 %s 库，不能用它访问 %q",
+		service.ErrForbidden, src.Ref, src.Database, database)
 }
 
-// filterDatabases 把探查到的库清单收窄到范围内。
-func filterDatabases(src *model.DataSource, list []Database) []Database {
-	allowed := allowedDatabases(src)
-	if allowed == nil {
-		return list
-	}
-	out := make([]Database, 0, len(allowed))
-	for _, d := range list {
-		if databaseAllowed(src, d.Name) {
-			out = append(out, d)
-		}
-	}
-	return out
-}
-
-// guardStatements 拒绝明写了范围外库名的语句。
+// guardStatements 拒绝明写了别的库的语句。
 //
-// 只认 `库名.` 这种限定名前缀，且在剥掉字符串与注释之后判断——数据里
-// 出现的 `pp-game.users` 不该被当成跨库引用。挡不住的写法在文件头注释
-// 里写清楚了：这是收窄视野，不是安全边界。
+// 只认**表位置**（FROM/JOIN/INTO/UPDATE/TABLE 之后）的 `库名.` 限定名，
+// 且在剥掉字符串与注释之后判断：`SELECT u.id FROM app.users u` 里的 `u.`
+// 是表别名不是库引用，全局扫会把几乎每条 JOIN 都误判成跨库。
 func guardStatements(src *model.DataSource, stmts []string) error {
-	allowed := allowedDatabases(src)
-	if allowed == nil {
+	bound := strings.TrimSpace(src.Database)
+	if bound == "" {
 		return nil
 	}
 	for _, stmt := range stmts {
 		for _, name := range qualifiedDatabases(stmt) {
-			if !databaseAllowed(src, name) {
-				return fmt.Errorf("%w: 语句引用了范围外的库 %q（数据源 %s 的范围：%s）",
-					service.ErrForbidden, name, src.Ref, strings.Join(allowed, "、"))
+			if !strings.EqualFold(name, bound) {
+				return fmt.Errorf("%w: 语句引用了 %q 库，而连接 %s 只对应 %s 库",
+					service.ErrForbidden, name, src.Ref, bound)
 			}
 		}
 	}
 	return nil
 }
+
+// dotSpacing 匹配点号周围的空白：`db . tbl` 与 `db.tbl` 在 MySQL 里等价。
+var dotSpacing = regexp.MustCompile(`\s*\.\s*`)
 
 // tableKeywords 是「下一个标识符出现在表位置」的关键字。
 var tableKeywords = map[string]bool{
 	"from": true, "join": true, "into": true, "update": true, "table": true,
 }
 
-// qualifiedDatabases 提取语句里**表位置**上的 `<库>.` 限定名。
-//
-// 只看表位置是必须的：`SELECT u.id FROM app.users AS u` 里的 `u.` 是表别名
-// 限定列，不是库引用。全局扫所有 `xxx.` 会把几乎每条带 JOIN 的语句都误判
-// 成跨库——那种误伤比漏判更让人没法干活。
+// qualifiedDatabases 提取语句里表位置上的 `<库>.` 限定名。
 func qualifiedDatabases(stmt string) []string {
-	tokens := identTokens(stripLiterals(stmt))
+	// 先把点号周围的空白压掉：MySQL 认 `` `db` . `tbl` ``，不压的话
+	// 加个空格就绕过了整道闸门。
+	tokens := identTokens(dotSpacing.ReplaceAllString(stripLiterals(stmt), "."))
 	var out []string
 	for i := 0; i+1 < len(tokens); i++ {
 		if !tableKeywords[strings.ToLower(tokens[i])] {
 			continue
 		}
-		// 表位置上的 `db.table`：点号前那段是库名。三段式
-		// `db.tbl.col` 在表位置不合法，取第一段即可。
+		// 表位置上的 `db.table`：点号前那段是库名。
 		name, _, ok := strings.Cut(tokens[i+1], ".")
 		if !ok || name == "" || (name[0] >= '0' && name[0] <= '9') {
 			continue
@@ -156,7 +99,7 @@ func identTokens(s string) []string {
 }
 
 // stripLiterals 去掉字符串字面量与注释，只留语法骨架。
-// 库名检测必须在骨架上做：`WHERE note = 'pp-game.users'` 里的是数据不是引用。
+// 库名检测必须在骨架上做：`WHERE note = 'other.users'` 里的是数据不是引用。
 func stripLiterals(s string) string {
 	var b strings.Builder
 	for i, n := 0, len(s); i < n; {
@@ -166,7 +109,7 @@ func stripLiterals(s string) string {
 			b.WriteByte(' ')
 			i = scanQuoted(s, i)
 		case c == '`':
-			// 反引号是标识符引用，内容要保留（`pp-game`.users 是真跨库）。
+			// 反引号是标识符引用，内容要保留（`other-db`.users 是真跨库）。
 			j := scanQuoted(s, i)
 			b.WriteString(strings.ReplaceAll(s[i+1:max(j-1, i+1)], "``", "`"))
 			i = j

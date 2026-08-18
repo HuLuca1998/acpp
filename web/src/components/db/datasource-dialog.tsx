@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { api, ApiError } from "@/lib/api"
-import type { DataSource, DataSourceInput, SSHAuth } from "@/types/acp"
+import type {
+  DataSource,
+  DataSourceInput,
+  DbDatabase,
+  SSHAuth,
+} from "@/types/acp"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SuggestInput } from "@/components/db/suggest-input"
+import { UriDialog } from "@/components/db/uri-dialog"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
@@ -100,7 +106,6 @@ function DataSourceForm({
     user: source?.user ?? "root",
     password: "",
     database: source?.database ?? "",
-    databases: source?.databases ?? "",
     params: source?.params ?? "",
     note: source?.note ?? "",
     sshEnabled: source?.sshEnabled ?? false,
@@ -116,6 +121,7 @@ function DataSourceForm({
   }))
   const [saving, setSaving] = useState(false)
   const [test, setTest] = useState<TestState>({ status: "idle" })
+  const [uriOpen, setUriOpen] = useState(false)
 
   const set = <K extends keyof DataSourceInput>(
     key: K,
@@ -243,7 +249,9 @@ function DataSourceForm({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="ds-password">{t("db.password")}</FieldLabel>
+                <FieldLabel htmlFor="ds-password">
+                  {t("db.password")}
+                </FieldLabel>
                 <Input
                   id="ds-password"
                   type="password"
@@ -255,31 +263,14 @@ function DataSourceForm({
               </Field>
             </div>
 
-            <Field>
-              <FieldLabel htmlFor="ds-database">{t("db.database")}</FieldLabel>
-              <Input
-                id="ds-database"
-                value={form.database}
-                placeholder={t("db.databaseOptional")}
-                onChange={(e) => set("database", e.target.value)}
-              />
-            </Field>
+            {/* 一条连接只对应一个库，所以这里是必选而不是可填：
+                选定之后所有入口（界面、斜杠命令、AI）都锁死在它上面。 */}
+            <DatabasePicker
+              sourceId={source?.id ?? 0}
+              form={form}
+              onPick={(name) => set("database", name)}
+            />
 
-            <Field>
-              <FieldLabel htmlFor="ds-databases">
-                {t("db.databasesScope")}
-              </FieldLabel>
-              <Input
-                id="ds-databases"
-                className="font-mono"
-                value={form.databases}
-                placeholder={t("db.databasesScopePlaceholder")}
-                onChange={(e) => set("databases", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("db.databasesScopeHint")}
-              </p>
-            </Field>
           </FieldGroup>
         </TabsContent>
 
@@ -468,15 +459,25 @@ function DataSourceForm({
       <TestResult state={test} />
 
       <DialogFooter className="gap-2 sm:justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving || test.status === "running"}
-          onClick={handleTest}
-        >
-          {test.status === "running" ? <Spinner /> : null}
-          {test.status === "running" ? t("db.testing") : t("db.test")}
-        </Button>
+        <div className="flex gap-2">
+          {/* URI 按钮的位置照 Navicat：连接对话框左下角。 */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setUriOpen(true)}
+          >
+            {t("db.uriButton")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={saving || test.status === "running"}
+            onClick={handleTest}
+          >
+            {test.status === "running" ? <Spinner /> : null}
+            {test.status === "running" ? t("db.testing") : t("db.test")}
+          </Button>
+        </div>
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>
             {t("common.cancel")}
@@ -487,7 +488,84 @@ function DataSourceForm({
           </Button>
         </div>
       </DialogFooter>
+
+      <UriDialog
+        open={uriOpen}
+        sourceId={source?.id ?? 0}
+        onOpenChange={setUriOpen}
+        onImport={(parsed) => {
+          setForm((prev) => ({ ...prev, ...parsed }))
+          setTest({ status: "idle" })
+        }}
+      />
     </form>
+  )
+}
+
+/**
+ * 库选择器：点开时现连一次库把清单拉回来。
+ *
+ * 不做成自由输入是因为库名敲错要等到真去查表才报错，而那时人已经忘了
+ * 自己敲了什么；列表选还能顺便看到每个库有多少张表。
+ */
+function DatabasePicker({
+  sourceId,
+  form,
+  onPick,
+}: {
+  sourceId: number
+  form: DataSourceInput
+  onPick: (name: string) => void
+}) {
+  const { t } = useTranslation()
+  const [list, setList] = useState<DbDatabase[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      setList(await api.datasources.probeDatabases({ ...form, id: sourceId }))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Field>
+      <FieldLabel htmlFor="ds-database">{t("db.database")}</FieldLabel>
+      <div className="flex items-center gap-2">
+        <Select
+          value={form.database || ""}
+          onValueChange={(v) => onPick(v ?? "")}
+        >
+          <SelectTrigger id="ds-database" className="flex-1">
+            <SelectValue placeholder={t("db.databasePick")} />
+          </SelectTrigger>
+          <SelectContent>
+            {/* 已选的库先摆上，免得还没拉清单时显示成空。 */}
+            {(list ?? (form.database ? [{ name: form.database, tables: 0 }] : []))
+              .map((d) => (
+                <SelectItem key={d.name} value={d.name}>
+                  {d.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        <Button type="button" variant="outline" size="sm" disabled={loading} onClick={load}>
+          {loading ? <Spinner /> : null}
+          {t("db.databaseLoad")}
+        </Button>
+      </div>
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t("db.databaseHint")}</p>
+      )}
+    </Field>
   )
 }
 

@@ -5,6 +5,7 @@ import type {
   DataSource,
   DataSourceInput,
   DataSourceTest,
+  DataSourceUri,
   DbDatabase,
   DbTable,
   DbTableDetail,
@@ -464,7 +465,13 @@ export const api = {
   },
 
   roles: {
-    list: () => request<Role[]>("/roles"),
+    list: (params?: { page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.page) qs.set("page", String(params.page))
+      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
+      const s = qs.toString()
+      return request<Paged<Role>>(`/roles${s ? `?${s}` : ""}`)
+    },
     get: (id: number) => request<Role>(`/roles/${id}`),
     create: (input: RoleInput) =>
       request<Role>("/roles", { method: "POST", body: JSON.stringify(input) }),
@@ -659,7 +666,19 @@ export const api = {
    * 免得在会话里误用别的项目的连接。
    */
   datasources: {
-    list: () => request<DataSource[]>("/datasources"),
+    list: (params?: { page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.page) qs.set("page", String(params.page))
+      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
+      const s = qs.toString()
+      return request<Paged<DataSource>>(`/datasources${s ? `?${s}` : ""}`)
+    },
+    /** 配置页选库用：列出这组连接参数能看到的全部库（连接还没绑定库）。 */
+    probeDatabases: (input: DataSourceInput & { id?: number }) =>
+      request<DbDatabase[]>("/datasources/probe-databases", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
     get: (id: number) => request<DataSource>(`/datasources/${id}`),
     create: (input: DataSourceInput) =>
       request<DataSource>("/datasources", {
@@ -676,6 +695,8 @@ export const api = {
     /** 拨一次真连接确认配置可用，失败不抛异常而是返回 ok:false + 原话。 */
     test: (id: number) =>
       request<DataSourceTest>(`/datasources/${id}/test`, { method: "POST" }),
+    /** 导出连接 URI（Navicat 与通用两种写法，**含密码**）。 */
+    uri: (id: number) => request<DataSourceUri>(`/datasources/${id}/uri`),
     databases: (id: number) =>
       request<DbDatabase[]>(`/datasources/${id}/databases`),
     tables: (id: number, database: string) =>

@@ -42,12 +42,42 @@ func (in RoleInput) validate() error {
 	return nil
 }
 
+// List 返回全部角色。编排的调度提示词要把可雇佣角色一个不落地列出来
+// （buildOrchPrompt），所以这条路径刻意不分页——分页的是给人看的列表。
 func (s *RoleService) List(ctx context.Context) ([]model.Role, error) {
 	var roles []model.Role
 	if err := s.db.WithContext(ctx).Order("id asc").Find(&roles).Error; err != nil {
 		return nil, fmt.Errorf("list roles: %w", err)
 	}
 	return roles, nil
+}
+
+// ListPage 是角色页用的分页读法。
+func (s *RoleService) ListPage(ctx context.Context, page, pageSize int) ([]model.Role, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+
+	q := s.db.WithContext(ctx).Model(&model.Role{})
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count roles: %w", err)
+	}
+
+	var roles []model.Role
+	err := q.Order("id asc").
+		Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&roles).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("list roles: %w", err)
+	}
+	return roles, total, nil
 }
 
 func (s *RoleService) Get(ctx context.Context, id uint) (*model.Role, error) {

@@ -13,6 +13,7 @@ import "time"
 // （含 SSH 隧道），因此这张表里没有任何运行态字段——面板重启、隧道断掉
 // 都不需要对账。
 //
+// 库与读写各有一道闸门（Database 绑定、ReadOnly 开关），见各字段注释。
 // 读写边界有两道：数据源上的 ReadOnly 开关（软件层闸门，见其注释）与
 // 连接账号的授权范围（真正的边界）。前者让「这条连接只用来查」成为一个
 // 可配置的事实，后者保证就算闸门被绕过也改不动东西——要绝对安全，
@@ -31,18 +32,16 @@ type DataSource struct {
 	// Password 永不出 API：响应里只给 HasPassword 这类布尔位，
 	// 编辑时留空表示不修改。
 	Password string `gorm:"size:512" json:"-"`
-	// Database 是默认库，可空（空则连上后再按需选库）。
-	Database string `gorm:"size:128" json:"database"`
-	// Databases 是这个数据源允许访问的库，逗号分隔。
+	// Database 是这条连接绑定的库，**必填且唯一**。
 	//
-	// 空表示**沿用 Database**——配了默认库就只看那一个。这是有意的默认：
-	// 一个账号常常能连到整台实例上的全部库，而用户配数据源时心里想的
-	// 是「这个项目的库」，不是「这台机器上的所有库」。要跨库就把库都
-	// 列在这里，或者填 `*` 显式放开。
+	// 一条连接只对应一个库：所有入口（界面、斜杠命令、AI 的 MCP 工具）
+	// 都锁死在它上面，用这条连接访问别的库一律拒绝。这么定是因为一个
+	// MySQL 账号通常连得到整台实例上的全部库，而人配连接时想的从来是
+	// 「这个项目的这个库」——把范围写进配置，比每次提醒自己别走错门可靠。
 	//
-	// **这是收窄视野，不是安全边界**：明写 `别的库.表` 的 SQL 会被挡，
-	// 但动态 SQL、存储过程绕得过去。真正的边界是连接账号的授权范围。
-	Databases string `gorm:"size:512" json:"databases"`
+	// **这是闸门不是边界**：明写 `别的库.表` 的 SQL 会被挡，但动态 SQL、
+	// 存储过程绕得过去。真正的边界是连接账号的授权范围。
+	Database string `gorm:"size:128;not null" json:"database"`
 	// Params 是追加到 DSN 的额外参数（如 `charset=utf8mb4&tls=skip-verify`）。
 	Params string `gorm:"size:512" json:"params"`
 	Note   string `gorm:"size:512" json:"note"`

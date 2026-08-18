@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"acpp/server/internal/model"
 	"net/http"
 
 	"acpp/server/internal/orch"
@@ -11,12 +12,20 @@ type roleHandler struct {
 }
 
 func (h roleHandler) list(w http.ResponseWriter, r *http.Request) {
-	roles, err := h.roles.List(r.Context())
+	pageNum := queryInt(r, "page", 1)
+	pageSize := queryInt(r, "pageSize", 50)
+
+	roles, total, err := h.roles.ListPage(r.Context(), pageNum, pageSize)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, roles)
+	writeData(w, http.StatusOK, page[model.Role]{
+		Items:    roles,
+		Total:    total,
+		Page:     pageNum,
+		PageSize: pageSize,
+	})
 }
 
 func (h roleHandler) get(w http.ResponseWriter, r *http.Request) {

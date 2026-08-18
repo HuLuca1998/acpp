@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -30,26 +30,40 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
   DatabaseIcon,
-  NetworkIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react"
 
+/** 一页多少条。列表分页而不是全量拉——连接多起来时页面不该跟着变慢。 */
+const PAGE_SIZE = 50
+
 /**
- * 数据库页：按项目分组管理 MySQL 连接（adr-008）。
+ * 数据库页：管理 MySQL 连接（adr-008）。
  *
- * 分组不是装饰——数据源的身份就是「项目 + 环境」，而项目决定了哪些
- * 会话能看到它。按项目摆，看到的结构就是生效的结构。
+ * 一行一条连接（项目 / 环境 / 库 / 地址 / 读写），点行展开它的表浏览与
+ * SQL 控制台。项目与环境是这条连接的身份，项目还决定了哪些会话看得到它；
+ * 库是绑定的——一条连接只对应一个库。
  */
 export function Databases() {
   const { t } = useTranslation()
-  const {
-    data: sources,
-    error,
-    setData: setSources,
-  } = useAsyncData(() => api.datasources.list(), [])
+  const { data, error, setData } = useAsyncData(
+    () => api.datasources.list({ pageSize: PAGE_SIZE }),
+    []
+  )
+  const sources = data?.items ?? null
+  const total = data?.total ?? 0
+
   // 项目名建议来自工作区已有的仓库；拉不到不影响填写（自由输入）。
   const { data: projects } = useAsyncData(
     () =>
@@ -62,7 +76,27 @@ export function Databases() {
   const [editing, setEditing] = useState<DataSource | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState<DataSource | null>(null)
-  const [browsing, setBrowsing] = useState<DataSource | null>(null)
+  const [opened, setOpened] = useState<DataSource | null>(null)
+
+  /** 追加下一页：以已加载条数推算页码，不维护独立游标。 */
+  const loadMore = useCallback(() => {
+    const loaded = sources?.length ?? 0
+    api.datasources
+      .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
+      .then((res) => {
+        setData((prev) => {
+          const seen = new Set((prev?.items ?? []).map((s) => s.id))
+          return {
+            ...res,
+            items: [
+              ...(prev?.items ?? []),
+              ...res.items.filter((s) => !seen.has(s.id)),
+            ],
+          }
+        })
+      })
+      .catch((err) => toast.error((err as Error).message))
+  }, [sources, setData])
 
   function openEdit(source: DataSource | null) {
     setEditing(source)
@@ -70,21 +104,36 @@ export function Databases() {
   }
 
   function handleSaved(saved: DataSource) {
-    setSources((prev) => {
-      const list = prev ?? []
-      const at = list.findIndex((s) => s.id === saved.id)
-      const next = at >= 0 ? list.with(at, saved) : [...list, saved]
-      return next.sort((a, b) => a.ref.localeCompare(b.ref))
+    setData((prev) => {
+      const items = prev?.items ?? []
+      const at = items.findIndex((s) => s.id === saved.id)
+      const next = at >= 0 ? items.with(at, saved) : [...items, saved]
+      return {
+        items: next.sort((a, b) => a.ref.localeCompare(b.ref)),
+        total: at >= 0 ? (prev?.total ?? next.length) : (prev?.total ?? 0) + 1,
+        page: prev?.page ?? 1,
+        pageSize: prev?.pageSize ?? PAGE_SIZE,
+      }
     })
     setEditing(saved)
+    // 展开中的那条被改了：换成新记录，免得面板还按旧连接查。
+    setOpened((prev) => (prev?.id === saved.id ? saved : prev))
   }
 
   async function confirmDelete() {
     if (!deleting) return
     try {
       await api.datasources.remove(deleting.id)
-      setSources((prev) => (prev ?? []).filter((s) => s.id !== deleting.id))
-      if (browsing?.id === deleting.id) setBrowsing(null)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.filter((s) => s.id !== deleting.id),
+              total: Math.max(prev.total - 1, 0),
+            }
+          : prev
+      )
+      if (opened?.id === deleting.id) setOpened(null)
       toast.success(t("db.deleted"))
     } catch (err) {
       toast.error((err as Error).message)
@@ -93,63 +142,54 @@ export function Databases() {
     }
   }
 
-  const groups = groupByProject(sources ?? [])
-
   return (
     <div className="flex flex-col gap-4 p-4 lg:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold">{t("db.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("db.description")}</p>
-        </div>
-        <Button onClick={() => openEdit(null)}>
-          <PlusIcon data-icon="inline-start" />
-          {t("db.add")}
-        </Button>
-      </div>
-
-      {sources === null || error || sources.length === 0 ? (
-        <ListPageStates
-          icon={<DatabaseIcon />}
-          error={error}
-          loading={sources === null}
-          emptyTitle={t("db.empty")}
-          emptyHint={t("db.emptyHint")}
-          emptyAction={
-            <Button onClick={() => openEdit(null)}>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("db.title")}</CardTitle>
+          <CardDescription>{t("db.description")}</CardDescription>
+          <CardAction>
+            <Button size="sm" onClick={() => openEdit(null)}>
               <PlusIcon data-icon="inline-start" />
               {t("db.add")}
             </Button>
-          }
-        />
-      ) : (
-        <div className="flex flex-col gap-4">
-          {groups.map(([project, items]) => (
-            <Card key={project}>
-              <CardHeader>
-                <CardTitle className="font-mono">{project}</CardTitle>
-                <CardDescription>
-                  {t("db.envCount", { count: items.length })}
-                </CardDescription>
-                <CardAction>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEdit(null)}
-                  >
-                    <PlusIcon data-icon="inline-start" />
-                    {t("db.add")}
-                  </Button>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1">
-                {items.map((source) => (
-                  <EnvRow
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          {error || sources === null || sources.length === 0 ? (
+            <ListPageStates
+              icon={<DatabaseIcon />}
+              error={error}
+              loading={sources === null}
+              emptyTitle={t("db.empty")}
+              emptyHint={t("db.emptyHint")}
+              emptyAction={
+                <Button size="sm" onClick={() => openEdit(null)}>
+                  <PlusIcon data-icon="inline-start" />
+                  {t("db.add")}
+                </Button>
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("db.project")}</TableHead>
+                  <TableHead>{t("db.env")}</TableHead>
+                  <TableHead>{t("db.database")}</TableHead>
+                  <TableHead>{t("db.address")}</TableHead>
+                  <TableHead>{t("db.mode")}</TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sources.map((source) => (
+                  <SourceRow
                     key={source.id}
                     source={source}
-                    active={browsing?.id === source.id}
+                    active={opened?.id === source.id}
                     onToggle={() =>
-                      setBrowsing((prev) =>
+                      setOpened((prev) =>
                         prev?.id === source.id ? null : source
                       )
                     }
@@ -157,16 +197,49 @@ export function Databases() {
                     onDelete={() => setDeleting(source)}
                   />
                 ))}
-                {browsing && items.some((s) => s.id === browsing.id) ? (
-                  <div className="mt-2 border-t border-border pt-3">
-                    <DataSourceExplorer source={browsing} />
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              </TableBody>
+            </Table>
+          )}
+          {sources !== null && sources.length < total ? (
+            <div className="flex justify-center py-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={loadMore}
+              >
+                {t("db.loadMore", { loaded: sources.length, total })}
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* 展开的那条连接：表浏览 + SQL 控制台。放表格下方而不是塞进行里
+          ——它是一整块工作区，挤在表格行内没法用。 */}
+      {opened ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-mono text-base">
+              {opened.ref} / {opened.database}
+            </CardTitle>
+            <CardDescription>{addressOf(opened)}</CardDescription>
+            <CardAction>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("common.cancel")}
+                onClick={() => setOpened(null)}
+              >
+                <XIcon />
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <DataSourceExplorer key={opened.id} source={opened} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <DataSourceDialog
         open={dialogOpen}
@@ -199,7 +272,20 @@ export function Databases() {
   )
 }
 
-function EnvRow({
+/**
+ * 地址列：走隧道时真正决定「连到哪台机器」的是跳板机，所以把它显示在
+ * 前面——只显示 127.0.0.1:3306 会让几条不同的线上库看起来一模一样。
+ */
+function addressOf(source: DataSource): string {
+  const target = `${source.host}:${source.port}`
+  if (!source.sshEnabled) return target
+  const jump = source.sshUser
+    ? `${source.sshUser}@${source.sshHost}`
+    : source.sshHost
+  return `${jump}:${source.sshPort} → ${target}`
+}
+
+function SourceRow({
   source,
   active,
   onToggle,
@@ -214,69 +300,55 @@ function EnvRow({
 }) {
   const { t } = useTranslation()
   return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-        active ? "bg-accent text-accent-foreground" : "hover:bg-muted"
-      )}
+    <TableRow
+      className={cn("group cursor-pointer", active && "bg-accent/50")}
+      onClick={onToggle}
     >
-      <StatusDot tone={source.disabled ? "muted" : "success"} />
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
-      >
-        <span className="shrink-0 font-medium">{source.env}</span>
-        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-          {source.host}:{source.port}
-          {source.database ? `/${source.database}` : ""}
+      <TableCell className="font-medium">
+        <span className="flex items-center gap-2">
+          <StatusDot tone={source.disabled ? "muted" : "success"} />
+          {source.project}
         </span>
-        {source.readOnly ? (
-          <span className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground">
-            {t("db.readOnlyBadge")}
-          </span>
-        ) : null}
-        {source.sshEnabled ? (
-          <NetworkIcon
-            className="size-3.5 shrink-0 text-muted-foreground"
-            aria-label={t("db.ssh")}
-          />
-        ) : null}
-        {source.note ? (
-          <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {source.note}
-          </span>
-        ) : null}
-      </button>
-      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("db.editTitle")}
-          onClick={onEdit}
-        >
-          <PencilIcon />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("common.delete")}
-          onClick={onDelete}
-        >
-          <Trash2Icon />
-        </Button>
-      </div>
-    </div>
+      </TableCell>
+      <TableCell className="font-mono">{source.env}</TableCell>
+      <TableCell className="font-mono text-muted-foreground">
+        {source.database}
+      </TableCell>
+      <TableCell
+        className="max-w-72 truncate font-mono text-muted-foreground tabular-nums"
+        title={source.sshEnabled ? t("db.viaSsh") : undefined}
+      >
+        {addressOf(source)}
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {source.readOnly ? t("db.readOnlyBadge") : t("db.writable")}
+      </TableCell>
+      <TableCell className="py-0">
+        <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("db.editTitle")}
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+          >
+            <PencilIcon />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("common.delete")}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+          >
+            <Trash2Icon />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
   )
-}
-
-/** 按项目分组，组内按环境名排序（后端已排好，这里只保持稳定）。 */
-function groupByProject(sources: DataSource[]): [string, DataSource[]][] {
-  const byProject = new Map<string, DataSource[]>()
-  for (const source of sources) {
-    const list = byProject.get(source.project)
-    if (list) list.push(source)
-    else byProject.set(source.project, [source])
-  }
-  return [...byProject.entries()].sort(([a], [b]) => a.localeCompare(b))
 }

@@ -16,11 +16,10 @@ import (
 // 更要紧的是它**指定了范围**。「帮我看下这个表」比「你自己找找」少一半
 // 误会，尤其是有多个环境的时候。
 //
-// 引用串的形状与 MCP 工具的 source 参数保持一致：
+// 引用串两级——一条连接固定对应一个库，中间没有「选库」这一层：
 //
-//	pp-game/dev              数据源（带默认库的表清单）
-//	pp-game/dev/mydb         指定库（表清单）
-//	pp-game/dev/mydb/users   指定表（列、索引、建表语句）
+//	pp-game/dev         数据源（它那个库的表清单）
+//	pp-game/dev/users   指定表（列、索引、建表语句）
 
 // refMaxTables 是库级引用最多列出的表数。库大起来表能上千，
 // 全列进去就把上下文吃光了——超出部分只报数量，AI 要细节自己调工具。
@@ -52,15 +51,12 @@ func (s *Service) Reference(ctx context.Context, cwd string, refs []string) ([]s
 }
 
 func expandRef(ctx context.Context, sources []model.DataSource, raw string) (*service.DBReference, error) {
-	src, database, table, err := splitRef(sources, raw)
+	src, table, err := splitRef(sources, raw)
 	if err != nil {
 		return nil, err
 	}
 
-	uri := "mysql://" + src.Ref
-	if database != "" {
-		uri += "/" + database
-	}
+	uri := "mysql://" + src.Ref + "/" + src.Database
 	if table != "" {
 		uri += "/" + table
 	}
@@ -74,41 +70,24 @@ func expandRef(ctx context.Context, sources []model.DataSource, raw string) (*se
 	if src.Note != "" {
 		fmt.Fprintf(&b, "，%s", src.Note)
 	}
-	b.WriteString("）")
-	if database != "" {
-		fmt.Fprintf(&b, "的 `%s` 库", database)
-	}
+	fmt.Fprintf(&b, "）的 `%s` 库", src.Database)
 	if table != "" {
 		fmt.Fprintf(&b, "的 `%s` 表", table)
 	}
-	b.WriteString("。\n\n")
+	b.WriteString("。这条连接只对应这一个库。\n\n")
 	fmt.Fprintf(&b, "**接下来凡是与数据有关的问题，都用 acpp-db 的 db_* 工具实际查询它**"+
 		"（`source` 参数填 `%s`），不要凭下面的结构推测数据、也不要问用户该连哪个库——"+
 		"他已经指定了。下面的结构信息是给你省掉一次 db_schema，不是数据本身。\n\n",
 		src.Ref)
 
-	switch {
-	case table != "":
-		detail, err := Describe(ctx, src, database, table)
+	if table != "" {
+		detail, err := Describe(ctx, src, "", table)
 		if err != nil {
 			return nil, err
 		}
 		b.WriteString(renderSchema(src, detail))
-
-	case database != "":
-		tables, err := Tables(ctx, src, database)
-		if err != nil {
-			return nil, err
-		}
-		b.WriteString(renderRefTables(src, database, tables))
-
-	default:
-		// 数据源级引用：没有默认库就只给数据源信息，让 AI 自己 db_databases。
-		if strings.TrimSpace(src.Database) == "" {
-			b.WriteString("（该数据源未配默认库，用 db_databases 查看有哪些库。）\n")
-			break
-		}
-		tables, err := Tables(ctx, src, src.Database)
+	} else {
+		tables, err := Tables(ctx, src, "")
 		if err != nil {
 			return nil, err
 		}
@@ -118,15 +97,15 @@ func expandRef(ctx context.Context, sources []model.DataSource, raw string) (*se
 	return &service.DBReference{URI: uri, Text: b.String()}, nil
 }
 
-// splitRef 把引用串拆成数据源 + 库 + 表。
+// splitRef 把引用串拆成数据源 + 表。
 //
 // 数据源部分是 `<项目>/<环境>` 两段（项目与环境都不含斜杠，建时已挡），
-// 所以按斜杠切开后前两段归数据源，第三段是库、第四段是表。只写一段的
-// 也认——那是只给环境名的写法，与 MCP 工具的 source 参数一致。
-func splitRef(sources []model.DataSource, raw string) (*model.DataSource, string, string, error) {
+// 按斜杠切开后前两段归数据源，剩下的是表名。只写一段的也认——那是只给
+// 环境名的写法，与 MCP 工具的 source 参数一致。
+func splitRef(sources []model.DataSource, raw string) (*model.DataSource, string, error) {
 	parts := strings.Split(strings.Trim(strings.TrimSpace(raw), "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
-		return nil, "", "", fmt.Errorf("%w: 空的数据库引用", service.ErrInvalid)
+		return nil, "", fmt.Errorf("%w: 空的数据库引用", service.ErrInvalid)
 	}
 
 	// 先按两段找，找不到再按一段找（只给了环境名）。
@@ -147,17 +126,19 @@ func splitRef(sources []model.DataSource, raw string) (*model.DataSource, string
 		if err == nil {
 			err = fmt.Errorf("%w: 没有叫 %q 的数据源", service.ErrNotFound, raw)
 		}
-		return nil, "", "", err
+		return nil, "", err
 	}
 
-	var database, table string
+	var table string
 	if len(rest) > 0 {
-		database = rest[0]
+		// 兼容旧写法 `<项目>/<环境>/<库>/<表>`：库那一段与连接绑定的库
+		// 相同就跳过，剩下的当表名。
+		if len(rest) > 1 && strings.EqualFold(rest[0], src.Database) {
+			rest = rest[1:]
+		}
+		table = rest[0]
 	}
-	if len(rest) > 1 {
-		table = rest[1]
-	}
-	return src, database, table, nil
+	return src, table, nil
 }
 
 // renderRefTables 是库级引用的正文：表清单 + 用法提示。
