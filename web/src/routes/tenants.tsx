@@ -4,7 +4,8 @@ import { toast } from "sonner"
 
 import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
-import { useAsyncData } from "@/hooks/use-async-data"
+import { usePagedData } from "@/hooks/use-paged-data"
+import { DataPagination } from "@/components/data-pagination"
 import { api } from "@/lib/api"
 import { formatRelativeTime } from "@/lib/format"
 import type { Tenant } from "@/types/acp"
@@ -70,10 +71,16 @@ import {
 export function Tenants() {
   const { t, i18n } = useTranslation()
   const {
-    data: tenants,
+    items: tenants,
+    total,
     error,
-    setData: setTenants,
-  } = useAsyncData(() => api.tenants.list().then((res) => res.items), [])
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    replace,
+    remove: dropRow,
+  } = usePagedData((params) => api.tenants.list(params))
 
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
@@ -82,14 +89,7 @@ export function Tenants() {
   const [rotating, setRotating] = useState<Tenant | null>(null)
 
   function upsert(saved: Tenant) {
-    setTenants((prev) => {
-      if (!prev) return [saved]
-      const index = prev.findIndex((item) => item.id === saved.id)
-      if (index < 0) return [...prev, saved]
-      const next = [...prev]
-      next[index] = saved
-      return next
-    })
+    replace(saved)
   }
 
   async function copyInvite(tenant: Tenant) {
@@ -154,9 +154,7 @@ export function Tenants() {
     if (!deleting) return
     try {
       await api.tenants.remove(deleting.id)
-      setTenants(
-        (prev) => prev?.filter((item) => item.id !== deleting.id) ?? null
-      )
+      dropRow(deleting.id)
       toast.success(t("tenants.removed"))
     } catch (err) {
       toast.error((err as Error).message)
@@ -206,94 +204,106 @@ export function Tenants() {
                 }
               />
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("tenants.name")}</TableHead>
-                    <TableHead>{t("tenants.root")}</TableHead>
-                    <TableHead className="text-right">
-                      {t("tenants.sessions")}
-                    </TableHead>
-                    <TableHead>{t("tenants.lastSeen")}</TableHead>
-                    <TableHead className="w-10" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tenants.map((tenant) => (
-                    <TableRow key={tenant.id}>
-                      <TableCell className="font-medium">
-                        <span className="inline-flex items-center gap-2">
-                          <StatusDot
-                            tone={tenant.disabled ? "muted" : "success"}
-                          />
-                          {tenant.name}
-                        </span>
-                      </TableCell>
-                      <TableCell className="max-w-80 truncate font-mono text-xs text-muted-foreground">
-                        {tenant.root}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {tenant.sessionCount}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground tabular-nums">
-                        {tenant.lastSeenAt
-                          ? formatRelativeTime(tenant.lastSeenAt, i18n.language)
-                          : t("tenants.never")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                className="text-muted-foreground"
-                                aria-label={t("tenants.actions")}
-                              />
-                            }
-                          >
-                            <MoreHorizontalIcon />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              onClick={() => void copyInvite(tenant)}
-                            >
-                              <CopyIcon />
-                              <span>{t("tenants.copyLink")}</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setRotating(tenant)}
-                            >
-                              <RefreshCwIcon />
-                              <span>{t("tenants.rotate")}</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => void toggle(tenant)}
-                            >
-                              <StatusDot
-                                tone={tenant.disabled ? "success" : "muted"}
-                              />
-                              <span>
-                                {tenant.disabled
-                                  ? t("tenants.enable")
-                                  : t("tenants.disable")}
-                              </span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => setDeleting(tenant)}
-                            >
-                              <Trash2Icon />
-                              <span>{t("common.delete")}</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("tenants.name")}</TableHead>
+                      <TableHead>{t("tenants.root")}</TableHead>
+                      <TableHead className="text-right">
+                        {t("tenants.sessions")}
+                      </TableHead>
+                      <TableHead>{t("tenants.lastSeen")}</TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {tenants.map((tenant) => (
+                      <TableRow key={tenant.id}>
+                        <TableCell className="font-medium">
+                          <span className="inline-flex items-center gap-2">
+                            <StatusDot
+                              tone={tenant.disabled ? "muted" : "success"}
+                            />
+                            {tenant.name}
+                          </span>
+                        </TableCell>
+                        <TableCell className="max-w-80 truncate font-mono text-xs text-muted-foreground">
+                          {tenant.root}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {tenant.sessionCount}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground tabular-nums">
+                          {tenant.lastSeenAt
+                            ? formatRelativeTime(
+                                tenant.lastSeenAt,
+                                i18n.language
+                              )
+                            : t("tenants.never")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  className="text-muted-foreground"
+                                  aria-label={t("tenants.actions")}
+                                />
+                              }
+                            >
+                              <MoreHorizontalIcon />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
+                              <DropdownMenuItem
+                                onClick={() => void copyInvite(tenant)}
+                              >
+                                <CopyIcon />
+                                <span>{t("tenants.copyLink")}</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setRotating(tenant)}
+                              >
+                                <RefreshCwIcon />
+                                <span>{t("tenants.rotate")}</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => void toggle(tenant)}
+                              >
+                                <StatusDot
+                                  tone={tenant.disabled ? "success" : "muted"}
+                                />
+                                <span>
+                                  {tenant.disabled
+                                    ? t("tenants.enable")
+                                    : t("tenants.disable")}
+                                </span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setDeleting(tenant)}
+                              >
+                                <Trash2Icon />
+                                <span>{t("common.delete")}</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <DataPagination
+                  total={total}
+                  page={page}
+                  pageSize={pageSize}
+                  onPage={setPage}
+                  onPageSize={setPageSize}
+                />
+              </>
             )}
           </CardContent>
         </Card>

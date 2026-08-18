@@ -23,7 +23,17 @@ func (h skillHandler) list(w http.ResponseWriter, r *http.Request) {
 			skills[i].UsageCount = counts[skills[i].Name]
 		}
 	}
-	writeData(w, http.StatusOK, newPage(skills))
+	// 技能是扫盘得来的（磁盘即事实源），没有 SQL 可以 LIMIT——在内存里切。
+	// 目录读取本身是 O(n)，但那部分快得多，真正会拖慢页面的是把几百条
+	// 连同正文一起塞进一次响应。
+	pageNum, pageSize := pageParams(r)
+	total := len(skills)
+	writeData(w, http.StatusOK, page[service.Skill]{
+		Items:    slicePage(skills, pageNum, pageSize),
+		Total:    int64(total),
+		Page:     pageNum,
+		PageSize: pageSize,
+	})
 }
 
 // usageTop 返回使用最多的技能，供概览页统计。

@@ -17,8 +17,7 @@ type orchHandler struct {
 }
 
 func (h orchHandler) list(w http.ResponseWriter, r *http.Request) {
-	pageNum := queryInt(r, "page", 1)
-	pageSize := queryInt(r, "pageSize", 20)
+	pageNum, pageSize := pageParams(r)
 	items, total, err := h.orch.List(r.Context(), pageNum, pageSize)
 	if err != nil {
 		writeError(w, err)

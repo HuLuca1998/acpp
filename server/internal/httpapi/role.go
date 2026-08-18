@@ -12,8 +12,7 @@ type roleHandler struct {
 }
 
 func (h roleHandler) list(w http.ResponseWriter, r *http.Request) {
-	pageNum := queryInt(r, "page", 1)
-	pageSize := queryInt(r, "pageSize", 50)
+	pageNum, pageSize := pageParams(r)
 
 	roles, total, err := h.roles.ListPage(r.Context(), pageNum, pageSize)
 	if err != nil {

@@ -11,6 +11,12 @@ export default {
     unnamed: "Untitled",
     none: "—",
   },
+  pagination: {
+    range: "{{from}}–{{to}} of {{total}}",
+    perPage: "Per page",
+    previous: "Previous",
+    next: "Next",
+  },
   nav: {
     overview: "Overview",
     skills: "Skills",

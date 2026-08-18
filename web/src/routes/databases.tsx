@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -7,6 +7,8 @@ import { DataSourceDialog } from "@/components/db/datasource-dialog"
 import { DataSourceExplorer } from "@/components/db/datasource-explorer"
 import { StatusDot } from "@/components/status-dot"
 import { useAsyncData } from "@/hooks/use-async-data"
+import { usePagedData } from "@/hooks/use-paged-data"
+import { DataPagination } from "@/components/data-pagination"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { DataSource } from "@/types/acp"
@@ -45,9 +47,6 @@ import {
   XIcon,
 } from "lucide-react"
 
-/** 一页多少条。列表分页而不是全量拉——连接多起来时页面不该跟着变慢。 */
-const PAGE_SIZE = 50
-
 /**
  * 数据库页：管理 MySQL 连接（adr-008）。
  *
@@ -57,12 +56,17 @@ const PAGE_SIZE = 50
  */
 export function Databases() {
   const { t } = useTranslation()
-  const { data, error, setData } = useAsyncData(
-    () => api.datasources.list({ pageSize: PAGE_SIZE }),
-    []
-  )
-  const sources = data?.items ?? null
-  const total = data?.total ?? 0
+  const {
+    items: sources,
+    total,
+    error,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    replace,
+    remove: dropRow,
+  } = usePagedData((params) => api.datasources.list(params))
 
   // 项目名建议来自工作区已有的仓库；拉不到不影响填写（自由输入）。
   const { data: projects } = useAsyncData(
@@ -73,30 +77,11 @@ export function Databases() {
         .catch(() => []),
     []
   )
+
   const [editing, setEditing] = useState<DataSource | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState<DataSource | null>(null)
   const [opened, setOpened] = useState<DataSource | null>(null)
-
-  /** 追加下一页：以已加载条数推算页码，不维护独立游标。 */
-  const loadMore = useCallback(() => {
-    const loaded = sources?.length ?? 0
-    api.datasources
-      .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
-      .then((res) => {
-        setData((prev) => {
-          const seen = new Set((prev?.items ?? []).map((s) => s.id))
-          return {
-            ...res,
-            items: [
-              ...(prev?.items ?? []),
-              ...res.items.filter((s) => !seen.has(s.id)),
-            ],
-          }
-        })
-      })
-      .catch((err) => toast.error((err as Error).message))
-  }, [sources, setData])
 
   function openEdit(source: DataSource | null) {
     setEditing(source)
@@ -104,17 +89,7 @@ export function Databases() {
   }
 
   function handleSaved(saved: DataSource) {
-    setData((prev) => {
-      const items = prev?.items ?? []
-      const at = items.findIndex((s) => s.id === saved.id)
-      const next = at >= 0 ? items.with(at, saved) : [...items, saved]
-      return {
-        items: next.sort((a, b) => a.ref.localeCompare(b.ref)),
-        total: at >= 0 ? (prev?.total ?? next.length) : (prev?.total ?? 0) + 1,
-        page: prev?.page ?? 1,
-        pageSize: prev?.pageSize ?? PAGE_SIZE,
-      }
-    })
+    replace(saved)
     setEditing(saved)
     // 展开中的那条被改了：换成新记录，免得面板还按旧连接查。
     setOpened((prev) => (prev?.id === saved.id ? saved : prev))
@@ -124,15 +99,7 @@ export function Databases() {
     if (!deleting) return
     try {
       await api.datasources.remove(deleting.id)
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              items: prev.items.filter((s) => s.id !== deleting.id),
-              total: Math.max(prev.total - 1, 0),
-            }
-          : prev
-      )
+      dropRow(deleting.id)
       if (opened?.id === deleting.id) setOpened(null)
       toast.success(t("db.deleted"))
     } catch (err) {
@@ -200,18 +167,13 @@ export function Databases() {
               </TableBody>
             </Table>
           )}
-          {sources !== null && sources.length < total ? (
-            <div className="flex justify-center py-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={loadMore}
-              >
-                {t("db.loadMore", { loaded: sources.length, total })}
-              </Button>
-            </div>
-          ) : null}
+          <DataPagination
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
         </CardContent>
       </Card>
 

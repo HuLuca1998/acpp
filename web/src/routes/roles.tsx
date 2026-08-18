@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
@@ -6,6 +6,8 @@ import { ListPageStates } from "@/components/list-page-states"
 import { AgentIcon } from "@/components/agent-icon"
 import { RoleDialog } from "@/components/roles/role-dialog"
 import { useAsyncData } from "@/hooks/use-async-data"
+import { usePagedData } from "@/hooks/use-paged-data"
+import { DataPagination } from "@/components/data-pagination"
 import { api } from "@/lib/api"
 import type { Role } from "@/types/acp"
 import {
@@ -38,9 +40,6 @@ import {
 } from "@/components/ui/table"
 import { DramaIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
-/** 一页多少条：与会话列表同一个尺度。 */
-const PAGE_SIZE = 50
-
 /**
  * 角色页（adr-006）：编排里可雇佣的子代理定义。列表 + Dialog 编辑，
  * 角色是轻量配置对象，不配详情路由。
@@ -48,32 +47,16 @@ const PAGE_SIZE = 50
 export function Roles() {
   const { t } = useTranslation()
   const {
-    data,
+    items: roles,
+    total,
     error,
-    setData,
-  } = useAsyncData(() => api.roles.list({ pageSize: PAGE_SIZE }), [])
-  const roles = data?.items ?? null
-  const total = data?.total ?? 0
-
-  /** 追加下一页：以已加载条数推算页码，不维护独立游标。 */
-  const loadMore = useCallback(() => {
-    const loaded = roles?.length ?? 0
-    api.roles
-      .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
-      .then((res) => {
-        setData((prev) => {
-          const seen = new Set((prev?.items ?? []).map((r) => r.id))
-          return {
-            ...res,
-            items: [
-              ...(prev?.items ?? []),
-              ...res.items.filter((r) => !seen.has(r.id)),
-            ],
-          }
-        })
-      })
-      .catch((err) => toast.error((err as Error).message))
-  }, [roles, setData])
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    replace,
+    remove: dropRow,
+  } = usePagedData((params) => api.roles.list(params))
   const { data: agents } = useAsyncData(
     () => api.agents.list().then((res) => res.items),
     []
@@ -96,31 +79,14 @@ export function Roles() {
   }
 
   function onSaved(saved: Role) {
-    setData((prev) => {
-      const items = prev?.items ?? []
-      const at = items.findIndex((r) => r.id === saved.id)
-      return {
-        items: at >= 0 ? items.with(at, saved) : [...items, saved],
-        total: at >= 0 ? (prev?.total ?? items.length) : (prev?.total ?? 0) + 1,
-        page: prev?.page ?? 1,
-        pageSize: prev?.pageSize ?? PAGE_SIZE,
-      }
-    })
+    replace(saved)
   }
 
   async function remove() {
     if (!deleting) return
     try {
       await api.roles.remove(deleting.id)
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              items: prev.items.filter((r) => r.id !== deleting.id),
-              total: Math.max(prev.total - 1, 0),
-            }
-          : prev
-      )
+      dropRow(deleting.id)
       toast.success(t("roles.deleted"))
     } catch (err) {
       toast.error((err as Error).message)
@@ -226,18 +192,13 @@ export function Roles() {
                 </TableBody>
               </Table>
             )}
-            {roles !== null && roles.length < total ? (
-              <div className="flex justify-center py-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={loadMore}
-                >
-                  {t("roles.loadMore", { loaded: roles.length, total })}
-                </Button>
-              </div>
-            ) : null}
+            <DataPagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPage={setPage}
+              onPageSize={setPageSize}
+            />
           </CardContent>
         </Card>
       </div>

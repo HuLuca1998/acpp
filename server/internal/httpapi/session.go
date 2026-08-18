@@ -22,8 +22,7 @@ func (h sessionHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 		agentID = id
 	}
-	pageNum := queryInt(r, "page", 1)
-	pageSize := queryInt(r, "pageSize", 50)
+	pageNum, pageSize := pageParams(r)
 
 	sessions, total, err := h.sessions.List(r.Context(), scopeOf(r), agentID, pageNum, pageSize)
 	if err != nil {

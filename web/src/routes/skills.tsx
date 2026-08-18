@@ -4,7 +4,8 @@ import { Link } from "react-router"
 import { toast } from "sonner"
 
 import { ListPageStates } from "@/components/list-page-states"
-import { useAsyncData } from "@/hooks/use-async-data"
+import { usePagedData } from "@/hooks/use-paged-data"
+import { DataPagination } from "@/components/data-pagination"
 
 import { api } from "@/lib/api"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
@@ -42,19 +43,23 @@ import { InfoIcon, PlusIcon, PuzzleIcon, Trash2Icon } from "lucide-react"
 export function Skills() {
   const { t, i18n } = useTranslation()
   const {
-    data: skills,
+    items: skills,
+    total,
     error,
-    setData: setSkills,
-  } = useAsyncData(() => api.skills.list().then((res) => res.items), [])
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    patch,
+    remove: dropRow,
+  } = usePagedData((params) => api.skills.list(params), {
+    keyOf: (s) => s.name,
+  })
   const [deleting, setDeleting] = useState<Skill | null>(null)
 
   async function toggle(skill: Skill, enabled: boolean) {
     // 乐观更新：符号链接切换基本不会失败，失败时回滚并提示。
-    setSkills(
-      (prev) =>
-        prev?.map((s) => (s.name === skill.name ? { ...s, enabled } : s)) ??
-        null
-    )
+    patch(skill.name, (s) => ({ ...s, enabled }))
     try {
       await api.skills.update(skill.name, { enabled })
       toast.success(
@@ -64,12 +69,7 @@ export function Skills() {
         { description: t("skills.effectNote") }
       )
     } catch (err) {
-      setSkills(
-        (prev) =>
-          prev?.map((s) =>
-            s.name === skill.name ? { ...s, enabled: !enabled } : s
-          ) ?? null
-      )
+      patch(skill.name, (s) => ({ ...s, enabled: !enabled }))
       toast.error((err as Error).message)
     }
   }
@@ -78,7 +78,7 @@ export function Skills() {
     if (!deleting) return
     try {
       await api.skills.remove(deleting.name)
-      setSkills((prev) => prev?.filter((s) => s.name !== deleting.name) ?? null)
+      dropRow(deleting.name)
       toast.success(t("skills.deleted"))
     } catch (err) {
       toast.error((err as Error).message)
@@ -188,6 +188,13 @@ export function Skills() {
                     ))}
                   </TableBody>
                 </Table>
+                <DataPagination
+                  total={total}
+                  page={page}
+                  pageSize={pageSize}
+                  onPage={setPage}
+                  onPageSize={setPageSize}
+                />
                 <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <InfoIcon className="size-3.5" />
                   {t("skills.effectNote")}

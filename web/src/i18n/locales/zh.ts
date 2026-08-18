@@ -11,6 +11,12 @@ export default {
     unnamed: "未命名",
     none: "—",
   },
+  pagination: {
+    range: "第 {{from}}–{{to}} 条 / 共 {{total}} 条",
+    perPage: "每页",
+    previous: "上一页",
+    next: "下一页",
+  },
   nav: {
     overview: "概览",
     skills: "技能",

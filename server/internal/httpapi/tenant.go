@@ -29,16 +29,23 @@ type tenantView struct {
 }
 
 func (h tenantHandler) list(w http.ResponseWriter, r *http.Request) {
-	tenants, err := h.tenants.List(r.Context())
+	pageNum, pageSize := pageParams(r)
+	views, total, err := h.tenants.List(r.Context(), pageNum, pageSize)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	views := make([]tenantView, 0, len(tenants))
-	for _, tenant := range tenants {
-		views = append(views, h.withInviteURL(tenant))
+	// 邀请链接由后端拼：host 取自监听地址，前端不必知道服务跑在哪。
+	out := make([]tenantView, 0, len(views))
+	for _, v := range views {
+		out = append(out, h.withInviteURL(v))
 	}
-	writeData(w, http.StatusOK, newPage(views))
+	writeData(w, http.StatusOK, page[tenantView]{
+		Items:    out,
+		Total:    total,
+		Page:     pageNum,
+		PageSize: pageSize,
+	})
 }
 
 // withInviteURL 拼 `http://<局域网IP>:<端口>/?invite=<token>`，并如实标出

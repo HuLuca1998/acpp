@@ -425,7 +425,13 @@ export const api = {
   },
 
   skills: {
-    list: () => request<Paged<Skill>>("/skills"),
+    list: (params?: { page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.page) qs.set("page", String(params.page))
+      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
+      const s = qs.toString()
+      return request<Paged<Skill>>(`/skills${s ? `?${s}` : ""}`)
+    },
     get: (name: string) => request<SkillDetail>(`/skills/${name}`),
     create: (input: SkillCreateInput) =>
       request<SkillDetail>("/skills", {
@@ -603,7 +609,13 @@ export const api = {
 
   /** 租户管理（owner 专属）。 */
   tenants: {
-    list: () => request<Paged<Tenant>>("/tenants"),
+    list: (params?: { page?: number; pageSize?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.page) qs.set("page", String(params.page))
+      if (params?.pageSize) qs.set("pageSize", String(params.pageSize))
+      const s = qs.toString()
+      return request<Paged<Tenant>>(`/tenants${s ? `?${s}` : ""}`)
+    },
     create: (name: string) =>
       request<Tenant>("/tenants", {
         method: "POST",

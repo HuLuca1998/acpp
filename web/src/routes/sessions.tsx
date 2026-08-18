@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
 import { ListPageStates } from "@/components/list-page-states"
-import { useAsyncData } from "@/hooks/use-async-data"
+import { usePagedData } from "@/hooks/use-paged-data"
+import { DataPagination } from "@/components/data-pagination"
 import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
@@ -40,46 +41,26 @@ import {
 } from "@/components/ui/table"
 import { MessagesSquareIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
-const PAGE_SIZE = 50
-
 export function Sessions() {
   const { t, i18n } = useTranslation()
   // 创建者列只对 owner 有意义：租户只看得见自己的会话，那一列对他恒为
   // 自己，白占一列宽度（adr-007 的隔离已经保证了这一点）。
   const isOwner = useIdentity().identity?.owner ?? false
-  const { data, error, setData, setError } = useAsyncData(
-    () => api.sessions.list({ pageSize: PAGE_SIZE }),
-    []
-  )
-  const sessions = data?.items ?? null
-  const total = data?.total ?? 0
-
-  /** 追加下一页：以已加载条数推算页码，避免维护独立游标。 */
-  const loadMore = useCallback(() => {
-    const loaded = sessions?.length ?? 0
-    api.sessions
-      .list({ page: Math.floor(loaded / PAGE_SIZE) + 1, pageSize: PAGE_SIZE })
-      .then((res) => {
-        setData((prev) => {
-          const seen = new Set((prev?.items ?? []).map((s) => s.id))
-          return {
-            ...res,
-            items: [
-              ...(prev?.items ?? []),
-              ...res.items.filter((s) => !seen.has(s.id)),
-            ],
-          }
-        })
-      })
-      .catch((err: Error) => setError(err.message))
-  }, [sessions, setData, setError])
-
+  const {
+    items: sessions,
+    total,
+    error,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    remove: dropRow,
+    setError,
+  } = usePagedData((params) => api.sessions.list(params))
   async function remove(id: number) {
     try {
       await api.sessions.remove(id)
-      setData((prev) =>
-        prev ? { ...prev, items: prev.items.filter((s) => s.id !== id) } : prev
-      )
+      dropRow(id)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -213,21 +194,13 @@ export function Sessions() {
                 </TableBody>
               </Table>
             )}
-            {sessions !== null && sessions.length < total ? (
-              <div className="flex justify-center py-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={loadMore}
-                >
-                  {t("sessions.loadMore", {
-                    loaded: sessions.length,
-                    total,
-                  })}
-                </Button>
-              </div>
-            ) : null}
+            <DataPagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPage={setPage}
+              onPageSize={setPageSize}
+            />
           </CardContent>
         </Card>
       </div>

@@ -56,10 +56,27 @@ type TenantView struct {
 	SessionCount int64 `json:"sessionCount"`
 }
 
-func (s *TenantService) List(ctx context.Context) ([]TenantView, error) {
+// List 分页返回访客列表（每条带会话数）。
+func (s *TenantService) List(ctx context.Context, page, pageSize int) ([]TenantView, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+
+	q := s.db.WithContext(ctx).Model(&model.Tenant{})
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count tenants: %w", err)
+	}
+
 	var tenants []model.Tenant
-	if err := s.db.WithContext(ctx).Order("id asc").Find(&tenants).Error; err != nil {
-		return nil, fmt.Errorf("list tenants: %w", err)
+	err := q.Order("id asc").
+		Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&tenants).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("list tenants: %w", err)
 	}
 
 	views := make([]TenantView, 0, len(tenants))
@@ -67,7 +84,7 @@ func (s *TenantService) List(ctx context.Context) ([]TenantView, error) {
 		var count int64
 		if err := s.db.WithContext(ctx).Model(&model.Session{}).
 			Where("tenant_id = ?", tenants[i].ID).Count(&count).Error; err != nil {
-			return nil, fmt.Errorf("count tenant sessions: %w", err)
+			return nil, 0, fmt.Errorf("count tenant sessions: %w", err)
 		}
 		views = append(views, TenantView{
 			Tenant:       tenants[i],
@@ -75,7 +92,7 @@ func (s *TenantService) List(ctx context.Context) ([]TenantView, error) {
 			SessionCount: count,
 		})
 	}
-	return views, nil
+	return views, total, nil
 }
 
 func (s *TenantService) Get(ctx context.Context, id uint) (*model.Tenant, error) {

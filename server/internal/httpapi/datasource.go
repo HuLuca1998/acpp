@@ -21,8 +21,7 @@ type datasourceHandler struct {
 }
 
 func (h datasourceHandler) list(w http.ResponseWriter, r *http.Request) {
-	pageNum := queryInt(r, "page", 1)
-	pageSize := queryInt(r, "pageSize", 50)
+	pageNum, pageSize := pageParams(r)
 
 	items, total, err := h.sources.List(r.Context(), pageNum, pageSize)
 	if err != nil {

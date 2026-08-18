@@ -148,6 +148,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 
 统一响应 `{"data": ...}` 或 `{"error": "..."}`，列表再包一层 `{items, total, page, pageSize}`。
 
+**分页协议**：所有列表端点统一收 `?page=&pageSize=`（页码从 1 起，缺省 20，上限 200，解析在 `httpapi.pageParams`），统一回 `{items, total, page, pageSize}`。事实源是数据库的走 LIMIT/OFFSET，是磁盘的（技能）在内存切片——形状对调用方一致。前端六个列表页共用 `usePagedData` + `DataPagination`，行为（改每页行数回第一页、删空当前页退回上一页）因此只有一套。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
