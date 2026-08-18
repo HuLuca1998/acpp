@@ -15,6 +15,7 @@
 | db | GORM 连接与 AutoMigrate | 基础 |
 | model | 数据模型（Agent / Session / Message / SkillUsage）与 JSON 字段类型 | 基础 |
 | transcript | 会话转录 JSONL 的追加与读取（对话内容唯一的持久化） | 叶子 |
+| titler | 会话标题生成：把首句派生的标题换成本机小模型（ollama）给的概括。两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到，所以由本项目自己算。不 import 本项目其他包 | 叶子 |
 | stream | SSE 事件形状（Event）与广播器（Broker）：多订阅者、轮内重放、慢订阅丢弃。聊天与编排两个业务包共用 | 叶子 |
 | mcp | 我方 MCP server 的协议外壳：JSON-RPC 信封、工具声明与分发（initialize/ping/tools.list/tools.call）。编排与数据源两个业务包共用，业务包只提供工具集 | 叶子 |
 | service | 普通会话的业务规则：会话/对话/技能/工作区/终端/agent 配置；多租户身份与隔离范围（Scope） | 业务 |

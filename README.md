@@ -170,6 +170,10 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/projects/repos` | 可克隆仓库清单（gh，只要组织与协作关系，个人账号名下的不出现） |
 | GET | `/api/system/env` | 环境体检：brew/node/npm、CLI 与 ACP 适配器是否就位（含版本与路径） |
 | POST | `/api/system/env/install` | 一键安装缺失依赖（`{key}`，只认后端白名单：brew formula / npm -g） |
+| GET | `/api/system/title-model` | 会话标题模型配置（本机 ollama：`{enabled, baseUrl, model}`） |
+| PUT | `/api/system/title-model` | 存标题模型配置，热更生效（启用时必须选模型） |
+| GET | `/api/system/title-model/models` | 列某个 ollama 端点上已装的模型（`?baseUrl=`，为空取默认地址） |
+| POST | `/api/system/title-model/test` | 用给定配置当场生成一个标题看效果，不落盘 |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查） |
 | POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版） |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
@@ -236,7 +240,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/mcp/{token}` | 编排 MCP 端点（agent 回连，JSON-RPC；token 为每编排会话专属凭证，不出现在 API 响应里） |
 | * | `/api/orchestrator/sessions/{id}/fs/*` `/git/*` `/terminals*` `/transcript` | 编排主会话的完整工作区数据面：与普通会话同形状同实现，只差路径前缀（升级不降级） |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`turn_done`、`error`（编排主会话另有 `task_update`）。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`session_title`、`turn_done`、`error`（编排主会话另有 `task_update`）。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`session_title` 在首轮结束后标题被模型重写时发一次（带新标题）。
 
 ## 数据模型
 
@@ -345,6 +349,7 @@ agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排�
 | `ACP_DATA_DIR` | `~/.acpp` | 数据根目录（db 与转录都派生于它）。优先级：本变量 > `~/.acpp/config.json` 里设置面板选定的目录 > 默认。首次启动自动创建；旧版 `server/data` 的存量数据自动迁入（拷贝，原数据保留） |
 | `ACP_DSN` | `<dataDir>/acp.db` | SQLite 文件路径（显式设置时覆盖派生值） |
 | 工作区根 | `~/acpp` | 不是环境变量：在 **设置 → 系统** 里选，存 `~/.acpp/config.json`。agent 干活的地方与访客 root 的父目录，与数据目录刻意分开 |
+| 会话标题模型 | 关闭 | 不是环境变量：在 **设置 → 系统** 里配，存 `~/.acpp/config.json`。开启后首轮结束时用本机 ollama 把标题从「首句前 15 字」换成模型概括；关闭或调用失败都退回首句派生 |
 | `ACP_CORS_ORIGINS` | `http://localhost:45173` | 允许的跨域来源，逗号分隔 |
 | `ACP_WEB_DIR` | 空 | 前端产物目录，设置后由后端托管静态文件 |
 | `ACP_MAX_SESSIONS` | `8` | 同时活着的 agent 子进程上限 |

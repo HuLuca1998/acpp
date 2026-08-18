@@ -24,6 +24,25 @@ export interface SystemInfo {
   defaultWorkspaceDir: string
 }
 
+/**
+ * 会话标题模型配置：本机 ollama 上跑的小模型，用来把「首句截断」换成
+ * 真正的概括。两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到，
+ * 所以这件事由本项目自己做；没配置就沿用首句派生，功能不受影响。
+ */
+export interface TitleModelConfig {
+  enabled: boolean
+  /** ollama 地址，留空按默认 http://127.0.0.1:11434 走。 */
+  baseUrl: string
+  /** 模型名，如 qwen3.5:9b-mlx。启用时必填。 */
+  model: string
+}
+
+/** ollama 上已安装的一个模型。size 供界面提示体积——标题这种轻活选小的更快。 */
+export interface OllamaModel {
+  name: string
+  size: number
+}
+
 /** 环境体检的一项依赖。 */
 export interface EnvDependency {
   key: string
@@ -377,6 +396,7 @@ export type StreamEventKind =
   | "turn_end"
   | "turn_done"
   | "message_saved"
+  | "session_title"
   | "task_update"
   | "error"
 

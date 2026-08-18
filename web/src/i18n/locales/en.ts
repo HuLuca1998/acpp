@@ -681,6 +681,27 @@ export default {
       targetPlaceholder: "/Users/you/acpp",
       saved: "Workspace root updated",
     },
+    titleModel: {
+      title: "Session title generation",
+      description:
+        "Use a local model to turn session titles from a truncated first message into a real summary. Both claude and codex generate their titles inside their own CLIs, out of reach of the ACP channel, so a small local model does the job here — it costs no agent quota and never enters the conversation.",
+      enabledLabel: "Enable",
+      enabledHint:
+        "When off, titles stay as the first 15 characters of the opening message",
+      endpointLabel: "Ollama endpoint",
+      endpointHint:
+        "Address of the local ollama server; the model list reloads when you click away",
+      modelLabel: "Model",
+      modelPlaceholder: "Pick a model",
+      modelHint:
+        "Titling is a light task — smaller is faster; a 9b model usually answers in under a second on Apple Silicon",
+      modelsFailed:
+        "Could not load the model list — check that ollama is running",
+      test: "Try it",
+      save: "Save",
+      saved: "Title model settings updated",
+      preview: "Result: ",
+    },
     menu: {
       system: "System",
       env: "Environment",

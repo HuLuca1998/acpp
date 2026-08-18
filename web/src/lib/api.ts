@@ -48,6 +48,8 @@ import type {
   SkillUsage,
   SqlExecResult,
   SystemInfo,
+  TitleModelConfig,
+  OllamaModel,
   Tenant,
   TerminalInfo,
   TreeListing,
@@ -366,6 +368,25 @@ export const api = {
       request<EnvInstallResult>("/system/env/install", {
         method: "POST",
         body: JSON.stringify({ key }),
+      }),
+    /** 读会话标题模型配置。 */
+    titleModel: () => request<TitleModelConfig>("/system/title-model"),
+    /** 存标题模型配置，立刻热更到运行中的服务（无需重启）。 */
+    saveTitleModel: (input: TitleModelConfig) =>
+      request<TitleModelConfig>("/system/title-model", {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    /** 拉某个 ollama 端点上已装的模型；地址传参是为了在保存前先试拉。 */
+    titleModels: (baseUrl: string) =>
+      request<OllamaModel[]>(
+        `/system/title-model/models?baseUrl=${encodeURIComponent(baseUrl)}`,
+      ),
+    /** 用表单里的配置当场生成一个标题看效果，不落盘。 */
+    testTitleModel: (input: TitleModelConfig) =>
+      request<{ title: string }>("/system/title-model/test", {
+        method: "POST",
+        body: JSON.stringify(input),
       }),
     /** 版本检查（缓存结果；force 现查 GitHub Releases）。 */
     update: (force?: boolean) =>

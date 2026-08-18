@@ -21,6 +21,7 @@ import (
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
+	"acpp/server/internal/titler"
 	"acpp/server/internal/transcript"
 )
 
@@ -131,6 +132,15 @@ func run() error {
 	chatService.SetDataSources(datasourceService)
 	orchService.SetDataSources(datasourceService)
 
+	// 会话标题：两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到
+	// （见 titler 包注释），所以由本机的小模型来算。配置在设置页维护，
+	// 没配就退回首句派生，功能不依赖它。
+	tm := config.SavedTitleModel()
+	titleService := titler.New(titler.Config{
+		Enabled: tm.Enabled, BaseURL: tm.BaseURL, Model: tm.Model,
+	})
+	chatService.SetTitler(titleService)
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -148,6 +158,7 @@ func run() error {
 		Skills:      service.NewSkillService(cfg.DataDir, skillUsage),
 		SkillUsage:  skillUsage,
 		Update:      updateService,
+		Titler:      titleService,
 		Roles:       roleService,
 		Orch:        orchService,
 		Tenants:     tenantService,

@@ -14,19 +14,22 @@ import (
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
+	"acpp/server/internal/titler"
 )
 
 // Services 是路由需要的全部业务服务，由装配层（cmd/server）构建后传入——
 // HTTP 层只做路由与编解码，不负责连库与组装依赖。
 type Services struct {
-	Agents      *service.AgentService
-	Sessions    *service.SessionService
-	Chat        *service.ChatService
-	Terminals   *service.TerminalService
-	System      *system.Service
-	Skills      *service.SkillService
-	SkillUsage  *service.SkillUsageService
-	Update      *system.Updater
+	Agents     *service.AgentService
+	Sessions   *service.SessionService
+	Chat       *service.ChatService
+	Terminals  *service.TerminalService
+	System     *system.Service
+	Skills     *service.SkillService
+	SkillUsage *service.SkillUsageService
+	Update     *system.Updater
+	// Titler 生成会话标题；设置页读写它的配置。
+	Titler      *titler.Service
 	Roles       *orch.RoleService
 	Orch        *orch.Service
 	Tenants     *service.TenantService
@@ -39,7 +42,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	agents := agentHandler{agents: svcs.Agents, chat: svcs.Chat}
 	sessions := sessionHandler{sessions: svcs.Sessions, chat: svcs.Chat}
 	chat := chatHandler{chat: svcs.Chat, sessions: svcs.Sessions}
-	system := systemHandler{system: svcs.System, update: svcs.Update}
+	system := systemHandler{system: svcs.System, update: svcs.Update, titler: svcs.Titler}
 	skills := skillHandler{skills: svcs.Skills, usage: svcs.SkillUsage}
 
 	api := http.NewServeMux()
@@ -115,6 +118,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/system/env", system.env)
 	api.HandleFunc("POST /api/system/env/install", system.envInstall)
 	// 版本检查（GitHub Releases，缓存 + ?force=1 现查）与一键更新重启。
+	// 会话标题模型（本机 ollama）：配置读写 + 模型清单 + 当场试生成。
+	api.HandleFunc("GET /api/system/title-model", system.titleModel)
+	api.HandleFunc("PUT /api/system/title-model", system.saveTitleModel)
+	api.HandleFunc("GET /api/system/title-model/models", system.titleModels)
+	api.HandleFunc("POST /api/system/title-model/test", system.titleModelTest)
+
 	api.HandleFunc("GET /api/system/update", system.updateInfo)
 	api.HandleFunc("POST /api/system/update/apply", system.updateApply)
 

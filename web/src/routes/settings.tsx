@@ -12,6 +12,7 @@ import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
+import { TitleModelCard } from "@/components/settings/title-model"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -157,6 +158,8 @@ export function Settings() {
             <>
               {/* 工作区根在数据目录之上：它才是每天要打交道的那个目录。 */}
               <WorkspaceDirCard info={info} onChange={setInfo} />
+              {/* 标题生成不依赖 SystemInfo，自己拉配置，放这里只为归到「系统」分区。 */}
+              <TitleModelCard />
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">

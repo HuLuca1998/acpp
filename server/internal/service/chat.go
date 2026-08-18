@@ -34,6 +34,9 @@ type ChatService struct {
 	// 可为 nil（没有数据库能力，会话照常可用）。
 	sources DataSources
 
+	// titler 生成会话标题；nil 或未启用时退回首句派生。
+	titler Titler
+
 	mu      sync.Mutex
 	brokers map[uint]*stream.Broker
 }
@@ -61,6 +64,18 @@ type DBReference struct {
 
 // SetDataSources 装上数据源能力面。装配期调用一次，之后只读。
 func (s *ChatService) SetDataSources(d DataSources) { s.sources = d }
+
+// Titler 是会话标题生成能力的注入口（实现在 internal/titler）。可为 nil：
+// 没装或没启用时会话沿用首句派生的标题，功能不受影响。
+// Enabled 单独暴露是为了在开销之前就短路——不必为了发现「没开」而先构造
+// 一次请求，也免得本包为判断一个哨兵错误去 import 实现包。
+type Titler interface {
+	Enabled() bool
+	Generate(ctx context.Context, user, assistant string) (string, error)
+}
+
+// SetTitler 装上标题生成能力。装配期调用一次，之后只读。
+func (s *ChatService) SetTitler(t Titler) { s.titler = t }
 
 func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
 	return &ChatService{

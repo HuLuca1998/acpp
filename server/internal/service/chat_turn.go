@@ -22,7 +22,9 @@ func DeriveTitle(text string) string {
 	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
 		line = strings.TrimSpace(line[:i])
 	}
-	const maxRunes = 24
+	// 与 titler.MaxTitleRunes 同一个数：两种标题在同一处界面轮换出现，
+	// 长度不一致会让侧边栏在标题升级的瞬间跳一下。
+	const maxRunes = 15
 	runes := []rune(line)
 	if len(runes) > maxRunes {
 		return string(runes[:maxRunes]) + "…"
@@ -255,6 +257,9 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 	// 消息数在写路径上重建一次并缓存——列表读取绝不做全量重建。
 	if all, err := s.rebuildAll(sessionID); err == nil {
 		updates["message_count"] = len(all)
+		// 标题升级借这次重建的结果，不再单独读一遍转录。异步是因为它要
+		// 等外部模型，而这一轮的收尾不该被它拖住。
+		go s.refineTitle(sessionID, br, all)
 	}
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", sessionID).Updates(updates).Error; err != nil {
 		slog.Error("save stop reason", "session", sessionID, "err", err)
@@ -302,4 +307,80 @@ func (s *ChatService) ResolveElicitation(sessionID uint, elicitationID, action s
 		return translateNoSession(sessionID, err)
 	}
 	return nil
+}
+
+// refineTitle 把首句派生的标题换成外部模型给的概括。
+//
+// 「该不该换」靠标题当前值自己回答：仍等于首句派生值就是还没被更好的
+// 标题覆盖过。这样不必给会话加状态字段，而且天然幂等——AI 标题一旦落库，
+// 之后每一轮都不再命中，符合「标题只在首轮定一次」。
+//
+// 全程失败无声：生成不出来时派生标题原样留着，界面没有任何异常。
+func (s *ChatService) refineTitle(sessionID uint, br *stream.Broker, all []model.Message) {
+	if s.titler == nil || !s.titler.Enabled() {
+		return
+	}
+	user, agent := firstExchange(all)
+	if user == "" {
+		return
+	}
+
+	var cur string
+	if err := s.db.Model(&model.Session{}).Where("id = ?", sessionID).
+		Pluck("title", &cur).Error; err != nil {
+		slog.Debug("refine title: 读当前标题失败", "session", sessionID, "err", err)
+		return
+	}
+	if cur != DeriveTitle(user) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
+	defer cancel()
+	title, err := s.titler.Generate(ctx, user, agent)
+	if err != nil {
+		slog.Debug("refine title: 生成失败", "session", sessionID, "err", err)
+		return
+	}
+
+	// 条件更新：这期间用户可能已经手动改了名，别把人家的标题盖掉。
+	res := s.db.Model(&model.Session{}).
+		Where("id = ? AND title = ?", sessionID, cur).Update("title", title)
+	if res.Error != nil {
+		slog.Warn("refine title: 落库失败", "session", sessionID, "err", res.Error)
+		return
+	}
+	if res.RowsAffected == 0 {
+		return
+	}
+	br.Publish(StreamEvent{Kind: "session_title", Title: title})
+	slog.Info("会话标题已生成", "session", sessionID, "title", title)
+}
+
+// titleTimeout 给标题生成留够冷启动的时间：ollama 首次调用要把模型载进
+// 内存，大模型十几秒是常态。它是异步的，等久点也不挡任何人。
+const titleTimeout = 90 * time.Second
+
+// firstExchange 取首轮的用户提问与 agent 回答正文。思考块与工具调用不进
+// 标题素材——它们讲的是过程，标题要的是这轮在干什么。
+func firstExchange(all []model.Message) (user, agent string) {
+	for _, m := range all {
+		if m.Kind != model.KindText || strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		switch m.Role {
+		case model.RoleUser:
+			if user == "" {
+				user = m.Content
+			}
+		case model.RoleAgent:
+			if user != "" && agent == "" {
+				agent = m.Content
+			}
+		}
+		if user != "" && agent != "" {
+			break
+		}
+	}
+	return user, agent
 }

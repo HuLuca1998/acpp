@@ -648,6 +648,24 @@ export default {
       targetPlaceholder: "/Users/you/acpp",
       saved: "工作区根目录已更新",
     },
+    titleModel: {
+      title: "会话标题生成",
+      description:
+        "用本机模型把会话标题从「首句截断」换成真正的概括。claude 与 codex 的自动标题都长在各自命令行里，ACP 通道取不到，所以这件事交给本机的小模型做——它不占 agent 的额度，也不进会话上下文。",
+      enabledLabel: "启用",
+      enabledHint: "关闭时标题仍取首句的前 15 个字",
+      endpointLabel: "ollama 地址",
+      endpointHint: "本机 ollama 的服务地址；改完点到别处会重新拉取模型清单",
+      modelLabel: "模型",
+      modelPlaceholder: "选一个模型",
+      modelHint:
+        "起标题是很轻的活，模型越小越快——9b 级别在 Apple Silicon 上通常不到一秒",
+      modelsFailed: "拉不到模型清单，确认 ollama 已经启动",
+      test: "试生成",
+      save: "保存",
+      saved: "标题模型配置已更新",
+      preview: "生成结果：",
+    },
     menu: {
       system: "系统",
       env: "环境",

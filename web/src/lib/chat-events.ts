@@ -174,6 +174,11 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         liveTools: mergeTool(prev.liveTools, ev),
       }
 
+    case "session_title":
+      // 标题不是聊天内容，它落在会话记录上（后端已落库）。这里显式接住
+      // 只为不掉进 default：真正的界面更新由会话列表的下次拉取完成。
+      return prev
+
     case "message_saved":
       // 落库的完整内容是权威版本，用它取代流式拼出来的文本。
       if (!ev.message) return prev

@@ -17,6 +17,18 @@ type fileConfig struct {
 	// 父目录）。与 DataDir 刻意分开：数据目录装 db、转录与技能包，让 agent
 	// 拿它当工作目录等于请它往自家数据里乱写。
 	WorkspaceDir string `json:"workspaceDir,omitempty"`
+	// TitleModel 是生成会话标题用的外部小模型。放本机配置而不入库：它描述
+	// 的是「这台机器上有什么可用」，与租户和数据目录都无关。
+	TitleModel TitleModel `json:"titleModel,omitempty"`
+}
+
+// TitleModel 是会话标题生成的模型配置，字段与 internal/titler.Config 对齐。
+// 两边各存一份而不互相 import：config 与 titler 都是叶子包，桥接由装配层
+// （cmd/server）做，免得为一个三字段结构在叶子之间连出依赖。
+type TitleModel struct {
+	Enabled bool   `json:"enabled"`
+	BaseURL string `json:"baseUrl,omitempty"`
+	Model   string `json:"model,omitempty"`
 }
 
 // ConfigHome 是固定的配置根（也是数据目录的默认值）：~/.acpp。
@@ -63,6 +75,18 @@ func SaveDataDir(dir string) error {
 func SaveWorkspaceDir(dir string) error {
 	fc := readFileConfig()
 	fc.WorkspaceDir = dir
+	return writeFileConfig(fc)
+}
+
+// SavedTitleModel 读标题模型配置；没配过返回零值（Enabled=false 即关闭）。
+func SavedTitleModel() TitleModel {
+	return readFileConfig().TitleModel
+}
+
+// SaveTitleModel 保存标题模型配置，立刻生效（只影响之后新建的标题）。
+func SaveTitleModel(tm TitleModel) error {
+	fc := readFileConfig()
+	fc.TitleModel = tm
 	return writeFileConfig(fc)
 }
 
