@@ -137,11 +137,14 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* 图表色：从 --primary 相对推导，五套 palette × 明暗两模式零成本继承
+     （规范 §5.1）。色相按 40° 一档铺开够区分，彩度压到 0.8 倍让多条并置
+     时不刺眼；明度固定，保证同一张图里几条线的视觉重量相当。 */
+  --chart-1: var(--primary);
+  --chart-2: oklch(from var(--primary) 0.62 calc(c * 0.85) calc(h + 45));
+  --chart-3: oklch(from var(--primary) 0.68 calc(c * 0.7) calc(h - 55));
+  --chart-4: oklch(from var(--primary) 0.58 calc(c * 0.9) calc(h + 110));
+  --chart-5: oklch(from var(--primary) 0.72 calc(c * 0.6) calc(h - 120));
   --success: oklch(0.6 0.15 150);
   --warning: oklch(0.666 0.132 75);
   --radius: 0.875rem;
@@ -174,11 +177,12 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* 深色下整体提亮：图表在深底上要更亮才读得出，同 §5.1 的推导方式。 */
+  --chart-1: var(--primary);
+  --chart-2: oklch(from var(--primary) 0.72 calc(c * 0.85) calc(h + 45));
+  --chart-3: oklch(from var(--primary) 0.78 calc(c * 0.7) calc(h - 55));
+  --chart-4: oklch(from var(--primary) 0.68 calc(c * 0.9) calc(h + 110));
+  --chart-5: oklch(from var(--primary) 0.82 calc(c * 0.6) calc(h - 120));
   --success: oklch(0.723 0.19 150);
   --warning: oklch(0.75 0.14 80);
   --sidebar: oklch(0.205 0 0);

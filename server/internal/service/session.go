@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -305,4 +306,127 @@ func gitBranch(cwd string) string {
 		return ref[:7]
 	}
 	return ""
+}
+
+// ── 概览统计 ────────────────────────────────────────────────────────
+
+// 概览页的统计面。
+//
+// 单独一个端点而不是让前端拿会话列表自己算：列表是分页的，前 50 条算出来
+// 的「最近两周趋势」是错的——用户看到的图会随每页行数变化。聚合就该在
+// 有全量数据的那一侧做。
+
+// OverviewStats 是概览页要的全部聚合数据。
+type OverviewStats struct {
+	// Totals 是全量口径的总计。放在这里而不是让前端拿列表自己 reduce：
+	// 列表是分页的，前 20 条加出来的「消息总量」只是前 20 条的和。
+	Sessions int64 `json:"sessions"`
+	Messages int64 `json:"messages"`
+	// Daily 是最近 N 天每天的会话数与消息数，按日期升序、**补齐空缺的天**
+	//（没有会话的那天也要有一个 0，否则折线会把两周压成三个点）。
+	Daily []DailyStat `json:"daily"`
+	// ByAgent 是会话在各 agent 上的分布。
+	ByAgent []NamedCount `json:"byAgent"`
+	// ByState 是会话的状态分布。
+	ByState []NamedCount `json:"byState"`
+}
+
+type DailyStat struct {
+	Date     string `json:"date"`
+	Sessions int64  `json:"sessions"`
+	Messages int64  `json:"messages"`
+}
+
+type NamedCount struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
+// Overview 汇总概览统计。days 是趋势图的天数窗口。
+func (s *SessionService) Overview(ctx context.Context, scope Scope, days int) (*OverviewStats, error) {
+	if days <= 0 || days > 90 {
+		days = 14
+	}
+	since := time.Now().AddDate(0, 0, -(days - 1)).Truncate(24 * time.Hour)
+
+	daily, err := s.dailyStats(ctx, scope, since, days)
+	if err != nil {
+		return nil, err
+	}
+
+	var totals struct {
+		Sessions int64
+		Messages int64
+	}
+	err = scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{})).
+		Select("count(*) as sessions, coalesce(sum(message_count),0) as messages").
+		Scan(&totals).Error
+	if err != nil {
+		return nil, fmt.Errorf("overview totals: %w", err)
+	}
+
+	byAgent, err := s.countBy(ctx, scope, "agents.name", "JOIN agents ON agents.id = sessions.agent_id")
+	if err != nil {
+		return nil, err
+	}
+	byState, err := s.countBy(ctx, scope, "sessions.state", "")
+	if err != nil {
+		return nil, err
+	}
+	return &OverviewStats{
+		Sessions: totals.Sessions,
+		Messages: totals.Messages,
+		Daily:    daily,
+		ByAgent:  byAgent,
+		ByState:  byState,
+	}, nil
+}
+
+// dailyStats 按天聚合会话数与消息数，并补齐没有数据的日子。
+func (s *SessionService) dailyStats(ctx context.Context, scope Scope, since time.Time, days int) ([]DailyStat, error) {
+	type row struct {
+		Day      string
+		Sessions int64
+		Messages int64
+	}
+	var rows []row
+	// date() 是 SQLite 的写法——本项目的元数据库固定是 SQLite（见 README）。
+	err := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{})).
+		Select("date(created_at) as day, count(*) as sessions, coalesce(sum(message_count),0) as messages").
+		Where("created_at >= ?", since).
+		Group("day").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("daily stats: %w", err)
+	}
+
+	byDay := make(map[string]row, len(rows))
+	for _, r := range rows {
+		byDay[r.Day] = r
+	}
+
+	out := make([]DailyStat, 0, days)
+	for i := range days {
+		day := since.AddDate(0, 0, i).Format("2006-01-02")
+		r := byDay[day]
+		out = append(out, DailyStat{Date: day, Sessions: r.Sessions, Messages: r.Messages})
+	}
+	return out, nil
+}
+
+// countBy 按某一列分组计数，倒序返回。
+func (s *SessionService) countBy(ctx context.Context, scope Scope, column, join string) ([]NamedCount, error) {
+	q := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{}))
+	if join != "" {
+		q = q.Joins(join)
+	}
+	var out []NamedCount
+	err := q.Select(column + " as name, count(*) as count").
+		Group(column).
+		Order("count desc").
+		Scan(&out).Error
+	if err != nil {
+		return nil, fmt.Errorf("count by %s: %w", column, err)
+	}
+	return out, nil
 }

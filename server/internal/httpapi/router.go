@@ -202,6 +202,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("DELETE /api/workspace/git/worktrees", draft.removeWorktree)
 
 	api.HandleFunc("GET /api/sessions", sessions.list)
+	// 概览统计：按天趋势 + agent/状态分布，聚合在有全量数据的这一侧做。
+	api.HandleFunc("GET /api/sessions/overview", sessions.overview)
 	api.HandleFunc("POST /api/sessions", sessions.create)
 	api.HandleFunc("GET /api/sessions/{id}", sessions.get)
 	api.HandleFunc("DELETE /api/sessions/{id}", sessions.remove)

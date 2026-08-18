@@ -186,6 +186,17 @@ export interface Session {
   updatedAt: string
 }
 
+/** 概览页的聚合统计（后端算，前端只画）。 */
+export interface OverviewStats {
+  /** 全量口径的总计（不是当前页的和）。 */
+  sessions: number
+  messages: number
+  /** 最近 N 天每天的会话数与消息数，已补齐没有数据的日子。 */
+  daily: { date: string; sessions: number; messages: number }[]
+  byAgent: { name: string; count: number }[]
+  byState: { name: string; count: number }[]
+}
+
 /** agent 计划里的一项，来自 session/update 的 plan entries。 */
 export interface PlanEntry {
   content: string

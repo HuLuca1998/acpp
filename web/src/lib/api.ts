@@ -24,6 +24,7 @@ import type {
   Message,
   OrchSession,
   OrchTask,
+  OverviewStats,
   Paged,
   Project,
   RemoteRepo,
@@ -349,6 +350,10 @@ export const api = {
   },
 
   sessions: {
+    /** 概览统计（按天趋势 + agent/状态分布）。聚合在后端做——分页列表算不准。 */
+    overview: (days = 14) =>
+      request<OverviewStats>(`/sessions/overview?days=${days}`),
+
     list: (params?: { agentId?: number; page?: number; pageSize?: number }) => {
       const qs = new URLSearchParams()
       if (params?.agentId) qs.set("agentId", String(params.agentId))

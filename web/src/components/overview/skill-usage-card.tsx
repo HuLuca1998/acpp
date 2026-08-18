@@ -1,7 +1,13 @@
 import { useTranslation } from "react-i18next"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { Link } from "react-router"
 
 import { Button } from "@/components/ui/button"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart"
 import {
   Card,
   CardAction,
@@ -23,7 +29,6 @@ import { ArrowRightIcon, PuzzleIcon } from "lucide-react"
 /** 技能使用统计卡：被 AI 调用最多的技能，次数条相对最高值。 */
 export function SkillUsageCard({ usage }: { usage: SkillUsage[] }) {
   const { t } = useTranslation()
-  const max = Math.max(1, ...usage.map((s) => s.count))
 
   return (
     <Card>
@@ -37,7 +42,7 @@ export function SkillUsageCard({ usage }: { usage: SkillUsage[] }) {
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-1 flex-col justify-center">
         {usage.length === 0 ? (
           <Empty>
             <EmptyHeader>
@@ -51,29 +56,40 @@ export function SkillUsageCard({ usage }: { usage: SkillUsage[] }) {
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="flex flex-col gap-2">
-            {usage.map((s) => (
-              <Link
-                key={s.name}
-                to={`/skills/${s.name}`}
-                className="group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-150 ease-snappy hover:bg-muted/60"
-              >
-                <span className="w-40 shrink-0 truncate font-mono text-xs">
-                  {s.name}
-                </span>
-                {/* 次数条：相对最高值的占比，纯视觉参照。 */}
-                <span className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className="h-full rounded-full bg-primary/70"
-                    style={{ width: `${(s.count / max) * 100}%` }}
-                  />
-                </span>
-                <span className="w-10 shrink-0 text-right text-sm tabular-nums">
-                  {s.count.toLocaleString()}
-                </span>
-              </Link>
-            ))}
-          </div>
+          <ChartContainer
+            config={{
+              count: {
+                label: t("overview.skillUsageCount"),
+                color: "var(--chart-1)",
+              },
+            }}
+            className="h-48 w-full"
+          >
+            {/* 横向柱状：技能名长短不一，竖着放标签会挤成斜的。 */}
+            <BarChart
+              data={usage}
+              layout="vertical"
+              margin={{ left: 4, right: 16 }}
+            >
+              <CartesianGrid horizontal={false} />
+              <XAxis type="number" dataKey="count" hide />
+              <YAxis
+                type="category"
+                dataKey="name"
+                tickLine={false}
+                axisLine={false}
+                width={140}
+                tick={{ fontSize: 12 }}
+              />
+              <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+              <Bar
+                dataKey="count"
+                fill="var(--color-count)"
+                radius={4}
+                barSize={20}
+              />
+            </BarChart>
+          </ChartContainer>
         )}
       </CardContent>
     </Card>

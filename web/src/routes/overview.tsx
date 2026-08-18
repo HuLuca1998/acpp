@@ -2,8 +2,8 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
-import { AgentsCard } from "@/components/overview/agents-card"
-import { RecentSessionsCard } from "@/components/overview/recent-sessions-card"
+import { ActivityChart } from "@/components/overview/activity-chart"
+import { DistributionChart } from "@/components/overview/distribution-chart"
 import { SkillUsageCard } from "@/components/overview/skill-usage-card"
 import { StatCards } from "@/components/overview/stat-cards"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/lib/api"
-import type { Agent, Session, SkillUsage } from "@/types/acp"
+import type { Agent, OverviewStats, Session, SkillUsage } from "@/types/acp"
 import { ActivityIcon, BotIcon } from "lucide-react"
 
 const RECENT_LIMIT = 6
@@ -27,9 +27,24 @@ export function Overview() {
   const { t } = useTranslation()
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [sessions, setSessions] = useState<Session[] | null>(null)
-  const [sessionTotal, setSessionTotal] = useState(0)
   const [skillUsage, setSkillUsage] = useState<SkillUsage[]>([])
+  const [stats, setStats] = useState<OverviewStats | null>(null)
+  const [days, setDays] = useState(14)
   const [error, setError] = useState<string | null>(null)
+
+  // 趋势数据随天数窗口重取。它与主体分开加载：图表慢一点不该拖住指标卡。
+  useEffect(() => {
+    let cancelled = false
+    api.sessions
+      .overview(days)
+      .then((res) => {
+        if (!cancelled) setStats(res)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [days])
 
   useEffect(() => {
     let cancelled = false
@@ -42,7 +57,6 @@ export function Overview() {
         if (cancelled) return
         setAgents(agentRes.items)
         setSessions(sessionRes.items)
-        setSessionTotal(sessionRes.total)
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message)
@@ -124,16 +138,14 @@ export function Overview() {
 
   return (
     <PageShell>
-      <StatCards
-        agents={agents}
-        sessions={sessions}
-        sessionTotal={sessionTotal}
-      />
-      <div className="grid grid-cols-1 items-start gap-4 px-4 md:gap-6 lg:px-6 @4xl/main:grid-cols-[2fr_1fr]">
-        <RecentSessionsCard sessions={sessions.slice(0, RECENT_LIMIT)} />
-        <AgentsCard agents={agents} />
-      </div>
+      <StatCards agents={agents} sessions={sessions} overview={stats} />
       <div className="px-4 lg:px-6">
+        <ActivityChart stats={stats} days={days} onDays={setDays} />
+      </div>
+      {/* 不用 items-start：那会让两张卡各按自身高度长，底边永远参差。
+          默认 stretch 才能对齐，卡内的图表再各自撑满。 */}
+      <div className="grid grid-cols-1 gap-4 px-4 md:gap-6 lg:px-6 @4xl/main:grid-cols-2">
+        <DistributionChart stats={stats} />
         <SkillUsageCard usage={skillUsage} />
       </div>
     </PageShell>

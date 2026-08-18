@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import type { Agent, Session } from "@/types/acp"
+import type { Agent, OverviewStats, Session } from "@/types/acp"
 import {
   ActivityIcon,
   BotIcon,
@@ -21,11 +21,13 @@ import {
 export function StatCards({
   agents,
   sessions,
-  sessionTotal,
+  overview,
 }: {
   agents: Agent[]
+  /** 只用来判断「哪些 agent 现在连着」——那是进程状态，统计端点算不出。 */
   sessions: Session[]
-  sessionTotal: number
+  /** 全量口径的总计与分布；还没加载好时退回 0。 */
+  overview: OverviewStats | null
 }) {
   const { t } = useTranslation()
 
@@ -33,9 +35,12 @@ export function StatCards({
   const connectedCount = new Set(
     sessions.filter((s) => s.running).map((s) => s.agentId)
   ).size
-  const activeCount = sessions.filter((s) => s.state === "active").length
+  // 「进行中」取全量口径（state=active），不是当前这几条的和。
+  const activeCount =
+    overview?.byState.find((s) => s.name === "active")?.count ?? 0
   const runningCount = sessions.filter((s) => s.running).length
-  const messageCount = sessions.reduce((sum, s) => sum + s.messageCount, 0)
+  const sessionTotal = overview?.sessions ?? 0
+  const messageCount = overview?.messages ?? 0
 
   const stats: {
     key: string
@@ -92,7 +97,7 @@ export function StatCards({
 
   return (
     // 指标卡：入场从下轻浮起 + 逐卡 45ms stagger，仅首次挂载可见。
-    <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card lg:px-6 @xl/main:grid-cols-2 @3xl/main:grid-cols-4">
       {stats.map((stat, i) => (
         <Card
           key={stat.key}

@@ -42,6 +42,17 @@ func (h sessionHandler) list(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// overview 是概览页的聚合统计。单独一个端点而不是让前端拿分页列表自己算
+// ——前 50 条算出来的「最近两周趋势」是错的（见 service.OverviewStats）。
+func (h sessionHandler) overview(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.sessions.Overview(r.Context(), scopeOf(r), queryInt(r, "days", 14))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, stats)
+}
+
 func (h sessionHandler) get(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
