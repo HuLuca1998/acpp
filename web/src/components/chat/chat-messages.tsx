@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/format"
 import { CopyButton } from "@/components/chat/copy-button"
 import { ElicitationAnsweredCard } from "@/components/chat/cards/elicitation-card"
 import { MarkdownContent } from "@/components/chat/markdown"
+import { UserAvatar } from "@/components/chat/message-shell"
 import { ThoughtBlock } from "@/components/chat/thought-block"
 import {
   ToolCallBlock,
@@ -16,7 +17,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
-import { Message as MessageRow, MessageContent } from "@/components/ui/message"
+import {
+  Message as MessageRow,
+  MessageAvatar,
+  MessageContent,
+} from "@/components/ui/message"
 import { Spinner } from "@/components/ui/spinner"
 import {
   ChevronRightIcon,
@@ -144,13 +149,17 @@ export const ActivityMessage = memo(function ActivityMessage({
   )
 })
 
-/** 正文消息：用户消息用主色气泡靠右，agent 输出通栏渲染 markdown。
+/** 正文消息：用户消息用主色气泡靠右并带头像，agent 输出渲染 markdown
+ *  （头像与左侧对齐槽由外层 AgentRow 给，因为工具卡、计划卡要缩进同样多）。
  *  memo 是必须的——流式期间每个 chunk 都触发页面重渲染，
  *  没有它整份历史的 markdown 会一遍遍重新解析。 */
 export const ChatMessage = memo(function ChatMessage({
   message,
+  userName,
 }: {
   message: Message
+  /** 会话创建者的名字，人这侧的头像用它取首字母。 */
+  userName?: string
 }) {
   const { i18n } = useTranslation()
   const timestamp = formatDateTime(message.createdAt, i18n.language)
@@ -167,6 +176,10 @@ export const ChatMessage = memo(function ChatMessage({
     } | null
     return (
       <MessageRow align="end">
+        {/* align=end 是 flex-row-reverse，头像作为第一个子元素落在右侧。 */}
+        <MessageAvatar className="self-start bg-transparent">
+          <UserAvatar name={userName} />
+        </MessageAvatar>
         <MessageContent>
           <div
             className="group/msg flex items-center justify-end gap-1.5"

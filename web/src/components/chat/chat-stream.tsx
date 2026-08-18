@@ -10,6 +10,7 @@ import {
 import { ElicitationCard } from "@/components/chat/cards/elicitation-card"
 import { FileEditCard } from "@/components/chat/file-edit-card"
 import { MarkdownContent } from "@/components/chat/markdown"
+import { AgentAvatar, AgentRow } from "@/components/chat/message-shell"
 import { PermissionCard } from "@/components/chat/cards/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
 import { PlanReviewCard } from "@/components/chat/cards/plan-review-card"
@@ -25,7 +26,7 @@ import {
 } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
 import type { ChatState } from "@/lib/chat-events"
-import { groupMessages } from "@/lib/message-blocks"
+import { groupMessages, type Block } from "@/lib/message-blocks"
 import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 
 /**
@@ -53,6 +54,8 @@ export interface ChatStreamSource extends ChatState {
  */
 export function ChatStream({ chat }: { chat: ChatStreamSource }) {
   const { t } = useTranslation()
+  const flavor = chat.session?.agentFlavor
+  const userName = chat.session?.tenantName
 
   // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
   const liveEdits = chat.liveTools.filter((tool) => tool.kind === "edit")
@@ -65,6 +68,35 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
   const activeTool = [...chat.liveTools]
     .reverse()
     .find((tool) => tool.status !== "completed" && tool.status !== "failed")
+  // 一轮开始就在等 agent 说第一句话，这时候没有任何内容可挂——单独一条
+  // 「思考中」占位。
+  const idleBusy =
+    chat.busy &&
+    !chat.streamingText &&
+    liveActivityCount === 0 &&
+    !chat.elicitation &&
+    !chat.permission
+
+  const blocks = groupMessages(chat.messages)
+  // 头像只戳每轮的第一条 agent 内容，其余留空槽。
+  const { starts: turnStarts, liveStartsTurn } = turnStartsOf(blocks)
+  // 活内容（这一轮还在跑的部分）按渲染顺序排一遍，头像给排在最前的那块。
+  // 声明式地先算好，别在 JSX 里边渲染边翻标志位——那是渲染期改渲染期的
+  // 状态，React 编译器会拦。
+  const liveOrder = [
+    chat.plan && chat.plan.length > 0 ? "plan" : null,
+    liveActivityCount > 0 ? "activity" : null,
+    liveEdits.length > 0 ? "edits" : null,
+    chat.streamingText ? "text" : null,
+    chat.permission ? "permission" : null,
+    chat.elicitation ? "elicitation" : null,
+    idleBusy ? "busy" : null,
+  ]
+  const liveHead = liveStartsTurn ? liveOrder.find(Boolean) : null
+  const liveAvatar = (slot: string) =>
+    slot === liveHead ? (
+      <AgentAvatar flavor={flavor} name={chat.session?.agentName} />
+    ) : undefined
 
   return (
     // 打开即定位到底部看最新内容（不是先渲染顶部再跳）；
@@ -79,111 +111,137 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
                 <EarlierSentinel onVisible={() => void chat.loadEarlier()} />
               </MessageScrollerItem>
             ) : null}
-            {groupMessages(chat.messages).map((block) =>
-              block.type === "chat" ? (
+            {blocks.map((block) => {
+              const key = blockKey(block)
+              // 用户消息自带靠右的头像行，不进 agent 侧的对齐槽。
+              // 这里内联判断而不用 isUserBlock：类型谓词会把 else 分支里的
+              // chat 块一起排除掉，下面就取不到 block.message 了。
+              if (block.type === "chat" && block.message.role === "user") {
                 // 不设 scrollAnchor：锚定会把新用户消息滚到视口顶并
                 // 打断贴底跟随，与 autoScroll 的跟随体验相互矛盾。
+                return (
+                  <MessageScrollerItem key={key} messageId={key}>
+                    <ChatMessage message={block.message} userName={userName} />
+                  </MessageScrollerItem>
+                )
+              }
+              const avatar = turnStarts.has(key) ? (
+                <AgentAvatar flavor={flavor} name={chat.session?.agentName} />
+              ) : undefined
+              return (
                 <MessageScrollerItem
-                  key={block.message.id}
-                  messageId={String(block.message.id)}
+                  key={key}
+                  messageId={block.type === "activity" ? undefined : key}
+                  scrollAnchor={false}
                 >
-                  <ChatMessage message={block.message} />
-                </MessageScrollerItem>
-              ) : block.type === "edit" ? (
-                <MessageScrollerItem
-                  key={block.message.id}
-                  messageId={String(block.message.id)}
-                >
-                  <FileEditCard
-                    payload={(block.message.payload ?? {}) as ToolCallPayload}
-                    status={
-                      (block.message.payload as ToolCallPayload | null)?.status
-                    }
-                  />
-                </MessageScrollerItem>
-              ) : (
-                <MessageScrollerItem key={block.key} scrollAnchor={false}>
-                  <ActivitySection count={block.items.length}>
-                    {block.items.map((item) => (
-                      <ActivityMessage key={item.id} message={item} />
-                    ))}
-                  </ActivitySection>
+                  <AgentRow avatar={avatar}>
+                    {block.type === "chat" ? (
+                      <ChatMessage message={block.message} />
+                    ) : block.type === "edit" ? (
+                      <FileEditCard
+                        payload={
+                          (block.message.payload ?? {}) as ToolCallPayload
+                        }
+                        status={
+                          (block.message.payload as ToolCallPayload | null)
+                            ?.status
+                        }
+                      />
+                    ) : (
+                      <ActivitySection count={block.items.length}>
+                        {block.items.map((item) => (
+                          <ActivityMessage key={item.id} message={item} />
+                        ))}
+                      </ActivitySection>
+                    )}
+                  </AgentRow>
                 </MessageScrollerItem>
               )
-            )}
+            })}
 
             {/* 任务计划：随 plan 事件实时更新，轮次结束保留最终状态。 */}
             {chat.plan && chat.plan.length > 0 ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <PlanCard entries={chat.plan} />
+                <AgentRow avatar={liveAvatar("plan")}>
+                  <PlanCard entries={chat.plan} />
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
 
             {liveActivityCount > 0 ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <ActivitySection
-                  count={liveActivityCount}
-                  busy={chat.busy}
-                  activeLabel={
-                    activeTool ? activeTool.title || activeTool.kind : undefined
-                  }
-                >
-                  {chat.streamingThought ? (
-                    <Marker>
-                      <MarkerIcon>
-                        <BrainIcon />
-                      </MarkerIcon>
-                      <MarkerContent>
-                        <span className="text-shimmer">
-                          {t("chat.thinking")}
-                        </span>
-                        {/* 只看思考的"最新进展"：截尾 + 行数钳制，不淹没界面。 */}
-                        <div className="mt-1 line-clamp-3 whitespace-pre-wrap">
-                          {chat.streamingThought.slice(-600)}
-                        </div>
-                      </MarkerContent>
-                    </Marker>
-                  ) : null}
-                  {chat.permissions.map((perm) => (
-                    <Marker key={perm.id}>
-                      <MarkerIcon>
-                        <ShieldCheckIcon />
-                      </MarkerIcon>
-                      <MarkerContent>
-                        {t("chat.permission.resolved", {
-                          title: perm.title,
-                          choice: perm.choice || t("chat.permission.cancelled"),
-                        })}
-                      </MarkerContent>
-                    </Marker>
-                  ))}
-                  {liveOthers.map((tool) => (
-                    <LiveToolMarker key={tool.id} tool={tool} />
-                  ))}
-                </ActivitySection>
+                <AgentRow avatar={liveAvatar("activity")}>
+                  <ActivitySection
+                    count={liveActivityCount}
+                    busy={chat.busy}
+                    activeLabel={
+                      activeTool
+                        ? activeTool.title || activeTool.kind
+                        : undefined
+                    }
+                  >
+                    {chat.streamingThought ? (
+                      <Marker>
+                        <MarkerIcon>
+                          <BrainIcon />
+                        </MarkerIcon>
+                        <MarkerContent>
+                          <span className="text-shimmer">
+                            {t("chat.thinking")}
+                          </span>
+                          {/* 只看思考的"最新进展"：截尾 + 行数钳制，不淹没界面。 */}
+                          <div className="mt-1 line-clamp-3 whitespace-pre-wrap">
+                            {chat.streamingThought.slice(-600)}
+                          </div>
+                        </MarkerContent>
+                      </Marker>
+                    ) : null}
+                    {chat.permissions.map((perm) => (
+                      <Marker key={perm.id}>
+                        <MarkerIcon>
+                          <ShieldCheckIcon />
+                        </MarkerIcon>
+                        <MarkerContent>
+                          {t("chat.permission.resolved", {
+                            title: perm.title,
+                            choice:
+                              perm.choice || t("chat.permission.cancelled"),
+                          })}
+                        </MarkerContent>
+                      </Marker>
+                    ))}
+                    {liveOthers.map((tool) => (
+                      <LiveToolMarker key={tool.id} tool={tool} />
+                    ))}
+                  </ActivitySection>
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
 
             {/* 进行中的文件编辑：独立消息条实时更新，diff 随改随看。 */}
             {liveEdits.map((tool) => (
               <MessageScrollerItem key={tool.id} scrollAnchor={false}>
-                <FileEditCard
-                  payload={
-                    {
-                      kind: tool.kind,
-                      rawInput: tool.rawInput,
-                      rawOutput: tool.rawOutput,
-                      content: tool.content,
-                    } as ToolCallPayload
-                  }
-                  status={tool.status}
-                />
+                <AgentRow avatar={liveAvatar("edits")}>
+                  <FileEditCard
+                    payload={
+                      {
+                        kind: tool.kind,
+                        rawInput: tool.rawInput,
+                        rawOutput: tool.rawOutput,
+                        content: tool.content,
+                      } as ToolCallPayload
+                    }
+                    status={tool.status}
+                  />
+                </AgentRow>
               </MessageScrollerItem>
             ))}
 
             {chat.streamingText ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <MarkdownContent>{chat.streamingText}</MarkdownContent>
+                <AgentRow avatar={liveAvatar("text")}>
+                  <MarkdownContent>{chat.streamingText}</MarkdownContent>
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
 
@@ -192,29 +250,31 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
                 key={chat.permission.id}
                 scrollAnchor={false}
               >
-                {chat.permission.planReview ? (
-                  <PlanReviewCard
-                    permission={chat.permission}
-                    onResolve={(optionId, choiceName) =>
-                      void chat.resolvePermission(
-                        chat.permission!.id,
-                        optionId,
-                        choiceName
-                      )
-                    }
-                  />
-                ) : (
-                  <PermissionCard
-                    permission={chat.permission}
-                    onResolve={(optionId, choiceName) =>
-                      void chat.resolvePermission(
-                        chat.permission!.id,
-                        optionId,
-                        choiceName
-                      )
-                    }
-                  />
-                )}
+                <AgentRow avatar={liveAvatar("permission")}>
+                  {chat.permission.planReview ? (
+                    <PlanReviewCard
+                      permission={chat.permission}
+                      onResolve={(optionId, choiceName) =>
+                        void chat.resolvePermission(
+                          chat.permission!.id,
+                          optionId,
+                          choiceName
+                        )
+                      }
+                    />
+                  ) : (
+                    <PermissionCard
+                      permission={chat.permission}
+                      onResolve={(optionId, choiceName) =>
+                        void chat.resolvePermission(
+                          chat.permission!.id,
+                          optionId,
+                          choiceName
+                        )
+                      }
+                    />
+                  )}
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
 
@@ -223,49 +283,51 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
                 key={chat.elicitation.id}
                 scrollAnchor={false}
               >
-                <ElicitationCard
-                  elicitation={chat.elicitation}
-                  onResolve={(action, content) =>
-                    void chat.resolveElicitation(
-                      chat.elicitation!.id,
-                      action,
-                      content
-                    )
-                  }
-                />
+                <AgentRow avatar={liveAvatar("elicitation")}>
+                  <ElicitationCard
+                    elicitation={chat.elicitation}
+                    onResolve={(action, content) =>
+                      void chat.resolveElicitation(
+                        chat.elicitation!.id,
+                        action,
+                        content
+                      )
+                    }
+                  />
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
 
-            {chat.busy &&
-            !chat.streamingText &&
-            liveActivityCount === 0 &&
-            !chat.elicitation &&
-            !chat.permission ? (
+            {idleBusy ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <Marker role="status">
-                  <MarkerIcon>
-                    <Spinner />
-                  </MarkerIcon>
-                  <MarkerContent className="text-shimmer">
-                    {t("chat.thinking")}
-                  </MarkerContent>
-                </Marker>
+                <AgentRow avatar={liveAvatar("busy")}>
+                  <Marker role="status">
+                    <MarkerIcon>
+                      <Spinner />
+                    </MarkerIcon>
+                    <MarkerContent className="text-shimmer">
+                      {t("chat.thinking")}
+                    </MarkerContent>
+                  </Marker>
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
 
             {/* 非正常结束原因内联在消息流末尾，紧跟被截断的回答。 */}
             {chat.stopReason ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <Marker>
-                  <MarkerIcon>
-                    <CircleAlertIcon className="text-warning" />
-                  </MarkerIcon>
-                  <MarkerContent>
-                    {t(`chat.stopReason.${chat.stopReason}` as never, {
-                      defaultValue: chat.stopReason,
-                    })}
-                  </MarkerContent>
-                </Marker>
+                <AgentRow>
+                  <Marker>
+                    <MarkerIcon>
+                      <CircleAlertIcon className="text-warning" />
+                    </MarkerIcon>
+                    <MarkerContent>
+                      {t(`chat.stopReason.${chat.stopReason}` as never, {
+                        defaultValue: chat.stopReason,
+                      })}
+                    </MarkerContent>
+                  </Marker>
+                </AgentRow>
               </MessageScrollerItem>
             ) : null}
           </MessageScrollerContent>
@@ -274,4 +336,32 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
       </MessageScroller>
     </MessageScrollerProvider>
   )
+}
+
+/** 块的稳定 key：活动块自带 key，其余用消息 id。 */
+function blockKey(block: Block): string {
+  return block.type === "activity" ? block.key : String(block.message.id)
+}
+
+/**
+ * 算出哪些块是「一轮的开头」——头像只戳在那儿，同一轮后续的块留空槽。
+ * liveStartsTurn 说的是历史里最后一句是人说的：那这一轮的活内容就是开头。
+ */
+function turnStartsOf(blocks: Block[]): {
+  starts: Set<string>
+  liveStartsTurn: boolean
+} {
+  const starts = new Set<string>()
+  let live = true
+  for (const block of blocks) {
+    if (block.type === "chat" && block.message.role === "user") {
+      live = true
+      continue
+    }
+    if (live) {
+      starts.add(blockKey(block))
+      live = false
+    }
+  }
+  return { starts, liveStartsTurn: live }
 }
