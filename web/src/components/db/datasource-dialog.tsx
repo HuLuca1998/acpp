@@ -27,7 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { SuggestInput } from "@/components/db/suggest-input"
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox"
 import { UriDialog } from "@/components/db/uri-dialog"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -195,15 +201,37 @@ function DataSourceForm({
             <div className="grid grid-cols-2 gap-4">
               <Field>
                 <FieldLabel htmlFor="ds-project">{t("db.project")}</FieldLabel>
-                {/* 建议而非限制：库常常先于代码存在，本机还没 clone 也得能配。 */}
-                <SuggestInput
-                  id="ds-project"
-                  required
+                {/* 建议而非限制：库常常先于代码存在，本机还没 clone 也得能配。
+                    inputValue 与 value 都接同一个字段，输入什么就是什么，
+                    选建议只是替你把字打完。 */}
+                <Combobox
+                  items={projects}
                   value={form.project}
-                  options={projects}
-                  placeholder={t("db.projectPlaceholder")}
-                  onChange={(v) => set("project", v)}
-                />
+                  onValueChange={(v) => set("project", (v as string) ?? "")}
+                  inputValue={form.project}
+                  onInputValueChange={(v) => set("project", v)}
+                  openOnInputClick
+                >
+                  <ComboboxInput
+                    id="ds-project"
+                    required
+                    placeholder={t("db.projectPlaceholder")}
+                    showTrigger={projects.length > 0}
+                  />
+                  <ComboboxContent>
+                    <ComboboxList>
+                      {(project: string) => (
+                        <ComboboxItem
+                          key={project}
+                          value={project}
+                          className="font-mono"
+                        >
+                          {project}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
               </Field>
               <Field>
                 <FieldLabel htmlFor="ds-env">{t("db.env")}</FieldLabel>
@@ -270,7 +298,6 @@ function DataSourceForm({
               form={form}
               onPick={(name) => set("database", name)}
             />
-
           </FieldGroup>
         </TabsContent>
 
@@ -547,15 +574,23 @@ function DatabasePicker({
           </SelectTrigger>
           <SelectContent>
             {/* 已选的库先摆上，免得还没拉清单时显示成空。 */}
-            {(list ?? (form.database ? [{ name: form.database, tables: 0 }] : []))
-              .map((d) => (
-                <SelectItem key={d.name} value={d.name}>
-                  {d.name}
-                </SelectItem>
-              ))}
+            {(
+              list ??
+              (form.database ? [{ name: form.database, tables: 0 }] : [])
+            ).map((d) => (
+              <SelectItem key={d.name} value={d.name}>
+                {d.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-        <Button type="button" variant="outline" size="sm" disabled={loading} onClick={load}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={load}
+        >
           {loading ? <Spinner /> : null}
           {t("db.databaseLoad")}
         </Button>
