@@ -3,10 +3,7 @@
   "configurations": [
     {
       "name": "acpp",
-      "runtimeExecutable": "make",
-      "runtimeArgs": ["preview"],
-      "port": 45173,
-      "autoPort": false
+      "url": "http://localhost:45173"
     }
   ]
 }
