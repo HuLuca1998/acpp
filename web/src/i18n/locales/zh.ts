@@ -11,6 +11,10 @@ export default {
     unnamed: "未命名",
     none: "—",
   },
+  table: {
+    columns: "列",
+    search: "搜索",
+  },
   pagination: {
     range: "第 {{from}}–{{to}} 条 / 共 {{total}} 条",
     perPage: "每页",

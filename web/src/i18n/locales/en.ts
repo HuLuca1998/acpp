@@ -11,6 +11,10 @@ export default {
     unnamed: "Untitled",
     none: "—",
   },
+  table: {
+    columns: "Columns",
+    search: "Search",
+  },
   pagination: {
     range: "{{from}}–{{to}} of {{total}}",
     perPage: "Per page",

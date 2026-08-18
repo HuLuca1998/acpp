@@ -57,7 +57,7 @@ type TenantView struct {
 }
 
 // List 分页返回访客列表（每条带会话数）。
-func (s *TenantService) List(ctx context.Context, page, pageSize int) ([]TenantView, int64, error) {
+func (s *TenantService) List(ctx context.Context, page, pageSize int, orderBy string) ([]TenantView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -71,8 +71,11 @@ func (s *TenantService) List(ctx context.Context, page, pageSize int) ([]TenantV
 		return nil, 0, fmt.Errorf("count tenants: %w", err)
 	}
 
+	if orderBy == "" {
+		orderBy = "id asc"
+	}
 	var tenants []model.Tenant
-	err := q.Order("id asc").
+	err := q.Order(orderBy).
 		Limit(pageSize).Offset((page - 1) * pageSize).
 		Find(&tenants).Error
 	if err != nil {

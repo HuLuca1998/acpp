@@ -30,7 +30,8 @@ type tenantView struct {
 
 func (h tenantHandler) list(w http.ResponseWriter, r *http.Request) {
 	pageNum, pageSize := pageParams(r)
-	views, total, err := h.tenants.List(r.Context(), pageNum, pageSize)
+	sort := sortParams(r, "name", "root", "disabled", "last_seen_at", "created_at")
+	views, total, err := h.tenants.List(r.Context(), pageNum, pageSize, sort.OrderBy(""))
 	if err != nil {
 		writeError(w, err)
 		return

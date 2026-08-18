@@ -53,7 +53,7 @@ func (s *RoleService) List(ctx context.Context) ([]model.Role, error) {
 }
 
 // ListPage 是角色页用的分页读法。
-func (s *RoleService) ListPage(ctx context.Context, page, pageSize int) ([]model.Role, int64, error) {
+func (s *RoleService) ListPage(ctx context.Context, page, pageSize int, orderBy string) ([]model.Role, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -70,8 +70,11 @@ func (s *RoleService) ListPage(ctx context.Context, page, pageSize int) ([]model
 		return nil, 0, fmt.Errorf("count roles: %w", err)
 	}
 
+	if orderBy == "" {
+		orderBy = "id asc"
+	}
 	var roles []model.Role
-	err := q.Order("id asc").
+	err := q.Order(orderBy).
 		Limit(pageSize).Offset((page - 1) * pageSize).
 		Find(&roles).Error
 	if err != nil {

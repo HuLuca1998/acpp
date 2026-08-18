@@ -65,7 +65,7 @@ type SessionInput struct {
 
 // List 按更新时间倒序分页。pageSize 有默认与上限——全量拉取会随
 // 会话数线性变慢，侧栏这类场景只需要前几条。
-func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, page, pageSize int) ([]SessionView, int64, error) {
+func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, page, pageSize int, orderBy string) ([]SessionView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -86,9 +86,12 @@ func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, pa
 		return nil, 0, fmt.Errorf("count sessions: %w", err)
 	}
 
+	if orderBy == "" {
+		orderBy = "updated_at desc"
+	}
 	var sessions []model.Session
 	err := q.Preload("Agent").
-		Order("updated_at desc").
+		Order(orderBy).
 		Limit(pageSize).
 		Offset((page - 1) * pageSize).
 		Find(&sessions).Error

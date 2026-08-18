@@ -98,7 +98,7 @@ type Input struct {
 //
 // 分页不是为了「现在」——是为了不给未来留一个随数据量线性变慢的读路径。
 // 一次全量返回在几条连接时看不出问题，等到几百条时它已经长在页面加载里了。
-func (s *Service) List(ctx context.Context, page, pageSize int) ([]model.DataSource, int64, error) {
+func (s *Service) List(ctx context.Context, page, pageSize int, orderBy string) ([]model.DataSource, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -115,8 +115,11 @@ func (s *Service) List(ctx context.Context, page, pageSize int) ([]model.DataSou
 		return nil, 0, fmt.Errorf("count datasources: %w", err)
 	}
 
+	if orderBy == "" {
+		orderBy = "project, env"
+	}
 	var out []model.DataSource
-	err := q.Order("project, env").
+	err := q.Order(orderBy).
 		Limit(pageSize).Offset((page - 1) * pageSize).
 		Find(&out).Error
 	if err != nil {

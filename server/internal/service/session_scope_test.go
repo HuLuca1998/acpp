@@ -59,7 +59,7 @@ func TestSessionService_ScopeIsolation(t *testing.T) {
 	svc, alice, bob, idA, idB := scopedSessions(t)
 	ctx := context.Background()
 
-	list, total, err := svc.List(ctx, alice, 0, 1, 50)
+	list, total, err := svc.List(ctx, alice, 0, 1, 50, "")
 	if err != nil {
 		t.Fatalf("List(alice): %v", err)
 	}
@@ -78,7 +78,7 @@ func TestSessionService_ScopeIsolation(t *testing.T) {
 		t.Fatalf("bob's session gone after alice tried to delete: %v", err)
 	}
 
-	_, total, err = svc.List(ctx, OwnerScope(), 0, 1, 50)
+	_, total, err = svc.List(ctx, OwnerScope(), 0, 1, 50, "")
 	if err != nil {
 		t.Fatalf("List(owner): %v", err)
 	}
