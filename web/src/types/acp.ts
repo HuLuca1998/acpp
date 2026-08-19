@@ -413,6 +413,13 @@ export interface StreamEvent {
   rawOutput?: unknown
   /** tool_call 的内容块（diff 等），流式期间即可渲染。 */
   content?: unknown
+  /** 这次工具调用启动了一个子代理（claude 的 Agent/Task、codex 的 subAgentActivity）。 */
+  isSubagent?: boolean
+  /** 这条是某个子代理干的，值为它所挂的启动调用 id。 */
+  subagentOf?: string
+  /** codex 专用：子代理独立 thread 的 id 与 agent 路径。 */
+  subagentThreadId?: string
+  subagentPath?: string
   /** plan 事件：任务条目数组。 */
   entries?: unknown
   /** agent 自行切档/改配置后的最新统一设置视图。 */

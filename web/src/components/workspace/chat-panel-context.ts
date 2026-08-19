@@ -1,4 +1,4 @@
-import { createContext } from "react"
+import { createContext, useContext } from "react"
 
 import type { useChat } from "@/hooks/use-chat"
 import type { useDraftSession } from "@/hooks/use-draft-session"
@@ -41,3 +41,10 @@ export interface ChatPanelData {
 }
 
 export const ChatPanelContext = createContext<ChatPanelData | null>(null)
+
+/** 取页面注入的会话流。对话面板与子代理面板共用同一份状态。 */
+export function useChatPanel(): ChatPanelData {
+  const value = useContext(ChatPanelContext)
+  if (!value) throw new Error("ChatPanel must be used within ChatPanelContext")
+  return value
+}

@@ -23,6 +23,11 @@ export interface LiveToolCall {
   rawInput?: unknown
   rawOutput?: unknown
   content?: unknown
+  /** 子代理归属，见 StreamEvent 上的同名字段。 */
+  isSubagent?: boolean
+  subagentOf?: string
+  subagentThreadId?: string
+  subagentPath?: string
 }
 
 /** 上下文用量（usage 事件），按占比展示。 */
@@ -311,6 +316,10 @@ function mergeTool(tools: LiveToolCall[], ev: StreamEvent): LiveToolCall[] {
         rawInput: ev.rawInput,
         rawOutput: ev.rawOutput,
         content: ev.content,
+        isSubagent: ev.isSubagent,
+        subagentOf: ev.subagentOf,
+        subagentThreadId: ev.subagentThreadId,
+        subagentPath: ev.subagentPath,
       },
     ]
   }
@@ -326,6 +335,11 @@ function mergeTool(tools: LiveToolCall[], ev: StreamEvent): LiveToolCall[] {
     rawInput: ev.rawInput ?? current.rawInput,
     rawOutput: ev.rawOutput ?? current.rawOutput,
     content: ev.content ?? current.content,
+    // agent 会在后续 update 里漏带子代理标记，已知归属不能被空值冲掉。
+    isSubagent: ev.isSubagent || current.isSubagent,
+    subagentOf: ev.subagentOf || current.subagentOf,
+    subagentThreadId: ev.subagentThreadId || current.subagentThreadId,
+    subagentPath: ev.subagentPath || current.subagentPath,
   }
   return next
 }

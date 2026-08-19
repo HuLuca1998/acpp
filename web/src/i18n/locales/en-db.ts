@@ -3,7 +3,8 @@
 export const enDb = {
   title: "Databases",
   uriTitle: "Connection URI",
-  uriHint: "One link carries the whole connection. Accepts Navicat's URI and the common mysql:// form.",
+  uriHint:
+    "One link carries the whole connection. Accepts Navicat's URI and the common mysql:// form.",
   uriImport: "Import",
   uriExport: "Export",
   uriPaste: "Paste a URI",
@@ -14,11 +15,13 @@ export const enDb = {
   uriCopied: "Copied",
   uriPlaceholderNote:
     "Navicat writes <PASSWORD> as a placeholder, so fill the password in yourself after importing.",
-  uriHasPassword: "These links contain the password in clear text — the link is a credential; don't paste it into chats or docs.",
+  uriHasPassword:
+    "These links contain the password in clear text — the link is a credential; don't paste it into chats or docs.",
   uriSaveFirst: "Save this connection first, then export a link.",
   uriButton: "URI",
   refTitle: "Reference a database",
-  refHint: "Pick a source, database or table — its current shape (table list or schema) is sent along with your message.",
+  refHint:
+    "Pick a source, database or table — its current shape (table list or schema) is sent along with your message.",
   refPick: "Reference",
   refNeedsSession: "Send your first message before referencing a database",
   refFile: "File",
@@ -45,9 +48,11 @@ export const enDb = {
   database: "Database",
   databasePick: "Pick a database",
   databaseLoad: "Load",
-  databaseHint: "One connection binds to one database — the UI, slash commands and the AI can only reach that one; anything else is rejected.",
+  databaseHint:
+    "One connection binds to one database — the UI, slash commands and the AI can only reach that one; anything else is rejected.",
   databasesScope: "Accessible databases",
-  databasesScopePlaceholder: "Empty = default database only; comma-separated; * = no limit",
+  databasesScopePlaceholder:
+    "Empty = default database only; comma-separated; * = no limit",
   databasesScopeHint:
     "One account usually reaches every database on the instance. Left empty, the scope is the default database above — that is all the AI and the UI can see. This narrows visibility, it is not a security boundary: SQL that spells out another-db.table is rejected, but dynamic SQL gets around it. The real boundary is what the account is granted.",
   params: "Parameters",

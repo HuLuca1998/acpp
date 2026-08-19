@@ -22,6 +22,7 @@ import { HistoryPanel } from "@/components/workspace/panels/history-panel"
 import { FilePreviewPanel } from "@/components/workspace/panels/file-preview-panel"
 import { FileTreePanel } from "@/components/workspace/panels/file-tree-panel"
 import { LogsPanel } from "@/components/workspace/panels/logs-panel"
+import { SubagentsPanel } from "@/components/workspace/panels/subagents-panel"
 import { TerminalPanel } from "@/components/workspace/panels/terminal-panel"
 import {
   useGitOverview,
@@ -59,6 +60,7 @@ const COMPONENTS: Record<
   changes: ChangesPanel,
   detail: CommitDetailPanel,
   logs: LogsPanel,
+  subagents: SubagentsPanel,
   terminal: TerminalPanel,
 }
 

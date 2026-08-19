@@ -4,6 +4,7 @@ import type {
   IDockviewPanel,
 } from "dockview-react"
 import {
+  BotIcon,
   FileDiffIcon,
   FileTextIcon,
   FolderTreeIcon,
@@ -29,6 +30,7 @@ export type WorkspacePanelKind =
   | "changes"
   | "detail"
   | "logs"
+  | "subagents"
   | "terminal"
 
 /** ⋯ 菜单里勾选显隐的单例面板（终端是实例列表，单独渲染）。 */
@@ -40,6 +42,7 @@ export const TOGGLEABLE_PANELS = [
   "changes",
   "detail",
   "logs",
+  "subagents",
 ] as const satisfies readonly WorkspacePanelKind[]
 
 export const PANEL_ICONS: Record<WorkspacePanelKind, LucideIcon> = {
@@ -51,6 +54,7 @@ export const PANEL_ICONS: Record<WorkspacePanelKind, LucideIcon> = {
   changes: FileDiffIcon,
   detail: InfoIcon,
   logs: ScrollTextIcon,
+  subagents: BotIcon,
   terminal: TerminalIcon,
 }
 

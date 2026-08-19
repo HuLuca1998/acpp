@@ -1,4 +1,4 @@
-import { memo, useContext, useState } from "react"
+import { memo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -18,18 +18,11 @@ import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
-  ChatPanelContext,
-  type ChatPanelData,
+  useChatPanel,
 } from "@/components/workspace/chat-panel-context"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { cn } from "@/lib/utils"
 import { ImageIcon } from "lucide-react"
-
-function useChatPanel(): ChatPanelData {
-  const value = useContext(ChatPanelContext)
-  if (!value) throw new Error("ChatPanel must be used within ChatPanelContext")
-  return value
-}
 
 /** 对话面板：消息流 + composer。工作区里唯一不可关闭的面板。 */
 export const ChatPanel = memo(function ChatPanel() {

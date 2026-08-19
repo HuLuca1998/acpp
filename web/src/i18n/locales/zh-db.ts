@@ -3,7 +3,8 @@
 export const zhDb = {
   title: "数据库",
   uriTitle: "连接 URI",
-  uriHint: "一条链接换一整套连接参数。认 Navicat 的 URI，也认通用的 mysql:// 写法。",
+  uriHint:
+    "一条链接换一整套连接参数。认 Navicat 的 URI，也认通用的 mysql:// 写法。",
   uriImport: "导入",
   uriExport: "导出",
   uriPaste: "粘贴 URI",
@@ -14,11 +15,13 @@ export const zhDb = {
   uriCopied: "已复制",
   uriPlaceholderNote:
     "Navicat 导出的链接里密码是 <PASSWORD> 占位符，导入后要自己补填。",
-  uriHasPassword: "这两条链接包含密码明文——它本身就是凭证，别往聊天窗口或文档里贴。",
+  uriHasPassword:
+    "这两条链接包含密码明文——它本身就是凭证，别往聊天窗口或文档里贴。",
   uriSaveFirst: "先保存这条连接，再来导出链接。",
   uriButton: "URI",
   refTitle: "引用数据库",
-  refHint: "选一个数据源、库或表交给 AI——发送时把它的现状（表清单或表结构）一并带上。",
+  refHint:
+    "选一个数据源、库或表交给 AI——发送时把它的现状（表清单或表结构）一并带上。",
   refPick: "引用",
   refNeedsSession: "发出第一条消息后才能引用数据库",
   refFile: "文件",
@@ -44,7 +47,8 @@ export const zhDb = {
   database: "数据库",
   databasePick: "选择数据库",
   databaseLoad: "读取",
-  databaseHint: "一条连接只对应一个库——界面、斜杠命令与 AI 都只能访问它，用这条连接查别的库会被拒绝。",
+  databaseHint:
+    "一条连接只对应一个库——界面、斜杠命令与 AI 都只能访问它，用这条连接查别的库会被拒绝。",
   databasesScope: "可访问的库",
   databasesScopePlaceholder: "留空=只用默认库；多个用逗号分隔；* 表示不限",
   databasesScopeHint:

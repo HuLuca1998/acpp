@@ -57,15 +57,17 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
   const flavor = chat.session?.agentFlavor
   const userName = chat.session?.tenantName
 
+  // 子代理干活的工具调用不进主流（去子代理面板），这里先摘干净再分类。
+  const mainTools = chat.liveTools.filter((tool) => !tool.subagentOf)
   // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
-  const liveEdits = chat.liveTools.filter((tool) => tool.kind === "edit")
-  const liveOthers = chat.liveTools.filter((tool) => tool.kind !== "edit")
+  const liveEdits = mainTools.filter((tool) => tool.kind === "edit")
+  const liveOthers = mainTools.filter((tool) => tool.kind !== "edit")
   const liveActivityCount =
     (chat.streamingThought ? 1 : 0) +
     liveOthers.length +
     chat.permissions.length
   // 折叠头上显示「正在干的那件事」：最后一个未完成的工具调用。
-  const activeTool = [...chat.liveTools]
+  const activeTool = [...mainTools]
     .reverse()
     .find((tool) => tool.status !== "completed" && tool.status !== "failed")
   // 一轮开始就在等 agent 说第一句话，这时候没有任何内容可挂——单独一条
