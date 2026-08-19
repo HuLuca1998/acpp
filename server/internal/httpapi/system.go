@@ -15,6 +15,10 @@ type systemHandler struct {
 	update *system.Updater
 	// titler 是会话标题生成服务，设置页改配置后原地热更（不用重启）。
 	titler *titler.Service
+	// busyTurns 数正在跑的轮。自更新会杀掉全部 agent 子进程，正有人
+	// 等回复时必须先提示、拿到明确确认才动手（实测踩过：更新时一条
+	// 会话在途，进程被带走，那轮永远等不到响应）。
+	busyTurns func() int
 }
 
 func (h systemHandler) updateInfo(w http.ResponseWriter, r *http.Request) {
@@ -23,12 +27,28 @@ func (h systemHandler) updateInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h systemHandler) updateApply(w http.ResponseWriter, r *http.Request) {
+	// body 可选：老客户端与桌面壳可能裸 POST，等价 force=false。
+	var in struct {
+		Force bool `json:"force"`
+	}
+	if r.ContentLength != 0 {
+		if err := decodeJSON(r, &in); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	if busy := h.busyTurns(); busy > 0 && !in.Force {
+		// 不是错误而是待确认：前端据此弹「有人在干活」的确认框，
+		// 用户点了继续再带 force 重发。
+		writeData(w, http.StatusOK, map[string]any{"applied": false, "runningTurns": busy})
+		return
+	}
 	message, err := h.update.Apply(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, map[string]string{"message": message})
+	writeData(w, http.StatusOK, map[string]any{"applied": true, "message": message})
 }
 
 func (h systemHandler) get(w http.ResponseWriter, _ *http.Request) {

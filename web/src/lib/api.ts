@@ -391,9 +391,16 @@ export const api = {
     /** 版本检查（缓存结果；force 现查 GitHub Releases）。 */
     update: (force?: boolean) =>
       request<UpdateInfo>(`/system/update${force ? "?force=1" : ""}`),
-    /** 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。 */
-    updateApply: () =>
-      request<{ message: string }>("/system/update/apply", { method: "POST" }),
+    /**
+     * 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。
+     * 有会话正在生成回复时返回 `applied:false + runningTurns`（更新会
+     * 杀掉全部 agent 子进程），确认后带 force 重发才真装。
+     */
+    updateApply: (force = false) =>
+      request<{ applied: boolean; message?: string; runningTurns?: number }>(
+        "/system/update/apply",
+        { method: "POST", body: JSON.stringify({ force }) }
+      ),
   },
 
   /**

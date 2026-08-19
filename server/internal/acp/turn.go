@@ -124,6 +124,20 @@ func (m *Manager) TurnActive(key string) bool {
 	return sess.activeCalls.Load() > 0
 }
 
+// ActiveTurnCount 数有在途调用的会话——自更新/重启这类会杀掉全部
+// agent 子进程的操作，动手前先问它有没有人正在等回复。
+func (m *Manager) ActiveTurnCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, sess := range m.sessions {
+		if sess.activeCalls.Load() > 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // Commands 返回会话的斜杠命令清单快照。
 func (m *Manager) Commands(key string) []Command {
 	sess, ok := m.Get(key)

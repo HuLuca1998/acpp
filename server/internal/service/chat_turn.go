@@ -275,6 +275,11 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 	br.EndTurn()
 }
 
+// ActiveTurnCount 数正在跑的轮——自更新前的「有人在干活」检查用。
+func (s *ChatService) ActiveTurnCount() int {
+	return s.manager.ActiveTurnCount()
+}
+
 // Cancel 中止会话上正在跑的一轮。
 func (s *ChatService) Cancel(sessionID uint) error {
 	if err := s.manager.Cancel(sessionKey(sessionID)); err != nil {

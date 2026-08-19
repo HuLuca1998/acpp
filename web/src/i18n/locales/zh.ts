@@ -550,6 +550,10 @@ export default {
       apply: "立即更新并重启",
       applying: "正在下载安装…",
       devHint: "一键更新仅桌面版支持；开发态请 git pull 后重启。",
+      busyTitle: "有会话正在生成回复",
+      busyDescription:
+        "{{count}} 个会话正在等 AI 回复。现在更新会重启应用并中断它们——正在生成的这轮拿不到结果，历史里会标记为中断。建议等它们跑完再更新。",
+      busyConfirm: "仍要更新",
     },
     env: {
       connTitle: "连接测试",

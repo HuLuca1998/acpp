@@ -177,7 +177,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/system/title-model/models` | 列某个 ollama 端点上已装的模型（`?baseUrl=`，为空取默认地址） |
 | POST | `/api/system/title-model/test` | 用给定配置当场生成一个标题看效果，不落盘 |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查） |
-| POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版） |
+| POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
 | GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型与命令清单） |

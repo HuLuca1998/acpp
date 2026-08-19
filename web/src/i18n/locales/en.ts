@@ -581,6 +581,10 @@ export default {
       applying: "Downloading & installing…",
       devHint:
         "One-click update is desktop-only; in dev mode, git pull and restart.",
+      busyTitle: "Sessions are still generating",
+      busyDescription:
+        "{{count}} session(s) are waiting for the AI to reply. Updating now restarts the app and interrupts them — the in-flight turns never get their results and show as interrupted in history. Consider letting them finish first.",
+      busyConfirm: "Update anyway",
     },
     env: {
       connTitle: "Connection test",

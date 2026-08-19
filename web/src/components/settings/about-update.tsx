@@ -5,6 +5,16 @@ import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,6 +43,8 @@ export function AboutUpdate() {
   const [checking, setChecking] = useState(false)
   const [applying, setApplying] = useState(false)
   const [restarting, setRestarting] = useState<string | null>(null)
+  // 有会话正在生成回复时后端会把更新拦下来，这里存计数弹确认框。
+  const [busyTurns, setBusyTurns] = useState<number | null>(null)
 
   async function check() {
     setChecking(true)
@@ -45,12 +57,19 @@ export function AboutUpdate() {
     }
   }
 
-  async function apply() {
+  async function apply(force = false) {
     setApplying(true)
     try {
-      const res = await api.system.updateApply()
+      const res = await api.system.updateApply(force)
+      if (!res.applied) {
+        // 更新会杀掉全部 agent 子进程，正在跑的轮会拿不到回复——
+        // 停下来让用户拍板，确认后带 force 重发。
+        setBusyTurns(res.runningTurns ?? 0)
+        setApplying(false)
+        return
+      }
       // 后端随即杀壳重启，这个页面马上会失联——把结果钉在界面上。
-      setRestarting(res.message)
+      setRestarting(res.message ?? "")
     } catch (err) {
       toast.error((err as Error).message)
       setApplying(false)
@@ -203,6 +222,36 @@ export function AboutUpdate() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={busyTurns !== null}
+        onOpenChange={(open) => !open && setBusyTurns(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("settingsPage.about.busyTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("settingsPage.about.busyDescription", {
+                count: busyTurns ?? 0,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setBusyTurns(null)
+                void apply(true)
+              }}
+            >
+              {t("settingsPage.about.busyConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
