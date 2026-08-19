@@ -2,6 +2,7 @@ import {
   parseElicitationSchema,
   type ElicitationSchema,
 } from "@/lib/elicitation"
+import { isOptimisticMessage } from "@/lib/chat/first-send"
 import type {
   Message,
   PendingElicitation,
@@ -152,13 +153,19 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         last?.role === "user" &&
         last.id < 1e12 &&
         last.content === ev.message.content
+      // 首发交棒的乐观气泡（lib/first-send）：服务端回声（同一句话的
+      // 临时消息）到达时原位替换，否则同一句话显示两个气泡。
+      const isEchoOfOptimistic =
+        isOptimisticMessage(last) && last.content === ev.message.content
       return {
         ...prev,
         busy: true,
         stopReason: null,
         messages: isDupOfRebuilt
           ? prev.messages
-          : upsert(prev.messages, ev.message),
+          : isEchoOfOptimistic
+            ? [...prev.messages.slice(0, -1), ev.message]
+            : upsert(prev.messages, ev.message),
       }
     }
 

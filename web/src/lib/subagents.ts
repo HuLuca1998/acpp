@@ -1,4 +1,4 @@
-import type { LiveToolCall } from "@/lib/chat-events"
+import type { LiveToolCall } from "@/lib/chat/chat-events"
 import type { Message } from "@/types/acp"
 
 /**

@@ -6,7 +6,7 @@ import {
   mergeInputs,
   reduceChatEvent,
   type ChatState,
-} from "@/lib/chat-events"
+} from "@/lib/chat/chat-events"
 import type {
   OrchSession,
   OrchTask,

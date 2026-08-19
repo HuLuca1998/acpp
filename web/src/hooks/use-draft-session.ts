@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 
 import { api } from "@/lib/api"
+import {
+  clearFirstSend,
+  failFirstSend,
+  stashFirstSend,
+} from "@/lib/chat/first-send"
 import type {
   Agent,
   SendInput,
@@ -26,6 +31,27 @@ export interface ModelGroup {
 
 /** 草稿态的默认设置选择：思考深度「高」，权限档「自动编辑」。 */
 const DEFAULT_PATCH: SettingsPatch = { effort: "high", level: "auto-edit" }
+
+/**
+ * 后台派发首发：应用设置（内含 agent 握手，可能数十秒）后发送。
+ * 挂在模块层跑完为止，与组件生命周期无关；结果经 first-send 交棒层
+ * 通知会话页（成功由 SSE 回声接管，失败收思考态、亮告警）。
+ */
+async function dispatchFirstSend(
+  sessionId: number,
+  input: SendInput,
+  patch: SettingsPatch
+) {
+  try {
+    if (Object.keys(patch).length > 0) {
+      await api.sessions.applySettings(sessionId, patch)
+    }
+    await api.sessions.send(sessionId, input)
+    clearFirstSend(sessionId)
+  } catch (err) {
+    failFirstSend(sessionId, (err as Error).message)
+  }
+}
 
 /** 创建前把暂存选择过滤到所选 agent 真正支持的维度上。 */
 function filterPatch(patch: SettingsPatch, agent: Agent | undefined) {
@@ -66,7 +92,7 @@ function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
 
 /**
  * 草稿会话的状态与创建流程：加载 agent 清单、跨 ACP 模型选择、工作目录，
- * 首条消息落地时才真正创建会话（create → 应用所选模型 → send → 跳转）。
+ * 首条消息落地时才真正创建会话（create → 立即跳转 → 后台应用模型 + send）。
  */
 export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
   const navigate = useNavigate()
@@ -164,7 +190,11 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
     }
   }, [selectedAgent, draftPatch])
 
-  /** 首条消息落地：创建 → 应用模型 → 发送 → replace 掉草稿路由。 */
+  /**
+   * 首条消息落地：创建 → 立即交棒跳转（lib/first-send）→ 后台应用模型
+   * 并发送。applySettings 内含 agent 握手（可能数十秒），不能让用户对着
+   * 草稿空态干等——跳转后会话页乐观渲染用户气泡与思考态，握手在背后跑。
+   */
   const start = useCallback(
     async (input: SendInput) => {
       if (!selected || creating) return
@@ -181,11 +211,11 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
         if (selected.modelId) {
           patch.model = selected.modelId
         }
-        if (Object.keys(patch).length > 0) {
-          await api.sessions.applySettings(session.id, patch)
-        }
-        await api.sessions.send(session.id, input)
+        stashFirstSend(session.id, { input, patch })
         void navigate(`/sessions/${session.id}`, { replace: true })
+        // 派发失败不落在草稿态的 error 上——页面已经离开草稿态，错误经
+        // 交棒层通知会话页收起思考态、亮告警（残留在这儿反而永远关不掉）。
+        void dispatchFirstSend(session.id, input, patch)
       } catch (err) {
         setError((err as Error).message)
       } finally {

@@ -6,7 +6,12 @@ import {
   mergeInputs,
   reduceChatEvent,
   type ChatState,
-} from "@/lib/chat-events"
+} from "@/lib/chat/chat-events"
+import {
+  claimFirstSend,
+  optimisticUserMessage,
+  releaseFirstSend,
+} from "@/lib/chat/first-send"
 import type {
   Message,
   SendInput,
@@ -14,14 +19,14 @@ import type {
   StreamEvent,
 } from "@/types/acp"
 
-// 状态与条目类型定义在 lib/chat-events.ts（纯 reducer 层），这里转发给消费方。
+// 状态与条目类型定义在 lib/chat/chat-events.ts（纯 reducer 层），这里转发给消费方。
 export type {
   ChatState,
   ContextUsage,
   LiveToolCall,
   QueuedMessage,
   ResolvedPermission,
-} from "@/lib/chat-events"
+} from "@/lib/chat/chat-events"
 
 /**
  * 初次进入拉取的消息条数：一屏出头即可——打开只看最新，
@@ -52,6 +57,23 @@ export function useChat(sessionId: number) {
       return
     }
 
+    // 草稿页交棒的首发（lib/first-send）：立即乐观渲染用户气泡与思考态，
+    // 不等 agent 握手（派发由草稿页在后台继续，可能数十秒）。失败时收起
+    // 思考态、把错误落到告警条上；已失败的交棒进入时直接按失败态渲染。
+    const first = claimFirstSend(sessionId, (error) => {
+      if (cancelled) return
+      setState((prev) => ({ ...prev, busy: false, error }))
+    })
+    if (first) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        busy: first.error === undefined,
+        error: first.error ?? null,
+        messages: [optimisticUserMessage(sessionId, first.send.input)],
+      }))
+    }
+
     async function bootstrap() {
       try {
         // 只读加载：详情与历史都是毫秒级，不拉 agent 进程——
@@ -61,24 +83,34 @@ export function useChat(sessionId: number) {
           api.sessions.messages(sessionId, { limit: MESSAGE_PAGE }),
         ])
         if (cancelled) return
+        // 空转录的 items 后端已兜底成 []，这里再保一道（老后端发 null）。
+        const items = history.items ?? []
         setState((prev) => ({
           ...prev,
           session,
           settings: session.settings ?? null,
           commands: session.commands ?? [],
-          messages: history.items,
-          hasEarlier: history.items.length < history.total,
+          // 首发的乐观消息还没落转录：空历史不许冲掉本地已渲染的内容。
+          messages: items.length > 0 ? items : prev.messages,
+          hasEarlier: items.length < history.total,
           // busy 以后端权威状态起步：active 表示这一轮还在跑（刷新页面时
           // SSE 重放会接上流式），其余状态一律静止——别把 UI 卡在假 busy 上。
-          // SSE 若已推进过状态（lastSeq>0），以事件流为准，不许旧快照回拨。
-          busy: lastSeq.current === 0 ? session.state === "active" : prev.busy,
+          // SSE 若已推进过状态（lastSeq>0）或首发乐观态已置忙，以那边为准，
+          // 不许旧快照回拨。
+          busy: prev.busy || (lastSeq.current === 0 && session.state === "active"),
           loading: false,
         }))
       } catch (err) {
         if (cancelled) return
         // 404 是"会话已不存在"，与 agent 连不上是两码事，分开表达。
+        // 例外：首发失败时后端会回收从没连上过的空会话——此时保留乐观
+        // 气泡与错误告警，好过一个"会话不存在"空页把用户刚说的话吞掉。
         if (err instanceof ApiError && err.status === 404) {
-          setState((prev) => ({ ...prev, loading: false, notFound: true }))
+          setState((prev) =>
+            prev.messages.length > 0
+              ? { ...prev, loading: false }
+              : { ...prev, loading: false, notFound: true }
+          )
           return
         }
         setState((prev) => ({
@@ -92,6 +124,7 @@ export function useChat(sessionId: number) {
     void bootstrap()
     return () => {
       cancelled = true
+      releaseFirstSend(sessionId)
     }
   }, [sessionId])
 

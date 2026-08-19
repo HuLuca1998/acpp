@@ -25,8 +25,8 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
-import type { ChatState } from "@/lib/chat-events"
-import { groupMessages, type Block } from "@/lib/message-blocks"
+import type { ChatState } from "@/lib/chat/chat-events"
+import { groupMessages, type Block } from "@/lib/chat/message-blocks"
 import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 
 /**

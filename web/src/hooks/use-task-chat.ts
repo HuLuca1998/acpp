@@ -5,7 +5,7 @@ import {
   INITIAL_CHAT_STATE,
   reduceChatEvent,
   type ChatState,
-} from "@/lib/chat-events"
+} from "@/lib/chat/chat-events"
 import type { StreamEvent } from "@/types/acp"
 
 const MESSAGE_PAGE = 60

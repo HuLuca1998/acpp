@@ -11,17 +11,18 @@
 | 文件              | 职责                                                                  | 关键导出                                                             |
 | ----------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | api.ts            | 后端 API 客户端，全部 HTTP/SSE/ws 地址的唯一出口；组件禁止裸 fetch    | `api`、`ApiError`、`Paged`                                           |
-| chat-events.ts    | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat    | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs`  |
+| chat/chat-events.ts | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat  | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs`  |
 | clipboard.ts      | 复制到剪贴板；非安全上下文（局域网 http）静默退让                     | `copyText`                                                           |
 | db-uri.ts         | 连接 URI 解析（Navicat 的 `navicat://` 与通用 `mysql://`）→ 表单字段；导出在后端 | `parseDbUri`、`ParsedUri`                                            |
 | db-result.ts      | 数据库 MCP 工具输出文本 → 结构化结果（对话里渲染真表格用）；格式与后端 datasource/render.go 共同约定 | `parseDbToolOutput`、`isDbQueryCall`、`ParsedDbResult`              |
 | elicitation.ts    | elicitation JSON Schema 解析成结构化问题与作答收集                    | `parseElicitationSchema`、`answerFor`                                |
 | files.ts          | 浏览器文件 → base64 图片附件、剪贴板取图                              | `fileToImageAttachment`、`imagesFromClipboard`                       |
+| chat/first-send.ts | 草稿页 → 会话页的首发交棒：乐观用户消息、派发状态与失败通知          | `stashFirstSend`、`claimFirstSend`、`optimisticUserMessage`、`isOptimisticMessage` |
 | local-commands.ts | 本地斜杠命令（前端自己执行、不发给 agent）的解析与补全清单合并        | `parseLocalCommand`、`withLocalCommands`、`LOCAL_COMMANDS`          |
 | format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`formatBytes`、`capitalize`、`displayPath` |
 | git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |
-| message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）                          | `groupMessages`                                                      |
+| chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）                     | `groupMessages`                                                      |
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |
