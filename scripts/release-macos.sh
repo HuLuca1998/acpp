@@ -30,12 +30,15 @@ if [ -z "$NOTES_FILE" ]; then
 fi
 
 echo "==> 构建 ACPP.app（版本 $VERSION）"
-APP_VERSION="$VERSION" scripts/build-macos-app.sh
+# 发布构建落在独立目录：build/app 里可能就是本机正在运行的 ACPP.app，
+# 发布不该动用户的日常使用。
+RELEASE_OUT="$ROOT/build/release"
+APP_VERSION="$VERSION" APP_OUT="$RELEASE_OUT" scripts/build-macos-app.sh
 
 echo "==> 打 zip"
-ZIP="build/app/ACPP-$VERSION.zip"
+ZIP="$RELEASE_OUT/ACPP-$VERSION.zip"
 rm -f "$ZIP"
-ditto -ck --keepParent "build/app/ACPP.app" "$ZIP"
+ditto -ck --keepParent "$RELEASE_OUT/ACPP.app" "$ZIP"
 
 echo "==> 打 tag 并推送"
 git tag -a "$TAG" -m "ACPP $VERSION"

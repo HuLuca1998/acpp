@@ -4,6 +4,8 @@
 # 用法：scripts/build-macos-app.sh [--skip-web]
 #       --skip-web    跳过前端构建，复用已有 build/web（迭代壳代码时提速）
 #       APP_VERSION   环境变量覆盖版本号，默认 0.1.0
+#       APP_OUT       环境变量覆盖输出目录，默认 build/app——发布流程用
+#                     独立目录，避免覆盖本机正在运行的 ACPP.app
 # 前置：macOS + Xcode Command Line Tools（swiftc/iconutil/codesign）、node、go。
 # 可安全重跑（每次全量重组 bundle）。
 set -euo pipefail
@@ -13,7 +15,7 @@ cd "$ROOT"
 
 APP_NAME="ACPP"
 VERSION="${APP_VERSION:-0.1.0}"
-OUT="$ROOT/build/app"
+OUT="${APP_OUT:-$ROOT/build/app}"
 BUNDLE="$OUT/$APP_NAME.app"
 STAGE="$OUT/stage"
 
