@@ -38,7 +38,7 @@ acpp/
 │   │   │   ├── ui/             # shadcn 组件（CLI 托管区，目录级 AGENTS.md）
 │   │   │   ├── shell/          # 应用外壳：侧边栏、顶栏、导航、主题/语言切换
 │   │   │   ├── chat/           # 消息渲染；composer/ 输入域；cards/ 权限、计划审批、提问卡
-│   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 九类面板
+│   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 十类面板
 │   │   │   ├── projects/       # 克隆仓库对话框（gh 清单 + URL）
 │   │   │   ├── orchestrator/   # 编排工作区：主控对话 / 任务列表 / 任务子会话面板 / dock
 │   │   │   ├── roles/          # 角色编辑对话框
@@ -240,7 +240,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/mcp/{token}` | 编排 MCP 端点（agent 回连，JSON-RPC；token 为每编排会话专属凭证，不出现在 API 响应里） |
 | * | `/api/orchestrator/sessions/{id}/fs/*` `/git/*` `/terminals*` `/transcript` | 编排主会话的完整工作区数据面：与普通会话同形状同实现，只差路径前缀（升级不降级） |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`session_title`、`turn_done`、`error`（编排主会话另有 `task_update`）。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`session_title` 在首轮结束后标题被模型重写时发一次（带新标题）。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`message_saved`、`session_title`、`turn_done`、`error`（编排主会话另有 `task_update`）。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图；`usage` 是上下文用量 `{used, size}`；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`session_title` 在首轮结束后标题被模型重写时发一次（带新标题）。`tool_call` 另带一组子代理字段：`isSubagent`（这次调用派出了子代理）、`subagentOf`（这条是某个子代理干的，值为它所挂的启动调用 id）、codex 专用的 `subagentThreadId` / `subagentPath`。
 
 ## 数据模型
 
@@ -267,6 +267,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 | 变更 | 文件清单，**跟随选择态**：没选看工作区，选提交看那条提交，选两个 ref 看对比。按目录树展示，单子目录链压缩 |
 | 详情 | 提交说明 / 对比摘要 |
 | 日志 | 线级转录实时跟随 |
+| 子代理 | agent 派出去的活：按进行中/已完成/失败分组，展开看这次派了什么、拿回了什么 |
 | 终端 | 可多实例的真实 pty |
 
 四个 git 面板不互相说话，全部读命令总线里的同一份选择态——因此可以只开其中一个，也可以任意摆放。布局预设 **Git 工作台** 把它们按「左分支 ｜ 中链路 ｜ 右上变更 / 右下详情」一次摆好。
