@@ -198,6 +198,7 @@ export const OrchMainPanel = memo(function OrchMainPanel() {
             cwd={isNew ? draftCwd : chat.orchSession?.cwd}
             branchSlot={isNew ? null : <BranchPicker />}
             usage={isNew ? null : chat.contextUsage}
+            lastUsage={isNew ? null : chat.lastUsage}
             onPickCwd={isNew ? openCwdPicker : undefined}
           />
         }

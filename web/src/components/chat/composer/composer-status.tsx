@@ -3,7 +3,14 @@ import { useTranslation } from "react-i18next"
 import type { ContextUsage } from "@/hooks/use-chat"
 import { useIdentity } from "@/hooks/identity-context"
 import { displayPath, formatTokens } from "@/lib/format"
-import { FolderIcon, GitBranchIcon, PencilIcon } from "lucide-react"
+import type { TurnUsage } from "@/types/acp"
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  FolderIcon,
+  GitBranchIcon,
+  PencilIcon,
+} from "lucide-react"
 
 /**
  * 输入卡下沿的状态栏：工作目录、git 分支、上下文用量。
@@ -17,6 +24,7 @@ export function ComposerStatus({
   branchSlot,
   worktreeSlot,
   usage,
+  lastUsage,
   onPickCwd,
 }: {
   cwd?: string
@@ -26,6 +34,8 @@ export function ComposerStatus({
   /** 草稿态的 worktree 开关，跟在分支之后。 */
   worktreeSlot?: React.ReactNode
   usage?: ContextUsage | null
+  /** 最近一轮的 token 计量（turn_end 携带），悬停给完整四项。 */
+  lastUsage?: TurnUsage | null
   /** 草稿态：点击工作目录打开目录选择器；老会话不传，纯展示。 */
   onPickCwd?: () => void
 }) {
@@ -33,7 +43,8 @@ export function ComposerStatus({
   const { identity } = useIdentity()
   // 访客看到的是 `~/...`：完整路径里带着这台机器主人的用户名，对他没用。
   const shownCwd = displayPath(cwd ?? "", identity?.root)
-  if (!cwd && !gitBranch && !branchSlot && !worktreeSlot && !usage) return null
+  if (!cwd && !gitBranch && !branchSlot && !worktreeSlot && !usage && !lastUsage)
+    return null
 
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground/80">
@@ -62,9 +73,28 @@ export function ComposerStatus({
           </span>
         ) : null)}
       {worktreeSlot}
+      {/* 右侧数据组：最近一轮 token 计量 + 上下文占比。 */}
+      {lastUsage ? (
+        <span
+          className="ml-auto flex shrink-0 items-center gap-1 tabular-nums"
+          title={t("chat.status.turnTokensHint", {
+            input: lastUsage.inputTokens.toLocaleString(),
+            output: lastUsage.outputTokens.toLocaleString(),
+            cached: lastUsage.cachedReadTokens.toLocaleString(),
+            total: lastUsage.totalTokens.toLocaleString(),
+          })}
+        >
+          <ArrowUpIcon className="size-3" />
+          {formatTokens(lastUsage.inputTokens)}
+          <ArrowDownIcon className="size-3" />
+          {formatTokens(lastUsage.outputTokens)}
+        </span>
+      ) : null}
       {usage && usage.size > 0 ? (
         <span
-          className="ml-auto shrink-0 tabular-nums"
+          className={
+            lastUsage ? "shrink-0 tabular-nums" : "ml-auto shrink-0 tabular-nums"
+          }
           title={`${usage.used.toLocaleString()} / ${usage.size.toLocaleString()} tokens`}
         >
           {t("chat.status.context", {

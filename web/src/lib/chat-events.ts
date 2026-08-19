@@ -12,6 +12,7 @@ import type {
   SessionSettings,
   SlashCommand,
   StreamEvent,
+  TurnUsage,
 } from "@/types/acp"
 
 /** 一次工具调用的实时状态，按 toolCallId 合并多条更新。 */
@@ -72,6 +73,8 @@ export interface ChatState {
   settings: SessionSettings | null
   /** 上下文用量，agent 每轮会推若干次。 */
   contextUsage: ContextUsage | null
+  /** 最近一轮的 token 计量（turn_end 携带），刷新前一直展示。 */
+  lastUsage: TurnUsage | null
   /** 可用斜杠命令，agent 推送全量清单，供输入框 "/" 补全。 */
   commands: SlashCommand[]
   /** 还有更早的消息没加载（消息按尾部分页）。 */
@@ -102,6 +105,7 @@ export const INITIAL_CHAT_STATE: ChatState = {
   stopReason: null,
   settings: null,
   contextUsage: null,
+  lastUsage: null,
   commands: [],
   hasEarlier: false,
   elicitation: null,
@@ -257,6 +261,8 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         ...prev,
         stopReason:
           ev.stopReason && ev.stopReason !== "end_turn" ? ev.stopReason : null,
+        // 某轮 runtime 没报计量（如取消）就保留上一轮的，不闪没。
+        lastUsage: ev.usage ?? prev.lastUsage,
       }
 
     case "turn_done":

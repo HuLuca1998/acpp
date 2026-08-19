@@ -414,6 +414,8 @@ export default {
     },
     status: {
       context: "Context {{used}} / {{size}} · {{percent}}%",
+      turnTokensHint:
+        "Last turn: {{input}} in · {{output}} out · {{cached}} cached · {{total}} total tokens",
     },
     toolStatus: {
       pending: "Pending",

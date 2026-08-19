@@ -393,6 +393,8 @@ export default {
     },
     status: {
       context: "上下文 {{used}} / {{size}} · {{percent}}%",
+      turnTokensHint:
+        "最近一轮：输入 {{input}} · 输出 {{output}} · 缓存读 {{cached}} · 合计 {{total}} tokens",
     },
     toolStatus: {
       pending: "等待中",

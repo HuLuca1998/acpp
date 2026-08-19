@@ -201,6 +201,7 @@ export const ChatPanel = memo(function ChatPanel() {
               ) : null
             }
             usage={isNew ? null : chat.contextUsage}
+            lastUsage={isNew ? null : chat.lastUsage}
             onPickCwd={isNew ? openCwdPicker : undefined}
           />
         }
