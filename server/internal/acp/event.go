@@ -31,22 +31,33 @@ const (
 // Event 是一条归一化事件。工具调用的多条更新共用同一个 ToolCallID，
 // 上层必须按它合并，否则界面会出现一堆重复条目。
 type Event struct {
-	Kind          EventKind       `json:"kind"`
-	Text          string          `json:"text,omitempty"`
-	ToolCallID    string          `json:"toolCallId,omitempty"`
-	Title         string          `json:"title,omitempty"`
-	ToolKind      string          `json:"toolKind,omitempty"`
-	Status        string          `json:"status,omitempty"`
-	RawInput      json.RawMessage `json:"rawInput,omitempty"`
-	RawOutput     json.RawMessage `json:"rawOutput,omitempty"`
-	Content       json.RawMessage `json:"content,omitempty"`
-	Locations     json.RawMessage `json:"locations,omitempty"`
-	Entries       json.RawMessage `json:"entries,omitempty"`
-	Settings      *Settings       `json:"settings,omitempty"`
-	Used          int64           `json:"used,omitempty"`
-	Size          int64           `json:"size,omitempty"`
-	Commands      []Command       `json:"commands,omitempty"`
-	ElicitationID string          `json:"elicitationId,omitempty"`
+	Kind       EventKind       `json:"kind"`
+	Text       string          `json:"text,omitempty"`
+	ToolCallID string          `json:"toolCallId,omitempty"`
+	Title      string          `json:"title,omitempty"`
+	ToolKind   string          `json:"toolKind,omitempty"`
+	Status     string          `json:"status,omitempty"`
+	RawInput   json.RawMessage `json:"rawInput,omitempty"`
+	RawOutput  json.RawMessage `json:"rawOutput,omitempty"`
+	Content    json.RawMessage `json:"content,omitempty"`
+	Locations  json.RawMessage `json:"locations,omitempty"`
+	// 子代理归属。IsSubagent 为真表示这条工具调用启动了一个子代理（claude 的
+	// Agent/Task、codex 的 subAgentActivity）；SubagentOf 非空表示这条事件是某个
+	// 子代理干出来的，值为它所挂的启动调用 id。两者互斥。
+	// 注意：agent 会在部分后续 update 里漏带这两个标记，上层按 ToolCallID 合并时
+	// 必须保留已知的非空值，不能用后来的空值覆盖。
+	IsSubagent bool   `json:"isSubagent,omitempty"`
+	SubagentOf string `json:"subagentOf,omitempty"`
+	// codex 专用：子代理是独立 thread，凭 SubagentThreadID 才能 session/load
+	// 拉到它的转录；SubagentPath 形如 /root/<任务名>，末段用作展示名。
+	SubagentThreadID string          `json:"subagentThreadId,omitempty"`
+	SubagentPath     string          `json:"subagentPath,omitempty"`
+	Entries          json.RawMessage `json:"entries,omitempty"`
+	Settings         *Settings       `json:"settings,omitempty"`
+	Used             int64           `json:"used,omitempty"`
+	Size             int64           `json:"size,omitempty"`
+	Commands         []Command       `json:"commands,omitempty"`
+	ElicitationID    string          `json:"elicitationId,omitempty"`
 	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。
 	// Title/RawInput/Content 只有 claude 带，前端按空值收敛。
 	// PlanReview 非空时这是「计划完成」审批，前端渲染专门卡片。

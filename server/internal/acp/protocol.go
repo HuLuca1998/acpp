@@ -342,6 +342,73 @@ type SessionUpdate struct {
 
 	// available_commands_update：可用斜杠命令清单，带全量。
 	AvailableCommands []Command `json:"availableCommands,omitempty"`
+
+	// Meta 是私有扩展。只解析子代理相关字段——它是两端唯一的父子关系载体，
+	// 协议本身没有嵌套消息的概念。
+	Meta *UpdateMeta `json:"_meta,omitempty"`
+}
+
+// UpdateMeta 收两端 _meta 里的子代理信息。两端机制截然不同：claude 把子代理的
+// 工具调用（声明 subagent-transcript 后还有正文与思考）混进主流，靠
+// parentToolUseId 认领；codex 只发一条活动事件，转录留在独立 thread 里。
+type UpdateMeta struct {
+	ClaudeCode *ClaudeCodeMeta `json:"claudeCode,omitempty"`
+	Codex      *CodexMeta      `json:"codex,omitempty"`
+}
+
+// ClaudeCodeMeta 是 claude 的私有扩展（只取子代理相关的）。
+type ClaudeCodeMeta struct {
+	// Subagent 为真表示这条 tool_call 就是启动子代理的 Agent/Task 调用本身。
+	Subagent bool `json:"subagent,omitempty"`
+	// ParentToolUseID 指向产生这条 update 的子代理所挂的 Agent/Task 调用。
+	// 实测同一工具调用的部分后续 update 会漏带它（连 Subagent 标记一起漏），
+	// 所以归属必须在按 ToolCallID 合并时记住，不能每条现读现判。
+	ParentToolUseID string `json:"parentToolUseId,omitempty"`
+	ToolName        string `json:"toolName,omitempty"`
+}
+
+// CodexMeta 是 codex 的私有扩展（只取子代理相关的）。
+type CodexMeta struct {
+	Subagent *CodexSubagent `json:"subagent,omitempty"`
+}
+
+// CodexSubagent 是 codex 子代理活动事件的载荷。子代理是独立 thread，
+// ThreadID 可直接喂给 session/load 拉全量转录——这是 codex 侧取转录的唯一途径。
+type CodexSubagent struct {
+	ThreadID string `json:"threadId,omitempty"`
+	Path     string `json:"path,omitempty"`
+	// Activity 为 started / interacted / interrupted。
+	Activity string `json:"activity,omitempty"`
+}
+
+// SubagentOf 返回产生这条 update 的子代理所挂的 Agent/Task 调用 id；
+// 不是子代理产生的返回空。只有 claude 有——codex 不转发子代理转录。
+func (u SessionUpdate) SubagentOf() string {
+	if u.Meta == nil || u.Meta.ClaudeCode == nil {
+		return ""
+	}
+	return u.Meta.ClaudeCode.ParentToolUseID
+}
+
+// IsSubagentLaunch 判断这条工具调用是不是「启动了一个子代理」的那次调用。
+// claude 是 Agent/Task 工具带 subagent 标记，codex 是 subAgentActivity 事件。
+func (u SessionUpdate) IsSubagentLaunch() bool {
+	if u.Meta == nil {
+		return false
+	}
+	if u.Meta.ClaudeCode != nil && u.Meta.ClaudeCode.Subagent {
+		return true
+	}
+	return u.Meta.Codex != nil && u.Meta.Codex.Subagent != nil
+}
+
+// CodexSubagentThread 返回 codex 子代理的独立 thread id 与 agent 路径，
+// 不是 codex 子代理事件时返回两个空串。
+func (u SessionUpdate) CodexSubagentThread() (threadID, path string) {
+	if u.Meta == nil || u.Meta.Codex == nil || u.Meta.Codex.Subagent == nil {
+		return "", ""
+	}
+	return u.Meta.Codex.Subagent.ThreadID, u.Meta.Codex.Subagent.Path
 }
 
 // Command 是 agent 暴露的一条斜杠命令。发送时就是普通文本（"/plan …"），

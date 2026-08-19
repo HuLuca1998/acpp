@@ -28,22 +28,29 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 
 	switch u.SessionUpdate {
 	case UpdateAgentMessageChunk:
-		h.session.emit(Event{Kind: EventMessage, Text: u.Text()})
+		// SubagentOf 只在客户端声明了 subagent-transcript 后才可能有值；
+		// 我们不声明（只要子代理的输入输出，不要过程），这里保持归一化以防漂移。
+		h.session.emit(Event{Kind: EventMessage, Text: u.Text(), SubagentOf: u.SubagentOf()})
 
 	case UpdateAgentThoughtChunk:
-		h.session.emit(Event{Kind: EventThought, Text: u.Text()})
+		h.session.emit(Event{Kind: EventThought, Text: u.Text(), SubagentOf: u.SubagentOf()})
 
 	case UpdateToolCall, UpdateToolCallUpdate:
+		threadID, path := u.CodexSubagentThread()
 		h.session.emit(Event{
-			Kind:       EventToolCall,
-			ToolCallID: u.ToolCallID,
-			Title:      u.Title,
-			ToolKind:   u.Kind,
-			Status:     u.Status,
-			RawInput:   u.RawInput,
-			RawOutput:  u.RawOutput,
-			Content:    u.Content,
-			Locations:  u.Locations,
+			Kind:             EventToolCall,
+			ToolCallID:       u.ToolCallID,
+			Title:            u.Title,
+			ToolKind:         u.Kind,
+			Status:           u.Status,
+			RawInput:         u.RawInput,
+			RawOutput:        u.RawOutput,
+			Content:          u.Content,
+			Locations:        u.Locations,
+			IsSubagent:       u.IsSubagentLaunch(),
+			SubagentOf:       u.SubagentOf(),
+			SubagentThreadID: threadID,
+			SubagentPath:     path,
 		})
 
 	case UpdatePlan:
