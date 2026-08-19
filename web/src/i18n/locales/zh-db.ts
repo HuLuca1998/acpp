@@ -81,7 +81,7 @@ export const zhDb = {
   sshKeyPathPlaceholder: "~/.ssh/id_ed25519（留空则用 ssh-agent）",
   sshPassphrase: "通行短语",
   sshKnownHosts:
-    "跳板机指纹按 ~/.ssh/known_hosts 校验。没连过的主机先手工 ssh 一次，或执行 ssh-keyscan 补录。",
+    "跳板机指纹按 ~/.ssh/known_hosts 校验：没连过的主机首次连接自动补录，指纹与记录不符则拒绝连接——那可能是中间人，人工核实后删掉旧记录再试。",
   test: "测试连接",
   testing: "连接中…",
   testOk: "连接成功（MySQL {{version}}）",

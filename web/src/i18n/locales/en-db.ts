@@ -84,7 +84,7 @@ export const enDb = {
   sshKeyPathPlaceholder: "~/.ssh/id_ed25519 (empty uses ssh-agent)",
   sshPassphrase: "Passphrase",
   sshKnownHosts:
-    "Host keys are verified against ~/.ssh/known_hosts. For a new host, ssh to it once or run ssh-keyscan first.",
+    "Host keys are verified against ~/.ssh/known_hosts: a first-time host is recorded automatically, while a key that stopped matching is rejected — possibly a man-in-the-middle; verify by hand and drop the stale entry before retrying.",
   test: "Test connection",
   testing: "Connecting…",
   testOk: "Connected (MySQL {{version}})",
