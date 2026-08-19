@@ -115,7 +115,12 @@ export function DataTable<TData extends RowData>({
               className={cn(
                 // relative 是拉伸链接（after:absolute inset-0）的落脚点，
                 // 本项目所有列表行的主链接都是这个模式（AGENTS.md §5.5）。
-                "group relative",
+                // transform 是给 WebKit 的兜底：WKWebView（桌面壳）不把 tr 的
+                // relative 当 absolute 后代的定位基准，链接的 ::after 会相对
+                // 外层容器铺满整张表、最后一行叠在最顶——表现为整表只有最后
+                // 一行可点。任何非 none 的 transform 建立的定位基准两家引擎
+                // 都认，对 Chrome 无行为差异。
+                "group relative [transform:translate(0)]",
                 onRowClick && "cursor-pointer",
                 rowClassName?.(row.original)
               )}
