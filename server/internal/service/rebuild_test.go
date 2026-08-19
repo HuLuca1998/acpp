@@ -204,3 +204,58 @@ func TestRebuildMessagesCodexSubagentThread(t *testing.T) {
 		t.Errorf("subagentPath = %v，期望 /root/project_inventory", got)
 	}
 }
+
+// agent 的节奏是「说一句 → 干点活 → 再说一句」。正文被工具调用打断的地方
+// 就是消息的断点——揉成一条会让两次发言首尾相接，读起来像一句话说到一半
+// 突然换了话题（真实样本：派子代理前后各说一句）。
+func TestRebuildMessagesSplitsTextAroundTools(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "读一下文件")),
+		wire(t, "recv", chunkFrame("我先派个子代理去读。")),
+		wire(t, "recv", toolFrame(t, "tool_call", "t1",
+			`,"title":"Task","status":"pending"`, "")),
+		wire(t, "recv", toolFrame(t, "tool_call_update", "t1", `,"status":"completed"`, "")),
+		wire(t, "recv", chunkFrame("子代理回来了，结果如下。")),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+
+	var got []string
+	for _, m := range msgs {
+		got = append(got, string(m.Kind)+":"+m.Content)
+	}
+	want := []string{
+		"text:读一下文件",
+		"text:我先派个子代理去读。",
+		"tool_call:Task",
+		"text:子代理回来了，结果如下。",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("消息序列 = %v，期望 %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("第 %d 条 = %q，期望 %q", i, got[i], want[i])
+		}
+	}
+}
+
+// 同一段里的连续分片仍然合并——断点只由工具调用产生，不是每个 chunk 一条。
+func TestRebuildMessagesMergesAdjacentChunks(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "你好")),
+		wire(t, "recv", chunkFrame("前半句")),
+		wire(t, "recv", chunkFrame("后半句。")),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+	var texts []string
+	for _, m := range msgs {
+		if m.Role == model.RoleAgent && m.Kind == model.KindText {
+			texts = append(texts, m.Content)
+		}
+	}
+	if len(texts) != 1 || texts[0] != "前半句后半句。" {
+		t.Errorf("agent 正文 = %v，期望合并成一条「前半句后半句。」", texts)
+	}
+}

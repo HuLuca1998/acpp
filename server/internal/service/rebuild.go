@@ -18,12 +18,34 @@ type wireMsg struct {
 	Result json.RawMessage `json:"result,omitempty"`
 }
 
-// rebuildTurn 攒住一轮里的正文、思考与工具调用。
+// rebuildTurn 按**时序**攒住一轮里的内容。agent 的节奏通常是「说一句 →
+// 干点活 → 再说一句」，把整轮正文揉成一条消息会把这个节奏抹平：界面上
+// 两次发言首尾相接，读起来像一句话说到一半突然换了话题。
 type rebuildTurn struct {
-	message   []byte
-	thought   []byte
-	toolOrder []string
-	tools     map[string]*rebuildTool
+	items []*turnItem
+	tools map[string]*rebuildTool
+}
+
+// turnItem 是轮内时间线上的一段：一段连续的正文、一段连续的思考，
+// 或一次工具调用。
+type turnItem struct {
+	kind model.MessageKind
+	// buf 是正文/思考的分片累积，工具调用不用。
+	buf    []byte
+	toolID string
+}
+
+// appendChunk 把分片接到时间线末尾那段同类内容上；末尾不是同类
+// （中间插了工具调用）就另起一段——那正是消息该断开的地方。
+func (t *rebuildTurn) appendChunk(kind model.MessageKind, text string) {
+	if text == "" {
+		return
+	}
+	if n := len(t.items); n > 0 && t.items[n-1].kind == kind {
+		t.items[n-1].buf = append(t.items[n-1].buf, text...)
+		return
+	}
+	t.items = append(t.items, &turnItem{kind: kind, buf: []byte(text)})
 }
 
 type rebuildTool struct {
@@ -44,7 +66,8 @@ type rebuildTool struct {
 // RebuildMessages 把线级转录重建成 UI 消息列表。
 //
 // 规则与旧的落库行为一致：session/prompt 请求产出 user 消息；
-// 一轮内的 update 分片累积，prompt 响应到达时按 思考 → 工具 → 正文 落成消息。
+// 一轮内的 update 按时序攒进一条时间线，prompt 响应到达时原样落成多条消息
+// ——正文被工具调用打断处就是消息的断点。
 // 进行中的半轮不产出——那部分由前端的流式态渲染。
 func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message {
 	var out []model.Message
@@ -110,53 +133,67 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		if turn == nil {
 			return
 		}
-		if thought := trimmed(turn.thought); thought != "" {
-			emit(model.Message{Role: model.RoleAgent, Kind: model.KindThought, Content: thought}, ts)
+		// 停止原因挂在本轮最后一段正文上：异常收尾时界面要能就地说明为什么断的。
+		lastText := -1
+		for i, it := range turn.items {
+			if it.kind == model.KindText && trimmed(it.buf) != "" {
+				lastText = i
+			}
 		}
-		for _, id := range turn.toolOrder {
-			tool := turn.tools[id]
-			// 轮已收尾，没走到终态的工具必然被中止/丢弃——
-			// 历史消息不能停留在「执行中」。
-			if tool.status == "" || tool.status == "pending" || tool.status == "in_progress" {
-				tool.status = "cancelled"
+		for i, it := range turn.items {
+			switch it.kind {
+			case model.KindText, model.KindThought:
+				content := trimmed(it.buf)
+				if content == "" {
+					continue
+				}
+				msg := model.Message{Role: model.RoleAgent, Kind: it.kind, Content: content}
+				if i == lastText && stopReason != "" && stopReason != string(acp.StopEndTurn) {
+					msg.Payload = model.JSONMap{"stopReason": stopReason}
+				}
+				emit(msg, ts)
+
+			case model.KindToolCall:
+				tool := turn.tools[it.toolID]
+				if tool == nil {
+					continue
+				}
+				// 轮已收尾，没走到终态的工具必然被中止/丢弃——
+				// 历史消息不能停留在「执行中」。
+				if tool.status == "" || tool.status == "pending" || tool.status == "in_progress" {
+					tool.status = "cancelled"
+				}
+				payload := model.JSONMap{"toolCallId": it.toolID, "status": tool.status}
+				if tool.kind != "" {
+					payload["kind"] = tool.kind
+				}
+				if len(tool.rawInput) > 0 {
+					payload["rawInput"] = json.RawMessage(tool.rawInput)
+				}
+				if len(tool.rawOutput) > 0 {
+					payload["rawOutput"] = json.RawMessage(tool.rawOutput)
+				}
+				if len(tool.content) > 0 {
+					payload["content"] = json.RawMessage(tool.content)
+				}
+				// 子代理信息只在有值时进 payload，普通工具调用的形状不变。
+				if tool.isSubagent {
+					payload["isSubagent"] = true
+				}
+				if tool.subagentOf != "" {
+					payload["subagentOf"] = tool.subagentOf
+				}
+				if tool.subagentThreadID != "" {
+					payload["subagentThreadId"] = tool.subagentThreadID
+					payload["subagentPath"] = tool.subagentPath
+				}
+				emit(model.Message{
+					Role:    model.RoleAgent,
+					Kind:    model.KindToolCall,
+					Content: tool.title,
+					Payload: payload,
+				}, ts)
 			}
-			payload := model.JSONMap{"toolCallId": id, "status": tool.status}
-			if tool.kind != "" {
-				payload["kind"] = tool.kind
-			}
-			if len(tool.rawInput) > 0 {
-				payload["rawInput"] = json.RawMessage(tool.rawInput)
-			}
-			if len(tool.rawOutput) > 0 {
-				payload["rawOutput"] = json.RawMessage(tool.rawOutput)
-			}
-			if len(tool.content) > 0 {
-				payload["content"] = json.RawMessage(tool.content)
-			}
-			// 子代理信息只在有值时进 payload，普通工具调用的形状不变。
-			if tool.isSubagent {
-				payload["isSubagent"] = true
-			}
-			if tool.subagentOf != "" {
-				payload["subagentOf"] = tool.subagentOf
-			}
-			if tool.subagentThreadID != "" {
-				payload["subagentThreadId"] = tool.subagentThreadID
-				payload["subagentPath"] = tool.subagentPath
-			}
-			emit(model.Message{
-				Role:    model.RoleAgent,
-				Kind:    model.KindToolCall,
-				Content: tool.title,
-				Payload: payload,
-			}, ts)
-		}
-		if content := trimmed(turn.message); content != "" {
-			msg := model.Message{Role: model.RoleAgent, Kind: model.KindText, Content: content}
-			if stopReason != "" && stopReason != string(acp.StopEndTurn) {
-				msg.Payload = model.JSONMap{"stopReason": stopReason}
-			}
-			emit(msg, ts)
 		}
 		turn = nil
 	}
@@ -266,10 +303,10 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 func applyUpdate(turn *rebuildTurn, u acp.SessionUpdate) {
 	switch u.SessionUpdate {
 	case acp.UpdateAgentMessageChunk:
-		turn.message = append(turn.message, u.Text()...)
+		turn.appendChunk(model.KindText, u.Text())
 
 	case acp.UpdateAgentThoughtChunk:
-		turn.thought = append(turn.thought, u.Text()...)
+		turn.appendChunk(model.KindThought, u.Text())
 
 	case acp.UpdateToolCall, acp.UpdateToolCallUpdate:
 		if u.ToolCallID == "" {
@@ -279,7 +316,11 @@ func applyUpdate(turn *rebuildTurn, u acp.SessionUpdate) {
 		if !ok {
 			tool = &rebuildTool{}
 			turn.tools[u.ToolCallID] = tool
-			turn.toolOrder = append(turn.toolOrder, u.ToolCallID)
+			// 工具调用首次出现的位置就是它在时间线上的位置，后续 update
+			// 只更新内容、不再挪动它。
+			turn.items = append(turn.items, &turnItem{
+				kind: model.KindToolCall, toolID: u.ToolCallID,
+			})
 		}
 		// 更新只带变了的字段，空值不能覆盖已有内容。
 		if u.Title != "" {
