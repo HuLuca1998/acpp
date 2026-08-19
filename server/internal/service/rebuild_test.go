@@ -97,6 +97,63 @@ func TestRebuildMessagesPromptQueueing(t *testing.T) {
 	}
 }
 
+// agent 进程死在 prompt 在途时，重连后 session/load 会重放全部历史。
+// 真实事故（会话 64）：僵尸轮不收尾，重放的整段历史被攒进它，下一轮
+// 响应到达时把「全部历史 + 新轮」揉成一坨落在同一时刻；pendingPrompts
+// 同时泄漏，此后每个 prompt 都被误判成 promptQueueing。重建器必须把
+// send session/new|load 当成连接边界：僵尸轮按 cancelled 收尾，重放不
+// 产出消息，新轮从零开始。
+func TestRebuildMessagesConnRestartBoundary(t *testing.T) {
+	entries := []transcript.Entry{
+		// 第一段连接：一轮正常，一轮死在途中。
+		wire(t, "send", `{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"cwd":"/w"}}`),
+		wire(t, "send", promptFrame(2, "第一问")),
+		wire(t, "recv", chunkFrame("第一答。")),
+		wire(t, "recv", resultFrame(2)),
+		wire(t, "send", promptFrame(3, "第二问")),
+		wire(t, "recv", chunkFrame("答到一半——")),
+		// 进程死了：id=3 的响应永远不来。重连,load 重放历史。
+		wire(t, "send", `{"jsonrpc":"2.0","id":1,"method":"session/load","params":{"sessionId":"s","cwd":"/w"}}`),
+		wire(t, "recv", chunkFrame("第一答。")),
+		wire(t, "recv", chunkFrame("答到一半——")),
+		wire(t, "recv", resultFrame(1)),
+		// 用户重发,新轮正常收尾。
+		wire(t, "send", promptFrame(2, "第二问")),
+		wire(t, "recv", chunkFrame("这次答完了。")),
+		wire(t, "recv", resultFrame(2)),
+	}
+
+	got := RebuildMessages(7, entries)
+
+	want := []struct {
+		role    model.MessageRole
+		content string
+	}{
+		{model.RoleUser, "第一问"},
+		{model.RoleAgent, "第一答。"},
+		{model.RoleUser, "第二问"},
+		{model.RoleAgent, "答到一半——"}, // 僵尸轮的内容保留,按 cancelled 收尾
+		{model.RoleUser, "第二问"},       // 用户重发是真实动作,照实产出
+		{model.RoleAgent, "这次答完了。"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d messages, want %d: %+v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i].Role != w.role || got[i].Content != w.content {
+			t.Errorf("message[%d] = (%s, %q), want (%s, %q)", i, got[i].Role, got[i].Content, w.role, w.content)
+		}
+	}
+	// 僵尸轮要带上中断标志,界面才能就地说明这轮为什么断。
+	if reason, _ := got[3].Payload["stopReason"].(string); reason != "cancelled" {
+		t.Errorf("僵尸轮 stopReason = %v，期望 cancelled", got[3].Payload["stopReason"])
+	}
+	// load 的应答（新连接 id=1）不能被旧连接的认领表误认成 prompt 收尾。
+	if got[5].Payload != nil {
+		t.Errorf("正常轮不该带 stopReason payload: %+v", got[5].Payload)
+	}
+}
+
 // 普通两轮对话的基线：每轮 prompt 产出 user 消息，轮末落 agent 正文。
 func TestRebuildMessagesTwoTurns(t *testing.T) {
 	entries := []transcript.Entry{

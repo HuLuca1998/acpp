@@ -205,6 +205,22 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		}
 
 		switch {
+		case entry.Dir == "send" && (msg.Method == "session/new" || msg.Method == "session/load"):
+			// 连接重启边界：agent 进程死过一次，后端重连后建/载会话。
+			// 上一段若有在途的轮，它的响应永远不会来了——按 cancelled
+			// 收尾，内容保留但不再挂起。flush 后 turn 为 nil，接下来
+			// session/load 重放的历史 update 会被下面的 turn==nil 跳过，
+			// 不会混进任何轮（实时侧的对应机制是 session.replaying）。
+			// 旧连接的请求 id 空间同时作废：新连接从小 id 重新计数，
+			// 残留的认领表会让旧 id 撞上新请求、误收响应。
+			flush(entry.TS, string(acp.StopCancelled))
+			pendingPrompts = 0
+			sentMethods = map[string]string{}
+			agentReqs = map[string]agentReq{}
+			if len(msg.ID) > 0 {
+				sentMethods[string(msg.ID)] = msg.Method
+			}
+
 		case entry.Dir == "send" && msg.Method == "session/prompt":
 			if len(msg.ID) > 0 {
 				sentMethods[string(msg.ID)] = msg.Method
