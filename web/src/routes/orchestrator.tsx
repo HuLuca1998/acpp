@@ -151,7 +151,7 @@ export function Orchestrator() {
         <Button
           size="icon-sm"
           variant="ghost"
-          className="relative text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+          className="relative text-muted-foreground transition-colors hover:text-destructive"
           aria-label={t("common.delete")}
           onClick={() => setDeleting(row.original)}
         >

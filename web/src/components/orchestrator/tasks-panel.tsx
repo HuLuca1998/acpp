@@ -99,7 +99,7 @@ export const OrchTasksPanel = memo(function OrchTasksPanel() {
                 size="icon-sm"
                 variant="ghost"
                 aria-label={t("orch.tasks.cancel")}
-                className="absolute right-2 bottom-2 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                className="absolute right-2 bottom-2 text-muted-foreground transition-colors hover:text-destructive"
                 onClick={() => void api.orchestrator.taskCancel(task.id)}
               >
                 <SquareIcon />

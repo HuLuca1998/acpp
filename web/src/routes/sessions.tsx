@@ -267,7 +267,7 @@ function DeleteSessionButton({ onConfirm }: { onConfirm: () => void }) {
             variant="ghost"
             size="icon-sm"
             aria-label={t("common.delete")}
-            className="relative text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100 aria-expanded:opacity-100"
+            className="relative text-muted-foreground transition-colors hover:text-destructive"
           />
         }
       >

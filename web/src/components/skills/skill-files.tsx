@@ -112,7 +112,7 @@ export function SkillFiles({
               <Button
                 size="icon-sm"
                 variant="ghost"
-                className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                className="text-muted-foreground transition-colors hover:text-destructive"
                 aria-label={t("common.delete")}
                 onClick={() => setDeleting(file.path)}
               >

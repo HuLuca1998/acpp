@@ -181,7 +181,7 @@ function Row({
       <Button
         size="sm"
         variant="ghost"
-        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        className="shrink-0 transition-colors"
         onClick={() => onPick(refValue)}
       >
         {t("db.refPick")}

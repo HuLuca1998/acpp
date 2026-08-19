@@ -110,7 +110,8 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 
 - **创建核心对象走"进入即用"（draft-first），不走表单**：像 ChatGPT/Claude 的新建会话——直接进入空白目标页，参数（agent/工作目录）在输入框旁用胶囊控件就地选、可不选用默认，**首次实质动作才真正创建**（参考 `routes/session-chat.tsx` 的草稿态：首条消息落地才建会话，标题由后端从首条消息自动简写）。不要让用户在见到东西之前先填表。
 - **轻量配置操作才用 `Dialog`**：需要几个字段确认、且完成后要回到原地的操作（改名、危险确认等）原地弹出；内容本身是"一整页"（对话流、详情、列表）才配路由。
-- **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`；行内次级操作（删除等）默认 `opacity-0`，`group-hover` / `focus-visible` 浮现，并保证键盘可达。
+- **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`。
+- **承载功能的行内操作常显**（删除、引用等）：用 `text-muted-foreground` 压低存在感、hover 时才上色，但**不要用 `opacity-0` + `group-hover` 藏起来**。藏起来的按钮就是「hover 专属效果承载了唯一信息」，与下面的可访问性一条直接冲突；而且 macOS 桌面壳的 WKWebView 里 hover 态并不总跟着鼠标走，藏了就等于点不到。纯装饰的提示（可编辑的铅笔、指示方向的箭头）不承载信息，照旧可以 hover 才现。
 - **危险操作**：一律 `AlertDialog` 确认，确认按钮 `variant="destructive"`，文案讲清后果（如"子进程会一并回收，记录不可恢复"）。
 - **时间显示**：列表用相对时间（`lib/format.ts`），`title` 悬停给完整时间；时间与数字列加 `tabular-nums`。
 - **可访问性**：可点击元素用 `<button>` / `<a>`（或 shadcn 等价物），不给 `div` 挂 onClick；表单控件有 label；hover 专属效果不承载唯一信息。
