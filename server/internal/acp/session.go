@@ -62,6 +62,8 @@ type Session struct {
 	// mcpServers 是上层要求挂载的 MCP server 清单（编排会话的系统能力
 	// 注入口），session/new 与 session/load 都要带。
 	mcpServers []any
+	// replayEvents 为真时不抑制 session/load 的历史重放，见 OpenOptions 同名字段。
+	replayEvents bool
 }
 
 // mcpList 给协议调用返回 mcpServers 字段的值：该字段是必填项，
@@ -79,10 +81,12 @@ func (s *Session) setReplaying(v bool) {
 	s.mu.Unlock()
 }
 
+// isReplaying 表示「正在重放历史，且这些内容应当丢弃」。开了 replayEvents
+// 的一次性读取会话要的就是这批内容，对它永远返回 false。
 func (s *Session) isReplaying() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.replaying
+	return s.replaying && !s.replayEvents
 }
 
 // Caps 是会话能力的原始快照（modes 与 configOptions），只在 acp 包内部

@@ -364,6 +364,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/sessions/{id}/send", chat.send)
 	api.HandleFunc("GET /api/sessions/{id}/events", chat.events)
 	api.HandleFunc("POST /api/sessions/{id}/cancel", chat.cancel)
+	api.HandleFunc("GET /api/sessions/{id}/subagents/{threadId}/output", chat.subagentOutput)
 	// 会话级统一设置：模型/思考深度/权限档/plan/fast，逐项可选。
 	api.HandleFunc("PUT /api/sessions/{id}/settings", chat.settings)
 	// 交互式提问的作答与权限裁决回传。

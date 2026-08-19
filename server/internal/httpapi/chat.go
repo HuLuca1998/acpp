@@ -67,6 +67,28 @@ func (h chatHandler) send(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusAccepted, msg)
 }
 
+// subagentOutput 读一个 codex 子代理的最终产出（claude 的产出随工具调用
+// 一起下发，不走这里）。开一条一次性会话把子 thread 的转录 load 出来，慢，
+// 所以是界面展开那一条时才拉的懒加载。
+func (h chatHandler) subagentOutput(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.guard(r, id); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	output, err := h.chat.SubagentOutput(r.Context(), id, r.PathValue("threadId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]string{"output": output})
+}
+
 // settings 应用统一设置变更（模型/思考深度/权限档/plan/fast，逐项可选）。
 func (h chatHandler) settings(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

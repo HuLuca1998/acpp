@@ -78,6 +78,11 @@ type OpenOptions struct {
 	// MCPServers 挂载到会话上的 MCP server 清单（协议原样透传，
 	// 空为不挂载）。
 	MCPServers []any
+	// ReplayEvents 为真时，session/load 重放的历史内容照常经 OnEvent 送出，
+	// 不做抑制。常规会话必须留 false——历史的正源是转录与重建，重放混进实时
+	// 流会让消息重复一遍。只有「我要的就是这条历史」的一次性读取才开
+	// （读 codex 子代理独立 thread 的转录就是唯一用例）。
+	ReplayEvents bool
 }
 
 // Open 拉起 agent、完成握手并新建（或恢复）会话。
@@ -124,7 +129,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 		close(opening)
 	}()
 
-	sess := &Session{cwd: opts.Cwd, onEvent: opts.OnEvent}
+	sess := &Session{cwd: opts.Cwd, onEvent: opts.OnEvent, replayEvents: opts.ReplayEvents}
 	// 刚打开还没跑过调用，从现在起计空闲，否则零值等于「很久以前」立即被回收。
 	sess.lastDone.Store(time.Now().UnixNano())
 	handler := &sessionHandler{session: sess}
