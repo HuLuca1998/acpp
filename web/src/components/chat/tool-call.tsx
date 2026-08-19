@@ -6,6 +6,7 @@ import {
   parseDbToolOutput,
   type ParsedDbResult,
 } from "@/lib/db-result"
+import { MarkdownContent } from "@/components/chat/markdown"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { cn } from "@/lib/utils"
 import { SqlResultView } from "@/components/db/sql-result-view"
@@ -61,6 +62,8 @@ export interface ToolCallPayload {
     oldText?: string | null
     newText?: string
   }[]
+  /** 这次调用派出了子代理——它的产出是 markdown 报告，不是终端输出。 */
+  isSubagent?: boolean
 }
 
 /** 归一化三种 rawOutput 形状，取正文与退出码。 */
@@ -168,6 +171,17 @@ function ToolCallDetail({ payload }: { payload: ToolCallPayload }) {
   )
   const command = payload.rawInput?.command
   const { output, exitCode } = outputOf(payload)
+
+  // 子代理交回来的是 AI 写的 markdown 报告（标题、表格、代码块），塞进
+  // 终端视图会把 ## 和 | 原样摆出来。反过来 Bash/Read 的输出是原始文本，
+  // 用 markdown 渲染只会毁掉它（缩进变代码块、* 变列表），所以只认子代理。
+  if (payload.isSubagent && output) {
+    return (
+      <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+        <MarkdownContent className="text-sm">{output}</MarkdownContent>
+      </div>
+    )
+  }
 
   if (isDbQueryCall(payload.rawInput)) {
     return (
