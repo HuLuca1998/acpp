@@ -214,8 +214,18 @@ func (s *Updater) Apply(ctx context.Context) (string, error) {
 
 	// 4. 分离重启器：TERM 让壳走正常退出路径（回收本进程与 agent 子进程），
 	//    随后 open 新包。Setsid 保证它不随本进程一起死。
+	//
+	//    必须**等壳真正退出**再 open：壳的退出要回收 acp-server 连带全部
+	//    agent 子进程，耗时轻松超过固定 sleep；旧实例还活着时 open 只会
+	//    「激活」它而不启动新进程，结果就是只更新不重启。上限 60 秒，
+	//    超时 SIGKILL 兜底（孤儿端口下次启动由壳的清理逻辑接管）。
 	shellPID := os.Getppid()
-	script := fmt.Sprintf("sleep 1; kill -TERM %d 2>/dev/null; sleep 2; /usr/bin/open %s",
+	script := fmt.Sprintf(
+		"sleep 1; kill -TERM %[1]d 2>/dev/null; "+
+			"i=0; while kill -0 %[1]d 2>/dev/null; do "+
+			"i=$((i+1)); if [ $i -ge 120 ]; then kill -KILL %[1]d 2>/dev/null; sleep 1; break; fi; "+
+			"sleep 0.5; done; "+
+			"sleep 1; /usr/bin/open %[2]s",
 		shellPID, strconv.Quote(bundle))
 	restarter := exec.Command("/bin/sh", "-c", script)
 	restarter.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
