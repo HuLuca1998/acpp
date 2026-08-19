@@ -193,6 +193,16 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		MetaExtra:          metaExtra,
 	})
 	if err != nil {
+		// 一次都没连上过、也没有任何消息的会话是个空壳。留着它只会在列表里
+		// 变成一条点开就报错的死记录——agent 命令不在 PATH 里时，每试一次
+		// 新建就攒一条。这种直接回收，不让用户去手动收拾；已经跑过的会话
+		// 不在此列，它们的历史比一次连接失败值钱。
+		if view.ACPSessionID == "" && view.MessageCount == 0 {
+			if derr := s.sessions.Delete(ctx, OwnerScope(), sessionID); derr != nil {
+				slog.Warn("discard never-started session", "session", sessionID, "err", derr)
+			}
+			return nil, fmt.Errorf("open acp session: %w", err)
+		}
 		s.markSessionError(sessionID, err)
 		return nil, fmt.Errorf("open acp session: %w", err)
 	}
