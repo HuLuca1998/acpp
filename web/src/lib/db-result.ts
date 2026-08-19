@@ -119,7 +119,9 @@ function readBody(
  * 认参数不认工具名：名字随 runtime 加前缀（claude 是 mcp__acpp-db__db_query，
  * codex 又不一样），而 sql 参数是我们自己定的，稳定得多。
  */
-export function isDbQueryCall(rawInput: unknown): rawInput is { sql: string } {
+export function isDbQueryCall(
+  rawInput: unknown
+): rawInput is { sql: string; source?: string } {
   return (
     typeof rawInput === "object" &&
     rawInput !== null &&

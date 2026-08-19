@@ -25,6 +25,7 @@ export const enDb = {
   refPick: "Reference",
   refNeedsCwd:
     "Pick a working directory first — sources are filtered by its project",
+  defaultSource: "default source",
   refFile: "File",
   refDatabase: "Database",
   description:

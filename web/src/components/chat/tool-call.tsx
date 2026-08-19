@@ -130,18 +130,29 @@ function TerminalView({
  */
 function DbQueryView({
   sql,
+  source,
   parsed,
 }: {
   sql: string
+  /** 入参里的数据源 ref；项目只有一个数据源时 AI 可省略。 */
+  source?: string
   parsed: ParsedDbResult | null
 }) {
-  // 还没跑完（或结果解析不出来）时先把 SQL 亮出来——等待期间最该看见的
-  // 就是「它到底要跑什么」。
+  const { t } = useTranslation()
+  // 还没跑完（或结果解析不出来）时也要标出目标：跑错环境的代价太大，
+  // 语句正对着 prod 跑的那一刻最该看见。入参没带 source 就如实标
+  // 「默认数据源」，等结果头部到达后换成权威标识。
   if (!parsed) {
     return (
-      <pre className="overflow-auto rounded-lg border border-border bg-background/50 px-2.5 py-1.5 font-mono text-xs leading-5 whitespace-pre-wrap">
-        {sql}
-      </pre>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <DatabaseIcon className="size-3.5 shrink-0" />
+          <span className="font-mono">{source || t("db.defaultSource")}</span>
+        </div>
+        <pre className="overflow-auto rounded-lg border border-border bg-background/50 px-2.5 py-1.5 font-mono text-xs leading-5 whitespace-pre-wrap">
+          {sql}
+        </pre>
+      </div>
     )
   }
 
@@ -187,6 +198,7 @@ function ToolCallDetail({ payload }: { payload: ToolCallPayload }) {
     return (
       <DbQueryView
         sql={payload.rawInput.sql}
+        source={payload.rawInput.source}
         parsed={output ? parseDbToolOutput(output) : null}
       />
     )

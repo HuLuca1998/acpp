@@ -24,6 +24,7 @@ export const zhDb = {
     "选一个数据源、库或表交给 AI——发送时把它的现状（表清单或表结构）一并带上。",
   refPick: "引用",
   refNeedsCwd: "先选择工作目录——数据源按它所属的项目筛选",
+  defaultSource: "默认数据源",
   refFile: "文件",
   refDatabase: "数据库",
   description:
