@@ -220,6 +220,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?…}`；密码永不下发，响应只给 `hasPassword` 标志位） |
 | GET/PUT/DELETE | `/api/datasources/{id}` | 连接详情 / 更新（密码留空=不改） / 删除 |
 | POST | `/api/datasources/{id}/test` | 测试连接（连不上返回 200 带 `{ok:false, error}`，那是配置问题不是服务故障） |
+| POST | `/api/datasources/probe-databases` | 配置页选库：列出这组连接参数可见的库（参数走请求体，编辑时带 `id` 沿用已存密码） |
+| POST | `/api/datasources/probe-ssh` | 配置页 SSH 页签单独测隧道，不碰 MySQL（probe 模式与失败形状同上两条） |
 | GET | `/api/datasources/{id}/databases` `/tables` `/schema` | 库清单 / 表清单（`?database=`） / 表结构（`?database=&table=`，含列、索引与建表语句） |
 | POST | `/api/datasources/{id}/query` | 执行 SQL（`{database?, sql, maxRows?}`，可含多条语句：按序执行、遇错即停，每条独立返回耗时与影响行数；行数硬顶 1000） |
 | GET | `/api/sessions/{id}/datasources` | **会话可见的**数据源：只有当前工作目录所属项目的那几条（斜杠命令数据源） |

@@ -127,6 +127,7 @@ function DataSourceForm({
   }))
   const [saving, setSaving] = useState(false)
   const [test, setTest] = useState<TestState>({ status: "idle" })
+  const [sshTest, setSSHTest] = useState<TestState>({ status: "idle" })
   const [uriOpen, setUriOpen] = useState(false)
 
   const set = <K extends keyof DataSourceInput>(
@@ -136,6 +137,7 @@ function DataSourceForm({
     setForm((prev) => ({ ...prev, [key]: value }))
     // 改了任何字段，上一次的测试结论就作废了。
     setTest({ status: "idle" })
+    setSSHTest({ status: "idle" })
   }
 
   async function save(): Promise<DataSource | null> {
@@ -175,6 +177,25 @@ function DataSourceForm({
       )
     } catch (err) {
       setTest({ status: "failed", error: (err as Error).message })
+    }
+  }
+
+  // SSH 单独测走 probe 模式（同选库的「读取」）：表单直接测、不落库，
+  // 编辑时带 id 让后端沿用已存密码——隧道和库两层分开测，报错才知道卡在哪层。
+  async function handleTestSSH() {
+    setSSHTest({ status: "running" })
+    try {
+      const result = await api.datasources.probeSSH({
+        ...form,
+        id: source?.id ?? 0,
+      })
+      setSSHTest(
+        result.ok
+          ? { status: "ok", version: result.version }
+          : { status: "failed", error: result.error ?? "" }
+      )
+    } catch (err) {
+      setSSHTest({ status: "failed", error: (err as Error).message })
     }
   }
 
@@ -428,6 +449,22 @@ function DataSourceForm({
                   </>
                 ) : null}
 
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={sshTest.status === "running"}
+                    onClick={handleTestSSH}
+                  >
+                    {sshTest.status === "running" ? <Spinner /> : null}
+                    {sshTest.status === "running"
+                      ? t("db.testing")
+                      : t("db.sshTest")}
+                  </Button>
+                </div>
+                <TestResult state={sshTest} variant="ssh" />
+
                 <p className="text-xs text-muted-foreground">
                   {t("db.sshKnownHosts")}
                 </p>
@@ -604,13 +641,22 @@ function DatabasePicker({
   )
 }
 
-function TestResult({ state }: { state: TestState }) {
+function TestResult({
+  state,
+  variant = "mysql",
+}: {
+  state: TestState
+  /** ssh 档只测到跳板机，成功文案不能说成「MySQL 连接成功」。 */
+  variant?: "mysql" | "ssh"
+}) {
   const { t } = useTranslation()
   if (state.status === "ok") {
     return (
       <p className="flex items-center gap-1.5 text-xs text-success">
         <CheckCircle2Icon className="size-3.5 shrink-0" />
-        {t("db.testOk", { version: state.version ?? "" })}
+        {variant === "ssh"
+          ? t("db.sshTestOk", { version: state.version ?? "" })
+          : t("db.testOk", { version: state.version ?? "" })}
       </p>
     )
   }

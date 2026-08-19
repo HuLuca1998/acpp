@@ -741,6 +741,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    /** SSH 页签单独测隧道，不碰 MySQL；失败形状同 test。 */
+    probeSSH: (input: DataSourceInput & { id?: number }) =>
+      request<DataSourceTest>("/datasources/probe-ssh", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
     get: (id: number) => request<DataSource>(`/datasources/${id}`),
     create: (input: DataSourceInput) =>
       request<DataSource>("/datasources", {

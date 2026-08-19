@@ -85,6 +85,8 @@ export const zhDb = {
   test: "测试连接",
   testing: "连接中…",
   testOk: "连接成功（MySQL {{version}}）",
+  sshTest: "测试 SSH",
+  sshTestOk: "SSH 连接成功（{{version}}）",
   testFailed: "连接失败",
   empty: "还没有数据库连接",
   emptyHint: "添加连接后，在该项目下的会话里就能用 /db 查看，AI 也能读写它。",

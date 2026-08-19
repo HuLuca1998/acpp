@@ -88,6 +88,8 @@ export const enDb = {
   test: "Test connection",
   testing: "Connecting…",
   testOk: "Connected (MySQL {{version}})",
+  sshTest: "Test SSH",
+  sshTestOk: "SSH connected ({{version}})",
   testFailed: "Connection failed",
   empty: "No database connections yet",
   emptyHint:

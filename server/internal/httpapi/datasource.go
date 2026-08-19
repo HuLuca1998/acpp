@@ -109,6 +109,26 @@ func (h datasourceHandler) test(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, map[string]any{"ok": true, "version": version})
 }
 
+// probeSSH 只拨 SSH 隧道，供配置页 SSH 页签单独排障。probe 模式同
+// probeDatabases：参数走请求体，编辑时带 id 沿用已存密码。
+func (h datasourceHandler) probeSSH(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		datasource.Input
+		ID uint `json:"id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	banner, err := h.sources.ProbeSSH(r.Context(), req.ID, req.Input)
+	if err != nil {
+		// 与 test 同一哲学：连不上是配置问题不是服务故障，原话给前端。
+		writeData(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeData(w, http.StatusOK, map[string]any{"ok": true, "version": banner})
+}
+
 // probeDatabases 列出一组连接参数能看到的库，供配置页选库。
 // 新建时还没有 id，所以连接参数走请求体；编辑时带上 id 就能沿用已存密码。
 func (h datasourceHandler) probeDatabases(w http.ResponseWriter, r *http.Request) {

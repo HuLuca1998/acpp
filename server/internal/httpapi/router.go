@@ -266,6 +266,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/datasources/{id}/uri", datasources.uri)
 	// 配置页选库用：唯一不受「一条连接一个库」约束的读法（那时还没绑定）。
 	api.HandleFunc("POST /api/datasources/probe-databases", datasources.probeDatabases)
+	// 配置页 SSH 页签单独测隧道：不碰 MySQL，报错就知道卡在哪层。
+	api.HandleFunc("POST /api/datasources/probe-ssh", datasources.probeSSH)
 	api.HandleFunc("GET /api/datasources/{id}/databases", datasources.databases)
 	api.HandleFunc("GET /api/datasources/{id}/tables", datasources.tables)
 	api.HandleFunc("GET /api/datasources/{id}/schema", datasources.schema)

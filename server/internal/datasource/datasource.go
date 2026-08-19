@@ -312,6 +312,38 @@ func (s *Service) ProbeDatabases(ctx context.Context, id uint, in Input) ([]Data
 	return out, rows.Err()
 }
 
+// ProbeSSH 只拨 SSH 隧道确认跳板机可达、认证有效，不碰后面的 MySQL——
+// 给配置页 SSH 页签单独排障用：隧道和库两层分开测，报错才知道卡在哪层。
+// probe 模式同 ProbeDatabases：新建时还没有 id，编辑时带 id 沿用已存的
+// 密码/通行短语。返回跳板机的版本横幅（SSH-2.0-OpenSSH_… 那行）。
+func (s *Service) ProbeSSH(ctx context.Context, id uint, in Input) (string, error) {
+	probe := model.DataSource{Port: 3306, SSHPort: 22}
+	if id > 0 {
+		existing, err := s.Get(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		probe = *existing
+	}
+	// 只合并不做落库校验：测 SSH 不该被「项目/数据库还没填」挡住——
+	// 用户就在 SSH 页签上，常规页的必填项与这一层无关。SSH 字段本身
+	// 由 dialTunnel/sshAuths 校验。
+	merge(&probe, in)
+	if !probe.SSHEnabled {
+		return "", fmt.Errorf("%w: 先开启 SSH 隧道再测试", service.ErrInvalid)
+	}
+
+	// dialTunnel 靠 ctx 的 deadline 保护握手阶段，这里必须给一个。
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	t, err := dialTunnel(ctx, &probe)
+	if err != nil {
+		return "", err
+	}
+	defer t.Close()
+	return string(t.client.ServerVersion()), nil
+}
+
 // Test 拨一次连接确认配置可用，返回服务端版本。
 func (s *Service) Test(ctx context.Context, id uint) (string, error) {
 	src, err := s.Get(ctx, id)
@@ -333,9 +365,15 @@ func (s *Service) Test(ctx context.Context, id uint) (string, error) {
 	return "", nil
 }
 
-// apply 把入参合进记录并校验。字符串字段整体覆盖（表单每次提交全量），
-// 指针字段没传就保持原值。
+// apply 把入参合进记录并校验。
 func apply(src *model.DataSource, in Input) error {
+	merge(src, in)
+	return validate(src)
+}
+
+// merge 把入参合进记录。字符串字段整体覆盖（表单每次提交全量），
+// 指针字段没传就保持原值。
+func merge(src *model.DataSource, in Input) {
 	src.Project = strings.TrimSpace(in.Project)
 	src.Env = strings.TrimSpace(in.Env)
 	src.Host = strings.TrimSpace(in.Host)
@@ -380,7 +418,10 @@ func apply(src *model.DataSource, in Input) error {
 	if in.ReadOnly != nil {
 		src.ReadOnly = *in.ReadOnly
 	}
+}
 
+// validate 校验一条完整记录能否落库。
+func validate(src *model.DataSource) error {
 	switch {
 	case src.Project == "":
 		return fmt.Errorf("%w: 项目不能为空", service.ErrInvalid)
