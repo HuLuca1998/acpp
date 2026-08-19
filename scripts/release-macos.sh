@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # 用途：打包并发布 macOS 桌面版到 GitHub Releases——构建 ACPP.app → zip →
 #       git tag → gh release create（附 release notes，App 内更新检查读它）。
-# 用法：scripts/release-macos.sh <版本号> [notes文件]
-#       版本号形如 0.2.0（不带 v）；notes 缺省用上个 tag 以来的 git log 生成。
+# 用法：scripts/release-macos.sh [版本号] [notes文件]
+#       版本号形如 0.2.0（不带 v）；**缺省取上个 tag +0.0.1**（patch 递增，
+#       项目约定日常发布只加 0.0.1，升 minor/major 需显式给版本号）。
+#       notes 缺省用上个 tag 以来的 git log 生成。
 # 前置：gh CLI 已登录、仓库有 GitHub remote、工作区干净（未提交改动拒绝发布）。
 # 重跑须知：同一版本号重复执行会因 tag 已存在而失败——这是防重复发布的保护。
 set -euo pipefail
@@ -10,8 +12,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="${1:?用法: scripts/release-macos.sh <版本号> [notes文件]}"
+VERSION="${1:-}"
 NOTES_FILE="${2:-}"
+
+if [ -z "$VERSION" ]; then
+  LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+  [ -n "$LAST_TAG" ] || { echo "没有历史 tag，首次发布请显式给版本号" >&2; exit 1; }
+  BASE="${LAST_TAG#v}"
+  [[ "$BASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "上个 tag $LAST_TAG 不是 x.y.z 形状，请显式给版本号" >&2; exit 1; }
+  VERSION="${BASE%.*}.$((${BASE##*.} + 1))"
+  echo "==> 未指定版本号，取上个 tag（$LAST_TAG）+0.0.1：$VERSION"
+fi
 TAG="v$VERSION"
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "版本号必须形如 0.2.0（不带 v）" >&2; exit 1; }
