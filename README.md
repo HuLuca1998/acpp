@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-006 编排/外化子代理；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-006 编排/外化子代理；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -335,7 +335,9 @@ agent 内部的 subagent（claude 的 Task 工具）对用户是黑盒。编排�
 
 局域网分享打开后，访问者分两种身份：**owner** 是本机访问（loopback 判定，全权），**租户**凭 owner 发的邀请链接换到一个 HttpOnly cookie。选 cookie 而不是 Authorization header，是因为 SSE（`EventSource`）与工作区终端（WebSocket）都带不了自定义 header——三条通道要统一鉴权，只有 cookie 能做到。
 
-隔离只有一个执行点（`service.Scope`）：数据面把租户条件写进查询本身（漏写等于查不到，不会变成越权），路径面把一切目录操作 canonical 化后钉在租户 root（`<工作区根>/<租户名>`）内。别人的会话按「不存在」处理而不是 403——403 会泄露会话是否存在，凭 id 递增就能数出别人有多少条。owner 专属面（编排、系统设置、技能/角色/工具的写）由集中的前缀表判定，新增路由自动继承策略。
+隔离只有一个执行点（`service.Scope`）：数据面把租户条件写进查询本身（漏写等于查不到，不会变成越权），路径面把一切目录操作 canonical 化后钉在租户 root（`<工作区根>/<租户名>`）内。别人的会话按「不存在」处理而不是 403——403 会泄露会话是否存在，凭 id 递增就能数出别人有多少条。owner 专属面（编排、系统设置、数据库连接管理、技能/角色/工具的写）由集中的前缀表判定，新增路由自动继承策略。
+
+**会话内的能力面租户与 owner 一致**（adr-010）：数据源引用/`/db`/MCP 数据库工具、终端、全部工作区面板对租户开放，只按工作目录所属项目过滤，不按身份分家；能在库里干什么交给数据库账号权限管。凭证永不经会话侧下发。
 
 **分享链接什么时候真的能用**：服务默认只监听 `127.0.0.1`，那时任何链接发出去都打不开（访客管理页会直说，并把链接指向本机，方便 owner 自己验一眼访客视角）。要让局域网里的人能用：桌面版在菜单栏图标右键开「允许局域网访问」，命令行用 `make serve-lan`（后端托管前端产物 + 监听 `0.0.0.0:48080`）。开发态的 `make dev` 不适合分享——后端不托管前端，vite 只监听本机。
 

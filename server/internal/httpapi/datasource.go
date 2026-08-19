@@ -308,12 +308,12 @@ func (h datasourceHandler) byID(r *http.Request) (*model.DataSource, error) {
 }
 
 // sessionSources 取会话所在项目的数据源。
+//
+// 租户与 owner 同一规则（adr-010）：会话侧的能力面不按身份分家，只按
+// 项目过滤；能在库里干什么交给数据库账号权限管。凭证本身不经这条路
+// 下发（清单只带 hasPassword 标志），管理面（/api/datasources）仍是
+// owner 专属。
 func (h datasourceHandler) sessionSources(r *http.Request) ([]model.DataSource, error) {
-	// 租户拿不到任何数据源：数据库连接是 owner 的资产（adr-007 的 owner
-	// 专属面），不因为会话开在哪个目录而外借。
-	if !identityOf(r).owner {
-		return []model.DataSource{}, nil
-	}
 	cwd, err := h.cwdOf(r)
 	if err != nil {
 		return nil, err

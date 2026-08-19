@@ -15,6 +15,7 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/config"
+	"acpp/server/internal/datasource"
 	"acpp/server/internal/model"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
@@ -40,7 +41,7 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.Tenant{}); err != nil {
+	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.Tenant{}, &model.DataSource{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	if err := gdb.Create(&model.Agent{Name: "claude", Command: "claude-agent-acp"}).Error; err != nil {
@@ -66,10 +67,11 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	tenants := service.NewTenantService(gdb, base)
 	env := &flowEnv{base: base}
 	env.handler = NewRouter(config.Config{}, Services{
-		Sessions: sessions,
-		Chat:     service.NewChatService(gdb, sessions, manager, transcripts, skillUsage),
-		Tenants:  tenants,
-		Projects: project.NewService(gdb),
+		Sessions:    sessions,
+		Chat:        service.NewChatService(gdb, sessions, manager, transcripts, skillUsage),
+		Tenants:     tenants,
+		Projects:    project.NewService(gdb),
+		DataSources: datasource.NewService(gdb, sessions, "127.0.0.1:48080"),
 	})
 
 	for _, name := range []string{"alice", "bob"} {
@@ -254,6 +256,51 @@ func TestTenantFlow_ProjectsScoped(t *testing.T) {
 		`{"url":"https://github.com/org/repo.git","name":"../bob/stolen"}`)
 	if rec.Code == http.StatusAccepted {
 		t.Fatal("alice started a clone into bob's root")
+	}
+}
+
+// 契约：会话侧的数据源对租户与 owner 同一规则（adr-010）——按项目过滤、
+// 不按身份分家；凭证仍不下发，管理面仍是 owner 专属。
+func TestTenantFlow_SessionDatasourcesSharedByProject(t *testing.T) {
+	env := newFlowEnv(t)
+
+	// owner 在管理面配一条 pp-game 的连接。
+	rec := env.as(t, nil, http.MethodPost, "/api/datasources",
+		`{"project":"pp-game","env":"dev","host":"127.0.0.1","port":3306,"user":"root","password":"secret-pw","database":"pp_game"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("owner create datasource = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// alice 在自己 root 下有个同名仓库，会话开在里面。
+	repo := filepath.Join(env.base, "alice", "pp-game")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	rec = env.as(t, env.alice, http.MethodPost, "/api/sessions",
+		`{"agentId":1,"cwd":"`+repo+`"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("alice create session = %d: %s", rec.Code, rec.Body.String())
+	}
+	sess := decodeData[service.SessionView](t, rec)
+
+	rec = env.as(t, env.alice, http.MethodGet,
+		"/api/sessions/"+itoa(sess.ID)+"/datasources", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alice list session datasources = %d: %s", rec.Code, rec.Body.String())
+	}
+	raw := rec.Body.String()
+	sources := decodeData[[]model.DataSource](t, rec)
+	if len(sources) != 1 || sources[0].Ref != "pp-game/dev" {
+		t.Fatalf("alice sees %+v, want the pp-game/dev source", sources)
+	}
+	if strings.Contains(raw, "secret-pw") {
+		t.Fatal("session datasource response leaks the password")
+	}
+
+	// 管理面照旧对租户关门。
+	rec = env.as(t, env.alice, http.MethodGet, "/api/datasources", "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("alice GET /api/datasources = %d, want 403", rec.Code)
 	}
 }
 
