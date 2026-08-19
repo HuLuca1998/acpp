@@ -82,6 +82,7 @@ export const enDb = {
   sshPassword: "Password",
   sshKeyPath: "Private key",
   sshKeyPathPlaceholder: "~/.ssh/id_ed25519 (empty uses ssh-agent)",
+  sshKeyBrowse: "Browse for key file",
   sshPassphrase: "Passphrase",
   sshKnownHosts:
     "Host keys are verified against ~/.ssh/known_hosts: a first-time host is recorded automatically, while a key that stopped matching is rejected — possibly a man-in-the-middle; verify by hand and drop the stale entry before retrying.",

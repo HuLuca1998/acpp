@@ -79,6 +79,7 @@ export const zhDb = {
   sshPassword: "密码",
   sshKeyPath: "私钥",
   sshKeyPathPlaceholder: "~/.ssh/id_ed25519（留空则用 ssh-agent）",
+  sshKeyBrowse: "选择私钥文件",
   sshPassphrase: "通行短语",
   sshKnownHosts:
     "跳板机指纹按 ~/.ssh/known_hosts 校验：没连过的主机首次连接自动补录，指纹与记录不符则拒绝连接——那可能是中间人，人工核实后删掉旧记录再试。",

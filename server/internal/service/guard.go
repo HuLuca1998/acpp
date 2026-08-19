@@ -58,6 +58,16 @@ func (s Scope) GuardPath(path string) (string, error) {
 		if path == "" {
 			return Home(s), nil
 		}
+		// `~` 展开只给 owner：表单里私钥路径、文件选择器起点这类地方
+		// 都按 CLI 直觉写 ~/.ssh；租户分支的相对路径 join 在自己 root
+		// 下，`~` 对他们不该有家目录语义。
+		if path == "~" || strings.HasPrefix(path, "~/") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("%w: resolve home: %v", ErrInvalid, err)
+			}
+			path = filepath.Join(home, strings.TrimPrefix(path, "~"))
+		}
 		if !filepath.IsAbs(path) {
 			return "", fmt.Errorf("%w: path must be absolute", ErrInvalid)
 		}

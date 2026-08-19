@@ -34,11 +34,12 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
+import { DirPicker } from "@/components/dir-picker"
 import { UriDialog } from "@/components/db/uri-dialog"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
-import { CheckCircle2Icon, XCircleIcon } from "lucide-react"
+import { CheckCircle2Icon, FolderOpenIcon, XCircleIcon } from "lucide-react"
 
 /**
  * 连接编辑对话框：常规 / SSH / 高级三个页签（形态照 Navicat，做同一件事
@@ -129,6 +130,7 @@ function DataSourceForm({
   const [test, setTest] = useState<TestState>({ status: "idle" })
   const [sshTest, setSSHTest] = useState<TestState>({ status: "idle" })
   const [uriOpen, setUriOpen] = useState(false)
+  const [keyPickerOpen, setKeyPickerOpen] = useState(false)
 
   const set = <K extends keyof DataSourceInput>(
     key: K,
@@ -423,13 +425,24 @@ function DataSourceForm({
                       <FieldLabel htmlFor="ds-ssh-key">
                         {t("db.sshKeyPath")}
                       </FieldLabel>
-                      <Input
-                        id="ds-ssh-key"
-                        className="font-mono"
-                        value={form.sshKeyPath}
-                        placeholder={t("db.sshKeyPathPlaceholder")}
-                        onChange={(e) => set("sshKeyPath", e.target.value)}
-                      />
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="ds-ssh-key"
+                          className="flex-1 font-mono"
+                          value={form.sshKeyPath}
+                          placeholder={t("db.sshKeyPathPlaceholder")}
+                          onChange={(e) => set("sshKeyPath", e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label={t("db.sshKeyBrowse")}
+                          onClick={() => setKeyPickerOpen(true)}
+                        >
+                          <FolderOpenIcon />
+                        </Button>
+                      </div>
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="ds-ssh-passphrase">
@@ -560,6 +573,26 @@ function DataSourceForm({
         onImport={(parsed) => {
           setForm((prev) => ({ ...prev, ...parsed }))
           setTest({ status: "idle" })
+        }}
+      />
+
+      {/* 私钥文件选择：已填路径就从它所在目录起步，否则直达 ~/.ssh
+          （目录本身是隐藏项、从家目录导航根本看不见它）。 */}
+      <DirPicker
+        open={keyPickerOpen}
+        onOpenChange={setKeyPickerOpen}
+        mode="file"
+        initialPath={
+          (form.sshKeyPath ?? "").includes("/")
+            ? (form.sshKeyPath ?? "").slice(
+                0,
+                (form.sshKeyPath ?? "").lastIndexOf("/")
+              ) || "~/.ssh"
+            : "~/.ssh"
+        }
+        onSelect={(path) => {
+          set("sshKeyPath", path)
+          setKeyPickerOpen(false)
         }}
       />
     </form>

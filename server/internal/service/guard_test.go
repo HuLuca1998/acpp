@@ -58,6 +58,25 @@ func TestScope_GuardPath_OwnerUnrestricted(t *testing.T) {
 	if _, err := scope.GuardPath("relative/path"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("owner relative path err = %v, want ErrInvalid", err)
 	}
+
+	// owner 的 `~` 按 CLI 直觉展开成家目录（私钥路径、文件选择器起点都这么写）。
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	if got, err := scope.GuardPath("~/.ssh"); err != nil || got != filepath.Join(home, ".ssh") {
+		t.Fatalf("owner GuardPath(~/.ssh) = %q, %v; want %q", got, err, filepath.Join(home, ".ssh"))
+	}
+}
+
+// 契约：租户没有家目录语义——`~` 不展开，按相对路径 join 进 root 后
+// 因不存在而被拒，绝不能泄出 root 之外。
+func TestScope_GuardPath_TenantTildeStaysInRoot(t *testing.T) {
+	root := t.TempDir()
+	scope := TenantScope(1, root)
+	if got, err := scope.GuardPath("~/.ssh"); err == nil {
+		t.Fatalf("tenant GuardPath(~/.ssh) = %q, want error", got)
+	}
 }
 
 // 契约：待创建路径（新建目录、克隆目标）自身可以不存在，但父目录必须在
