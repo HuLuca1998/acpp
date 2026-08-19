@@ -138,6 +138,11 @@ func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	if messages == nil {
+		// 空转录是合法状态（会话刚建、首发还没落）：契约是 items 数组，
+		// 不能让 nil 切片序列化成 null 砸到前端。
+		messages = []model.Message{}
+	}
 	writeData(w, http.StatusOK, page[model.Message]{
 		Items:    messages,
 		Total:    int64(total),
