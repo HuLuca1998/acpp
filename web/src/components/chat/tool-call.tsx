@@ -6,6 +6,7 @@ import {
   parseDbToolOutput,
   type ParsedDbResult,
 } from "@/lib/db-result"
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { cn } from "@/lib/utils"
 import { SqlResultView } from "@/components/db/sql-result-view"
 import { DiffView } from "@/components/diff-view"
@@ -243,8 +244,12 @@ export function ToolCallBlock({
 
   const header = (
     <>
-      <Icon className="size-4 shrink-0" />
-      <span className="min-w-0 truncate">{title || t("chat.toolCall")}</span>
+      <MarkerIcon>
+        <Icon />
+      </MarkerIcon>
+      <MarkerContent className="truncate">
+        {title || t("chat.toolCall")}
+      </MarkerContent>
       {status ? (
         <Badge
           variant={status === "failed" ? "destructive" : "secondary"}
@@ -259,20 +264,25 @@ export function ToolCallBlock({
 
   if (!expandable) {
     return (
-      <div className="flex min-h-4 items-center gap-2 text-sm text-muted-foreground">
+      <Marker>
+        {/* 占位对齐可展开项的箭头槽，一列工具的图标才在同一条竖线上。 */}
         <span className="size-4 shrink-0" />
         {header}
-      </div>
+      </Marker>
     )
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex min-h-4 w-full items-center gap-2 rounded-md text-left text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+      <Marker
+        render={
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+          />
+        }
+        className="rounded-md transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <ChevronRightIcon
           className={cn(
@@ -281,7 +291,7 @@ export function ToolCallBlock({
           )}
         />
         {header}
-      </button>
+      </Marker>
       {open && payload ? (
         <div className="pl-6 transition-[opacity,translate] duration-200 ease-snappy starting:-translate-y-0.5 starting:opacity-0 motion-reduce:starting:translate-y-0">
           <ToolCallDetail payload={payload} />
