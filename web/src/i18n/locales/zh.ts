@@ -36,6 +36,7 @@ export default {
     help: "帮助",
     search: "搜索",
     newSession: "新建会话",
+    newSessionIn: "在此目录开新会话",
     recentSessions: "最近会话",
     viewAll: "查看全部",
     resume: "继续",

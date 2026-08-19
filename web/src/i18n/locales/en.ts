@@ -36,6 +36,7 @@ export default {
     help: "Get Help",
     search: "Search",
     newSession: "New Session",
+    newSessionIn: "New session in this directory",
     recentSessions: "Recent Sessions",
     viewAll: "View all",
     resume: "Resume",
