@@ -34,7 +34,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
-import { DirPicker } from "@/components/dir-picker"
+import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { UriDialog } from "@/components/db/uri-dialog"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"

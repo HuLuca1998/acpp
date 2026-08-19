@@ -178,7 +178,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/system/title-model/test` | 用给定配置当场生成一个标题看效果，不落盘 |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查） |
 | POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
-| GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录），供工作目录选择器导航 |
+| GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录；`?files=1` 连文件、`?hidden=1` 含隐藏项；条目带大小与修改时间），供选择器导航 |
+| GET | `/api/fs/places` | 选择器侧边栏的默认位置（家目录/桌面/文稿/下载/工作区；租户只有自己的 root） |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
 | GET/POST | `/api/agents` | agent 列表 / 新建（新建后自动探测模型与命令清单） |
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |

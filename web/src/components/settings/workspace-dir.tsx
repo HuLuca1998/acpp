@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
-import { DirPicker } from "@/components/dir-picker"
+import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { api } from "@/lib/api"
 import type { SystemInfo } from "@/types/acp"
 import { Badge } from "@/components/ui/badge"

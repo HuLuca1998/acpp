@@ -11,6 +11,7 @@ import type {
   DbTableDetail,
   DirEntry,
   DirListing,
+  FsPlace,
   EnvInfo,
   EnvInstallResult,
   GitBranchView,
@@ -719,13 +720,16 @@ export const api = {
 
   fs: {
     /** 列目录（withFiles 时连同文件），供选择器导航；path 为空从家目录开始。 */
-    dirs: (path?: string, withFiles?: boolean) => {
+    dirs: (path?: string, withFiles?: boolean, showHidden?: boolean) => {
       const params = new URLSearchParams()
       if (path) params.set("path", path)
       if (withFiles) params.set("files", "1")
+      if (showHidden) params.set("hidden", "1")
       const qs = params.toString()
       return request<DirListing>(`/fs/dirs${qs ? `?${qs}` : ""}`)
     },
+    /** 选择器侧边栏的默认位置（租户只有自己的 root）。 */
+    places: () => request<FsPlace[]>("/fs/places"),
     /** 在 path 下新建单层子目录，返回新目录条目（工作目录选择器就地建目录）。 */
     createDir: (path: string, name: string) =>
       request<DirEntry>("/fs/dirs", {

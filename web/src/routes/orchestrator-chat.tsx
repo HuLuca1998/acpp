@@ -5,7 +5,7 @@ import { useRef } from "react"
 
 import { DbRefPicker } from "@/components/db/db-ref-picker"
 import { UploadDialog } from "@/components/chat/composer/upload-dialog"
-import { DirPicker } from "@/components/dir-picker"
+import { DirPicker } from "@/components/dir-picker/dir-picker"
 import {
   OrchChatContext,
   type OrchChatValue,

@@ -73,12 +73,17 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。
 	// ?files=1 时连同文件一起列（@ 文件引用用）。
 	api.HandleFunc("GET /api/fs/dirs", func(w http.ResponseWriter, r *http.Request) {
-		listing, err := service.ListDirs(scopeOf(r), r.URL.Query().Get("path"), r.URL.Query().Get("files") == "1")
+		listing, err := service.ListDirs(scopeOf(r), r.URL.Query().Get("path"), r.URL.Query().Get("files") == "1", r.URL.Query().Get("hidden") == "1")
 		if err != nil {
 			writeError(w, err)
 			return
 		}
 		writeData(w, http.StatusOK, listing)
+	})
+
+	// 选择器侧边栏的默认位置（家目录一族 + 工作区根；租户只有自己的 root）。
+	api.HandleFunc("GET /api/fs/places", func(w http.ResponseWriter, r *http.Request) {
+		writeData(w, http.StatusOK, service.Places(scopeOf(r)))
 	})
 
 	// 就地新建子目录：给新会话开工作目录时不用离开选择器。

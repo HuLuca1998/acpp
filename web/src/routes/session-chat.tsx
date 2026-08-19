@@ -10,7 +10,7 @@ import { fileToImageAttachment } from "@/lib/files"
 import { api } from "@/lib/api"
 import { DbRefPicker } from "@/components/db/db-ref-picker"
 import { UploadDialog } from "@/components/chat/composer/upload-dialog"
-import { DirPicker } from "@/components/dir-picker"
+import { DirPicker } from "@/components/dir-picker/dir-picker"
 import {
   ChatPanelContext,
   type ChatPanelData,

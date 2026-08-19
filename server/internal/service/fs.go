@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"acpp/server/internal/config"
 )
@@ -30,6 +31,10 @@ func DefaultCwd() string {
 type DirEntry struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+	// Size 只对文件有意义（目录恒 0，前端显示占位符）。
+	Size int64 `json:"size"`
+	// ModTime 是 RFC3339 修改时间；拿不到（stat 失败）时为空。
+	ModTime string `json:"modTime,omitempty"`
 }
 
 // DirListing 是一次目录浏览的结果。Files 只在 withFiles 时带上
@@ -39,6 +44,38 @@ type DirListing struct {
 	Parent string     `json:"parent,omitempty"`
 	Dirs   []DirEntry `json:"dirs"`
 	Files  []DirEntry `json:"files,omitempty"`
+}
+
+// Place 是文件选择器侧边栏的一个固定位置。Key 是稳定标识
+// （home/desktop/downloads/documents/workspace），显示名由前端翻译。
+type Place struct {
+	Key  string `json:"key"`
+	Path string `json:"path"`
+}
+
+// Places 返回选择器侧边栏的默认位置（访达收藏夹的骨架）。
+// owner 给家目录一族 + 工作区根，只列真实存在的；租户只有自己的 root
+// ——别的位置对他既不可达也不该可见。
+func Places(scope Scope) []Place {
+	if !scope.Owner {
+		return []Place{{Key: "home", Path: scope.Root}}
+	}
+	out := []Place{}
+	if home, err := os.UserHomeDir(); err == nil {
+		out = append(out, Place{Key: "home", Path: home})
+		for _, p := range []struct{ key, dir string }{
+			{"desktop", "Desktop"},
+			{"documents", "Documents"},
+			{"downloads", "Downloads"},
+		} {
+			path := filepath.Join(home, p.dir)
+			if info, err := os.Stat(path); err == nil && info.IsDir() {
+				out = append(out, Place{Key: p.key, Path: path})
+			}
+		}
+	}
+	out = append(out, Place{Key: "workspace", Path: DefaultCwd()})
+	return out
 }
 
 // CreateDir 在 parent 下新建一个子目录，供工作目录选择器就地开新目录。
@@ -69,12 +106,13 @@ func CreateDir(scope Scope, parent, name string) (*DirEntry, error) {
 
 // ListDirs 列出指定目录的子目录（withFiles 时连同文件），供前端的
 // 目录/文件选择器导航。浏览器拿不到本地路径（File System Access API
-// 只给 handle），选择只能由后端代劳。隐藏项不列。
+// 只给 handle），选择只能由后端代劳。隐藏项默认不列，showHidden 才给
+// ——`~/.ssh` 这类隐藏目录没有它就永远导航不进去。
 //
 // path 为空时从 scope 的起点开始：owner 是家目录，租户是自己的 root。
 // 租户站在 root 上时不给 Parent——「上一层」按钮不该把人带出自己的地盘
 // （后端即使被绕过也会在 GuardPath 拒掉，这里是让界面别显示假入口）。
-func ListDirs(scope Scope, path string, withFiles bool) (*DirListing, error) {
+func ListDirs(scope Scope, path string, withFiles, showHidden bool) (*DirListing, error) {
 	path, err := scope.GuardPath(path)
 	if err != nil {
 		return nil, err
@@ -92,10 +130,17 @@ func ListDirs(scope Scope, path string, withFiles bool) (*DirListing, error) {
 		}
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") && !showHidden {
 			continue
 		}
 		entry := DirEntry{Name: e.Name(), Path: filepath.Join(path, e.Name())}
+		// 元数据尽力而为：stat 失败（断掉的符号链接等）不挡整个列表。
+		if info, err := e.Info(); err == nil {
+			entry.ModTime = info.ModTime().Format(time.RFC3339)
+			if !e.IsDir() {
+				entry.Size = info.Size()
+			}
+		}
 		if e.IsDir() {
 			listing.Dirs = append(listing.Dirs, entry)
 		} else if withFiles {

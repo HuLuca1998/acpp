@@ -278,6 +278,10 @@ export interface PendingPermission {
 export interface DirEntry {
   name: string
   path: string
+  /** 文件字节数；目录恒 0。 */
+  size: number
+  /** RFC3339 修改时间；stat 失败时缺省。 */
+  modTime?: string
 }
 
 export interface DirListing {
@@ -285,6 +289,12 @@ export interface DirListing {
   parent?: string
   dirs: DirEntry[]
   files?: DirEntry[]
+}
+
+/** 选择器侧边栏的默认位置；key 是稳定标识，显示名走 i18n。 */
+export interface FsPlace {
+  key: string
+  path: string
 }
 
 /** 工作区文件树的一个节点，与 server/internal/service.TreeEntry 对齐。 */

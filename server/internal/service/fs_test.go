@@ -24,7 +24,7 @@ func TestCreateDir_CreatesNavigableDir(t *testing.T) {
 	if err != nil || !info.IsDir() {
 		t.Fatalf("created path not a dir: info=%v err=%v", info, err)
 	}
-	listing, err := ListDirs(OwnerScope(), parent, false)
+	listing, err := ListDirs(OwnerScope(), parent, false, false)
 	if err != nil {
 		t.Fatalf("ListDirs: %v", err)
 	}
@@ -78,5 +78,39 @@ func TestCreateDir_RejectsUnsafeNames(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("rejected names left artifacts: %v", entries)
+	}
+}
+
+// 契约：隐藏项默认不列、showHidden 才给（~/.ssh 这类目录得能导航进去）；
+// 文件条目带大小与修改时间——访达式列表靠它们撑起来。
+func TestListDirs_HiddenAndMetadata(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".hidden"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	plain, err := ListDirs(OwnerScope(), dir, true, false)
+	if err != nil {
+		t.Fatalf("ListDirs: %v", err)
+	}
+	if len(plain.Dirs) != 0 {
+		t.Fatalf("默认不该列出隐藏目录: %+v", plain.Dirs)
+	}
+	if len(plain.Files) != 1 || plain.Files[0].Name != "note.txt" {
+		t.Fatalf("files = %+v, want note.txt", plain.Files)
+	}
+	if plain.Files[0].Size != 5 || plain.Files[0].ModTime == "" {
+		t.Errorf("文件元数据缺失: size=%d modTime=%q", plain.Files[0].Size, plain.Files[0].ModTime)
+	}
+
+	shown, err := ListDirs(OwnerScope(), dir, true, true)
+	if err != nil {
+		t.Fatalf("ListDirs(hidden): %v", err)
+	}
+	if len(shown.Dirs) != 1 || shown.Dirs[0].Name != ".hidden" {
+		t.Fatalf("showHidden 应列出隐藏目录: %+v", shown.Dirs)
 	}
 }
