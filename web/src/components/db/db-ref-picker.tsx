@@ -112,7 +112,10 @@ function Picker({
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
+    // max-h 是必须的：Dialog 是 grid，行高随内容长——没有上限时长表清单
+    // 会把对话框撑到被裁切，ScrollArea 自身不受限也就永远不滚（与
+    // dir-picker 的定高滚动区同一个坑）。
+    <div className="flex max-h-[60vh] min-h-0 flex-col gap-2">
       <Breadcrumb source={source} onReset={() => setSource(null)} />
       <ScrollArea className="min-h-0 flex-1">
         {!source ? (
