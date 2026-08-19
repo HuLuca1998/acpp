@@ -18,8 +18,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(server: server, app: self)
         installSignalHandlers()
 
-        windowController.showLoading()
-        windowController.show()
+        // 开机最小化：只驻留菜单栏，窗口不弹、Dock 不占。服务照常起——
+        // 用户从菜单栏打开时窗口里应该已经是可用的界面，而不是现加载。
+        if LaunchPreferences.startMinimized {
+            NSApp.setActivationPolicy(.accessory)
+        } else {
+            windowController.showLoading()
+            windowController.show()
+        }
         server.start { [weak self] ok in
             guard let self else { return }
             if ok {
@@ -49,9 +55,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - 菜单栏动作
 
-    func toggleMainWindow() { windowController.toggle() }
+    func toggleMainWindow() {
+        restoreRegularActivation()
+        windowController.toggle()
+    }
 
-    func showMainWindow() { windowController.show() }
+    func showMainWindow() {
+        restoreRegularActivation()
+        windowController.show()
+    }
+
+    /// 静默启动后第一次亮出窗口时切回正常 app：Dock 图标与主菜单一起回来。
+    /// 主菜单不是装饰——没有 Edit 菜单，WKWebView 里连复制粘贴都没有
+    /// （见 MainMenu）。切回后不再切走：开机最小化只管开机那一下。
+    private func restoreRegularActivation() {
+        guard NSApp.activationPolicy() != .regular else { return }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     func openInBrowser() { NSWorkspace.shared.open(server.localURL) }
 

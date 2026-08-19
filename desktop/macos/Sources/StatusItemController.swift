@@ -71,6 +71,15 @@ final class StatusItemController: NSObject {
         }
         menu.addItem(.separator())
 
+        let login = item("开机启动", #selector(toggleOpenAtLogin))
+        login.state = LaunchPreferences.openAtLogin ? .on : .off
+        menu.addItem(login)
+
+        let minimized = item("开机最小化（仅菜单栏）", #selector(toggleStartMinimized))
+        minimized.state = LaunchPreferences.startMinimized ? .on : .off
+        menu.addItem(minimized)
+        menu.addItem(.separator())
+
         menu.addItem(item("重启服务", #selector(restart)))
         menu.addItem(item("打开服务日志", #selector(openLog)))
         menu.addItem(.separator())
@@ -98,6 +107,14 @@ final class StatusItemController: NSObject {
     @objc private func openBrowser() { app.openInBrowser() }
     @objc private func toggleLan() { app.toggleLanShare() }
     @objc private func copyLan() { app.copyLanLink() }
+    @objc private func toggleOpenAtLogin() {
+        LaunchPreferences.openAtLogin.toggle()
+    }
+
+    @objc private func toggleStartMinimized() {
+        LaunchPreferences.startMinimized.toggle()
+    }
+
     @objc private func restart() { app.restartServer() }
     @objc private func openLog() { app.openServerLog() }
     @objc private func quit() { app.requestRealQuit() }

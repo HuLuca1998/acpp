@@ -90,23 +90,27 @@ function SubagentItem({
   // codex 的产出不在协议里，展开时才去 load 它那条独立 thread。拉过就留住，
   // 每次展开都重开一条 agent 会话太贵。
   const [fetched, setFetched] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const needsFetch =
-    !!entry.threadId && !entry.output && fetched === null && !!sessionId
+  const threadId = entry.threadId
+  const needsFetch = !!threadId && !entry.output && !!sessionId
+  // 由状态推出来，不在 effect 里同步 setState（那会引起级联渲染）。
+  const loading = expanded && needsFetch && fetched === null
 
   useEffect(() => {
-    if (!expanded || !needsFetch || !sessionId || !entry.threadId) return
+    if (!expanded || !needsFetch || fetched !== null) return
+    if (!sessionId || !threadId) return
     let alive = true
-    setLoading(true)
     api.sessions
-      .subagentOutput(sessionId, entry.threadId)
-      .then((r) => alive && setFetched(r.output))
-      .catch(() => alive && setFetched(""))
-      .finally(() => alive && setLoading(false))
+      .subagentOutput(sessionId, threadId)
+      .then((r) => {
+        if (alive) setFetched(r.output)
+      })
+      .catch(() => {
+        if (alive) setFetched("")
+      })
     return () => {
       alive = false
     }
-  }, [expanded, needsFetch, sessionId, entry.threadId])
+  }, [expanded, needsFetch, fetched, sessionId, threadId])
 
   const output = entry.output || fetched || ""
   return (
