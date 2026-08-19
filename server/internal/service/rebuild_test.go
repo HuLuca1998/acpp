@@ -116,3 +116,91 @@ func TestRebuildMessagesTwoTurns(t *testing.T) {
 		t.Errorf("agent contents = %q, %q", got[1].Content, got[3].Content)
 	}
 }
+
+// toolFrame 拼一条 tool_call/tool_call_update 的线级帧，meta 直接给 _meta 的 JSON。
+func toolFrame(t *testing.T, kind, id, body, meta string) string {
+	t.Helper()
+	m := ""
+	if meta != "" {
+		m = `,"_meta":` + meta
+	}
+	return fmt.Sprintf(
+		`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":%q,"toolCallId":%q%s%s}}}`,
+		kind, id, body, m)
+}
+
+// 子代理归属必须落进重建出的 payload，历史会话才能还原出子代理列表。
+// 关键在最后一帧：agent 实测会在后续 update 里把 subagent / parentToolUseId
+// 标记一起漏掉，重建器绝不能让这种空值把已知归属冲掉。
+func TestRebuildMessagesSubagentAttribution(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "派个子代理")),
+		// 启动子代理的 Agent 调用。
+		wire(t, "recv", toolFrame(t, "tool_call", "toolu_agent",
+			`,"title":"Task","status":"pending"`,
+			`{"claudeCode":{"toolName":"Agent","subagent":true}}`)),
+		// 子代理干活时的工具调用，认领到上面那次调用。
+		wire(t, "recv", toolFrame(t, "tool_call", "toolu_bash",
+			`,"title":"ls","status":"pending"`,
+			`{"claudeCode":{"toolName":"Bash","parentToolUseId":"toolu_agent"}}`)),
+		// 收尾帧漏带了归属标记（agent 的真实行为）。
+		wire(t, "recv", toolFrame(t, "tool_call_update", "toolu_bash",
+			`,"status":"completed"`, `{"claudeCode":{"toolName":"Bash"}}`)),
+		wire(t, "recv", toolFrame(t, "tool_call_update", "toolu_agent",
+			`,"status":"completed","rawOutput":"干完了"`, `{"claudeCode":{"toolName":"Agent"}}`)),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+
+	byID := map[string]model.JSONMap{}
+	for _, m := range msgs {
+		if m.Kind != model.KindToolCall {
+			continue
+		}
+		id, _ := m.Payload["toolCallId"].(string)
+		byID[id] = m.Payload
+	}
+	if len(byID) != 2 {
+		t.Fatalf("期望重建出 2 条工具调用，实际 %d 条", len(byID))
+	}
+	if got := byID["toolu_agent"]["isSubagent"]; got != true {
+		t.Errorf("Agent 调用的 isSubagent = %v，期望 true", got)
+	}
+	if got := byID["toolu_bash"]["subagentOf"]; got != "toolu_agent" {
+		t.Errorf("子代理工具调用的 subagentOf = %v，期望 toolu_agent（收尾帧的空值不能冲掉归属）", got)
+	}
+	if got := byID["toolu_agent"]["status"]; got != "completed" {
+		t.Errorf("Agent 调用状态 = %v，期望 completed", got)
+	}
+}
+
+// codex 的子代理是独立 thread：活动事件必须把 threadId 留在 payload 里，
+// 否则界面拿不到转录（codex 侧只能靠它 session/load）。
+func TestRebuildMessagesCodexSubagentThread(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "起个子代理")),
+		wire(t, "recv", toolFrame(t, "tool_call", "item_7",
+			`,"title":"Start subagent project_inventory","status":"in_progress"`,
+			`{"codex":{"subagent":{"threadId":"01a01803-8e03","path":"/root/project_inventory","activity":"started"}}}`)),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+	var payload model.JSONMap
+	for _, m := range msgs {
+		if m.Kind == model.KindToolCall {
+			payload = m.Payload
+		}
+	}
+	if payload == nil {
+		t.Fatal("没有重建出工具调用")
+	}
+	if got := payload["isSubagent"]; got != true {
+		t.Errorf("isSubagent = %v，期望 true", got)
+	}
+	if got := payload["subagentThreadId"]; got != "01a01803-8e03" {
+		t.Errorf("subagentThreadId = %v，期望 01a01803-8e03", got)
+	}
+	if got := payload["subagentPath"]; got != "/root/project_inventory" {
+		t.Errorf("subagentPath = %v，期望 /root/project_inventory", got)
+	}
+}

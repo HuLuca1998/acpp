@@ -27,6 +27,13 @@ type Event struct {
 	RawOutput  json.RawMessage `json:"rawOutput,omitempty"`
 	Content    json.RawMessage `json:"content,omitempty"`
 	Locations  json.RawMessage `json:"locations,omitempty"`
+	// 子代理归属，供界面把子代理的活从主对话流里摘出来单独成列表。
+	// IsSubagent 标记「这次调用启动了一个子代理」，SubagentOf 标记
+	// 「这条是某个子代理干的」；codex 的转录要凭 SubagentThreadID 另行拉取。
+	IsSubagent       bool   `json:"isSubagent,omitempty"`
+	SubagentOf       string `json:"subagentOf,omitempty"`
+	SubagentThreadID string `json:"subagentThreadId,omitempty"`
+	SubagentPath     string `json:"subagentPath,omitempty"`
 	// Entries 是 plan 事件的任务条目数组。
 	Entries       json.RawMessage `json:"entries,omitempty"`
 	Settings      *acp.Settings   `json:"settings,omitempty"`

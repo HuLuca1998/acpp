@@ -37,6 +37,11 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 			RawOutput:  ev.RawOutput,
 			Content:    ev.Content,
 			Locations:  ev.Locations,
+
+			IsSubagent:       ev.IsSubagent,
+			SubagentOf:       ev.SubagentOf,
+			SubagentThreadID: ev.SubagentThreadID,
+			SubagentPath:     ev.SubagentPath,
 		})
 
 	case acp.EventPermission:

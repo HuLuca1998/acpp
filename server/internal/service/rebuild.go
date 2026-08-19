@@ -33,6 +33,12 @@ type rebuildTool struct {
 	rawInput  json.RawMessage
 	rawOutput json.RawMessage
 	content   json.RawMessage
+	// 子代理归属。agent 会在部分后续 update 里漏带这些标记，靠下面
+	// 「空值不覆盖」的合并语义把首次见到的值留住。
+	isSubagent       bool
+	subagentOf       string
+	subagentThreadID string
+	subagentPath     string
 }
 
 // RebuildMessages 把线级转录重建成 UI 消息列表。
@@ -126,6 +132,17 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			}
 			if len(tool.content) > 0 {
 				payload["content"] = json.RawMessage(tool.content)
+			}
+			// 子代理信息只在有值时进 payload，普通工具调用的形状不变。
+			if tool.isSubagent {
+				payload["isSubagent"] = true
+			}
+			if tool.subagentOf != "" {
+				payload["subagentOf"] = tool.subagentOf
+			}
+			if tool.subagentThreadID != "" {
+				payload["subagentThreadId"] = tool.subagentThreadID
+				payload["subagentPath"] = tool.subagentPath
 			}
 			emit(model.Message{
 				Role:    model.RoleAgent,
@@ -282,6 +299,16 @@ func applyUpdate(turn *rebuildTurn, u acp.SessionUpdate) {
 		}
 		if len(u.Content) > 0 {
 			tool.content = u.Content
+		}
+		if u.IsSubagentLaunch() {
+			tool.isSubagent = true
+		}
+		if parent := u.SubagentOf(); parent != "" {
+			tool.subagentOf = parent
+		}
+		if threadID, path := u.CodexSubagentThread(); threadID != "" {
+			tool.subagentThreadID = threadID
+			tool.subagentPath = path
 		}
 	}
 }
