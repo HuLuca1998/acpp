@@ -380,7 +380,7 @@ export const api = {
     /** 拉某个 ollama 端点上已装的模型；地址传参是为了在保存前先试拉。 */
     titleModels: (baseUrl: string) =>
       request<OllamaModel[]>(
-        `/system/title-model/models?baseUrl=${encodeURIComponent(baseUrl)}`,
+        `/system/title-model/models?baseUrl=${encodeURIComponent(baseUrl)}`
       ),
     /** 用表单里的配置当场生成一个标题看效果，不落盘。 */
     testTitleModel: (input: TitleModelConfig) =>
@@ -440,6 +440,15 @@ export const api = {
       }),
     remove: (id: number) =>
       request<null>(`/sessions/${id}`, { method: "DELETE" }),
+    /**
+     * 子代理的最终产出。只有 codex 需要——它的子代理是独立 thread，产出不在
+     * 协议里，得开一条一次性会话把转录 load 出来，所以是展开时才拉的懒加载。
+     * claude 的产出随工具调用一起下发，不走这里。
+     */
+    subagentOutput: (id: number, threadId: string) =>
+      request<{ output: string }>(
+        `/sessions/${id}/subagents/${encodeURIComponent(threadId)}/output`
+      ),
     /** 消息列表：limit 取尾部 N 条，before 是「加载更早」的游标。 */
     messages: (id: number, params?: { limit?: number; before?: number }) => {
       const qs = new URLSearchParams()

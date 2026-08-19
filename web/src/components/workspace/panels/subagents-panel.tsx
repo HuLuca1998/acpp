@@ -1,8 +1,9 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { BotIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 
 import { MarkdownContent } from "@/components/chat/markdown"
+import { api } from "@/lib/api"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { useChatPanel } from "@/components/workspace/chat-panel-context"
 import { StatusDot, type StatusTone } from "@/components/status-dot"
@@ -77,11 +78,37 @@ function Field({
 function SubagentItem({
   entry,
   tone,
+  expanded,
+  sessionId,
 }: {
   entry: SubagentEntry
   tone: StatusTone
+  expanded: boolean
+  sessionId: number | null
 }) {
   const { t } = useTranslation()
+  // codex 的产出不在协议里，展开时才去 load 它那条独立 thread。拉过就留住，
+  // 每次展开都重开一条 agent 会话太贵。
+  const [fetched, setFetched] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const needsFetch =
+    !!entry.threadId && !entry.output && fetched === null && !!sessionId
+
+  useEffect(() => {
+    if (!expanded || !needsFetch || !sessionId || !entry.threadId) return
+    let alive = true
+    setLoading(true)
+    api.sessions
+      .subagentOutput(sessionId, entry.threadId)
+      .then((r) => alive && setFetched(r.output))
+      .catch(() => alive && setFetched(""))
+      .finally(() => alive && setLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [expanded, needsFetch, sessionId, entry.threadId])
+
+  const output = entry.output || fetched || ""
   return (
     <AccordionItem
       value={entry.id}
@@ -108,8 +135,8 @@ function SubagentItem({
         <Field label={t("workspace.subagents.input")} value={entry.input} />
         <Field
           label={t("workspace.subagents.output")}
-          value={entry.output}
-          pending={entry.state === "running"}
+          value={output}
+          pending={entry.state === "running" || loading}
         />
       </AccordionContent>
     </AccordionItem>
@@ -122,11 +149,15 @@ function Group({
   tone,
   entries,
   collapsible,
+  openIds,
+  sessionId,
 }: {
   state: SubagentState
   tone: StatusTone
   entries: SubagentEntry[]
   collapsible: boolean
+  openIds: string[]
+  sessionId: number | null
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
@@ -160,7 +191,13 @@ function Group({
       {shown ? (
         <div className="px-2">
           {entries.map((entry) => (
-            <SubagentItem key={entry.id} entry={entry} tone={tone} />
+            <SubagentItem
+              key={entry.id}
+              entry={entry}
+              tone={tone}
+              expanded={openIds.includes(entry.id)}
+              sessionId={sessionId}
+            />
           ))}
         </div>
       ) : null}
@@ -177,6 +214,7 @@ function Group({
 export const SubagentsPanel = memo(function SubagentsPanel() {
   const { t } = useTranslation()
   const { chat } = useChatPanel()
+  const [openIds, setOpenIds] = useState<string[]>([])
   const entries = useMemo(
     () => collectSubagents(chat.messages, chat.liveTools),
     [chat.messages, chat.liveTools]
@@ -194,13 +232,20 @@ export const SubagentsPanel = memo(function SubagentsPanel() {
   return (
     <ScrollArea className="h-full">
       {/* 手风琴：明细一次只摊开一条，长输出不会把整个列表顶走。 */}
-      <Accordion multiple={false} className="py-1">
+      <Accordion
+        multiple={false}
+        value={openIds}
+        onValueChange={setOpenIds}
+        className="py-1"
+      >
         {GROUPS.map(({ state, tone, collapsible }) => (
           <Group
             key={state}
             state={state}
             tone={tone}
             collapsible={collapsible}
+            openIds={openIds}
+            sessionId={chat.session?.id ?? null}
             entries={entries.filter((e) => e.state === state)}
           />
         ))}
