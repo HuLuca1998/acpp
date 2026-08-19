@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-import { api } from "@/lib/api"
+import type { WorkspaceScopeApi } from "@/lib/api"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource } from "@/types/acp"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -22,16 +22,20 @@ import { DatabaseIcon, TableIcon, XIcon } from "lucide-react"
  * @ 菜单把同一条路重走一遍。
  *
  * 能看到什么与 AI 能操作什么是同一个范围——都只有当前工作目录所属项目的
- * 数据源（后端 /sessions/{id}/datasources 已按项目过滤）。
+ * 数据源（会话态走 /sessions/{id}/datasources，草稿态走 /workspace?cwd=，
+ * 两条路后端都按项目过滤）。
  */
 export function DbSlashPanel({
   sessionId,
+  scope,
   /** 命令参数：空 = 列数据源，`<env>` = 列那条连接的表。 */
   args,
   onPick,
   onClose,
 }: {
   sessionId: number
+  /** 数据面作用域：会话态查会话的项目，草稿态经 `/workspace?cwd=` 查目录的。 */
+  scope: WorkspaceScopeApi
   args: string
   /** 把这条引用带进输入框的附件区（与 @ 菜单同一个入口）。 */
   onPick: (ref: string) => void
@@ -40,8 +44,8 @@ export function DbSlashPanel({
   const { t } = useTranslation()
   const [envArg] = args.split(/\s+/).filter(Boolean)
   const { data: sources, error } = useAsyncData(
-    () => api.sessions.datasources(sessionId),
-    [sessionId]
+    () => scope.datasources(sessionId),
+    [sessionId, scope]
   )
 
   const picked = envArg ? pickSource(sources ?? [], envArg) : null
@@ -83,6 +87,7 @@ export function DbSlashPanel({
         ) : (
           <TableList
             sessionId={sessionId}
+            scope={scope}
             source={picked}
             database={picked.database}
             onPick={onPick}
@@ -156,19 +161,21 @@ function Row({
 
 function TableList({
   sessionId,
+  scope,
   source,
   database,
   onPick,
 }: {
   sessionId: number
+  scope: WorkspaceScopeApi
   source: DataSource
   database: string
   onPick: (ref: string) => void
 }) {
   const { t } = useTranslation()
   const { data, error } = useAsyncData(
-    () => api.sessions.datasourceTables(sessionId, source.id, database),
-    [sessionId, source.id, database]
+    () => scope.datasourceTables(sessionId, source.id, database),
+    [sessionId, scope, source.id, database]
   )
 
   if (error) return <p className="px-1 py-2 text-destructive">{error}</p>

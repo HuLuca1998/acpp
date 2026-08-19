@@ -239,6 +239,7 @@ export function OrchestratorChat() {
         open={dbRefPickerOpen}
         sessionId={isNew ? 0 : orchId}
         scope={api.orchestrator}
+        draftCwd={isNew ? draftCwd : undefined}
         onOpenChange={setDbRefPickerOpen}
         onSelect={addDbRef}
       />

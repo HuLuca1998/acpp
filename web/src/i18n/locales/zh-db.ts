@@ -23,7 +23,7 @@ export const zhDb = {
   refHint:
     "选一个数据源、库或表交给 AI——发送时把它的现状（表清单或表结构）一并带上。",
   refPick: "引用",
-  refNeedsSession: "发出第一条消息后才能引用数据库",
+  refNeedsCwd: "先选择工作目录——数据源按它所属的项目筛选",
   refFile: "文件",
   refDatabase: "数据库",
   description:

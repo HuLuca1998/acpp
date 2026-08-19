@@ -270,11 +270,13 @@ export function SessionChat() {
         }
       />
 
-      {/* @ 数据库引用：选中的数据源/库/表随消息一起发出，后端查现状嵌入。 */}
+      {/* @ 数据库引用：选中的数据源/库/表随消息一起发出，后端查现状嵌入。
+          草稿态选了工作目录就可用——项目由目录决定，不必等首条消息建会话。 */}
       <DbRefPicker
         open={dbRefPickerOpen}
         sessionId={isNew ? 0 : sessionId}
         scope={api.sessions}
+        draftCwd={isNew ? newSession.cwd.trim() : undefined}
         onOpenChange={setDbRefPickerOpen}
         onSelect={addDbRef}
       />

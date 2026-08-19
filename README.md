@@ -205,6 +205,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/git/history` | 提交链路（`?ref=&limit=&offset=`，`hasMore` 指示还有没有） |
 | GET | `/api/sessions/{id}/git/compare` | 两 ref 对比（`?base=&head=`）：head 独有的提交 + 三点 diff 的文件变更 |
 | POST/DELETE | `/api/sessions/{id}/git/worktrees` | 开/拆隔离工作区（`<仓库>/worktrees/<名字>`），拆时保留分支 |
+| * | `/api/workspace/fs/*` `/git/*` | **草稿态**工作区数据面：会话还没建，目录由 `?cwd=` 给（路径闸照旧），端点形状与上面会话侧一一对应——选完工作目录文件树与 git 面板即可用（adr-002） |
 | GET/POST | `/api/sessions/{id}/terminals` | 工作区终端列表 / 新建（会话 cwd 起交互 shell，每会话上限见 `ACP_MAX_TERMINALS`） |
 | DELETE | `/api/sessions/{id}/terminals/{tid}` | 关闭终端（杀 pty） |
 | WS | `/api/sessions/{id}/terminals/{tid}/ws` | 终端双向流：二进制帧 = 原始字节，文本帧 = `{"type":"resize","cols","rows"}`；断线后 pty 保活 30s 供重连（带回放缓冲） |
@@ -227,6 +228,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/datasources/{id}/query` | 执行 SQL（`{database?, sql, maxRows?}`，可含多条语句：按序执行、遇错即停，每条独立返回耗时与影响行数；行数硬顶 1000） |
 | GET | `/api/sessions/{id}/datasources` | **会话可见的**数据源：只有当前工作目录所属项目的那几条（斜杠命令数据源） |
 | GET | `/api/sessions/{id}/datasources/{dsid}/databases` `/tables` | 同上但按会话过滤，项目之外的 id 按「不存在」处理 |
+| GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | GET/POST | `/api/roles` | 角色列表 / 新建（编排里可雇佣的子代理定义，见 §编排） |
 | GET/PUT/DELETE | `/api/roles/{id}` | 角色详情 / 更新 / 删除 |

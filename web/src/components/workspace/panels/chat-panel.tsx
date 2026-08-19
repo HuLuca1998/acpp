@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   useChatPanel,
 } from "@/components/workspace/chat-panel-context"
+import { useWorkspace } from "@/components/workspace/workspace-context"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { cn } from "@/lib/utils"
 import { ImageIcon } from "lucide-react"
@@ -57,11 +58,16 @@ export const ChatPanel = memo(function ChatPanel() {
   // null 表示没在看。
   const [localCommand, setLocalCommand] = useState<string | null>(null)
   const sessionId = chat.session?.id ?? 0
+  // 数据面作用域：会话态查会话的项目，草稿态经 `/workspace?cwd=` 查
+  // 选定目录的——/db 因此不用等会话建出来。
+  const workspace = useWorkspace()
+  // 本地命令有项目可查就放行：会话已建，或草稿态已选工作目录。
+  const localReady = sessionId > 0 || Boolean(isNew && draftCwd)
 
   // 本地命令自己消化掉，不发给 agent；其余照常提交。
   function handleSubmit() {
     const local = parseLocalCommand(draft)
-    if (local && sessionId) {
+    if (local && localReady) {
       setLocalCommand(local.args)
       setDraft("")
       return
@@ -139,15 +145,18 @@ export const ChatPanel = memo(function ChatPanel() {
         pending={isNew && newSession.creating}
         disabled={isNew && (newSession.agents === null || !newSession.selected)}
         placeholder={t("chat.placeholder")}
-        commands={
-          isNew
+        commands={(() => {
+          // 草稿态选了工作目录，/db 就有项目可查；没选目录不列——
+          // 列一个按了没反应的命令比没有更糟。
+          const agentCommands = isNew
             ? (newSession.selectedAgent?.commands ?? []).filter(
                 (c) => !c.disabled
               )
-            : // 本地命令只在会话建起来之后给：它们要按会话工作目录
-              // 所属的项目取数据源，草稿态还没有会话可问。
-              withLocalCommands(chat.commands, { db: t("db.slashHint") })
-        }
+            : chat.commands
+          return localReady
+            ? withLocalCommands(agentCommands, { db: t("db.slashHint") })
+            : agentCommands
+        })()}
         attachments={
           <AttachmentTray
             images={images}
@@ -160,9 +169,10 @@ export const ChatPanel = memo(function ChatPanel() {
         }
         onPasteImages={(picked) => void addImages(picked)}
         localPanel={
-          localCommand !== null && sessionId ? (
+          localCommand !== null && localReady ? (
             <DbSlashPanel
               sessionId={sessionId}
+              scope={workspace.scope}
               args={localCommand}
               onPick={addDbRef}
               onClose={() => setLocalCommand(null)}

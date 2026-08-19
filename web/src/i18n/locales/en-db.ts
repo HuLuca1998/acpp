@@ -23,7 +23,8 @@ export const enDb = {
   refHint:
     "Pick a source, database or table — its current shape (table list or schema) is sent along with your message.",
   refPick: "Reference",
-  refNeedsSession: "Send your first message before referencing a database",
+  refNeedsCwd:
+    "Pick a working directory first — sources are filtered by its project",
   refFile: "File",
   refDatabase: "Database",
   description:

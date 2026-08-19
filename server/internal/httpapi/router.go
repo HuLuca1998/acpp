@@ -282,6 +282,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/datasources", datasources.sessionList)
 	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/databases", datasources.sessionDatabases)
 	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/tables", datasources.sessionTables)
+	// 草稿态：会话还没建，项目由 `?cwd=` 给的目录决定——选完工作目录就该
+	// 能引用数据库，与草稿工作区（文件树/git）同一先例（adr-002）。
+	draftDatasources := datasourceHandler{sources: svcs.DataSources, cwdOf: draftCwd}
+	api.HandleFunc("GET /api/workspace/datasources", draftDatasources.sessionList)
+	api.HandleFunc("GET /api/workspace/datasources/{dsid}/databases", draftDatasources.sessionDatabases)
+	api.HandleFunc("GET /api/workspace/datasources/{dsid}/tables", draftDatasources.sessionTables)
 	orchDatasources := datasourceHandler{sources: svcs.DataSources, cwdOf: orchCwd}
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources", orchDatasources.sessionList)
 	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources/{dsid}/databases", orchDatasources.sessionDatabases)

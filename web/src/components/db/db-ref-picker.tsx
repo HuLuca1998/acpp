@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { WorkspaceScopeApi } from "@/lib/api"
+import { workspaceScopeApi, type WorkspaceScopeApi } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource } from "@/types/acp"
@@ -31,19 +31,30 @@ export function DbRefPicker({
   open,
   sessionId,
   scope,
+  draftCwd,
   onOpenChange,
   onSelect,
 }: {
   open: boolean
-  /** 0 表示草稿态：会话还没建，取不到项目，只提示。 */
+  /** 0 表示草稿态：会话还没建，项目改由 draftCwd 决定。 */
   sessionId: number
   /** 作用域 API：普通会话与编排主会话形状一致，只差路径前缀。 */
   scope: WorkspaceScopeApi
+  /**
+   * 草稿态选定的工作目录。给了它，数据库引用立刻可用——项目由目录
+   * 决定，不该等到「发出第一条消息」把会话建出来（同 adr-002 的先例）。
+   */
+  draftCwd?: string
   onOpenChange: (open: boolean) => void
   /** 选中的引用串：`<项目>/<环境>[/<库>[/<表>]]`。 */
   onSelect: (ref: string) => void
 }) {
   const { t } = useTranslation()
+  // 草稿态换到 `/workspace/...?cwd=` 作用域，方法签名不变（id 被忽略）。
+  const activeScope = useMemo(
+    () => (!sessionId && draftCwd ? workspaceScopeApi("/sessions", draftCwd) : scope),
+    [sessionId, draftCwd, scope]
+  )
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] gap-3 overflow-hidden sm:max-w-lg">
@@ -54,7 +65,8 @@ export function DbRefPicker({
         {open ? (
           <Picker
             sessionId={sessionId}
-            scope={scope}
+            scope={activeScope}
+            ready={sessionId > 0 || Boolean(draftCwd)}
             onPick={(ref) => {
               onSelect(ref)
               onOpenChange(false)
@@ -69,22 +81,25 @@ export function DbRefPicker({
 function Picker({
   sessionId,
   scope,
+  ready,
   onPick,
 }: {
   sessionId: number
   scope: WorkspaceScopeApi
+  /** 有项目可查了吗：会话已建，或草稿态已选定工作目录。 */
+  ready: boolean
   onPick: (ref: string) => void
 }) {
   const { t } = useTranslation()
   const { data: sources, error } = useAsyncData(
-    () => (sessionId ? scope.datasources(sessionId) : Promise.resolve([])),
-    [sessionId]
+    () => (ready ? scope.datasources(sessionId) : Promise.resolve([])),
+    [sessionId, scope, ready]
   )
   // 钻取路径只有一步：选中数据源 → 看它那个库的表。
   const [source, setSource] = useState<DataSource | null>(null)
 
-  if (!sessionId) {
-    return <Empty text={t("db.refNeedsSession")} />
+  if (!ready) {
+    return <Empty text={t("db.refNeedsCwd")} />
   }
   if (error) {
     return <p className="p-4 text-sm text-destructive">{error}</p>
