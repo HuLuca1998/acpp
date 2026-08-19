@@ -519,6 +519,19 @@ export default {
     openFailed: "Could not connect to the agent",
   },
   settingsPage: {
+    desktopLaunch: {
+      title: "Launch behaviour",
+      description:
+        "macOS desktop app only — these change this machine's login items.",
+      openAtLogin: "Open at login",
+      openAtLoginHint:
+        "Run ACPP automatically after you log in. You can also turn this off in System Settings › General › Login Items.",
+      startMinimized: "Start minimised",
+      startMinimizedHint:
+        "On launch, stay in the menu bar only: no window, no Dock icon. The server still starts, so it is ready when you open it.",
+      failed:
+        "The system refused the change: {{reason}}. Apps that are unsigned or outside the Applications folder are often rejected.",
+    },
     workspace: {
       title: "Workspace root",
       description:

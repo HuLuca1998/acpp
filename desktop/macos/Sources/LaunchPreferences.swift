@@ -12,20 +12,25 @@ enum LaunchPreferences {
     /// 开机自启。读的是系统里的真实注册状态，不自己记一份——用户随时可能
     /// 在系统设置里改，本地缓存只会和事实对不上。
     static var openAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
-            do {
-                if newValue {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-            } catch {
-                // 未签名或不在 /Applications 下时注册会被系统拒绝。这不是能
-                // 静默吞掉的失败——开关会弹回原位，用户得知道为什么。
-                NSLog("acpp: 切换开机自启失败: \(error.localizedDescription)")
-                presentFailure(enabling: newValue, error: error)
+        SMAppService.mainApp.status == .enabled
+    }
+
+    /// 设置开机自启，成功返回 nil，失败返回给人看的原因。
+    ///
+    /// 不在这里弹框：设置页经 JS 通道调过来时弹模态框会把 WebView 卡住，
+    /// 该由调用方决定怎么呈现（菜单栏弹 alert，设置页把原因回给前端）。
+    @discardableResult
+    static func setOpenAtLogin(_ on: Bool) -> String? {
+        do {
+            if on {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
             }
+            return nil
+        } catch {
+            NSLog("acpp: 切换开机自启失败: \(error.localizedDescription)")
+            return error.localizedDescription
         }
     }
 
@@ -36,12 +41,13 @@ enum LaunchPreferences {
         set { UserDefaults.standard.set(newValue, forKey: startMinimizedKey) }
     }
 
-    private static func presentFailure(enabling: Bool, error: Error) {
+    /// 菜单栏那条路径上的失败提示。设置页不走这里——它把原因显示在开关旁边。
+    static func presentFailure(enabling: Bool, reason: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = enabling ? "无法开启开机启动" : "无法关闭开机启动"
         alert.informativeText = """
-            系统拒绝了这次登录项变更：\(error.localizedDescription)
+            系统拒绝了这次登录项变更：\(reason)
 
             未签名或不在「应用程序」文件夹里的 app 常会被拒。可以把 ACPP 移到
             「应用程序」后重试，或直接在「系统设置 › 通用 › 登录项」里改。

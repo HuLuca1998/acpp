@@ -6,6 +6,7 @@ import WebKit
 final class MainWindowController: NSObject, NSWindowDelegate, WKNavigationDelegate {
     private let window: NSWindow
     private let webView: WKWebView
+    private let bridge = DesktopBridge()
     private let appURL: URL
 
     var isVisible: Bool { window.isVisible }
@@ -16,6 +17,10 @@ final class MainWindowController: NSObject, NSWindowDelegate, WKNavigationDelega
         let config = WKWebViewConfiguration()
         // 右键「检查元素」，排查前端问题时救命
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        // 设置页要开的是这台机器的登录项，只有壳碰得到——开一条窄通道给它。
+        config.userContentController.addUserScript(DesktopBridge.bootstrap)
+        config.userContentController.addScriptMessageHandler(
+            bridge, contentWorld: .page, name: DesktopBridge.name)
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsMagnification = true
 

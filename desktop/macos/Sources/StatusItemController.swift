@@ -108,7 +108,10 @@ final class StatusItemController: NSObject {
     @objc private func toggleLan() { app.toggleLanShare() }
     @objc private func copyLan() { app.copyLanLink() }
     @objc private func toggleOpenAtLogin() {
-        LaunchPreferences.openAtLogin.toggle()
+        let want = !LaunchPreferences.openAtLogin
+        if let reason = LaunchPreferences.setOpenAtLogin(want) {
+            LaunchPreferences.presentFailure(enabling: want, reason: reason)
+        }
     }
 
     @objc private func toggleStartMinimized() {

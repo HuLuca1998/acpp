@@ -493,6 +493,18 @@ export default {
     openFailed: "无法连接 agent",
   },
   settingsPage: {
+    desktopLaunch: {
+      title: "启动方式",
+      description: "只在 macOS 桌面应用里可用——改的是这台机器的登录项。",
+      openAtLogin: "开机启动",
+      openAtLoginHint:
+        "登录系统后自动运行 ACPP。也可在「系统设置 › 通用 › 登录项」里关掉。",
+      startMinimized: "开机最小化",
+      startMinimizedHint:
+        "开机时只驻留菜单栏，不弹窗口也不占 Dock。服务照常启动，从菜单栏图标打开即用。",
+      failed:
+        "系统拒绝了这次变更：{{reason}}。未签名或不在「应用程序」文件夹里的 app 常会被拒。",
+    },
     workspace: {
       title: "工作区根目录",
       description:
