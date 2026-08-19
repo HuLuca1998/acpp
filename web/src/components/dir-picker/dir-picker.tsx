@@ -259,7 +259,9 @@ export function DirPicker({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {/* min-w-0：Dialog 是 grid，子项默认 min-width:auto，长面包屑/多列
+            会把对话框撑破而不是触发自己的横向滚动。 */}
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <Button
             size="icon-sm"
             variant="outline"
@@ -407,7 +409,7 @@ export function DirPicker({
           </form>
         ) : null}
 
-        <div className="flex min-h-0 gap-2">
+        <div className="flex min-h-0 min-w-0 gap-2">
           <DirPlaces
             places={places}
             pins={pins}
