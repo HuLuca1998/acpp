@@ -1,4 +1,4 @@
-import { memo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -22,6 +22,7 @@ import {
 } from "@/components/workspace/chat-panel-context"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
+import { sumSessionUsage } from "@/lib/chat/usage"
 import { cn } from "@/lib/utils"
 import { ImageIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -82,6 +83,13 @@ export const ChatPanel = memo(function ChatPanel() {
   const promptImageAllowed = isNew
     ? newSession.selectedAgent?.skeleton?.promptImage !== false
     : (chat.settings?.prompt?.image ?? true)
+
+  // 会话用量：历史各轮的 turnUsage 相加 + 最后一轮。SSE 的实时用量刷新
+  // 即失，靠这份从转录重建出来的数据兜底，面板任何时候都点得开。
+  const usageStats = useMemo(
+    () => sumSessionUsage(chat.messages),
+    [chat.messages]
+  )
 
   const hasContent =
     chat.messages.length > 0 ||
@@ -234,7 +242,8 @@ export const ChatPanel = memo(function ChatPanel() {
               ) : null
             }
             usage={isNew ? null : chat.contextUsage}
-            lastUsage={isNew ? null : chat.lastUsage}
+            lastUsage={isNew ? null : (chat.lastUsage ?? usageStats?.last)}
+            totals={isNew ? null : usageStats?.totals}
             onPickCwd={isNew ? openCwdPicker : undefined}
           />
         }

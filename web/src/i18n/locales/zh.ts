@@ -396,7 +396,20 @@ export default {
       context: "上下文 {{used}} / {{size}} · {{percent}}%",
       turnTokensHint:
         "最近一轮：输入 {{input}} · 输出 {{output}} · 缓存读 {{cached}} · 合计 {{total}} tokens",
-      costHint: "本会话累计费用（{{currency}}，agent 上报）",
+    },
+    usage: {
+      open: "查看用量详情",
+      totalShort: "累计 {{total}}",
+      summaryTotal: "会话累计 {{total}} · {{count}} 轮",
+      context: "上下文窗口",
+      lastTurn: "最近一轮",
+      session: "会话累计 · {{count}} 轮",
+      input: "输入",
+      output: "输出",
+      cached: "缓存读",
+      total: "合计",
+      cost: "累计费用",
+      costNote: "由 agent 上报，仅 Claude 提供。",
     },
     toolStatus: {
       pending: "等待中",

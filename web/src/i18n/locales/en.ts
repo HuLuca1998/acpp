@@ -417,7 +417,20 @@ export default {
       context: "Context {{used}} / {{size}} · {{percent}}%",
       turnTokensHint:
         "Last turn: {{input}} in · {{output}} out · {{cached}} cached · {{total}} total tokens",
-      costHint: "Session cost so far ({{currency}}, reported by the agent)",
+    },
+    usage: {
+      open: "Show usage details",
+      totalShort: "Total {{total}}",
+      summaryTotal: "Session total {{total}} · {{count}} turns",
+      context: "Context window",
+      lastTurn: "Last turn",
+      session: "Session total · {{count}} turns",
+      input: "Input",
+      output: "Output",
+      cached: "Cached read",
+      total: "Total",
+      cost: "Cost so far",
+      costNote: "Reported by the agent; Claude only.",
     },
     toolStatus: {
       pending: "Pending",

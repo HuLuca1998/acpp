@@ -29,8 +29,12 @@ export function formatDateTime(iso: string, locale: string): string {
   })
 }
 
-/** token 数缩写："32.2k"、"1.0M"；千以下原样。精确值放 title 里。 */
+/**
+ * token 数缩写："32.2k"、"1.2M"、"3.4B"；千以下原样。精确值放 title 里。
+ * 长会话的累计轻松破百万，界面上永远不该出现 1,165,807 这样的一长串。
+ */
 export function formatTokens(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
   return String(n)

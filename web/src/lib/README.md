@@ -22,6 +22,7 @@
 | format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
 | git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |
+| chat/usage.ts     | 会话累计用量：把历史各轮的 turnUsage 相加（用量面板用）              | `sumSessionUsage`、`SessionUsageTotals`                              |
 | chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）                     | `groupMessages`                                                      |
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
