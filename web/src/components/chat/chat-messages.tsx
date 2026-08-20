@@ -1,13 +1,14 @@
 import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { Message } from "@/types/acp"
+import type { Message, PlanEntry, TurnUsage } from "@/types/acp"
 import type { LiveToolCall } from "@/hooks/use-chat"
 import { cn } from "@/lib/utils"
-import { formatDateTime } from "@/lib/format"
+import { formatDateTime, formatTokens } from "@/lib/format"
 import { CopyButton } from "@/components/chat/copy-button"
 import { ElicitationAnsweredCard } from "@/components/chat/cards/elicitation-card"
 import { MarkdownContent } from "@/components/chat/markdown"
+import { PlanHistoryCard } from "@/components/chat/plan-card"
 import { UserAvatar } from "@/components/chat/message-shell"
 import { ThoughtBlock } from "@/components/chat/thought-block"
 import {
@@ -24,6 +25,8 @@ import {
 } from "@/components/ui/message"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   ChevronRightIcon,
   FileIcon,
   ShieldCheckIcon,
@@ -124,17 +127,32 @@ export const ActivityMessage = memo(function ActivityMessage({
 }: {
   message: Message
 }) {
+  const { t } = useTranslation()
+
   if (message.kind === "thought") {
     return <ThoughtBlock content={message.content} />
   }
 
   if (message.kind === "permission_request") {
+    // 转录重建的裁决记录：谁请求 + 用户选了什么（取消也如实说）。
+    const payload = message.payload as {
+      toolKind?: string
+      choice?: string
+      outcome?: string
+    } | null
+    const title =
+      message.content || payload?.toolKind || t("chat.permission.title")
+    const choice =
+      payload?.choice ||
+      (payload?.outcome === "cancelled" ? t("chat.permission.cancelled") : "")
     return (
       <Marker>
         <MarkerIcon>
           <ShieldCheckIcon />
         </MarkerIcon>
-        <MarkerContent>{message.content}</MarkerContent>
+        <MarkerContent>
+          {choice ? t("chat.permission.resolved", { title, choice }) : title}
+        </MarkerContent>
       </Marker>
     )
   }
@@ -161,11 +179,18 @@ export const ChatMessage = memo(function ChatMessage({
   /** 会话创建者的名字，人这侧的头像用它取首字母。 */
   userName?: string
 }) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const timestamp = formatDateTime(message.createdAt, i18n.language)
 
   if (message.kind === "elicitation") {
     return <ElicitationAnsweredCard message={message} />
+  }
+
+  if (message.kind === "plan") {
+    // 计划的轮末快照：默认折叠成一行进度。
+    const entries = (message.payload?.entries ?? null) as PlanEntry[] | null
+    if (!entries?.length) return null
+    return <PlanHistoryCard entries={entries} />
   }
 
   if (message.role === "user") {
@@ -234,12 +259,30 @@ export const ChatMessage = memo(function ChatMessage({
     )
   }
 
+  const turnUsage = (message.payload as { turnUsage?: TurnUsage } | null)
+    ?.turnUsage
   return (
     <div className="group/msg" title={timestamp}>
       <MarkdownContent>{message.content}</MarkdownContent>
       {/* 操作行占位固定高度，浮现时不推挤下方内容。 */}
       <div className="mt-1 flex h-6 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
         <CopyButton text={message.content} />
+        {turnUsage ? (
+          <span
+            className="flex items-center gap-1 text-xs text-muted-foreground/70 tabular-nums"
+            title={t("chat.status.turnTokensHint", {
+              input: turnUsage.inputTokens.toLocaleString(),
+              output: turnUsage.outputTokens.toLocaleString(),
+              cached: turnUsage.cachedReadTokens.toLocaleString(),
+              total: turnUsage.totalTokens.toLocaleString(),
+            })}
+          >
+            <ArrowUpIcon className="size-3" />
+            {formatTokens(turnUsage.inputTokens)}
+            <ArrowDownIcon className="size-3" />
+            {formatTokens(turnUsage.outputTokens)}
+          </span>
+        ) : null}
       </div>
     </div>
   )

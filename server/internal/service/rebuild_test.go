@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/transcript"
 )
@@ -314,5 +315,126 @@ func TestRebuildMessagesMergesAdjacentChunks(t *testing.T) {
 	}
 	if len(texts) != 1 || texts[0] != "前半句后半句。" {
 		t.Errorf("agent 正文 = %v，期望合并成一条「前半句后半句。」", texts)
+	}
+}
+
+// plan 事件每次都是全量，轮末应落一条最终快照（取末次），空计划不产出。
+func TestRebuildMessagesPlanSnapshot(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "做个计划")),
+		wire(t, "recv", `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"plan","entries":[{"content":"步骤一","status":"in_progress"},{"content":"步骤二","status":"pending"}]}}}`),
+		wire(t, "recv", chunkFrame("干活中。")),
+		wire(t, "recv", `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"plan","entries":[{"content":"步骤一","status":"completed"},{"content":"步骤二","status":"completed"}]}}}`),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+
+	var plans []model.Message
+	for _, m := range msgs {
+		if m.Kind == model.KindPlan {
+			plans = append(plans, m)
+		}
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plan 快照 = %d 条，期望 1 条：%+v", len(plans), msgs)
+	}
+	raw, err := json.Marshal(plans[0].Payload["entries"])
+	if err != nil {
+		t.Fatalf("plan payload 序列化失败: %v", err)
+	}
+	var got []struct {
+		Content string `json:"content"`
+		Status  string `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("plan entries 解析失败: %v", err)
+	}
+	if len(got) != 2 || got[0].Status != "completed" || got[1].Status != "completed" {
+		t.Errorf("plan 快照应是末次全量（全部 completed），实际 %+v", got)
+	}
+}
+
+// 权限请求配对：agent 的 session/request_permission 与我们的答复配对后
+// 落成一条裁决记录，带选项名与结果；ExitPlanMode 的计划全文也进 payload。
+func TestRebuildMessagesPermissionVerdict(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "删掉临时文件")),
+		wire(t, "recv", `{"jsonrpc":"2.0","id":100,"method":"session/request_permission","params":{"sessionId":"s","toolCall":{"toolCallId":"t1","kind":"execute","status":"pending","title":"rm -rf tmp/"},"options":[{"optionId":"allow","name":"允许一次","kind":"allow_once"},{"optionId":"reject","name":"拒绝","kind":"reject_once"}]}}`),
+		wire(t, "send", `{"jsonrpc":"2.0","id":100,"result":{"outcome":{"outcome":"selected","optionId":"allow"}}}`),
+		wire(t, "recv", chunkFrame("已删除。")),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+
+	var perms []model.Message
+	for _, m := range msgs {
+		if m.Kind == model.KindPermissionRequest {
+			perms = append(perms, m)
+		}
+	}
+	if len(perms) != 1 {
+		t.Fatalf("裁决记录 = %d 条，期望 1 条：%+v", len(perms), msgs)
+	}
+	p := perms[0]
+	if p.Content != "rm -rf tmp/" {
+		t.Errorf("content = %q，期望工具标题", p.Content)
+	}
+	if p.Payload["choice"] != "允许一次" || p.Payload["outcome"] != "selected" || p.Payload["toolKind"] != "execute" {
+		t.Errorf("payload = %+v，期望带 choice/outcome/toolKind", p.Payload)
+	}
+}
+
+// 取消的权限请求（cancel 或超时）落 outcome=cancelled，没有 choice。
+func TestRebuildMessagesPermissionCancelled(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "问一下")),
+		wire(t, "recv", `{"jsonrpc":"2.0","id":101,"method":"session/request_permission","params":{"sessionId":"s","toolCall":{"toolCallId":"t2","kind":"edit","status":"pending"},"options":[{"optionId":"allow","name":"允许","kind":"allow_once"}]}}`),
+		wire(t, "send", `{"jsonrpc":"2.0","id":101,"result":{"outcome":{"outcome":"cancelled"}}}`),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+
+	var perm *model.Message
+	for i := range msgs {
+		if msgs[i].Kind == model.KindPermissionRequest {
+			perm = &msgs[i]
+		}
+	}
+	if perm == nil {
+		t.Fatalf("没有裁决记录：%+v", msgs)
+	}
+	if perm.Payload["outcome"] != "cancelled" {
+		t.Errorf("outcome = %v，期望 cancelled", perm.Payload["outcome"])
+	}
+	if _, ok := perm.Payload["choice"]; ok {
+		t.Errorf("取消的请求不该有 choice：%+v", perm.Payload)
+	}
+}
+
+// prompt 响应带 usage 时，本轮计量挂在最后一段正文的 payload 上。
+func TestRebuildMessagesTurnUsage(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "算一下")),
+		wire(t, "recv", chunkFrame("答案是 42。")),
+		wire(t, "send", `{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":{"sessionId":"s","prompt":[{"type":"text","text":"第二问"}]}}`),
+	}
+	// 第一轮的响应带 usage。
+	entries = append(entries[:2:2],
+		wire(t, "recv", `{"jsonrpc":"2.0","id":1,"result":{"stopReason":"end_turn","usage":{"inputTokens":120,"outputTokens":45,"cachedReadTokens":100,"totalTokens":165}}}`),
+	)
+	msgs := RebuildMessages(1, entries)
+
+	var text *model.Message
+	for i := range msgs {
+		if msgs[i].Role == model.RoleAgent && msgs[i].Kind == model.KindText {
+			text = &msgs[i]
+		}
+	}
+	if text == nil {
+		t.Fatalf("没有正文消息：%+v", msgs)
+	}
+	usage, ok := text.Payload["turnUsage"].(*acp.Usage)
+	if !ok || usage.InputTokens != 120 || usage.OutputTokens != 45 {
+		t.Errorf("turnUsage = %#v，期望挂上本轮计量", text.Payload["turnUsage"])
 	}
 }

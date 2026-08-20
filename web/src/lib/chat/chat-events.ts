@@ -222,7 +222,8 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
       return { ...prev, commands: ev.commands ?? [] }
 
     case "plan": {
-      // 计划整体替换；保留到下一轮开始，让用户能回看最终完成状态。
+      // 计划整体替换，只在轮内展示；轮末转录重建会落一条 plan 快照消息，
+      // 历史里的最终状态由它接力，实时卡在 turn_done 收起。
       if (!inTurn) return prev
       const entries = Array.isArray(ev.entries)
         ? (ev.entries as PlanEntry[])
@@ -280,7 +281,8 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
 
     case "turn_done":
       // 本轮内容已经作为消息落库，清掉流式态避免重复渲染。
-      // plan 留着展示最终状态，下一轮的 plan 事件会整体替换它。
+      // plan 也一并收起：重建出的 plan 快照消息会在历史里接力展示，
+      // 留着实时卡会和它重复。
       return {
         ...prev,
         busy: false,
@@ -291,6 +293,7 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         permission: null,
         permissions: [],
         touched: [],
+        plan: null,
       }
 
     case "error":

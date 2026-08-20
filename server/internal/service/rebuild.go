@@ -24,6 +24,9 @@ type wireMsg struct {
 type rebuildTurn struct {
 	items []*turnItem
 	tools map[string]*rebuildTool
+	// plan 是本轮最后一次 plan 事件的全量条目（协议规定每次都发全量，
+	// 取末次即最终状态），轮末落成一条快照消息。
+	plan json.RawMessage
 }
 
 // turnItem 是轮内时间线上的一段：一段连续的正文、一段连续的思考，
@@ -129,10 +132,11 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		emit(model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content, Payload: payload}, ts)
 	}
 
-	flush := func(ts time.Time, stopReason string) {
+	flush := func(ts time.Time, stopReason string, usage *acp.Usage) {
 		if turn == nil {
 			return
 		}
+		flushedFrom := len(out)
 		// 停止原因挂在本轮最后一段正文上：异常收尾时界面要能就地说明为什么断的。
 		lastText := -1
 		for i, it := range turn.items {
@@ -195,6 +199,29 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 				}, ts)
 			}
 		}
+		// 计划快照落在轮末：与实时视图一致（计划卡跨轮保留最终状态）。
+		if planEntries(turn.plan) {
+			emit(model.Message{
+				Role:    model.RoleAgent,
+				Kind:    model.KindPlan,
+				Payload: model.JSONMap{"entries": json.RawMessage(turn.plan)},
+			}, ts)
+		}
+		// 本轮 token 计量挂到最后一段正文上（没有正文就挂轮末那条）——
+		// 历史里每轮的用量要能回看，转录里只有 prompt 响应带它。
+		if usage != nil && len(out) > flushedFrom {
+			at := len(out) - 1
+			for i := len(out) - 1; i >= flushedFrom; i-- {
+				if out[i].Kind == model.KindText {
+					at = i
+					break
+				}
+			}
+			if out[at].Payload == nil {
+				out[at].Payload = model.JSONMap{}
+			}
+			out[at].Payload["turnUsage"] = usage
+		}
 		turn = nil
 	}
 
@@ -213,7 +240,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			// 不会混进任何轮（实时侧的对应机制是 session.replaying）。
 			// 旧连接的请求 id 空间同时作废：新连接从小 id 重新计数，
 			// 残留的认领表会让旧 id 撞上新请求、误收响应。
-			flush(entry.TS, string(acp.StopCancelled))
+			flush(entry.TS, string(acp.StopCancelled), nil)
 			pendingPrompts = 0
 			sentMethods = map[string]string{}
 			agentReqs = map[string]agentReq{}
@@ -237,7 +264,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 				continue
 			}
 			// 上一轮如果没等到响应（进程中途死了），先按无结论落掉。
-			flush(entry.TS, "")
+			flush(entry.TS, "", nil)
 			pendingPrompts++
 			turn = &rebuildTurn{tools: map[string]*rebuildTool{}}
 
@@ -253,31 +280,73 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			sentMethods[string(msg.ID)] = msg.Method
 
 		case entry.Dir == "send" && msg.Method == "" && len(msg.ID) > 0:
-			// 我们对 agent 反向请求的答复；elicitation 配对后落成一条问答消息。
+			// 我们对 agent 反向请求的答复：elicitation 落成问答消息，
+			// permission 落成裁决记录。两者都在答复时刻产出（与 elicitation
+			// 既有行为一致），不插回轮内时间线。
 			req, ok := agentReqs[string(msg.ID)]
 			delete(agentReqs, string(msg.ID))
-			if !ok || req.method != "elicitation/create" {
+			if !ok {
 				continue
 			}
-			var p acp.ElicitationParams
-			if err := json.Unmarshal(req.params, &p); err != nil {
-				continue
+			switch req.method {
+			case "elicitation/create":
+				var p acp.ElicitationParams
+				if err := json.Unmarshal(req.params, &p); err != nil {
+					continue
+				}
+				var result acp.ElicitationResult
+				_ = json.Unmarshal(msg.Result, &result)
+				payload := model.JSONMap{"action": result.Action}
+				if len(p.RequestedSchema) > 0 {
+					payload["schema"] = json.RawMessage(p.RequestedSchema)
+				}
+				if len(result.Content) > 0 {
+					payload["answers"] = result.Content
+				}
+				emit(model.Message{
+					Role:    model.RoleAgent,
+					Kind:    model.KindElicitation,
+					Content: p.Message,
+					Payload: payload,
+				}, entry.TS)
+
+			case "session/request_permission":
+				var p acp.RequestPermissionParams
+				if err := json.Unmarshal(req.params, &p); err != nil {
+					continue
+				}
+				var result acp.RequestPermissionResult
+				_ = json.Unmarshal(msg.Result, &result)
+				payload := model.JSONMap{"outcome": result.Outcome.Outcome}
+				if p.ToolCall.Kind != "" {
+					payload["toolKind"] = p.ToolCall.Kind
+				}
+				if result.Outcome.OptionID != "" {
+					payload["optionId"] = result.Outcome.OptionID
+					for _, opt := range p.Options {
+						if opt.OptionID == result.Outcome.OptionID {
+							payload["choice"] = opt.Name
+							break
+						}
+					}
+				}
+				// ExitPlanMode（计划评审）也走这条通道：kind 是 ACP 标准的
+				// switch_mode，计划全文在 rawInput.plan，留进 payload 供回看。
+				if p.ToolCall.Kind == "switch_mode" && len(p.ToolCall.RawInput) > 0 {
+					var ri struct {
+						Plan string `json:"plan"`
+					}
+					if json.Unmarshal(p.ToolCall.RawInput, &ri) == nil && ri.Plan != "" {
+						payload["plan"] = ri.Plan
+					}
+				}
+				emit(model.Message{
+					Role:    model.RoleAgent,
+					Kind:    model.KindPermissionRequest,
+					Content: p.ToolCall.Title,
+					Payload: payload,
+				}, entry.TS)
 			}
-			var result acp.ElicitationResult
-			_ = json.Unmarshal(msg.Result, &result)
-			payload := model.JSONMap{"action": result.Action}
-			if len(p.RequestedSchema) > 0 {
-				payload["schema"] = json.RawMessage(p.RequestedSchema)
-			}
-			if len(result.Content) > 0 {
-				payload["answers"] = result.Content
-			}
-			emit(model.Message{
-				Role:    model.RoleAgent,
-				Kind:    model.KindElicitation,
-				Content: p.Message,
-				Payload: payload,
-			}, entry.TS)
 
 		case entry.Dir == "recv" && msg.Method != "" && len(msg.ID) > 0:
 			// agent 的反向请求（提问、权限），等我们的 response 再配对。
@@ -301,7 +370,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			}
 			var result acp.PromptResult
 			_ = json.Unmarshal(msg.Result, &result)
-			flush(entry.TS, string(result.StopReason))
+			flush(entry.TS, string(result.StopReason), result.Usage)
 			if pendingPrompts > 0 {
 				pendingPrompts--
 			}
@@ -320,6 +389,9 @@ func applyUpdate(turn *rebuildTurn, u acp.SessionUpdate) {
 	switch u.SessionUpdate {
 	case acp.UpdateAgentMessageChunk:
 		turn.appendChunk(model.KindText, u.Text())
+
+	case acp.UpdatePlan:
+		turn.plan = u.Entries
 
 	case acp.UpdateAgentThoughtChunk:
 		turn.appendChunk(model.KindThought, u.Text())
@@ -372,4 +444,13 @@ func applyUpdate(turn *rebuildTurn, u acp.SessionUpdate) {
 
 func trimmed(b []byte) string {
 	return strings.TrimSpace(string(b))
+}
+
+// planEntries 判断 plan 原文是不是非空条目数组——空计划不值得占一条历史。
+func planEntries(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var entries []json.RawMessage
+	return json.Unmarshal(raw, &entries) == nil && len(entries) > 0
 }

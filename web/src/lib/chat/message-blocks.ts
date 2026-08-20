@@ -1,13 +1,13 @@
 import { isSubagentWork } from "@/lib/subagents"
 import type { Message } from "@/types/acp"
 
-/** 思考 / 工具调用等过程性消息，聚合成一个可折叠块展示。 */
+/** 思考 / 工具调用等过程性消息，聚合成一个可折叠块展示。
+ *  plan 不在其中：计划快照独立成卡，与实时计划卡的呈现位置一致。 */
 const ACTIVITY_KINDS = new Set<Message["kind"]>([
   "thought",
   "tool_call",
   "tool_result",
   "permission_request",
-  "plan",
 ])
 
 export type Block =

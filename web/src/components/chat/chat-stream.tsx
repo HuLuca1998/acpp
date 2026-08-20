@@ -162,7 +162,8 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
               )
             })}
 
-            {/* 任务计划：随 plan 事件实时更新，轮次结束保留最终状态。 */}
+            {/* 任务计划：随 plan 事件实时更新；轮结束后由重建的 plan
+                快照消息（历史卡）接力展示最终状态。 */}
             {chat.plan && chat.plan.length > 0 ? (
               <MessageScrollerItem scrollAnchor={false}>
                 <AgentRow avatar={liveAvatar("plan")}>
