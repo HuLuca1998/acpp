@@ -67,7 +67,7 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		br.Publish(StreamEvent{Kind: "settings", Settings: ev.Settings})
 
 	case acp.EventUsage:
-		br.Publish(StreamEvent{Kind: "usage", Used: ev.Used, Size: ev.Size})
+		br.Publish(StreamEvent{Kind: "usage", Used: ev.Used, Size: ev.Size, Cost: ev.Cost})
 
 	case acp.EventCommands:
 		commands := s.catalogFor(context.Background(), sessionID).filterCommands(ev.Commands)

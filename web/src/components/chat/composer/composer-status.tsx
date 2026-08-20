@@ -39,8 +39,19 @@ export function ComposerStatus({
   /** 草稿态：点击工作目录打开目录选择器；老会话不传，纯展示。 */
   onPickCwd?: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { identity } = useIdentity()
+  // 货币格式化跟随界面语言；认不出的货币码退化成「数字 + 代码」。
+  const formatCurrency = (amount: number, currency: string) => {
+    try {
+      return new Intl.NumberFormat(i18n.language, {
+        style: "currency",
+        currency,
+      }).format(amount)
+    } catch {
+      return `${amount.toFixed(2)} ${currency}`
+    }
+  }
   // 访客看到的是 `~/...`：完整路径里带着这台机器主人的用户名，对他没用。
   const shownCwd = displayPath(cwd ?? "", identity?.root)
   if (!cwd && !gitBranch && !branchSlot && !worktreeSlot && !usage && !lastUsage)
@@ -102,6 +113,17 @@ export function ComposerStatus({
             size: formatTokens(usage.size),
             percent: Math.round((usage.used / usage.size) * 100),
           })}
+        </span>
+      ) : null}
+      {/* 累计费用：只有 claude 的 usage 带，codex 没有就整个不出现。 */}
+      {usage?.cost ? (
+        <span
+          className="shrink-0 tabular-nums"
+          title={t("chat.status.costHint", {
+            currency: usage.cost.currency,
+          })}
+        >
+          {formatCurrency(usage.cost.amount, usage.cost.currency)}
         </span>
       ) : null}
     </div>

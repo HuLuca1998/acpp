@@ -302,6 +302,12 @@ const (
 // OK 报告这一轮是否正常说完；其余四种都意味着回答可能是残缺的。
 func (s StopReason) OK() bool { return s == StopEndTurn }
 
+// UsageCost 是累计费用（usage_update 的 cost，目前只有 claude 带）。
+type UsageCost struct {
+	Amount   float64 `json:"amount"`
+	Currency string  `json:"currency"`
+}
+
 // Usage 是一轮的 token 计量，只保留两端 runtime 都报的交集字段
 // （claude 的 cachedWriteTokens/cost、codex 的 thoughtTokens 按交集规范废弃）。
 type Usage struct {
@@ -379,10 +385,12 @@ type SessionUpdate struct {
 	Entries json.RawMessage `json:"entries,omitempty"`
 
 	// usage_update：上下文用量。size 的语义两端有出入（claude 是模型窗口
-	// 大小，codex 是会话水位），按占比展示两端都成立；claude 独有的 cost
-	// 按交集规范废弃，不解析。
-	Used int64 `json:"used,omitempty"`
-	Size int64 `json:"size,omitempty"`
+	// 大小，codex 是会话水位），按占比展示两端都成立。cost 只有 claude
+	// 间歇带——作为可选装饰透传，codex 缺省时前端自动隐藏，不违反交集规范
+	//（交集规范约束的是「必须两端都有才能承诺」，可选展示不在其内）。
+	Used int64      `json:"used,omitempty"`
+	Size int64      `json:"size,omitempty"`
+	Cost *UsageCost `json:"cost,omitempty"`
 
 	// current_mode_update：agent 自己切了档。不同实现字段名不同，两个都收。
 	CurrentModeID string `json:"currentModeId,omitempty"`

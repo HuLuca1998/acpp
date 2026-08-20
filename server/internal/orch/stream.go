@@ -69,7 +69,7 @@ func (s *Service) handleOrchEvent(sessionID uint, key string, br *stream.Broker,
 		br.Publish(stream.Event{Kind: "settings", Settings: ev.Settings})
 
 	case acp.EventUsage:
-		br.Publish(stream.Event{Kind: "usage", Used: ev.Used, Size: ev.Size})
+		br.Publish(stream.Event{Kind: "usage", Used: ev.Used, Size: ev.Size, Cost: ev.Cost})
 
 	case acp.EventCommands:
 		br.Publish(stream.Event{Kind: "commands", Commands: ev.Commands})

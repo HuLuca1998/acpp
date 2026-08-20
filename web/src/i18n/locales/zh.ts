@@ -396,6 +396,7 @@ export default {
       context: "上下文 {{used}} / {{size}} · {{percent}}%",
       turnTokensHint:
         "最近一轮：输入 {{input}} · 输出 {{output}} · 缓存读 {{cached}} · 合计 {{total}} tokens",
+      costHint: "本会话累计费用（{{currency}}，agent 上报）",
     },
     toolStatus: {
       pending: "等待中",

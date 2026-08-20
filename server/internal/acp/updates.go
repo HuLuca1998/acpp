@@ -78,8 +78,8 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 
 	case UpdateUsage:
 		// 上下文用量快照。size 语义两端有出入（窗口大小 vs 水位），
-		// 按占比展示两端都成立；claude 独有的 cost 按交集规范不透出。
-		h.session.emit(Event{Kind: EventUsage, Used: u.Used, Size: u.Size})
+		// 按占比展示两端都成立；cost 只有 claude 带，作为可选装饰透传。
+		h.session.emit(Event{Kind: EventUsage, Used: u.Used, Size: u.Size, Cost: u.Cost})
 
 	case UpdateUserMessageChunk:
 		// 只在 session/load 重放历史时出现，这里不重放，忽略。

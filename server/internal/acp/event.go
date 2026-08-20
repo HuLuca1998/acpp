@@ -56,6 +56,7 @@ type Event struct {
 	Settings         *Settings       `json:"settings,omitempty"`
 	Used             int64           `json:"used,omitempty"`
 	Size             int64           `json:"size,omitempty"`
+	Cost             *UsageCost      `json:"cost,omitempty"`
 	Commands         []Command       `json:"commands,omitempty"`
 	ElicitationID    string          `json:"elicitationId,omitempty"`
 	// 权限请求：ID 用于回传裁决，Options 是 agent 给的选项。

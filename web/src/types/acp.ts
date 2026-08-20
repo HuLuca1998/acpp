@@ -458,6 +458,8 @@ export interface StreamEvent {
   /** usage 事件：上下文用量（按占比展示）。 */
   used?: number
   size?: number
+  /** usage 事件的累计费用，只有 claude 间歇带；缺省时界面不显示。 */
+  cost?: { amount: number; currency: string }
   /** commands 事件：可用斜杠命令全量清单。 */
   commands?: SlashCommand[]
   /** turn_end 事件：本轮 token 计量。 */

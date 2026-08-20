@@ -417,6 +417,7 @@ export default {
       context: "Context {{used}} / {{size}} · {{percent}}%",
       turnTokensHint:
         "Last turn: {{input}} in · {{output}} out · {{cached}} cached · {{total}} total tokens",
+      costHint: "Session cost so far ({{currency}}, reported by the agent)",
     },
     toolStatus: {
       pending: "Pending",

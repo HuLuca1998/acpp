@@ -39,6 +39,7 @@ type Event struct {
 	Settings      *acp.Settings   `json:"settings,omitempty"`
 	Used          int64           `json:"used,omitempty"`
 	Size          int64           `json:"size,omitempty"`
+	Cost          *acp.UsageCost  `json:"cost,omitempty"`
 	Commands      []acp.Command   `json:"commands,omitempty"`
 	Usage         *acp.Usage      `json:"usage,omitempty"`
 	ElicitationID string          `json:"elicitationId,omitempty"`

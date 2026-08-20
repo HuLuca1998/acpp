@@ -35,10 +35,12 @@ export interface LiveToolCall {
   subagentPath?: string
 }
 
-/** 上下文用量（usage 事件），按占比展示。 */
+/** 上下文用量（usage 事件），按占比展示。cost 只有 claude 间歇带，
+ *  拿到过就留住——后续不带 cost 的 usage 快照不该把它闪没。 */
 export interface ContextUsage {
   used: number
   size: number
+  cost?: { amount: number; currency: string }
 }
 
 /** 一轮进行中用户插话的排队条目：发出（被使用）前随时可撤回。 */
@@ -215,7 +217,11 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
       if (!ev.size) return prev
       return {
         ...prev,
-        contextUsage: { used: ev.used ?? 0, size: ev.size },
+        contextUsage: {
+          used: ev.used ?? 0,
+          size: ev.size,
+          cost: ev.cost ?? prev.contextUsage?.cost,
+        },
       }
 
     case "commands":
