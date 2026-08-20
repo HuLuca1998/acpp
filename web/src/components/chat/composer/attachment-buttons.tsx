@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 
+import { Hint } from "@/components/hint"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,22 +18,27 @@ const buttonClass =
 
 export function AttachmentButton({
   label,
+  desc,
   onClick,
   children,
 }: {
   label: string
+  /** 悬停说明的第二行：这枚圆钮按下去会发生什么。 */
+  desc?: string
   onClick: () => void
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      className={buttonClass}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+    <Hint label={label} desc={desc} align="start">
+      <button
+        type="button"
+        aria-label={label}
+        className={buttonClass}
+        onClick={onClick}
+      >
+        {children}
+      </button>
+    </Hint>
   )
 }
 
@@ -54,17 +60,23 @@ export function ReferenceMenu({
   const { t } = useTranslation()
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label={t("chat.attachments.file")}
-            className={buttonClass}
-          >
-            <AtSignIcon className="size-3.5" />
-          </button>
-        }
-      />
+      <Hint
+        label={t("chat.attachments.reference")}
+        desc={t("chat.attachments.referenceDesc")}
+        align="start"
+      >
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              aria-label={t("chat.attachments.reference")}
+              className={buttonClass}
+            >
+              <AtSignIcon className="size-3.5" />
+            </button>
+          }
+        />
+      </Hint>
       <DropdownMenuContent align="start" className="min-w-40">
         <DropdownMenuItem onClick={onPickFile}>
           <FileIcon />

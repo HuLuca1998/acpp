@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 
 import type { ContextUsage } from "@/hooks/use-chat"
 import type { SessionUsageTotals } from "@/lib/chat/usage"
+import { Hint } from "@/components/hint"
 import { UsagePopover } from "@/components/chat/composer/usage-popover"
 import { useIdentity } from "@/hooks/identity-context"
 import { displayPath } from "@/lib/format"
@@ -56,16 +57,22 @@ export function ComposerStatus({
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground/80">
       {cwd && onPickCwd ? (
-        <button
-          type="button"
-          title={t("sessions.form.cwdHint")}
-          className="group flex min-w-0 items-center gap-1 rounded-md transition-colors duration-150 hover:text-foreground"
-          onClick={onPickCwd}
+        <Hint
+          label={t("sessions.form.cwdLabel")}
+          desc={t("sessions.form.cwdHint")}
+          align="start"
         >
-          <FolderIcon className="size-3 shrink-0" />
-          <span className="truncate font-mono">{shownCwd}</span>
-          <PencilIcon className="size-3 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
-        </button>
+          <button
+            type="button"
+            aria-label={t("sessions.form.cwdLabel")}
+            className="group flex min-w-0 items-center gap-1 rounded-md transition-colors duration-150 hover:text-foreground"
+            onClick={onPickCwd}
+          >
+            <FolderIcon className="size-3 shrink-0" />
+            <span className="truncate font-mono">{shownCwd}</span>
+            <PencilIcon className="size-3 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+          </button>
+        </Hint>
       ) : cwd ? (
         <span className="flex min-w-0 items-center gap-1" title={cwd}>
           <FolderIcon className="size-3 shrink-0" />

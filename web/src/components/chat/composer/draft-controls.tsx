@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import type { useDraftSession } from "@/hooks/use-draft-session"
+import { Hint } from "@/components/hint"
 import {
   Select,
   SelectContent,
@@ -36,21 +37,26 @@ export function DraftControls({
             if (typeof v === "string" && v) setChoiceKey(v)
           }}
         >
-          <SelectTrigger
-            size="sm"
-            aria-label={t("sessions.form.modelLabel")}
-            disabled={draft.creating}
-            className="h-7 gap-1 rounded-full border-transparent bg-transparent px-2.5 text-xs text-muted-foreground shadow-none transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97] dark:bg-transparent dark:hover:bg-muted"
+          <Hint
+            label={t("sessions.form.modelLabel")}
+            desc={t("sessions.form.modelHint")}
           >
-            <SparklesIcon className="size-3.5" />
-            <SelectValue>
-              {selected
-                ? groups.length > 1
-                  ? `${selectedAgent?.name} · ${selected.label}`
-                  : selected.label
-                : t("sessions.form.modelPlaceholder")}
-            </SelectValue>
-          </SelectTrigger>
+            <SelectTrigger
+              size="sm"
+              aria-label={t("sessions.form.modelLabel")}
+              disabled={draft.creating}
+              className="h-7 gap-1 rounded-full border-transparent bg-transparent px-2.5 text-xs text-muted-foreground shadow-none transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97] dark:bg-transparent dark:hover:bg-muted"
+            >
+              <SparklesIcon className="size-3.5" />
+              <SelectValue>
+                {selected
+                  ? groups.length > 1
+                    ? `${selectedAgent?.name} · ${selected.label}`
+                    : selected.label
+                  : t("sessions.form.modelPlaceholder")}
+              </SelectValue>
+            </SelectTrigger>
+          </Hint>
           {/* 输入框贴底，向上弹出才不被视口截断；关掉选中项对齐的覆盖式定位，
               并放宽默认的可用高度限制，清单一屏放完不内滚。 */}
           <SelectContent

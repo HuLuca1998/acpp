@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
+import { Hint } from "@/components/hint"
 import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
 import { usePagedData } from "@/hooks/use-paged-data"
@@ -223,18 +224,20 @@ export function Tenants() {
       meta: { className: "w-10 text-right" },
       cell: ({ row }) => (
         <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                className="text-muted-foreground"
-                aria-label={t("tenants.actions")}
-              />
-            }
-          >
-            <MoreHorizontalIcon />
-          </DropdownMenuTrigger>
+          <Hint label={t("tenants.actions")} align="end">
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  aria-label={t("tenants.actions")}
+                >
+                  <MoreHorizontalIcon />
+                </Button>
+              }
+            />
+          </Hint>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={() => void copyInvite(row.original)}>
               <CopyIcon />

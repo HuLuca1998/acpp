@@ -9,6 +9,7 @@ import type {
   DbDatabase,
   SSHAuth,
 } from "@/types/acp"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -433,15 +434,17 @@ function DataSourceForm({
                           placeholder={t("db.sshKeyPathPlaceholder")}
                           onChange={(e) => set("sshKeyPath", e.target.value)}
                         />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          aria-label={t("db.sshKeyBrowse")}
-                          onClick={() => setKeyPickerOpen(true)}
-                        >
-                          <FolderOpenIcon />
-                        </Button>
+                        <Hint label={t("db.sshKeyBrowse")} align="end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={t("db.sshKeyBrowse")}
+                            onClick={() => setKeyPickerOpen(true)}
+                          >
+                            <FolderOpenIcon />
+                          </Button>
+                        </Hint>
                       </div>
                     </Field>
                     <Field>

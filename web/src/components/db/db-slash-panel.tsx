@@ -4,6 +4,7 @@ import type { WorkspaceScopeApi } from "@/lib/api"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSource } from "@/types/acp"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusDot } from "@/components/status-dot"
@@ -58,15 +59,17 @@ export function DbSlashPanel({
         {picked ? (
           <span className="font-mono text-muted-foreground">{picked.ref}</span>
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="ml-auto"
-          aria-label={t("common.cancel")}
-          onClick={onClose}
-        >
-          <XIcon />
-        </Button>
+        <Hint label={t("common.close")} align="end">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="ml-auto"
+            aria-label={t("common.close")}
+            onClick={onClose}
+          >
+            <XIcon />
+          </Button>
+        </Hint>
       </div>
 
       <ScrollArea className="max-h-64 p-2 text-xs">

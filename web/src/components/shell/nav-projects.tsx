@@ -17,6 +17,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { Hint } from "@/components/hint"
 import { StatusDot } from "@/components/status-dot"
 import { useActiveSessions } from "@/hooks/use-active-sessions"
 import { SESSION_STATE_TONE } from "@/lib/status-tone"
@@ -72,16 +73,19 @@ export function NavProjects({
                 {/* 在这个目录开新会话：草稿页认 ?cwd= 预填（adr-007 的项目
                     入口同一机制）。行内有 action 时按钮自动 pr-8 让位，
                     不要再手动偏移。常显但压低存在感，hover 才上色。 */}
-                <SidebarMenuAction
-                  className="text-sidebar-foreground/50 hover:text-sidebar-foreground"
-                  render={
-                    <Link to={`/sessions/new?cwd=${encodeURIComponent(cwd)}`} />
-                  }
-                  aria-label={t("nav.newSessionIn")}
-                  title={t("nav.newSessionIn")}
-                >
-                  <PlusIcon />
-                </SidebarMenuAction>
+                <Hint label={t("nav.newSessionIn")} desc={cwd} align="end">
+                  <SidebarMenuAction
+                    className="text-sidebar-foreground/50 hover:text-sidebar-foreground"
+                    render={
+                      <Link
+                        to={`/sessions/new?cwd=${encodeURIComponent(cwd)}`}
+                      />
+                    }
+                    aria-label={t("nav.newSessionIn")}
+                  >
+                    <PlusIcon />
+                  </SidebarMenuAction>
+                </Hint>
                 <CollapsibleContent>
                   <SidebarMenuSub>
                     {sessions.map((session) => (

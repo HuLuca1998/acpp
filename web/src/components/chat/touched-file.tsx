@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { FilePenLineIcon } from "lucide-react"
 
 import { relativePath } from "@/lib/format"
+import { Hint } from "@/components/hint"
 import { WorkspaceContext } from "@/components/workspace/workspace-context"
 import type { ToolLocation } from "@/types/acp"
 
@@ -33,13 +34,14 @@ export function TouchedFile({ loc, cwd }: { loc: ToolLocation; cwd?: string }) {
     )
   }
   return (
-    <button
-      type="button"
-      title={t("chat.touchedHint")}
-      onClick={() => ws.openPreview(loc.path, loc.line)}
-      className="flex min-w-0 items-center gap-1.5 rounded-md text-xs text-muted-foreground/80 transition-colors duration-150 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-    >
-      {body}
-    </button>
+    <Hint label={t("chat.touchedHint")} desc={loc.path} align="start">
+      <button
+        type="button"
+        onClick={() => ws.openPreview(loc.path, loc.line)}
+        className="flex min-w-0 items-center gap-1.5 rounded-md text-xs text-muted-foreground/80 transition-colors duration-150 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        {body}
+      </button>
+    </Hint>
   )
 }

@@ -5,6 +5,7 @@ import { toast } from "sonner"
 
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import type { GitBranchView } from "@/types/acp"
+import { Hint } from "@/components/hint"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -95,17 +96,26 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
         if (next) void load()
       }}
     >
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            className="flex shrink-0 items-center gap-1 rounded-md text-xs text-muted-foreground/80 transition-colors duration-150 hover:text-foreground"
-          />
-        }
+      <Hint
+        label={t("chat.branch.switch")}
+        desc={t("chat.branch.switchDesc")}
+        align="start"
       >
-        <GitBranchIcon className="size-3" />
-        <span className="font-mono">{current ?? t("chat.branch.none")}</span>
-      </PopoverTrigger>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              aria-label={t("chat.branch.switch")}
+              className="flex shrink-0 items-center gap-1 rounded-md text-xs text-muted-foreground/80 transition-colors duration-150 hover:text-foreground"
+            >
+              <GitBranchIcon className="size-3" />
+              <span className="font-mono">
+                {current ?? t("chat.branch.none")}
+              </span>
+            </button>
+          }
+        />
+      </Hint>
       <PopoverContent align="start" className="w-72 p-0">
         {view === null ? (
           <div className="flex items-center justify-center py-6">
@@ -164,15 +174,17 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
                   }
                 }}
               />
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label={t("chat.branch.create")}
-                disabled={!newBranch.trim() || busy || view.dirty}
-                onClick={() => void checkout(newBranch.trim(), true)}
-              >
-                <PlusIcon />
-              </Button>
+              <Hint label={t("chat.branch.create")} align="end">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t("chat.branch.create")}
+                  disabled={!newBranch.trim() || busy || view.dirty}
+                  onClick={() => void checkout(newBranch.trim(), true)}
+                >
+                  <PlusIcon />
+                </Button>
+              </Hint>
             </div>
 
             <Separator />
@@ -207,15 +219,21 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
                     if (e.key === "Enter") void addWorktree()
                   }}
                 />
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label={t("chat.branch.addWorktree")}
-                  disabled={!worktreeName.trim() || busy}
-                  onClick={() => void addWorktree()}
+                <Hint
+                  label={t("chat.branch.addWorktree")}
+                  desc={t("chat.branch.addWorktreeDesc")}
+                  align="end"
                 >
-                  <PlusIcon />
-                </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={t("chat.branch.addWorktree")}
+                    disabled={!worktreeName.trim() || busy}
+                    onClick={() => void addWorktree()}
+                  >
+                    <PlusIcon />
+                  </Button>
+                </Hint>
               </div>
             </div>
           </>

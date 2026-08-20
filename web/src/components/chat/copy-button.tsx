@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { CheckIcon, CopyIcon } from "lucide-react"
 
@@ -32,19 +33,21 @@ export function CopyButton({
   }
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      aria-label={copied ? t("chat.copied") : t("chat.copy")}
-      className={cn("size-6 text-muted-foreground", className)}
-      onClick={() => void copy()}
-    >
-      {copied ? (
-        <CheckIcon className="size-3.5 text-success" />
-      ) : (
-        <CopyIcon className="size-3.5" />
-      )}
-    </Button>
+    <Hint label={copied ? t("chat.copied") : t("chat.copy")}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={copied ? t("chat.copied") : t("chat.copy")}
+        className={cn("size-6 text-muted-foreground", className)}
+        onClick={() => void copy()}
+      >
+        {copied ? (
+          <CheckIcon className="size-3.5 text-success" />
+        ) : (
+          <CopyIcon className="size-3.5" />
+        )}
+      </Button>
+    </Hint>
   )
 }

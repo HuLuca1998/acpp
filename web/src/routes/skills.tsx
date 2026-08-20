@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 import { toast } from "sonner"
 
+import { Hint } from "@/components/hint"
 import { ListPageStates } from "@/components/list-page-states"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
@@ -183,15 +184,17 @@ export function Skills() {
       enableHiding: false,
       meta: { className: "w-10 text-right" },
       cell: ({ row }) => (
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          className="relative text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
-          aria-label={t("common.delete")}
-          onClick={() => setDeleting(row.original)}
-        >
-          <Trash2Icon />
-        </Button>
+        <Hint label={t("skills.deleteTitle")} align="end">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="relative text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+            aria-label={t("common.delete")}
+            onClick={() => setDeleting(row.original)}
+          >
+            <Trash2Icon />
+          </Button>
+        </Hint>
       ),
     },
   ]

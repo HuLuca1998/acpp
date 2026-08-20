@@ -19,7 +19,7 @@
 | `src/types/` | 领域类型，`acp.ts` 与 `server/internal/model` 字段对齐 | 组件 props 类型不放这里，跟组件走 |
 | `src/i18n/` | 语言配置与资源 | — |
 
-依赖方向：`routes → components → ui`；`hooks / lib / types` 被上层引用，不反向 import 组件。路径别名统一 `@/`。`components/` 根只留真正跨域的小组件（status-dot / diff-view / dir-picker / agent-icon / list-page-states），新组件优先归入功能域子目录。
+依赖方向：`routes → components → ui`；`hooks / lib / types` 被上层引用，不反向 import 组件。路径别名统一 `@/`。`components/` 根只留真正跨域的小组件（status-dot / diff-view / dir-picker / agent-icon / list-page-states / hint），新组件优先归入功能域子目录。
 
 ## 2. 命名
 
@@ -78,6 +78,7 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 - **专用组件优先于裸标签**：空态用 `Empty`，加载用 `Skeleton`（形状贴近真实内容），提示条用 `Alert`，危险确认用 `AlertDialog`（**禁用原生 `window.confirm`**），toast 用 `sonner`，分隔用 `Separator`，标签用 `Badge`。表单用 `FieldGroup`/`Field`，按钮内图标用 `data-icon="inline-start|end"`。
 - **聊天界面**只用 chat 原语：`MessageScroller`（滚动/跟随/回到底部）、`Message`、`Bubble`、`Marker`，不手写滚动容器与气泡 div。消息种类的专用渲染集中在 `components/chat/`：markdown 正文（代码块带语言标签 + 复制）、工具调用（按 ACP kind 换图标，diff/终端视图）、任务计划 `PlanCard`、思考折叠 `ThoughtBlock`、复制按钮。新消息种类先在这里建组件，不在页面里内联。
 - **图标**：只用 `lucide-react`，默认 `size-4`，与文字并排对齐基线；纯图标按钮必须有 `aria-label`。
+- **看不出用途的控件一律配 `Hint`**（`components/hint.tsx`，包住控件即可）：纯图标按钮、只显示当前值的胶囊（模型/思考深度/权限档）、状态点、没有可见 label 的开关。`aria-label` 只有读屏软件听得见，**原生 `title` 不算数**——延迟一两秒、样式不归我们管，桌面壳里更不可靠，见到就换成 `Hint`。写法：`label` 是名字，`desc` 是「按下去会发生什么」（名字已不言自明就别写），有快捷键的传 `shortcut={<Kbd>⌘B</Kbd>}`。气泡是纯说明，不可交互也不吃指针事件，所以盖住谁都不影响点击。
 - **类名合并**一律 `cn()`；布局用 `flex gap-*`，不用 `space-x/y-*`；等宽高用 `size-*`。
 
 ### 5.3 状态语言

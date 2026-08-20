@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next"
 import type { SlashCommand } from "@/types/acp"
 import { imagesFromClipboard } from "@/lib/files"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowUpIcon, SlashIcon, SquareIcon } from "lucide-react"
 
@@ -201,29 +203,43 @@ export function Composer({
           <div className="flex flex-wrap items-center gap-0.5 px-2 pb-2">
             {children}
             {busy && onCancel ? (
-              <Button
-                size="icon-sm"
-                variant="outline"
-                className="ml-auto rounded-full"
-                aria-label={t("chat.stop")}
-                onClick={onCancel}
+              <Hint
+                label={t("chat.stop")}
+                desc={t("chat.stopDesc")}
+                shortcut={<Kbd>Esc</Kbd>}
+                align="end"
               >
-                <SquareIcon className="size-3.5" />
-              </Button>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  className="ml-auto rounded-full"
+                  aria-label={t("chat.stop")}
+                  onClick={onCancel}
+                >
+                  <SquareIcon className="size-3.5" />
+                </Button>
+              </Hint>
             ) : (
-              <Button
-                size="icon-sm"
-                className="ml-auto rounded-full"
-                aria-label={t("chat.send")}
-                disabled={!canSend}
-                onClick={onSubmit}
+              <Hint
+                label={t("chat.send")}
+                desc={t("chat.sendDesc")}
+                shortcut={<Kbd>↵</Kbd>}
+                align="end"
               >
-                {pending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <ArrowUpIcon className="size-4" />
-                )}
-              </Button>
+                <Button
+                  size="icon-sm"
+                  className="ml-auto rounded-full"
+                  aria-label={t("chat.send")}
+                  disabled={!canSend}
+                  onClick={onSubmit}
+                >
+                  {pending ? (
+                    <Spinner className="size-4" />
+                  ) : (
+                    <ArrowUpIcon className="size-4" />
+                  )}
+                </Button>
+              </Hint>
             )}
           </div>
         </div>

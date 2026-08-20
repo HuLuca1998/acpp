@@ -7,6 +7,7 @@ import { formatBytes, formatRelativeTime } from "@/lib/format"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { UploadedFile } from "@/types/acp"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -176,19 +177,21 @@ export function UploadDialog({
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={t("common.delete")}
-                        className="text-muted-foreground transition-colors hover:text-destructive"
-                        onClick={(e) => {
-                          // 行本身是「引用它」，删除不该顺带把文件也引用上。
-                          e.stopPropagation()
-                          void remove(file)
-                        }}
-                      >
-                        <Trash2Icon />
-                      </Button>
+                      <Hint label={t("upload.remove")} align="end">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={t("common.delete")}
+                          className="text-muted-foreground transition-colors hover:text-destructive"
+                          onClick={(e) => {
+                            // 行本身是「引用它」，删除不该顺带把文件也引用上。
+                            e.stopPropagation()
+                            void remove(file)
+                          }}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      </Hint>
                     </ItemActions>
                   </Item>
                 ))}

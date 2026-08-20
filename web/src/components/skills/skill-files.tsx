@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -109,15 +110,17 @@ export function SkillFiles({
               >
                 {formatRelativeTime(file.updatedAt, i18n.language)}
               </span>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                className="text-muted-foreground transition-colors hover:text-destructive"
-                aria-label={t("common.delete")}
-                onClick={() => setDeleting(file.path)}
-              >
-                <Trash2Icon />
-              </Button>
+              <Hint label={t("skills.detail.fileDeleteTitle")} align="end">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className="text-muted-foreground transition-colors hover:text-destructive"
+                  aria-label={t("common.delete")}
+                  onClick={() => setDeleting(file.path)}
+                >
+                  <Trash2Icon />
+                </Button>
+              </Hint>
             </li>
           ))}
         </ul>

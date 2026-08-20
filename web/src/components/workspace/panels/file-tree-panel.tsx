@@ -1,4 +1,11 @@
-import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import {
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 import {
   ChevronRightIcon,
@@ -22,6 +29,7 @@ import {
   useGitOverview,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
+import { Hint } from "@/components/hint"
 import { StatusDot } from "@/components/status-dot"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -152,14 +160,20 @@ export const FileTreePanel = memo(function FileTreePanel() {
   return (
     <div className="flex h-full flex-col [contain:strict]">
       <div className="flex h-8 shrink-0 items-center justify-end px-2">
-        <button
-          type="button"
-          aria-label={t("workspace.tree.refresh")}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-          onClick={load}
+        <Hint
+          label={t("workspace.tree.refresh")}
+          desc={t("workspace.tree.refreshDesc")}
+          align="end"
         >
-          <RotateCwIcon className="size-3.5" />
-        </button>
+          <button
+            type="button"
+            aria-label={t("workspace.tree.refresh")}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+            onClick={load}
+          >
+            <RotateCwIcon className="size-3.5" />
+          </button>
+        </Hint>
       </div>
       <ScrollArea className="min-h-0 flex-1 px-1 pb-2">
         {entries.length === 0 ? (

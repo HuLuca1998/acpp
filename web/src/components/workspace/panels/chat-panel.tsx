@@ -16,10 +16,9 @@ import { WorktreeToggle } from "@/components/chat/composer/worktree-toggle"
 import { DraftControls } from "@/components/chat/composer/draft-controls"
 import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
+import { Hint } from "@/components/hint"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-  useChatPanel,
-} from "@/components/workspace/chat-panel-context"
+import { useChatPanel } from "@/components/workspace/chat-panel-context"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { sumSessionUsage } from "@/lib/chat/usage"
@@ -105,18 +104,27 @@ export const ChatPanel = memo(function ChatPanel() {
       <div className="mx-auto w-full max-w-3xl px-4 pt-3 lg:px-6">
         {!isNew ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span
-              aria-label={
+            <Hint
+              label={
                 chat.connected ? t("chat.connected") : t("chat.disconnected")
               }
-              className={cn(
-                "size-2 shrink-0 rounded-full",
-                chat.connected ? "bg-success" : "bg-destructive",
-                chat.connected &&
-                  chat.busy &&
-                  "animate-breathe motion-reduce:animate-none"
-              )}
-            />
+              desc={t("chat.connectedDesc")}
+              align="start"
+            >
+              <span
+                aria-label={
+                  chat.connected ? t("chat.connected") : t("chat.disconnected")
+                }
+                className={cn(
+                  // 8px 的点太小，指针够不着；用伪元素把悬停命中区撑到 20px。
+                  "relative size-2 shrink-0 rounded-full before:absolute before:-inset-1.5 before:content-['']",
+                  chat.connected ? "bg-success" : "bg-destructive",
+                  chat.connected &&
+                    chat.busy &&
+                    "animate-breathe motion-reduce:animate-none"
+                )}
+              />
+            </Hint>
             {chat.session ? (
               <>
                 <span className="shrink-0 font-medium text-foreground">
@@ -272,6 +280,7 @@ export const ChatPanel = memo(function ChatPanel() {
         {promptImageAllowed ? (
           <AttachmentButton
             label={t("chat.attachments.image")}
+            desc={t("chat.attachments.imageDesc")}
             onClick={openImagePicker}
           >
             <ImageIcon className="size-3.5" />

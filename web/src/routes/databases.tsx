@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { toast } from "sonner"
 
+import { Hint } from "@/components/hint"
 import { ListPageStates } from "@/components/list-page-states"
 import { DataSourceDialog } from "@/components/db/datasource-dialog"
 import { DataSourceExplorer } from "@/components/db/datasource-explorer"
@@ -169,14 +170,16 @@ export function Databases() {
             </CardTitle>
             <CardDescription>{addressOf(opened)}</CardDescription>
             <CardAction>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("common.cancel")}
-                onClick={() => setOpened(null)}
-              >
-                <XIcon />
-              </Button>
+              <Hint label={t("common.close")} align="end">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("common.close")}
+                  onClick={() => setOpened(null)}
+                >
+                  <XIcon />
+                </Button>
+              </Hint>
             </CardAction>
           </CardHeader>
           <CardContent>
@@ -308,29 +311,33 @@ function sourceColumns(
       meta: { className: "w-20 py-0" },
       cell: ({ row }) => (
         <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t("db.editTitle")}
-            onClick={(e) => {
-              // 行本身是展开/收起，编辑与删除不该顺带把它也切一下。
-              e.stopPropagation()
-              onEdit(row.original)
-            }}
-          >
-            <PencilIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t("common.delete")}
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete(row.original)
-            }}
-          >
-            <Trash2Icon />
-          </Button>
+          <Hint label={t("db.editTitle")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("db.editTitle")}
+              onClick={(e) => {
+                // 行本身是展开/收起，编辑与删除不该顺带把它也切一下。
+                e.stopPropagation()
+                onEdit(row.original)
+              }}
+            >
+              <PencilIcon />
+            </Button>
+          </Hint>
+          <Hint label={t("db.deleteTitle")} align="end">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("common.delete")}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(row.original)
+              }}
+            >
+              <Trash2Icon />
+            </Button>
+          </Hint>
         </div>
       ),
     },

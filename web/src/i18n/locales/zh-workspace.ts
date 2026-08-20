@@ -34,6 +34,7 @@ export const zhWorkspace = {
   closePanel: "关闭面板",
   menu: {
     label: "窗口管理",
+    labelDesc: "开关面板、切换布局、新建终端",
     windows: "工作区窗口",
     myLayouts: "我的布局",
     saveLayout: "保存当前布局…",
@@ -58,6 +59,7 @@ export const zhWorkspace = {
   tree: {
     refresh: "刷新",
     touched: "agent 正在触碰",
+    refreshDesc: "重新读一遍工作目录",
     empty: "目录为空",
     truncated: "条目过多，其余已省略",
     draftTitle: "工作区尚未就绪",
@@ -71,11 +73,14 @@ export const zhWorkspace = {
     source: "看源码",
     followOn: "跟随 agent 正在触碰的文件",
     followOff: "停止跟随",
+    followDesc: "AI 每碰一个文件，这里就自动切过去",
+    sourceDesc: "在渲染结果与 markdown 源码之间来回切",
     binary: "二进制文件，无法预览。",
     truncated: "内容过长，已截断显示。",
   },
   refMenu: {
     addReference: "添加到对话引用",
+    addReferenceDesc: "把这个文件挂到输入框的引用里",
     openPreview: "预览",
     downloadZip: "打包下载（zip）",
     download: "下载文件",
@@ -159,6 +164,7 @@ export const zhWorkspace = {
     clean: "工作区干净，没有未提交变更。",
     refresh: "刷新",
     noUpstream: "未设置上游分支，显示最近提交。",
+    refreshDesc: "重新读一遍 git 状态",
     allPushed: "已全部推送。",
     loadFailed: "git 状态加载失败",
     binary: "二进制文件，无法展示 diff。",

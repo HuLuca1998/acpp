@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Hint } from "@/components/hint"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ChevronLeftIcon, PuzzleIcon } from "lucide-react"
@@ -172,11 +173,13 @@ export function SkillDetail() {
             <h1 className="font-mono text-base font-medium">{name}</h1>
           )}
           {!isDraft && skill && (
-            <Switch
-              checked={skill.enabled}
-              onCheckedChange={toggle}
-              aria-label={t("skills.enabled")}
-            />
+            <Hint label={t("skills.enabled")} desc={t("skills.enabledDesc")}>
+              <Switch
+                checked={skill.enabled}
+                onCheckedChange={toggle}
+                aria-label={t("skills.enabled")}
+              />
+            </Hint>
           )}
           <div className="ml-auto flex items-center gap-3">
             {isDraft

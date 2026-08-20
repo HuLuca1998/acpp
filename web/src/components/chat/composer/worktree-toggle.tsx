@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SplitIcon, XIcon } from "lucide-react"
@@ -23,14 +24,19 @@ export function WorktreeToggle({
 
   if (!value) {
     return (
-      <button
-        type="button"
-        className="flex shrink-0 items-center gap-1 rounded-md text-xs text-muted-foreground/80 transition-colors duration-150 hover:text-foreground"
-        onClick={() => onChange(defaultWorktreeName())}
+      <Hint
+        label={t("chat.branch.useWorktree")}
+        desc={t("chat.branch.useWorktreeDesc")}
       >
-        <SplitIcon className="size-3" />
-        <span>{t("chat.branch.useWorktree")}</span>
-      </button>
+        <button
+          type="button"
+          className="flex shrink-0 items-center gap-1 rounded-md text-xs text-muted-foreground/80 transition-colors duration-150 hover:text-foreground"
+          onClick={() => onChange(defaultWorktreeName())}
+        >
+          <SplitIcon className="size-3" />
+          <span>{t("chat.branch.useWorktree")}</span>
+        </button>
+      </Hint>
     )
   }
 
@@ -43,15 +49,17 @@ export function WorktreeToggle({
         className="h-6 w-36 font-mono text-xs"
         onChange={(e) => onChange(e.target.value)}
       />
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        className="size-6"
-        aria-label={t("chat.branch.dropWorktree")}
-        onClick={() => onChange("")}
-      >
-        <XIcon />
-      </Button>
+      <Hint label={t("chat.branch.dropWorktree")}>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="size-6"
+          aria-label={t("chat.branch.dropWorktree")}
+          onClick={() => onChange("")}
+        >
+          <XIcon />
+        </Button>
+      </Hint>
     </span>
   )
 }

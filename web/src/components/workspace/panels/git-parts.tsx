@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { GitBranchIcon, RotateCwIcon } from "lucide-react"
 
+import { Hint } from "@/components/hint"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 /** git 面板群共用的头部：主标题（多为当前分支）、右侧提示、刷新。 */
@@ -28,14 +29,20 @@ export function GitPanelHeader({
       ) : null}
       <span className="flex-1" />
       {loading ? <Spinner className="size-3" /> : null}
-      <button
-        type="button"
-        aria-label={t("workspace.git.refresh")}
-        className="flex size-6 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-        onClick={onRefresh}
+      <Hint
+        label={t("workspace.git.refresh")}
+        desc={t("workspace.git.refreshDesc")}
+        align="end"
       >
-        <RotateCwIcon className="size-3.5" />
-      </button>
+        <button
+          type="button"
+          aria-label={t("workspace.git.refresh")}
+          className="flex size-6 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+          onClick={onRefresh}
+        >
+          <RotateCwIcon className="size-3.5" />
+        </button>
+      </Hint>
     </div>
   )
 }

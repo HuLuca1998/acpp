@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
+import { Hint } from "@/components/hint"
 import { CloneDialog } from "@/components/projects/clone-dialog"
 import { DirColumnsView } from "@/components/dir-picker/columns"
 import { DirListView } from "@/components/dir-picker/list"
@@ -110,8 +111,8 @@ export function DirPicker({
   const [showHidden, setShowHidden] = useState(false)
   const [sortKey, setSortKey] = useState<DirSortKey>("name")
   const [sortAsc, setSortAsc] = useState(true)
-  const [view, setView] = useState<"list" | "columns">(
-    () => (localStorage.getItem(VIEW_KEY) === "columns" ? "columns" : "list")
+  const [view, setView] = useState<"list" | "columns">(() =>
+    localStorage.getItem(VIEW_KEY) === "columns" ? "columns" : "list"
   )
   const [places, setPlaces] = useState<FsPlace[]>([])
   const [pins, setPins] = useState<PinnedDir[]>(() => readPins())
@@ -129,7 +130,10 @@ export function DirPicker({
 
   /** 导航：replace 整个层级重来（面包屑/位置/↑），或在第 at 列之后下钻。 */
   const navigate = useCallback(
-    async (path: string | undefined, opts?: { at?: number; hidden?: boolean }) => {
+    async (
+      path: string | undefined,
+      opts?: { at?: number; hidden?: boolean }
+    ) => {
       setLoading(true)
       setError(null)
       // 导航时收起新建输入行，避免残留在与之无关的目录上
@@ -139,7 +143,9 @@ export function DirPicker({
       try {
         const next = await fetchListing(path, opts?.hidden)
         setColumns((prev) =>
-          opts?.at !== undefined ? [...prev.slice(0, opts.at + 1), next] : [next]
+          opts?.at !== undefined
+            ? [...prev.slice(0, opts.at + 1), next]
+            : [next]
         )
         const clones = await api.projects
           .clones()
@@ -262,18 +268,20 @@ export function DirPicker({
         {/* min-w-0：Dialog 是 grid，子项默认 min-width:auto，长面包屑/多列
             会把对话框撑破而不是触发自己的横向滚动。 */}
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label={t("dirPicker.up")}
-            disabled={loading || !listing?.parent}
-            onClick={goUp}
-          >
-            <ArrowUpIcon className="size-3.5" />
-          </Button>
+          <Hint label={t("dirPicker.up")} align="start">
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label={t("dirPicker.up")}
+              disabled={loading || !listing?.parent}
+              onClick={goUp}
+            >
+              <ArrowUpIcon className="size-3.5" />
+            </Button>
+          </Hint>
           {/* 访达式路径栏：每一段都可点，长路径横向滚动不换行。 */}
           <div
-            className="min-w-0 flex-1 overflow-x-auto font-mono whitespace-nowrap [scrollbar-width:none]"
+            className="min-w-0 flex-1 [scrollbar-width:none] overflow-x-auto font-mono whitespace-nowrap"
             title={listing?.path}
           >
             {crumbsOf(listing?.path ?? "", identity?.root).map((crumb, i) => (
@@ -293,82 +301,95 @@ export function DirPicker({
             ))}
           </div>
           <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
-            <Button
-              size="icon-sm"
-              variant={view === "list" ? "secondary" : "ghost"}
-              aria-label={t("dirPicker.viewList")}
-              title={t("dirPicker.viewList")}
-              onClick={() => switchView("list")}
-            >
-              <LayoutListIcon className="size-3.5" />
-            </Button>
-            <Button
-              size="icon-sm"
-              variant={view === "columns" ? "secondary" : "ghost"}
-              aria-label={t("dirPicker.viewColumns")}
-              title={t("dirPicker.viewColumns")}
-              onClick={() => switchView("columns")}
-            >
-              <Columns2Icon className="size-3.5" />
-            </Button>
+            <Hint label={t("dirPicker.viewList")}>
+              <Button
+                size="icon-sm"
+                variant={view === "list" ? "secondary" : "ghost"}
+                aria-label={t("dirPicker.viewList")}
+                onClick={() => switchView("list")}
+              >
+                <LayoutListIcon className="size-3.5" />
+              </Button>
+            </Hint>
+            <Hint label={t("dirPicker.viewColumns")}>
+              <Button
+                size="icon-sm"
+                variant={view === "columns" ? "secondary" : "ghost"}
+                aria-label={t("dirPicker.viewColumns")}
+                onClick={() => switchView("columns")}
+              >
+                <Columns2Icon className="size-3.5" />
+              </Button>
+            </Hint>
           </div>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label={pinned ? t("dirPicker.unpin") : t("dirPicker.pin")}
-            title={pinned ? t("dirPicker.unpin") : t("dirPicker.pin")}
-            disabled={loading || !listing}
-            onClick={togglePin}
+          <Hint
+            label={pinned ? t("dirPicker.unpin") : t("dirPicker.pin")}
+            desc={t("dirPicker.pinDesc")}
           >
-            {pinned ? (
-              <PinOffIcon className="size-3.5" />
-            ) : (
-              <PinIcon className="size-3.5" />
-            )}
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            aria-label={t("dirPicker.showHidden")}
-            title={t("dirPicker.showHidden")}
-            disabled={loading}
-            onClick={() => {
-              const next = !showHidden
-              setShowHidden(next)
-              void navigate(listing?.path, { hidden: next })
-            }}
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label={pinned ? t("dirPicker.unpin") : t("dirPicker.pin")}
+              disabled={loading || !listing}
+              onClick={togglePin}
+            >
+              {pinned ? (
+                <PinOffIcon className="size-3.5" />
+              ) : (
+                <PinIcon className="size-3.5" />
+              )}
+            </Button>
+          </Hint>
+          <Hint
+            label={t("dirPicker.showHidden")}
+            desc={t("dirPicker.showHiddenDesc")}
           >
-            {showHidden ? (
-              <EyeIcon className="size-3.5" />
-            ) : (
-              <EyeOffIcon className="size-3.5" />
-            )}
-          </Button>
+            <Button
+              size="icon-sm"
+              variant="outline"
+              aria-label={t("dirPicker.showHidden")}
+              disabled={loading}
+              onClick={() => {
+                const next = !showHidden
+                setShowHidden(next)
+                void navigate(listing?.path, { hidden: next })
+              }}
+            >
+              {showHidden ? (
+                <EyeIcon className="size-3.5" />
+              ) : (
+                <EyeOffIcon className="size-3.5" />
+              )}
+            </Button>
+          </Hint>
           {mode === "dir" ? (
             <>
               {/* 选工作目录时最常见的下一步其实是「先把仓库弄下来」——
                   克隆入口放在这里，不用先去别处建好项目再回来选。 */}
-              <Button
-                size="icon-sm"
-                variant="outline"
-                aria-label={t("projects.clone")}
-                title={t("projects.clone")}
-                onClick={() => setCloneOpen(true)}
-              >
-                <DownloadCloudIcon className="size-3.5" />
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="outline"
-                aria-label={t("dirPicker.newFolder")}
-                disabled={loading || !listing}
-                onClick={() => {
-                  setCreating(true)
-                  setCreateError(null)
-                }}
-              >
-                <FolderPlusIcon className="size-3.5" />
-              </Button>
+              <Hint label={t("projects.clone")} desc={t("dirPicker.cloneDesc")}>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={t("projects.clone")}
+                  onClick={() => setCloneOpen(true)}
+                >
+                  <DownloadCloudIcon className="size-3.5" />
+                </Button>
+              </Hint>
+              <Hint label={t("dirPicker.newFolder")} align="end">
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={t("dirPicker.newFolder")}
+                  disabled={loading || !listing}
+                  onClick={() => {
+                    setCreating(true)
+                    setCreateError(null)
+                  }}
+                >
+                  <FolderPlusIcon className="size-3.5" />
+                </Button>
+              </Hint>
             </>
           ) : null}
         </div>

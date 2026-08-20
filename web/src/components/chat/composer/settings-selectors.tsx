@@ -7,6 +7,7 @@ import type {
   SettingsPatch,
 } from "@/types/acp"
 import { cn } from "@/lib/utils"
+import { Hint } from "@/components/hint"
 import {
   Select,
   SelectContent,
@@ -44,6 +45,8 @@ export function SettingsSelectors({
       {settings.models.length > 0 ? (
         <CapSelect
           icon={<SparklesIcon className="size-3.5" />}
+          label={t("chat.settings.model")}
+          desc={t("chat.settings.hints.model")}
           value={settings.currentModel ?? ""}
           placeholder={t("chat.settings.model")}
           // 只显示模型名：带描述的双行条目会把长清单撑到遮挡。
@@ -59,6 +62,8 @@ export function SettingsSelectors({
       {settings.efforts.length > 0 ? (
         <CapSelect
           icon={<BrainIcon className="size-3.5" />}
+          label={t("chat.settings.effortLabel")}
+          desc={t("chat.settings.hints.effort")}
           value={settings.currentEffort ?? ""}
           placeholder={t("chat.settings.effortLabel")}
           options={settings.efforts.map((e) => ({
@@ -73,6 +78,8 @@ export function SettingsSelectors({
       {settings.levels.length > 0 ? (
         <CapSelect
           icon={<ShieldIcon className="size-3.5" />}
+          label={t("chat.settings.levelLabel")}
+          desc={t("chat.settings.hints.level")}
           value={settings.currentLevel ?? ""}
           placeholder={t("chat.settings.levelLabel")}
           options={settings.levels.map((l) => ({
@@ -89,6 +96,7 @@ export function SettingsSelectors({
         <SettingToggle
           icon={<ListTodoIcon className="size-3.5" />}
           label={t("chat.settings.plan")}
+          desc={t("chat.settings.hints.plan")}
           on={settings.planOn}
           disabled={disabled}
           onToggle={(on) => void onApply({ plan: on })}
@@ -99,6 +107,7 @@ export function SettingsSelectors({
         <SettingToggle
           icon={<ZapIcon className="size-3.5" />}
           label={t("chat.settings.fast")}
+          desc={t("chat.settings.hints.fast")}
           on={settings.fastOn}
           disabled={disabled}
           onToggle={(on) => void onApply({ fast: on })}
@@ -112,37 +121,44 @@ export function SettingsSelectors({
 function SettingToggle({
   icon,
   label,
+  desc,
   on,
   disabled,
   onToggle,
 }: {
   icon: React.ReactNode
   label: string
+  /** 悬停说明：开关名本身说不清它到底改了什么。 */
+  desc: string
   on: boolean
   disabled: boolean
   onToggle: (on: boolean) => void
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      disabled={disabled}
-      onClick={() => onToggle(!on)}
-      className={cn(
-        "flex h-7 items-center gap-1 rounded-full px-2.5 text-xs transition-[scale,background-color,color] duration-150 ease-snappy active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50",
-        on
-          ? "bg-primary/15 text-primary"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-      )}
-    >
-      {icon}
-      {label}
-    </button>
+    <Hint label={label} desc={desc}>
+      <button
+        type="button"
+        aria-pressed={on}
+        disabled={disabled}
+        onClick={() => onToggle(!on)}
+        className={cn(
+          "flex h-7 items-center gap-1 rounded-full px-2.5 text-xs transition-[scale,background-color,color] duration-150 ease-snappy active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50",
+          on
+            ? "bg-primary/15 text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
+      >
+        {icon}
+        {label}
+      </button>
+    </Hint>
   )
 }
 
 function CapSelect({
   icon,
+  label,
+  desc,
   value,
   placeholder,
   options,
@@ -150,6 +166,10 @@ function CapSelect({
   onChange,
 }: {
   icon?: React.ReactNode
+  /** 维度名（模型 / 思考深度 / 权限档）：胶囊上只显示当前值，
+   *  不说它是哪个维度的——那句话由悬停说明补。 */
+  label: string
+  desc: string
   value: string
   /** 当前值不在选项里（如 runtime 默认态）时显示的占位文案。 */
   placeholder?: string
@@ -166,14 +186,17 @@ function CapSelect({
         if (typeof v === "string" && v && v !== value) onChange(v)
       }}
     >
-      <SelectTrigger
-        size="sm"
-        disabled={disabled}
-        className="h-7 gap-1 rounded-full border-transparent bg-transparent px-2.5 text-xs text-muted-foreground shadow-none transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97] dark:bg-transparent dark:hover:bg-muted"
-      >
-        {icon}
-        <SelectValue>{current?.name ?? (value || placeholder)}</SelectValue>
-      </SelectTrigger>
+      <Hint label={label} desc={desc}>
+        <SelectTrigger
+          size="sm"
+          aria-label={label}
+          disabled={disabled}
+          className="h-7 gap-1 rounded-full border-transparent bg-transparent px-2.5 text-xs text-muted-foreground shadow-none transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97] dark:bg-transparent dark:hover:bg-muted"
+        >
+          {icon}
+          <SelectValue>{current?.name ?? (value || placeholder)}</SelectValue>
+        </SelectTrigger>
+      </Hint>
       {/* 输入框贴底，向上弹出才不被视口截断；关掉选中项对齐的覆盖式定位，
           并放宽默认的可用高度限制，短清单一屏放完不内滚。 */}
       <SelectContent

@@ -17,7 +17,10 @@ applyPalette(loadPalette())
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
-      <TooltipProvider>
+      {/* 图标按钮的说明气泡（components/hint.tsx）走这一个 provider：
+          稍等一下再弹，免得划过工具条就一路炸开；相邻按钮之间（400ms 内）
+          则是瞬开，扫一排图标不用每个都等。 */}
+      <TooltipProvider delay={350} closeDelay={100}>
         {/* 身份要在路由之上：邀请链接是 `/?invite=<token>`，兑换发生在
             任何页面渲染之前（adr-007）。 */}
         <IdentityProvider>

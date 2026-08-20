@@ -10,6 +10,7 @@ import {
   Trash2Icon,
 } from "lucide-react"
 
+import { Hint } from "@/components/hint"
 import { LAYOUT_PRESETS } from "@/components/workspace/layout-presets"
 import {
   deleteLayout,
@@ -114,12 +115,18 @@ export function WorkspaceMenu({
           )
         }}
       >
-        <DropdownMenuTrigger
-          aria-label={t("workspace.menu.label")}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+        <Hint
+          label={t("workspace.menu.label")}
+          desc={t("workspace.menu.labelDesc")}
+          align="end"
         >
-          <MoreHorizontalIcon className="size-4" />
-        </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            aria-label={t("workspace.menu.label")}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+          >
+            <MoreHorizontalIcon className="size-4" />
+          </DropdownMenuTrigger>
+        </Hint>
         <DropdownMenuContent align="end" className="w-52">
           {/* Base UI 的 GroupLabel 必须住在 Group 里，直接平铺会抛错。 */}
           <DropdownMenuGroup>

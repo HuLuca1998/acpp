@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 
+import { Hint } from "@/components/hint"
 import type { ImageAttachment } from "@/types/acp"
 import {
   Attachment,
@@ -54,13 +55,15 @@ export function AttachmentTray({
             <img src={`data:${img.mimeType};base64,${img.data}`} alt="" />
           </AttachmentMedia>
           <AttachmentActions className="top-1 right-1">
-            <AttachmentAction
-              aria-label={t("chat.attachments.remove")}
-              className="size-4 rounded-full bg-foreground text-background opacity-0 group-hover/attachment:opacity-100 hover:bg-foreground hover:text-background focus-visible:opacity-100"
-              onClick={() => onRemoveImage(index)}
-            >
-              <XIcon className="size-3" />
-            </AttachmentAction>
+            <Hint label={t("chat.attachments.remove")}>
+              <AttachmentAction
+                aria-label={t("chat.attachments.remove")}
+                className="size-4 rounded-full bg-foreground text-background opacity-0 group-hover/attachment:opacity-100 hover:bg-foreground hover:text-background focus-visible:opacity-100"
+                onClick={() => onRemoveImage(index)}
+              >
+                <XIcon className="size-3" />
+              </AttachmentAction>
+            </Hint>
           </AttachmentActions>
         </Attachment>
       ))}
@@ -111,12 +114,14 @@ function RefChip({
         </AttachmentTitle>
       </AttachmentContent>
       <AttachmentActions className="pr-1">
-        <AttachmentAction
-          aria-label={t("chat.attachments.remove")}
-          onClick={onRemove}
-        >
-          <XIcon />
-        </AttachmentAction>
+        <Hint label={t("chat.attachments.remove")}>
+          <AttachmentAction
+            aria-label={t("chat.attachments.remove")}
+            onClick={onRemove}
+          >
+            <XIcon />
+          </AttachmentAction>
+        </Hint>
       </AttachmentActions>
     </Attachment>
   )

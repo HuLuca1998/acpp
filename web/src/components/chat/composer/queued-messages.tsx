@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import type { QueuedMessage } from "@/hooks/use-chat"
+import { Hint } from "@/components/hint"
 import {
   AtSignIcon,
   CornerDownRightIcon,
@@ -47,21 +48,33 @@ export function QueuedMessages({
               {q.input.files.length}
             </span>
           ) : null}
-          <button
-            type="button"
-            className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-[color,background-color,scale] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-            onClick={() => onSteer(q.id)}
+          <Hint
+            label={t("chat.queue.steer")}
+            desc={t("chat.queue.steerDesc")}
+            align="end"
           >
-            {t("chat.queue.steer")}
-          </button>
-          <button
-            type="button"
-            aria-label={t("chat.queue.recall")}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color,scale] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-            onClick={() => onRecall(q.id)}
+            <button
+              type="button"
+              className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-[color,background-color,scale] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+              onClick={() => onSteer(q.id)}
+            >
+              {t("chat.queue.steer")}
+            </button>
+          </Hint>
+          <Hint
+            label={t("chat.queue.recall")}
+            desc={t("chat.queue.recallDesc")}
+            align="end"
           >
-            <Undo2Icon className="size-3.5" />
-          </button>
+            <button
+              type="button"
+              aria-label={t("chat.queue.recall")}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color,scale] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+              onClick={() => onRecall(q.id)}
+            >
+              <Undo2Icon className="size-3.5" />
+            </button>
+          </Hint>
         </div>
       ))}
     </div>

@@ -36,6 +36,7 @@ export const enWorkspace = {
   closePanel: "Close panel",
   menu: {
     label: "Manage windows",
+    labelDesc: "Toggle panels, switch layouts, open a terminal",
     windows: "Workspace windows",
     myLayouts: "My layouts",
     saveLayout: "Save current layout...",
@@ -61,6 +62,7 @@ export const enWorkspace = {
   tree: {
     refresh: "Refresh",
     touched: "Agent is touching this",
+    refreshDesc: "Read the working directory again",
     empty: "Empty directory",
     truncated: "Too many entries, the rest are omitted",
     draftTitle: "Workspace not ready",
@@ -75,11 +77,14 @@ export const enWorkspace = {
     source: "Show source",
     followOn: "Follow files the agent touches",
     followOff: "Stop following",
+    followDesc: "Jumps to whichever file the agent touches next",
+    sourceDesc: "Toggle between rendered output and markdown source",
     binary: "Binary file, cannot preview.",
     truncated: "Content too long, display truncated.",
   },
   refMenu: {
     addReference: "Add to chat references",
+    addReferenceDesc: "Attach this file to the composer references",
     openPreview: "Preview",
     downloadZip: "Download as zip",
     download: "Download file",
@@ -167,6 +172,7 @@ export const enWorkspace = {
     clean: "Working tree clean, nothing uncommitted.",
     refresh: "Refresh",
     noUpstream: "No upstream branch, showing recent commits.",
+    refreshDesc: "Read git status again",
     allPushed: "Everything pushed.",
     loadFailed: "Failed to load git status",
     binary: "Binary file, no diff to show.",

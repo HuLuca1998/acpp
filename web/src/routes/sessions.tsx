@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 import type { ColumnDef } from "@tanstack/react-table"
 
+import { Hint } from "@/components/hint"
 import { ListPageStates } from "@/components/list-page-states"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
@@ -261,18 +262,24 @@ function DeleteSessionButton({ onConfirm }: { onConfirm: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("common.delete")}
-            className="relative text-muted-foreground transition-colors hover:text-destructive"
-          />
-        }
+      <Hint
+        label={t("sessions.deleteTitle")}
+        desc={t("sessions.deleteHint")}
+        align="end"
       >
-        <Trash2Icon />
-      </AlertDialogTrigger>
+        <AlertDialogTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("common.delete")}
+              className="relative text-muted-foreground transition-colors hover:text-destructive"
+            >
+              <Trash2Icon />
+            </Button>
+          }
+        />
+      </Hint>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("sessions.deleteTitle")}</AlertDialogTitle>

@@ -7,6 +7,7 @@ import { api } from "@/lib/api"
 import { parseDbUri } from "@/lib/db-uri"
 import { useAsyncData } from "@/hooks/use-async-data"
 import type { DataSourceInput } from "@/types/acp"
+import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -165,6 +166,7 @@ function UriRow({
   value: string
   onCopy: (value: string) => void
 }) {
+  const { t } = useTranslation()
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
@@ -172,15 +174,17 @@ function UriRow({
         <code className="min-w-0 flex-1 rounded-lg border border-border bg-muted/40 px-2.5 py-2 font-mono text-xs leading-5 break-all">
           {value}
         </code>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label={label}
-          onClick={() => onCopy(value)}
-        >
-          <CopyIcon />
-        </Button>
+        <Hint label={t("common.copy")} desc={label} align="end">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={label}
+            onClick={() => onCopy(value)}
+          >
+            <CopyIcon />
+          </Button>
+        </Hint>
       </div>
     </Field>
   )

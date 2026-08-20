@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
 import type { FsPlace } from "@/types/acp"
+import { Hint } from "@/components/hint"
 import { cn } from "@/lib/utils"
 import {
   DownloadIcon,
@@ -76,15 +77,16 @@ function PlaceRow({
       </button>
       {onRemove ? (
         // 常显的低调移除钮（不玩 hover 才现身那套，桌面壳里 hover 不可靠）。
-        <button
-          type="button"
-          aria-label={removeLabel}
-          title={removeLabel}
-          className="absolute right-1 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
-          onClick={onRemove}
-        >
-          <XIcon className="size-3" />
-        </button>
+        <Hint label={removeLabel ?? ""} align="end">
+          <button
+            type="button"
+            aria-label={removeLabel}
+            className="absolute right-1 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
+            onClick={onRemove}
+          >
+            <XIcon className="size-3" />
+          </button>
+        </Hint>
       ) : null}
     </div>
   )

@@ -8,6 +8,9 @@ export default {
     save: "Save",
     cancel: "Cancel",
     delete: "Delete",
+    close: "Close",
+    copy: "Copy",
+    browse: "Browse…",
     retry: "Retry",
     unnamed: "Untitled",
     none: "—",
@@ -35,6 +38,7 @@ export default {
     search: "Search",
     newSession: "New Session",
     newSessionIn: "New session in this directory",
+    toggleSidebar: "Collapse / expand sidebar",
     recentSessions: "Recent Sessions",
     viewAll: "View all",
     resume: "Resume",
@@ -131,6 +135,7 @@ export default {
     done: "Referenced {{count}} file(s)",
     history: "Past uploads",
     empty: "Nothing uploaded yet.",
+    remove: "Delete this uploaded file",
   },
   db: enDb,
   skills: {
@@ -145,6 +150,8 @@ export default {
     colDescription: "Description",
     usage: "Invocations",
     enabled: "Enabled",
+    enabledDesc:
+      "Turning it off stops injecting it; the files stay in the library",
     updated: "Updated",
     effectNote:
       "Toggles and edits apply to new sessions; running sessions are unaffected.",
@@ -221,6 +228,7 @@ export default {
     deleteTitle: "Delete session",
     deleteConfirm:
       "Delete this session? The agent subprocess is reclaimed and the transcript cannot be recovered.",
+    deleteHint: "The subprocess is reclaimed; the transcript is gone for good",
     form: {
       modelLabel: "Model",
       modelPlaceholder: "Select a model",
@@ -228,6 +236,11 @@ export default {
       cwdPlaceholder: "~/acpp",
       cwdHint:
         "Must be an absolute path; it is created if missing. Leave empty to fall back to the agent's default, then ~/acpp.",
+      cwdLabel: "Working directory",
+      cwdPick:
+        "The agent only works inside this directory. Click to change it.",
+      modelHint:
+        "Picking a model picks the agent; once the session exists you can only switch within that agent.",
     },
   },
   dirPicker: {
@@ -240,15 +253,18 @@ export default {
     cancel: "Cancel",
     empty: "No subdirectories",
     newFolder: "New folder",
+    cloneDesc: "Clone a remote repository into this directory",
     newFolderName: "New folder name",
     create: "Create",
     showHidden: "Show hidden items",
+    showHiddenDesc: "List dotfiles and dot-directories too",
     colName: "Name",
     colModified: "Date Modified",
     colSize: "Size",
     places: "Places",
     pinned: "Pinned",
     pin: "Pin current directory to sidebar",
+    pinDesc: "Pinned directories sit under Pinned — one click to come back",
     unpin: "Unpin",
     viewList: "List view",
     viewColumns: "Column view",
@@ -271,12 +287,21 @@ export default {
       useWorktree: "Worktree",
       dropWorktree: "Drop worktree",
       addWorktree: "Create worktree",
+      switch: "Switch branch",
+      switchDesc: "Browse branches and worktrees, or create one from here",
+      useWorktreeDesc:
+        "Work in a separate checkout so your main tree stays untouched",
+      addWorktreeDesc: "Creates it and opens a new session on it",
     },
     placeholder: "Type a message. Enter to send, Shift+Enter for a new line",
     send: "Send",
     stop: "Stop",
+    sendDesc: "While a turn is running, this is injected into it",
+    stopDesc: "Stop this turn; whatever was produced stays",
     thinking: "Thinking…",
     connected: "Connected",
+    connectedDesc:
+      "Live link to the agent subprocess; if it drops, this turn stops arriving",
     disconnected: "Disconnected",
     empty: "Start the conversation",
     emptyHint:
@@ -298,6 +323,8 @@ export default {
     queue: {
       steer: "Steer",
       recall: "Recall",
+      steerDesc: "Inject this line into the turn that is already running",
+      recallDesc: "Put it back in the input box and send nothing",
     },
     fileEdit: {
       edited: "Edited",
@@ -327,6 +354,13 @@ export default {
       },
       plan: "Plan mode",
       fast: "Fast",
+      hints: {
+        model: "Which model answers in this session",
+        effort: "Let it think longer, or answer quickly",
+        level: "Whether the agent asks before it changes things",
+        plan: "Propose a plan first, act only after you approve",
+        fast: "Same model, faster output",
+      },
     },
     status: {
       context: "Context {{used}} / {{size}} · {{percent}}%",
@@ -375,6 +409,10 @@ export default {
     attachments: {
       image: "Add image",
       file: "Reference a file",
+      imageDesc: "Pick images from this machine and send them with the message",
+      reference: "Reference something",
+      referenceDesc:
+        "Hand the agent a workspace file, a database, or a local file",
       remove: "Remove attachment",
       imageUnsupported: "This agent does not accept image input",
       linkedHint: "Large file — the agent reads it on demand",

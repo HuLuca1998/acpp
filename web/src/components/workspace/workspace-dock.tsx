@@ -13,6 +13,7 @@ import {
 import "dockview/dist/styles/dockview.css"
 import { XIcon } from "lucide-react"
 
+import { Hint } from "@/components/hint"
 import { ChatPanel } from "@/components/workspace/panels/chat-panel"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import { BranchesPanel } from "@/components/workspace/panels/branches-panel"
@@ -97,19 +98,21 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
         {kind === "history" ? <CommitsTabCount /> : null}
       </span>
       {kind !== "chat" ? (
-        <button
-          type="button"
-          aria-label={t("workspace.closePanel")}
-          className="acpp-tab-label -mr-0.5 flex size-4 items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-muted hover:text-foreground"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            // 统一走命令总线：终端面板要顺带杀 pty。
-            ws.closePanel(id)
-          }}
-        >
-          <XIcon className="size-3" />
-        </button>
+        <Hint label={t("workspace.closePanel")} align="end">
+          <button
+            type="button"
+            aria-label={t("workspace.closePanel")}
+            className="acpp-tab-label -mr-0.5 flex size-4 items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              // 统一走命令总线：终端面板要顺带杀 pty。
+              ws.closePanel(id)
+            }}
+          >
+            <XIcon className="size-3" />
+          </button>
+        </Hint>
       ) : null}
     </div>
   )

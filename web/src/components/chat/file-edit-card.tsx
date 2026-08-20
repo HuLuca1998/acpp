@@ -2,6 +2,7 @@ import { useContext, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { lineDiff } from "@/lib/line-diff"
+import { Hint } from "@/components/hint"
 import { cn } from "@/lib/utils"
 import { DiffView } from "@/components/diff-view"
 import type { ToolCallPayload } from "@/components/chat/tool-call"
@@ -58,20 +59,22 @@ export function FileEditCard({
       {edits.map((edit) => (
         <div key={edit.path} className="flex flex-col gap-2">
           <div className="flex min-h-4 items-center gap-2 text-sm">
-            <button
-              type="button"
-              aria-expanded={open}
-              aria-label={t("chat.fileEdit.toggle")}
-              onClick={() => setOpen((o) => !o)}
-              className="shrink-0 rounded-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <ChevronRightIcon
-                className={cn(
-                  "size-4 transition-transform",
-                  open && "rotate-90"
-                )}
-              />
-            </button>
+            <Hint label={t("chat.fileEdit.toggle")} align="start">
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-label={t("chat.fileEdit.toggle")}
+                onClick={() => setOpen((o) => !o)}
+                className="shrink-0 rounded-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <ChevronRightIcon
+                  className={cn(
+                    "size-4 transition-transform",
+                    open && "rotate-90"
+                  )}
+                />
+              </button>
+            </Hint>
             <FileDiffIcon className="size-4 shrink-0 text-muted-foreground" />
             <span className="shrink-0 text-muted-foreground">
               {t("chat.fileEdit.edited")}

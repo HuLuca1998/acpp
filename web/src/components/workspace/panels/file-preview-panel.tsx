@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { GitDiffView, WorkspaceFile } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
+import { Hint } from "@/components/hint"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
 import {
@@ -84,8 +85,12 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
           ? ws.scope
               .gitCommitFile(ws.sessionId, sha, path)
               .then((view) => ({ diff: view }))
-          : ws.scope.gitDiff(ws.sessionId, path).then((view) => ({ diff: view }))
-        : ws.scope.workspaceFile(ws.sessionId, path).then((view) => ({ file: view }))
+          : ws.scope
+              .gitDiff(ws.sessionId, path)
+              .then((view) => ({ diff: view }))
+        : ws.scope
+            .workspaceFile(ws.sessionId, path)
+            .then((view) => ({ file: view }))
 
     request
       .then((result) => {
@@ -151,48 +156,56 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
           {path}
         </span>
         {chatPanel ? (
-          <button
-            type="button"
-            aria-pressed={follow}
-            aria-label={t(
+          <Hint
+            label={t(
               follow
                 ? "workspace.preview.followOff"
                 : "workspace.preview.followOn"
             )}
-            title={t(
-              follow
-                ? "workspace.preview.followOff"
-                : "workspace.preview.followOn"
-            )}
-            className={cn(
-              "flex size-6 shrink-0 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted active:scale-[0.97]",
-              follow
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setFollow((prev) => !prev)}
+            desc={t("workspace.preview.followDesc")}
           >
-            <LocateFixedIcon className="size-3.5" />
-          </button>
+            <button
+              type="button"
+              aria-pressed={follow}
+              aria-label={t(
+                follow
+                  ? "workspace.preview.followOff"
+                  : "workspace.preview.followOn"
+              )}
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted active:scale-[0.97]",
+                follow
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setFollow((prev) => !prev)}
+            >
+              <LocateFixedIcon className="size-3.5" />
+            </button>
+          </Hint>
         ) : null}
         {isMarkdown(path) && target?.mode !== "diff" ? (
-          <button
-            type="button"
-            aria-label={t(
+          <Hint
+            label={t(
               raw ? "workspace.preview.rendered" : "workspace.preview.source"
             )}
-            title={t(
-              raw ? "workspace.preview.rendered" : "workspace.preview.source"
-            )}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-            onClick={() => setRaw((prev) => !prev)}
+            desc={t("workspace.preview.sourceDesc")}
           >
-            {raw ? (
-              <EyeIcon className="size-3.5" />
-            ) : (
-              <CodeIcon className="size-3.5" />
-            )}
-          </button>
+            <button
+              type="button"
+              aria-label={t(
+                raw ? "workspace.preview.rendered" : "workspace.preview.source"
+              )}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+              onClick={() => setRaw((prev) => !prev)}
+            >
+              {raw ? (
+                <EyeIcon className="size-3.5" />
+              ) : (
+                <CodeIcon className="size-3.5" />
+              )}
+            </button>
+          </Hint>
         ) : null}
         {target?.mode === "diff" ? (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
@@ -201,15 +214,20 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
               : t("workspace.git.workingTree")}
           </span>
         ) : null}
-        <button
-          type="button"
-          aria-label={t("workspace.refMenu.addReference")}
-          title={t("workspace.refMenu.addReference")}
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-          onClick={() => ws.addReference(path)}
+        <Hint
+          label={t("workspace.refMenu.addReference")}
+          desc={t("workspace.refMenu.addReferenceDesc")}
+          align="end"
         >
-          <AtSignIcon className="size-3.5" />
-        </button>
+          <button
+            type="button"
+            aria-label={t("workspace.refMenu.addReference")}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+            onClick={() => ws.addReference(path)}
+          >
+            <AtSignIcon className="size-3.5" />
+          </button>
+        </Hint>
       </div>
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
         {error ? (
