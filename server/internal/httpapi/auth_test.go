@@ -167,13 +167,10 @@ func TestAuth_OwnerOnlySurfaces(t *testing.T) {
 	forbidden := []struct{ method, path string }{
 		{http.MethodGet, "/api/tenants"},
 		{http.MethodPost, "/api/tenants"},
-		{http.MethodGet, "/api/orchestrator/sessions"},
-		{http.MethodPost, "/api/orchestrator/sessions"},
 		{http.MethodGet, "/api/system"},
 		{http.MethodPost, "/api/system/env/install"},
 		{http.MethodPost, "/api/skills"},
 		{http.MethodPut, "/api/skills/demo"},
-		{http.MethodDelete, "/api/roles/1"},
 		{http.MethodPut, "/api/agents/1/catalog"},
 		{http.MethodPost, "/api/skills/demo/scripts/run"},
 	}
@@ -187,7 +184,7 @@ func TestAuth_OwnerOnlySurfaces(t *testing.T) {
 
 	// 共享资源的读不该被身份层拦下（这里没装对应服务，走到 handler 会
 	// 500——只要不是 401/403 就说明身份层放行了）。
-	for _, path := range []string{"/api/skills", "/api/roles", "/api/agents"} {
+	for _, path := range []string{"/api/skills", "/api/agents"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.AddCookie(cookie)
 		if got := do(handler, req).Code; got == http.StatusForbidden || got == http.StatusUnauthorized {

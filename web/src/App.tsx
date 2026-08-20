@@ -4,11 +4,8 @@ import { Route, Routes } from "react-router"
 import { DashboardLayout } from "@/routes/dashboard-layout"
 import { Databases } from "@/routes/databases"
 import { NotFound } from "@/routes/not-found"
-import { Orchestrator } from "@/routes/orchestrator"
-import { OrchestratorChat } from "@/routes/orchestrator-chat"
 import { Overview } from "@/routes/overview"
 import { Placeholder } from "@/routes/placeholder"
-import { Roles } from "@/routes/roles"
 import { SessionChat } from "@/routes/session-chat"
 import { Sessions } from "@/routes/sessions"
 import { Tenants } from "@/routes/tenants"
@@ -40,13 +37,8 @@ export function App() {
             与可编辑工作目录，首条消息落地才真正创建会话。 */}
         <Route path="sessions/new" element={<SessionChat />} />
         <Route path="sessions/:id" element={<SessionChat />} />
-        <Route path="roles" element={<Roles />} />
         {/* 数据库连接（adr-008）：按项目 + 环境管理，会话侧只看得到本项目的。 */}
         <Route path="databases" element={<Databases />} />
-        <Route path="orchestrator" element={<Orchestrator />} />
-        {/* 编排会话同样 draft-first：/new 草稿态，首条消息落地才创建。 */}
-        <Route path="orchestrator/new" element={<OrchestratorChat />} />
-        <Route path="orchestrator/:id" element={<OrchestratorChat />} />
         <Route path="settings" element={<Settings />} />
         {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
         <Route path="connections" element={<Tenants />} />

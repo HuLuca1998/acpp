@@ -13,8 +13,6 @@ import { useIsOwner } from "@/hooks/identity-context"
  */
 const OWNER_ONLY_PREFIXES = [
   "/skills",
-  "/roles",
-  "/orchestrator",
   "/settings",
   "/connections",
   "/tools",

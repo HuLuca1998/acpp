@@ -46,9 +46,9 @@ export const FileTreePanel = memo(function FileTreePanel() {
   // 变更着色跟着共享的 git 汇总走：turn 结束与手动刷新都会重取，
   // 文件树不必自己再问一遍。
   const changes = useMemo(() => buildChangeMap(git.data), [git.data])
-  // agent 本轮触碰的文件（ACP locations）：亮一个呼吸状态点。上下文在
-  // 编排页可能不存在；用路径拼接的 key 记忆，聊天流的高频 chunk 不会
-  // 换 Set 引用、也就不会把整棵树拖着重渲染。
+  // agent 本轮触碰的文件（ACP locations）：亮一个呼吸状态点。上下文不一定
+  // 存在；用路径拼接的 key 记忆，聊天流的高频 chunk 不会换 Set 引用、
+  // 也就不会把整棵树拖着重渲染。
   const chatPanel = useContext(ChatPanelContext)
   const touchedKey =
     chatPanel?.chat.busy && chatPanel.chat.touched.length > 0

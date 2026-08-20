@@ -68,12 +68,9 @@ type OpenOptions struct {
 	// ResumeACPSessionID 非空且 agent 声明 loadSession 时，先尝试
 	// session/load 恢复这条会话的上下文，失败再回退 session/new。
 	ResumeACPSessionID string
-	// ExtraEnv 追加到 agent 进程环境，在技能隔离注入之后应用——
-	// 编排会话用它覆盖 CODEX_HOME / 设置 MCP_TOOL_TIMEOUT 等，优先级最高。
-	ExtraEnv map[string]string
-	// MetaExtra 深合并进 session/new 与 session/load 的 _meta（编排会话的
-	// systemPrompt 追加、disallowedTools 收口走这里），与技能隔离的
-	// Meta 冲突时以 MetaExtra 为准。
+	// MetaExtra 深合并进 session/new 与 session/load 的 _meta（上层要追加的
+	// systemPrompt、工具收口走这里），与技能隔离的 Meta 冲突时以
+	// MetaExtra 为准。
 	MetaExtra map[string]any
 	// MCPServers 挂载到会话上的 MCP server 清单（协议原样透传，
 	// 空为不挂载）。
@@ -152,14 +149,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 		sess.injMeta = inj.Meta
 		sess.injDirs = inj.AdditionalDirs
 	}
-	// 上层追加注入在技能隔离之后应用：编排会话要能覆盖 CODEX_HOME 指到
-	// 角色专属 home，_meta 冲突同理以上层为准。
-	if len(opts.ExtraEnv) > 0 {
-		env := make(map[string]string, len(opts.Runtime.Env)+len(opts.ExtraEnv))
-		maps.Copy(env, opts.Runtime.Env)
-		maps.Copy(env, opts.ExtraEnv)
-		opts.Runtime.Env = env
-	}
+	// 上层追加注入在技能隔离之后应用：_meta 冲突以上层为准。
 	if len(opts.MetaExtra) > 0 {
 		sess.injMeta = mergeMeta(sess.injMeta, opts.MetaExtra)
 	}

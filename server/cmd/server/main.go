@@ -17,7 +17,6 @@ import (
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/model"
-	"acpp/server/internal/orch"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
@@ -98,25 +97,6 @@ func run() error {
 			}(id)
 		}
 	}
-	// 编排（adr-006）：角色 + 主会话 + spawn 子会话。启动时预置内置角色
-	// 模板（一次性，删除不复活）。
-	roleService := orch.NewRoleService(gdb)
-	if err := roleService.EnsureDefaults(context.Background()); err != nil {
-		slog.Warn("ensure default roles", "err", err)
-	}
-	orchService := orch.NewService(gdb, roleService, manager, transcripts,
-		skillUsage, cfg.DataDir, filepath.Join(cfg.DataDir, "skillpack"), cfg.Addr)
-	// 编排会话的遗留 active 同样归一。
-	if err := gdb.Model(&model.OrchSession{}).
-		Where("state = ?", model.SessionActive).
-		Update("state", model.SessionIdle).Error; err != nil {
-		slog.Warn("normalize stale orch sessions", "err", err)
-	}
-	if err := gdb.Model(&model.OrchTask{}).
-		Where("state = ?", model.OrchTaskRunning).
-		Updates(map[string]any{"state": model.OrchTaskFailed, "result": "服务重启，任务中断"}).Error; err != nil {
-		slog.Warn("normalize stale orch tasks", "err", err)
-	}
 
 	// 多租户（adr-007）：局域网访客的身份与目录隔离。租户 root 落在默认
 	// 工作区下（~/acpp/<租户>），owner 由 loopback 判定，不入表。
@@ -130,7 +110,6 @@ func run() error {
 	// 两个业务包因此不互相 import。
 	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr)
 	chatService.SetDataSources(datasourceService)
-	orchService.SetDataSources(datasourceService)
 
 	// 会话标题：两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到
 	// （见 titler 包注释），所以由本机的小模型来算。配置在设置页维护，
@@ -159,8 +138,6 @@ func run() error {
 		SkillUsage:  skillUsage,
 		Update:      updateService,
 		Titler:      titleService,
-		Roles:       roleService,
-		Orch:        orchService,
 		Tenants:     tenantService,
 		Projects:    projectService,
 		DataSources: datasourceService,

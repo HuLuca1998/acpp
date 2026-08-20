@@ -26,10 +26,8 @@ import { groupSessionsByCwd, type SessionGroup } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   DatabaseIcon,
-  DramaIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
-  NetworkIcon,
   PlugZapIcon,
   ScrollTextIcon,
   UserRoundIcon,
@@ -76,8 +74,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }, [pathname])
 
-  // 租户只留会话与项目：编排、技能、角色、设置、连接都是 owner 的东西，
-  // 后端也已按 owner-only 拦截，导航里直接不出现（adr-007）。
+  // 租户只留会话与项目：技能、设置、连接都是 owner 的东西，后端也已按
+  // owner-only 拦截，导航里直接不出现（adr-007）。
   const navMain = isOwner
     ? [
         { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },
@@ -87,12 +85,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           url: "/sessions",
           icon: <MessagesSquareIcon />,
         },
-        {
-          title: t("nav.orchestrator"),
-          url: "/orchestrator",
-          icon: <NetworkIcon />,
-        },
-        { title: t("nav.roles"), url: "/roles", icon: <DramaIcon /> },
         {
           title: t("nav.databases"),
           url: "/databases",

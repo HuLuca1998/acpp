@@ -32,8 +32,7 @@ import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 
 /**
  * ChatStream 消费的数据源：聊天状态 + 三个交互回调。结构接口而不是
- * 绑死 useChat 的返回值——编排的主会话流（use-orch-chat）与任务观察流
- * （use-task-chat）返回结构兼容的形状，同样可渲染。
+ * 绑死 useChat 的返回值——任何返回结构兼容形状的流状态机都能渲染。
  */
 export interface ChatStreamSource extends ChatState {
   loadEarlier: () => Promise<void> | void

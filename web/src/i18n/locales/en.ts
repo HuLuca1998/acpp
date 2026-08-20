@@ -26,8 +26,6 @@ export default {
     overview: "Overview",
     skills: "Skills",
     sessions: "Sessions",
-    orchestrator: "Orchestrator",
-    roles: "Roles",
     databases: "Databases",
     tools: "Tools",
     logs: "Logs",
@@ -135,89 +133,6 @@ export default {
     empty: "Nothing uploaded yet.",
   },
   db: enDb,
-  roles: {
-    title: "Roles",
-    description:
-      "Hireable sub-agents for orchestration: persona, tool binding, model and access presets.",
-    add: "New role",
-    name: "Name",
-    namePlaceholder: "e.g. Architect",
-    colDescription: "Duty",
-    descPlaceholder:
-      "Hiring catalog shown to the conductor AI — what to hire it for.",
-    persona: "Persona",
-    personaPlaceholder:
-      "Persona and discipline injected into sub-sessions (e.g. you are the reviewer, read-only...).",
-    agent: "Tool",
-    model: "Model",
-    effort: "Effort",
-    level: "Access",
-    default: "Default",
-    builtin: "Built-in",
-    cloningHere:
-      "Cloning into this directory; files appear once the download finishes.",
-    empty: "No roles yet",
-    loadMore: "Loaded {{loaded}} of {{total}} — load more",
-    emptyHint:
-      "Once created, the conductor can hire roles by name for subtasks.",
-    editTitle: "Edit role",
-    addTitle: "New role",
-    dialogHint: "Leave model/effort/access empty to use the tool's defaults.",
-    created: "Role created",
-    updated: "Role saved",
-    deleted: "Role deleted",
-    deleteTitle: "Delete role?",
-    deleteBody:
-      '"{{name}}" will be deleted. Task records remain; built-in roles are not restored automatically.',
-  },
-  orch: {
-    title: "Orchestrator",
-    description:
-      "A conductor chat that delegates subtasks to role sub-agents — fully observable.",
-    add: "New orchestration",
-    empty: "No orchestration sessions yet",
-    emptyListHint:
-      "In an orchestration the AI can hire role sub-agents to work.",
-    colTitle: "Title",
-    colCwd: "Working dir",
-    colTokens: "Tokens",
-    colUpdated: "Updated",
-    deleted: "Orchestration deleted",
-    deleteTitle: "Delete orchestration?",
-    deleteBody:
-      '"{{name}}" and all its task records will be deleted; running subtasks are cancelled. This cannot be undone.',
-    untitled: "Untitled orchestration",
-    tokensUsed: "{{count}} tokens",
-    stopAll: "Stop all",
-    working: "{{role}} is working",
-    viewTask: "Watch",
-    conductorWorking: "Conductor is thinking and dispatching…",
-    placeholder:
-      "Describe the goal; the conductor hires role sub-agents as needed…",
-    emptyTitle: "Orchestration",
-    emptyHint:
-      "State your goal to begin. When the conductor needs help it hires roles via spawn_agent — every dispatch shows up in the task list, fully observable.",
-    notFound: "Orchestration not found",
-    notFoundHint: "It may have been deleted.",
-    backToList: "Back to orchestrations",
-    panels: {
-      main: "Conductor",
-      tasks: "Tasks",
-      taskFallback: "Task",
-    },
-    tasks: {
-      empty: "No dispatches yet",
-      emptyHint:
-        "Every time the conductor hires a sub-agent, the dispatch appears here. Open one to watch it work.",
-      cancel: "Cancel task",
-      gone: "Task not found",
-      state: {
-        running: "Running",
-        done: "Done",
-        failed: "Failed",
-      },
-    },
-  },
   skills: {
     title: "Skills",
     description:

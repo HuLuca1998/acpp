@@ -1,6 +1,6 @@
 // Package stream 是会话事件广播的共享构件：Event 是推给浏览器的 SSE
-// 事件形状，Broker 负责一条流的多订阅者广播与轮内重放。聊天（service）
-// 与编排（orch）两个业务包共用，本包不含任何业务规则。
+// 事件形状，Broker 负责一条流的多订阅者广播与轮内重放。本包不含任何
+// 业务规则。
 package stream
 
 import (
@@ -53,9 +53,6 @@ type Event struct {
 
 	// Message 在一条消息落库后带上完整记录，前端用它替换流式占位。
 	Message *model.Message `json:"message,omitempty"`
-
-	// Task 是编排会话的任务状态快照（kind=task_update），普通会话不发。
-	Task *model.OrchTask `json:"task,omitempty"`
 }
 
 // subscriberBuffer 是每个订阅者的缓冲深度。慢订阅者会丢事件而不是拖住

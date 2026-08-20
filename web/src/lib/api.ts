@@ -23,16 +23,12 @@ import type {
   GitOverview,
   Identity,
   Message,
-  OrchSession,
-  OrchTask,
   OverviewStats,
   Paged,
   PageQuery,
   UploadedFile,
   Project,
   RemoteRepo,
-  Role,
-  RoleInput,
   SendInput,
   Session,
   SessionSettings,
@@ -547,115 +543,6 @@ export const api = {
       request<SkillScriptRunResult>(`/skills/${name}/scripts/run`, {
         method: "POST",
         body: JSON.stringify(input),
-      }),
-  },
-
-  roles: {
-    list: (params?: Partial<PageQuery>) =>
-      request<Paged<Role>>(`/roles${pageQuery(params)}`),
-    get: (id: number) => request<Role>(`/roles/${id}`),
-    create: (input: RoleInput) =>
-      request<Role>("/roles", { method: "POST", body: JSON.stringify(input) }),
-    update: (id: number, input: RoleInput) =>
-      request<Role>(`/roles/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
-    remove: (id: number) => request<null>(`/roles/${id}`, { method: "DELETE" }),
-  },
-
-  orchestrator: {
-    list: (params?: Partial<PageQuery>) =>
-      request<Paged<OrchSession>>(`/orchestrator/sessions${pageQuery(params)}`),
-    get: (id: number) => request<OrchSession>(`/orchestrator/sessions/${id}`),
-    create: (input: { agentId: number; cwd?: string; title?: string }) =>
-      request<OrchSession>("/orchestrator/sessions", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    remove: (id: number) =>
-      request<null>(`/orchestrator/sessions/${id}`, { method: "DELETE" }),
-    send: (id: number, input: SendInput) =>
-      request<Message>(`/orchestrator/sessions/${id}/send`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    cancel: (id: number) =>
-      request<null>(`/orchestrator/sessions/${id}/cancel`, { method: "POST" }),
-    /** 急停：中止主会话与全部在跑子任务。 */
-    stop: (id: number) =>
-      request<null>(`/orchestrator/sessions/${id}/stop`, { method: "POST" }),
-    settings: (id: number) =>
-      request<SessionSettings>(`/orchestrator/sessions/${id}/settings`),
-    applySettings: (id: number, patch: SettingsPatch) =>
-      request<SessionSettings>(`/orchestrator/sessions/${id}/settings`, {
-        method: "PUT",
-        body: JSON.stringify(patch),
-      }),
-    resolvePermission: (id: number, permissionId: string, optionId: string) =>
-      request<null>(`/orchestrator/sessions/${id}/permission`, {
-        method: "POST",
-        body: JSON.stringify({ permissionId, optionId }),
-      }),
-    resolveElicitation: (
-      id: number,
-      elicitationId: string,
-      action: "accept" | "decline" | "cancel",
-      content?: Record<string, string>
-    ) =>
-      request<null>(`/orchestrator/sessions/${id}/elicitation`, {
-        method: "POST",
-        body: JSON.stringify({ elicitationId, action, content }),
-      }),
-    messages: (id: number, params?: { limit?: number; before?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.limit) qs.set("limit", String(params.limit))
-      if (params?.before) qs.set("before", String(params.before))
-      const s = qs.toString()
-      return request<Paged<Message>>(
-        `/orchestrator/sessions/${id}/messages${s ? `?${s}` : ""}`
-      )
-    },
-    eventsUrl: (id: number) => `${BASE}/orchestrator/sessions/${id}/events`,
-
-    tasks: (id: number) =>
-      request<OrchTask[]>(`/orchestrator/sessions/${id}/tasks`),
-    taskMessages: (
-      tid: number,
-      params?: { limit?: number; before?: number }
-    ) => {
-      const qs = new URLSearchParams()
-      if (params?.limit) qs.set("limit", String(params.limit))
-      if (params?.before) qs.set("before", String(params.before))
-      const s = qs.toString()
-      return request<Paged<Message>>(
-        `/orchestrator/tasks/${tid}/messages${s ? `?${s}` : ""}`
-      )
-    },
-    taskEventsUrl: (tid: number) => `${BASE}/orchestrator/tasks/${tid}/events`,
-    taskCancel: (tid: number) =>
-      request<null>(`/orchestrator/tasks/${tid}/cancel`, { method: "POST" }),
-    taskResolvePermission: (
-      tid: number,
-      permissionId: string,
-      optionId: string
-    ) =>
-      request<null>(`/orchestrator/tasks/${tid}/permission`, {
-        method: "POST",
-        body: JSON.stringify({ permissionId, optionId }),
-      }),
-    /** 编排主会话的工作区数据面（与普通会话同形状，见 workspaceScopeApi）。 */
-    ...workspaceScopeApi("/orchestrator/sessions"),
-
-    taskResolveElicitation: (
-      tid: number,
-      elicitationId: string,
-      action: "accept" | "decline" | "cancel",
-      content?: Record<string, string>
-    ) =>
-      request<null>(`/orchestrator/tasks/${tid}/elicitation`, {
-        method: "POST",
-        body: JSON.stringify({ elicitationId, action, content }),
       }),
   },
 

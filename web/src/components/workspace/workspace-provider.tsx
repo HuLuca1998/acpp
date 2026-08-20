@@ -22,13 +22,10 @@ import {
 /** 命令总线的宿主：状态全在 ref 里，provider 本身不因命令重渲染。 */
 export function WorkspaceProvider({
   sessionId,
-  scope,
   draftCwd,
   children,
 }: {
   sessionId: number
-  /** 数据面作用域，默认普通会话；编排页传 api.orchestrator。 */
-  scope?: WorkspaceScopeApi
   /**
    * 草稿态选定的工作目录。给了它，文件树与 git 面板立刻可用——看文件
    * 只需要一个目录，不该等到「发出第一条消息」把会话建出来（adr-002）。
@@ -39,12 +36,8 @@ export function WorkspaceProvider({
   // 会话建好前后用不同的作用域，但面板看到的是同一套方法签名。
   const activeScope = React.useMemo(
     () =>
-      sessionId
-        ? (scope ?? api.sessions)
-        : draftCwd
-          ? draftWorkspaceScope(draftCwd)
-          : (scope ?? api.sessions),
-    [sessionId, scope, draftCwd]
+      !sessionId && draftCwd ? draftWorkspaceScope(draftCwd) : api.sessions,
+    [sessionId, draftCwd]
   )
   const apiRef = useRef<DockviewApi | null>(null)
   const previewRef = useRef<PreviewTarget | null>(null)

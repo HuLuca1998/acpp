@@ -38,7 +38,7 @@ export function DbRefPicker({
   open: boolean
   /** 0 表示草稿态：会话还没建，项目改由 draftCwd 决定。 */
   sessionId: number
-  /** 作用域 API：普通会话与编排主会话形状一致，只差路径前缀。 */
+  /** 作用域 API：会话与草稿态形状一致，只差路径前缀。 */
   scope: WorkspaceScopeApi
   /**
    * 草稿态选定的工作目录。给了它，数据库引用立刻可用——项目由目录

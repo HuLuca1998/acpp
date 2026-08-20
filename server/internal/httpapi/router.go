@@ -10,7 +10,6 @@ import (
 
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
-	"acpp/server/internal/orch"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
@@ -30,8 +29,6 @@ type Services struct {
 	Update     *system.Updater
 	// Titler 生成会话标题；设置页读写它的配置。
 	Titler      *titler.Service
-	Roles       *orch.RoleService
-	Orch        *orch.Service
 	Tenants     *service.TenantService
 	Projects    *project.Service
 	DataSources *datasource.Service
@@ -158,9 +155,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 配置页勾选：更新 models/commands 的启用状态。
 	api.HandleFunc("PUT /api/agents/{id}/catalog", agents.catalog)
 
-	// 工作区数据面按 cwd 工作，普通会话与编排会话只差记录来源。
-	// 解析 cwd 的同时做归属校验：工作区的全部数据面（文件树、预览、git、
-	// 终端）都经这一步，隔离因此只有一个执行点（adr-007）。
+	// 工作区数据面按 cwd 工作。解析 cwd 的同时做归属校验：工作区的全部
+	// 数据面（文件树、预览、git、终端）都经这一步，隔离因此只有一个
+	// 执行点（adr-007）。
 	sessionCwd := func(r *http.Request) (string, error) {
 		id, err := pathID(r, "id")
 		if err != nil {
@@ -177,18 +174,6 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 路径闸照旧：租户给什么都逃不出自己的 root。
 	draftCwd := func(r *http.Request) (string, error) {
 		return scopeOf(r).GuardPath(r.URL.Query().Get("cwd"))
-	}
-	// 编排整体是 owner 专属（isOwnerOnly 已按前缀拦截），到这里不必再分身份。
-	orchCwd := func(r *http.Request) (string, error) {
-		id, err := pathID(r, "id")
-		if err != nil {
-			return "", err
-		}
-		orchSession, err := svcs.Orch.Get(r.Context(), id)
-		if err != nil {
-			return "", err
-		}
-		return orchSession.Cwd, nil
 	}
 	// 本地文件上传：落在各自身份的家目录下，@ 引用直接用它的路径。
 	uploads := uploadHandler{}
@@ -278,7 +263,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/datasources/{id}/schema", datasources.schema)
 	api.HandleFunc("POST /api/datasources/{id}/query", datasources.query)
 	// 会话侧（斜杠命令与 @ 引用的数据源）：只列当前项目的，id 不在项目内
-	// 按不存在处理。编排主会话同形状同实现，只差路径前缀（升级不降级）。
+	// 按不存在处理。
 	api.HandleFunc("GET /api/sessions/{id}/datasources", datasources.sessionList)
 	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/databases", datasources.sessionDatabases)
 	api.HandleFunc("GET /api/sessions/{id}/datasources/{dsid}/tables", datasources.sessionTables)
@@ -288,12 +273,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/workspace/datasources", draftDatasources.sessionList)
 	api.HandleFunc("GET /api/workspace/datasources/{dsid}/databases", draftDatasources.sessionDatabases)
 	api.HandleFunc("GET /api/workspace/datasources/{dsid}/tables", draftDatasources.sessionTables)
-	orchDatasources := datasourceHandler{sources: svcs.DataSources, cwdOf: orchCwd}
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources", orchDatasources.sessionList)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources/{dsid}/databases", orchDatasources.sessionDatabases)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/datasources/{dsid}/tables", orchDatasources.sessionTables)
-	// agent 回连的数据库工具端点。路径比编排的 /api/mcp/{token} 更具体，
-	// ServeMux 会优先命中这条。
+	// agent 回连的数据库工具端点（token 是每条会话专属凭证）。
 	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)
 
 	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
@@ -306,71 +286,6 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/terminals", terminals.list)
 	api.HandleFunc("DELETE /api/sessions/{id}/terminals/{tid}", terminals.remove)
 	api.HandleFunc("GET /api/sessions/{id}/terminals/{tid}/ws", terminals.attach)
-
-	// 角色：编排里可雇佣的子代理定义（adr-006）。
-	roles := roleHandler{roles: svcs.Roles}
-	api.HandleFunc("GET /api/roles", roles.list)
-	api.HandleFunc("POST /api/roles", roles.create)
-	api.HandleFunc("GET /api/roles/{id}", roles.get)
-	api.HandleFunc("PUT /api/roles/{id}", roles.update)
-	api.HandleFunc("DELETE /api/roles/{id}", roles.remove)
-
-	// 编排：主会话 + spawn 的任务子会话 + agent 回连的 MCP 端点（adr-006）。
-	orch := orchHandler{orch: svcs.Orch}
-	api.HandleFunc("GET /api/orchestrator/sessions", orch.list)
-	api.HandleFunc("POST /api/orchestrator/sessions", orch.create)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}", orch.get)
-	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}", orch.remove)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/send", orch.send)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/events", orch.events)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/messages", orch.messages)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/cancel", orch.cancel)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/stop", orch.stop)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/settings", orch.getSettings)
-	api.HandleFunc("PUT /api/orchestrator/sessions/{id}/settings", orch.settings)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/permission", orch.permission)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/elicitation", orch.elicitation)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/tasks", orch.tasks)
-	api.HandleFunc("GET /api/orchestrator/tasks/{tid}/events", orch.taskEvents)
-	api.HandleFunc("GET /api/orchestrator/tasks/{tid}/messages", orch.taskMessages)
-	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/cancel", orch.taskCancel)
-	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/permission", orch.taskPermission)
-	api.HandleFunc("POST /api/orchestrator/tasks/{tid}/elicitation", orch.taskElicitation)
-	api.HandleFunc("/api/mcp/{token}", orch.mcp)
-
-	// 编排主会话的完整工作区（升级不降级）：文件树/预览、git 数据面、
-	// 终端与转录，全部复用普通会话的数据面实现，只有 cwd 来源不同。
-	orchWorkspace := workspaceHandler{cwdOf: orchCwd}
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/entries", orchWorkspace.tree)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/file", orchWorkspace.file)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/fs/download", orchWorkspace.download)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/overview", orchWorkspace.gitOverview)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/diff", orchWorkspace.gitDiff)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/commits/{sha}", orchWorkspace.gitCommit)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/branches", orchWorkspace.branches)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/history", orchWorkspace.history)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/git/compare", orchWorkspace.compare)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/checkout", orchWorkspace.checkout)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/commit", orchWorkspace.commit)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/push", orchWorkspace.push)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/pull", orchWorkspace.pull)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/merge", orchWorkspace.merge)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/branches", orchWorkspace.createBranch)
-	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/git/branches/{name}", orchWorkspace.deleteBranch)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/discard", orchWorkspace.discard)
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.createWorktree)
-	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/git/worktrees", orchWorkspace.removeWorktree)
-	orchTerminals := terminalHandler{
-		cwdOf:          orchCwd,
-		terms:          svcs.Terminals,
-		originPatterns: corsHosts(cfg.CORSOrigins),
-		keyOffset:      orchTerminalKeyOffset,
-	}
-	api.HandleFunc("POST /api/orchestrator/sessions/{id}/terminals", orchTerminals.create)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/terminals", orchTerminals.list)
-	api.HandleFunc("DELETE /api/orchestrator/sessions/{id}/terminals/{tid}", orchTerminals.remove)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/terminals/{tid}/ws", orchTerminals.attach)
-	api.HandleFunc("GET /api/orchestrator/sessions/{id}/transcript", orch.transcript)
 
 	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)

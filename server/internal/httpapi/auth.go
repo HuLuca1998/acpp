@@ -112,8 +112,8 @@ func resolveIdentity(r *http.Request, tenants *service.TenantService) identity {
 }
 
 // isPublicPath 列出不需要身份的路径。
-// `/api/mcp/` 是 agent 子进程回连的编排端点（adr-006），自带一次性 token
-// 鉴权且发不出 cookie——要求 cookie 会直接把编排打死。
+// `/api/mcp/` 是 agent 子进程回连的工具端点（数据库工具面），自带每会话
+// 专属 token 鉴权且发不出 cookie——要求 cookie 会直接把它打死。
 func isPublicPath(path string) bool {
 	return path == "/api/health" ||
 		strings.HasPrefix(path, "/api/auth/") ||
@@ -123,20 +123,18 @@ func isPublicPath(path string) bool {
 // isOwnerOnly 判定一个请求是否只有 owner 能发。
 //
 // 刻意用前缀 + 方法的集中表，而不是在每个 handler 里 if 一下：新增路由
-// 自动继承同一策略，漏写不会变成越权。共享资源（技能库、角色、内置工具
-// 配置）对租户只读——GET 放行，写一律 owner。
+// 自动继承同一策略，漏写不会变成越权。共享资源（技能库、内置工具配置）
+// 对租户只读——GET 放行，写一律 owner。
 func isOwnerOnly(r *http.Request) bool {
 	path := r.URL.Path
 	switch {
-	case strings.HasPrefix(path, "/api/orchestrator/"),
-		strings.HasPrefix(path, "/api/tenants"),
+	case strings.HasPrefix(path, "/api/tenants"),
 		// 数据库连接里躺着生产库凭证，整个面（含只读的库表浏览）都是
 		// owner 的；会话侧那几条按项目过滤的另有 owner 判定。
 		strings.HasPrefix(path, "/api/datasources"),
 		strings.HasPrefix(path, "/api/system"):
 		return true
 	case strings.HasPrefix(path, "/api/skills"),
-		strings.HasPrefix(path, "/api/roles"),
 		strings.HasPrefix(path, "/api/agents"):
 		return r.Method != http.MethodGet
 	}

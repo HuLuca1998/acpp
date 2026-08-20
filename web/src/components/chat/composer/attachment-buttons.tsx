@@ -9,7 +9,7 @@ import {
 import { AtSignIcon, DatabaseIcon, FileIcon, FileUpIcon } from "lucide-react"
 
 /**
- * composer 左下角的附件圆钮与 @ 引用菜单。普通会话面板与编排面板共用
+ * composer 左下角的附件圆钮与 @ 引用菜单。会话面板与草稿态共用
  * ——两处的输入区是同一件东西，长得不一样只会让人以为功能也不一样。
  */
 const buttonClass =

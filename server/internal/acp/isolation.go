@@ -96,13 +96,6 @@ func mergeMeta(base, extra map[string]any) map[string]any {
 	return out
 }
 
-// EnsureCodexHome 幂等搭好一个隔离用的 codex 家目录（auth 软链、config
-// 复制、技能包软链），供上层为编排会话/角色构建专属 home——它们需要在
-// config.toml 里追加自己的段（MCP server、超时），但基座与技能隔离一致。
-func EnsureCodexHome(codexHome, skillpackDir, sysHome string) error {
-	return ensureCodexHome(codexHome, skillpackDir, sysHome)
-}
-
 // ensureCodexHome 幂等搭好隔离用的 codex 家目录：
 //   - auth.json 软链系统的（codex 用静态 OPENAI_API_KEY，不改写它，软链跟随
 //     系统登录态、不复制密钥）；
