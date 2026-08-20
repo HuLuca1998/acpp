@@ -405,6 +405,12 @@ export default {
       failed: "失败",
       cancelled: "已取消",
     },
+    authRequired: {
+      title: "Agent 未登录",
+      claude: "在终端运行 claude 并输入 /login 完成登录，然后重发消息。",
+      codex: "在终端运行 codex login 完成登录，然后重发消息。",
+      generic: "该 agent 需要先完成登录。请在终端完成它的登录流程后重发消息。",
+    },
     permission: {
       title: "Agent 请求权限",
       resolved: "权限已裁决：{{title}} → {{choice}}",

@@ -66,6 +66,10 @@ func writeError(w http.ResponseWriter, err error) {
 		// 该 runtime 不支持这个统一设置维度；正常前端不会发（控件按
 		// Settings 隐藏），发了就是入参问题。
 		status = http.StatusBadRequest
+	case errors.Is(err, acp.ErrAuthRequired):
+		// agent 侧未登录（-32000）。424：问题出在我们依赖的外部进程，
+		// 不是请求本身；也与租户认证的 401/403 严格区分。
+		status = http.StatusFailedDependency
 	default:
 		slog.Error("request failed", "err", err)
 	}

@@ -153,7 +153,9 @@ func (c *Conn) Call(ctx context.Context, method string, params, result any) erro
 		return c.processExitError(method)
 	case msg := <-ch:
 		if msg.Error != nil {
-			return fmt.Errorf("%s: agent error %d: %s", method, msg.Error.Code, msg.Error.Message)
+			// %w 保留 rpcError 链条：错误码是协议契约（如 -32000 未登录），
+			// 上层用 errors.Is 识别，不嗅探 message 字符串。
+			return fmt.Errorf("%s: agent error %d: %w", method, msg.Error.Code, msg.Error)
 		}
 		if result == nil || len(msg.Result) == 0 {
 			return nil

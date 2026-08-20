@@ -2,6 +2,7 @@ package acp
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 )
 
@@ -35,6 +36,18 @@ func (e *rpcError) Error() string {
 		return ""
 	}
 	return e.Message
+}
+
+// ErrAuthRequired 表示 agent 报了 -32000（Authentication required）：
+// runtime 侧未登录或凭证失效。上层据此给出登录引导，而不是模糊的握手失败。
+var ErrAuthRequired = errors.New("acp: agent authentication required")
+
+// authRequiredCode 是 ACP 约定的「需要认证」JSON-RPC 错误码。
+const authRequiredCode = -32000
+
+// Is 让带 -32000 的 agent 错误命中 errors.Is(err, ErrAuthRequired)。
+func (e *rpcError) Is(target error) bool {
+	return target == ErrAuthRequired && e != nil && e.Code == authRequiredCode
 }
 
 // ---- initialize ----

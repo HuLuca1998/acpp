@@ -426,6 +426,14 @@ export default {
       failed: "Failed",
       cancelled: "Cancelled",
     },
+    authRequired: {
+      title: "Agent not signed in",
+      claude:
+        "Run claude in a terminal and type /login to sign in, then resend the message.",
+      codex: "Run codex login in a terminal, then resend the message.",
+      generic:
+        "This agent requires sign-in. Complete its login flow in a terminal, then resend the message.",
+    },
     permission: {
       title: "The agent requests permission",
       resolved: "Permission resolved: {{title}} → {{choice}}",

@@ -120,14 +120,35 @@ export const ChatPanel = memo(function ChatPanel() {
           </div>
         ) : null}
 
-        {chat.error || newSession.error ? (
-          <Alert variant="destructive" className="mt-2">
-            <AlertTitle>{t("errors.openFailed")}</AlertTitle>
-            <AlertDescription>
-              {chat.error ?? newSession.error}
-            </AlertDescription>
-          </Alert>
-        ) : null}
+        {(() => {
+          const errorText = chat.error ?? newSession.error
+          if (!errorText) return null
+          // agent 未登录（ACP -32000）：给登录引导而不是原始握手错误。
+          // 后端已把错误码归一进文案（errors.Is 链），这里认稳定短语。
+          if (/authentication required/i.test(errorText)) {
+            const flavor = isNew
+              ? newSession.selectedAgent?.flavor
+              : chat.session?.agentFlavor
+            const hintKey =
+              flavor === "codex"
+                ? "chat.authRequired.codex"
+                : flavor === "claude"
+                  ? "chat.authRequired.claude"
+                  : "chat.authRequired.generic"
+            return (
+              <Alert className="mt-2">
+                <AlertTitle>{t("chat.authRequired.title")}</AlertTitle>
+                <AlertDescription>{t(hintKey as never)}</AlertDescription>
+              </Alert>
+            )
+          }
+          return (
+            <Alert variant="destructive" className="mt-2">
+              <AlertTitle>{t("errors.openFailed")}</AlertTitle>
+              <AlertDescription>{errorText}</AlertDescription>
+            </Alert>
+          )
+        })()}
       </div>
 
       {/* 消息流：底部 padding 给悬浮输入让位。 */}
