@@ -439,6 +439,7 @@ export default {
       image: "Add image",
       file: "Reference a file",
       remove: "Remove attachment",
+      imageUnsupported: "This agent does not accept image input",
     },
     elicitation: {
       title: "The agent needs your input",

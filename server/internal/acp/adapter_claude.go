@@ -36,6 +36,11 @@ func (claudeAdapter) Settings(caps Caps) Settings {
 		}
 		s.PlanOn = caps.Modes.CurrentModeID == "plan"
 	}
+	// 图片与内嵌上下文是实测能力（附件与 @ 引用一直在用），声明漏了也不该
+	// 把既有功能误关；audio 按声明走。
+	s.Prompt = caps.Prompt
+	s.Prompt.Image = true
+	s.Prompt.EmbeddedContext = true
 	return s
 }
 

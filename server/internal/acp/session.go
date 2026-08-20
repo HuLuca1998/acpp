@@ -94,6 +94,9 @@ func (s *Session) isReplaying() bool {
 type Caps struct {
 	Modes         *Modes         `json:"modes,omitempty"`
 	ConfigOptions []ConfigOption `json:"configOptions,omitempty"`
+	// Prompt 来自 initialize 的 agentCapabilities（连接级，不随 caps 更新
+	// 事件变化），握手时写入一次。
+	Prompt PromptCapabilities `json:"prompt"`
 }
 
 // ACPSessionID 是 agent 侧返回的会话标识。
@@ -107,7 +110,7 @@ func (s *Session) Caps() Caps {
 }
 
 func (c Caps) clone() Caps {
-	out := Caps{}
+	out := Caps{Prompt: c.Prompt}
 	if c.Modes != nil {
 		modes := *c.Modes
 		modes.AvailableModes = append([]Mode(nil), c.Modes.AvailableModes...)

@@ -93,6 +93,9 @@ type Settings struct {
 	PlanOn        bool          `json:"planOn"`
 	FastSupported bool          `json:"fastSupported"`
 	FastOn        bool          `json:"fastOn"`
+	// Prompt 是内容能力（图片/音频/内嵌上下文），前端据此门控附件入口。
+	// 已知方言由 adapter 按实测兜底（协议声明可能滞后），generic 按声明。
+	Prompt PromptCapabilities `json:"prompt"`
 }
 
 // SettingsPatch 是逐项可选的设置变更，nil 字段不动。

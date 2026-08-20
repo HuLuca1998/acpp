@@ -70,6 +70,13 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	if err != nil {
 		return nil, err
 	}
+	// 按 agent 声明的内容能力收口：规范禁止 client 越界发不支持的内容块。
+	if settings, serr := s.manager.Settings(sessionKey(sessionID)); serr == nil {
+		blocks, err = adaptBlocksToPromptCaps(blocks, settings.Prompt)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// 无标题的会话用首条消息的简写自动命名（对齐主流 AI 聊天应用）。
 	// 在返回 202 之前同步落库，前端跳转后立刻能看到新标题。
@@ -212,6 +219,29 @@ func BuildPromptBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSON
 		payload = nil
 	}
 	return blocks, payload, nil
+}
+
+// adaptBlocksToPromptCaps 把内容块收敛到 agent 声明的能力内（ACP 规定
+// client 不得发送未声明支持的内容块）：图片不支持时直接报错——静默丢掉
+// 用户刚传的图比报错更糟；内嵌上下文不支持时把 resource 降级成带来源头
+// 的 text 块——text 永远合法，agent 照样拿到全部内容。已知方言（claude/
+// codex）的能力由 adapter 兜底为 true，这里对它们是无操作。
+func adaptBlocksToPromptCaps(blocks []acp.ContentBlock, p acp.PromptCapabilities) ([]acp.ContentBlock, error) {
+	if p.Image && p.EmbeddedContext {
+		return blocks, nil
+	}
+	out := make([]acp.ContentBlock, 0, len(blocks))
+	for _, b := range blocks {
+		switch {
+		case b.Type == "image" && !p.Image:
+			return nil, fmt.Errorf("%w: 该 agent 不支持图片输入", ErrInvalid)
+		case b.Type == "resource" && !p.EmbeddedContext && b.Resource != nil:
+			out = append(out, acp.TextBlock(b.Resource.URI+"\n"+b.Resource.Text))
+		default:
+			out = append(out, b)
+		}
+	}
+	return out, nil
 }
 
 // runTurn 跑完一轮。它在自己的 goroutine 里，

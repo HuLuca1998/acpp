@@ -14,6 +14,8 @@ func (genericAdapter) Settings(caps Caps) Settings {
 	s := Settings{Flavor: FlavorGeneric}
 	s.Models, s.CurrentModel = modelsFrom(optionByCategory(caps, "model"))
 	s.Efforts, s.CurrentEffort = effortsFrom(optionByCategory(caps, "thought_level"))
+	// 内容能力严格按声明：规范默认全 false，不猜。
+	s.Prompt = caps.Prompt
 	return s
 }
 

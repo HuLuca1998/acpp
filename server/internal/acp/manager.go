@@ -247,6 +247,7 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 			sess.caps = Caps{
 				Modes:         loaded.Modes,
 				ConfigOptions: loaded.ConfigOptions,
+				Prompt:        init.AgentCapabilities.PromptCapabilities,
 			}
 			sess.mu.Unlock()
 			return nil
@@ -273,6 +274,7 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 	sess.caps = Caps{
 		Modes:         created.Modes,
 		ConfigOptions: created.ConfigOptions,
+		Prompt:        init.AgentCapabilities.PromptCapabilities,
 	}
 	sess.mu.Unlock()
 	return nil

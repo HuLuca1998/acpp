@@ -63,6 +63,14 @@ type FSCapability struct {
 	WriteTextFile bool `json:"writeTextFile"`
 }
 
+// PromptCapabilities 是 agent 声明的 prompt 内容能力（ACP promptCapabilities）。
+type PromptCapabilities struct {
+	Image bool `json:"image"`
+	Audio bool `json:"audio"`
+	// EmbeddedContext 是内嵌资源块（@ 文件全文内嵌）的支持位。
+	EmbeddedContext bool `json:"embeddedContext"`
+}
+
 type InitializeResult struct {
 	ProtocolVersion   int               `json:"protocolVersion"`
 	AgentCapabilities AgentCapabilities `json:"agentCapabilities"`
@@ -79,6 +87,9 @@ type AgentInfo struct {
 
 type AgentCapabilities struct {
 	LoadSession bool `json:"loadSession"`
+	// PromptCapabilities 声明 prompt 里允许的内容块种类；规范默认全 false，
+	// client 不该越界发。已知方言的实测兜底在各 adapter 里。
+	PromptCapabilities PromptCapabilities `json:"promptCapabilities"`
 }
 
 type AuthMethod struct {

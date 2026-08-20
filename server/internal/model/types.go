@@ -104,6 +104,12 @@ type AgentSkeleton struct {
 	Levels        []string `json:"levels,omitempty"`
 	PlanSupported bool     `json:"planSupported,omitempty"`
 	FastSupported bool     `json:"fastSupported,omitempty"`
+	// prompt 内容能力（探测时的 agentCapabilities.promptCapabilities，
+	// 已含方言兜底），草稿态用它门控附件按钮。指针是三态语义：nil 表示
+	// 旧探测记录没有这项（前端按支持处理），显式 false 才收起入口。
+	PromptImage    *bool `json:"promptImage,omitempty"`
+	PromptAudio    *bool `json:"promptAudio,omitempty"`
+	PromptEmbedded *bool `json:"promptEmbedded,omitempty"`
 }
 
 func (s AgentSkeleton) Value() (driver.Value, error) {

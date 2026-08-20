@@ -102,9 +102,13 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 				Disabled: oldDisabled["c:"+c.Name],
 			})
 		}
+		prompt := settings.Prompt
 		skeleton := model.AgentSkeleton{
-			PlanSupported: settings.PlanSupported,
-			FastSupported: settings.FastSupported,
+			PlanSupported:  settings.PlanSupported,
+			FastSupported:  settings.FastSupported,
+			PromptImage:    &prompt.Image,
+			PromptAudio:    &prompt.Audio,
+			PromptEmbedded: &prompt.EmbeddedContext,
 		}
 		for _, e := range settings.Efforts {
 			skeleton.Efforts = append(skeleton.Efforts, string(e))

@@ -24,6 +24,7 @@ import { useWorkspace } from "@/components/workspace/workspace-context"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { cn } from "@/lib/utils"
 import { ImageIcon } from "lucide-react"
+import { toast } from "sonner"
 
 /** 对话面板：消息流 + composer。工作区里唯一不可关闭的面板。 */
 export const ChatPanel = memo(function ChatPanel() {
@@ -74,6 +75,13 @@ export const ChatPanel = memo(function ChatPanel() {
     }
     submit()
   }
+
+  // prompt 内容能力门控：会话态看统一设置视图，草稿态看所选 agent 的
+  // 探测骨架。缺省（旧后端/旧探测记录）视为支持，显式 false 才收起入口
+  // ——claude/codex 由后端方言兜底恒为 true，这里主要约束 generic agent。
+  const promptImageAllowed = isNew
+    ? newSession.selectedAgent?.skeleton?.promptImage !== false
+    : (chat.settings?.prompt?.image ?? true)
 
   const hasContent =
     chat.messages.length > 0 ||
@@ -167,7 +175,11 @@ export const ChatPanel = memo(function ChatPanel() {
             onRemoveDbRef={removeDbRef}
           />
         }
-        onPasteImages={(picked) => void addImages(picked)}
+        onPasteImages={
+          promptImageAllowed
+            ? (picked) => void addImages(picked)
+            : () => toast.error(t("chat.attachments.imageUnsupported"))
+        }
         localPanel={
           localCommand !== null && localReady ? (
             <DbSlashPanel
@@ -225,13 +237,16 @@ export const ChatPanel = memo(function ChatPanel() {
           />
         )}
 
-        {/* 附件：图片上传与 @ 文件引用，两种态都可用。 */}
-        <AttachmentButton
-          label={t("chat.attachments.image")}
-          onClick={openImagePicker}
-        >
-          <ImageIcon className="size-3.5" />
-        </AttachmentButton>
+        {/* 附件：图片上传与 @ 文件引用。agent 声明不支持图片时按钮隐藏
+            （与「空清单自动隐藏」同一设计语言）。 */}
+        {promptImageAllowed ? (
+          <AttachmentButton
+            label={t("chat.attachments.image")}
+            onClick={openImagePicker}
+          >
+            <ImageIcon className="size-3.5" />
+          </AttachmentButton>
+        ) : null}
         <ReferenceMenu
           onPickFile={openFilePicker}
           onPickDatabase={openDbRefPicker}

@@ -30,6 +30,10 @@ func (codexAdapter) Settings(caps Caps) Settings {
 		s.PlanSupported = true
 		s.PlanOn = opt.CurrentValue == "plan"
 	}
+	// 同 claude：图片与内嵌上下文是实测能力，按方言兜底；audio 按声明走。
+	s.Prompt = caps.Prompt
+	s.Prompt.Image = true
+	s.Prompt.EmbeddedContext = true
 	return s
 }
 

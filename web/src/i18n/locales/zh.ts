@@ -418,6 +418,7 @@ export default {
       image: "添加图片",
       file: "引用文件",
       remove: "移除附件",
+      imageUnsupported: "当前 agent 不支持图片输入",
     },
     elicitation: {
       title: "Agent 请求你的输入",

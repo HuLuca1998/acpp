@@ -129,6 +129,10 @@ export interface Agent {
     levels?: AccessLevel[]
     planSupported?: boolean
     fastSupported?: boolean
+    /** prompt 内容能力（已含方言兜底），草稿态门控附件按钮。 */
+    promptImage?: boolean
+    promptAudio?: boolean
+    promptEmbedded?: boolean
   }
   /** 快速模式取舍：off 时快速开关不出现（空=未定，探测按 flavor 落默认）。 */
   fastPolicy?: "on" | "off" | ""
@@ -160,6 +164,12 @@ export interface SessionSettings {
   planOn: boolean
   fastSupported: boolean
   fastOn: boolean
+  /** prompt 内容能力（图片/音频/内嵌上下文）；缺省视为支持（旧后端）。 */
+  prompt?: {
+    image: boolean
+    audio: boolean
+    embeddedContext: boolean
+  }
 }
 
 /** 逐项可选的设置变更，缺省字段不动。 */
