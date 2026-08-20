@@ -14,6 +14,7 @@ import { AgentAvatar, AgentRow } from "@/components/chat/message-shell"
 import { PermissionCard } from "@/components/chat/cards/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
 import { PlanReviewCard } from "@/components/chat/cards/plan-review-card"
+import { TouchedFile } from "@/components/chat/touched-file"
 import type { ToolCallPayload } from "@/components/chat/tool-call"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import {
@@ -216,6 +217,18 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
                       <LiveToolMarker key={tool.id} tool={tool} />
                     ))}
                   </ActivitySection>
+                </AgentRow>
+              </MessageScrollerItem>
+            ) : null}
+
+            {/* 正在触碰的文件：locations 的跟随指示，点击可在查看器打开。 */}
+            {chat.busy && chat.touched[0] ? (
+              <MessageScrollerItem scrollAnchor={false}>
+                <AgentRow>
+                  <TouchedFile
+                    loc={chat.touched[0]}
+                    cwd={chat.session?.cwd}
+                  />
                 </AgentRow>
               </MessageScrollerItem>
             ) : null}

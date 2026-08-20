@@ -1,10 +1,18 @@
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AtSignIcon, CodeIcon, EyeIcon, FileTextIcon } from "lucide-react"
+import {
+  AtSignIcon,
+  CodeIcon,
+  EyeIcon,
+  FileTextIcon,
+  LocateFixedIcon,
+} from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import type { GitDiffView, WorkspaceFile } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
 import { MarkdownContent } from "@/components/chat/markdown"
+import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
 import {
   usePreviewTarget,
   useWorkspace,
@@ -37,6 +45,10 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   const ws = useWorkspace()
   const target = usePreviewTarget()
   const path = target?.path ?? null
+  const mode = target?.mode ?? "file"
+  const sha = target?.sha
+  // 跟随定位的行号：只在 file 模式有意义。
+  const targetLine = mode === "file" ? target?.line : undefined
   const [file, setFile] = useState<WorkspaceFile | null>(null)
   const [diff, setDiff] = useState<GitDiffView | null>(null)
   const [loading, setLoading] = useState(false)
@@ -44,9 +56,22 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   // markdown 默认看渲染后的样子——打开一个 README 是为了读它，不是读它的
   // 语法；要看源码点一下切过去。
   const [raw, setRaw] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
+  // 跟随模式：agent 每触碰一个新文件（locations），查看器自动切过去。
+  // 只在会话页有聊天上下文时提供；默认关闭——自动抢焦点必须是用户主动选的。
+  const chatPanel = useContext(ChatPanelContext)
+  const [follow, setFollow] = useState(false)
+  const head =
+    follow && chatPanel?.chat.busy ? chatPanel.chat.touched[0] : undefined
   useEffect(() => {
-    if (!target || !ws.sessionId) return
+    if (!head) return
+    ws.openPreview(head.path, head.line)
+  }, [head, ws])
+
+  // 依赖收窄到字段级：跟随时同一文件只变行号，不该整个重拉一遍内容。
+  useEffect(() => {
+    if (!path || !ws.sessionId) return
     let stale = false
     setLoading(true)
     setError(null)
@@ -54,17 +79,13 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     setDiff(null)
 
     const request =
-      target.mode === "diff"
-        ? target.sha
+      mode === "diff"
+        ? sha
           ? ws.scope
-              .gitCommitFile(ws.sessionId, target.sha, target.path)
+              .gitCommitFile(ws.sessionId, sha, path)
               .then((view) => ({ diff: view }))
-          : ws.scope
-              .gitDiff(ws.sessionId, target.path)
-              .then((view) => ({ diff: view }))
-        : ws.scope
-            .workspaceFile(ws.sessionId, target.path)
-            .then((view) => ({ file: view }))
+          : ws.scope.gitDiff(ws.sessionId, path).then((view) => ({ diff: view }))
+        : ws.scope.workspaceFile(ws.sessionId, path).then((view) => ({ file: view }))
 
     request
       .then((result) => {
@@ -81,7 +102,16 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     return () => {
       stale = true
     }
-  }, [target, ws.sessionId, ws.scope])
+  }, [path, mode, sha, ws.sessionId, ws.scope])
+
+  // 定位到行：行高固定 leading-5（20px），content-visibility 的估算尺寸
+  // 与之一致，按行数换算滚动位置即可，顶部留三行上下文。
+  useEffect(() => {
+    if (!targetLine || !file || file.binary) return
+    if (isMarkdown(path) && !raw) return
+    const el = bodyRef.current
+    if (el) el.scrollTop = Math.max(0, (targetLine - 1) * 20 - 60)
+  }, [targetLine, file, path, raw])
 
   const { lines, clipped } = useMemo(() => {
     if (!file || file.binary) return { lines: [], clipped: false }
@@ -120,6 +150,31 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         >
           {path}
         </span>
+        {chatPanel ? (
+          <button
+            type="button"
+            aria-pressed={follow}
+            aria-label={t(
+              follow
+                ? "workspace.preview.followOff"
+                : "workspace.preview.followOn"
+            )}
+            title={t(
+              follow
+                ? "workspace.preview.followOff"
+                : "workspace.preview.followOn"
+            )}
+            className={cn(
+              "flex size-6 shrink-0 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted active:scale-[0.97]",
+              follow
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setFollow((prev) => !prev)}
+          >
+            <LocateFixedIcon className="size-3.5" />
+          </button>
+        ) : null}
         {isMarkdown(path) && target?.mode !== "diff" ? (
           <button
             type="button"
@@ -156,7 +211,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
           <AtSignIcon className="size-3.5" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
         {error ? (
           <div className="p-3 text-xs text-destructive">{error}</div>
         ) : diff ? (
@@ -189,7 +244,10 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
                 // contain-intrinsic-size 必须带 auto：固定值让浏览器用估算
                 // 高度堆叠所有行，面板尺寸一变（拖动分栏、切布局）累积误差
                 // 就会把后半段留成空白；auto 让它记住实测高度再复用。
-                className="flex [contain-intrinsic-block-size:auto_1.25rem] [content-visibility:auto]"
+                className={cn(
+                  "flex [contain-intrinsic-block-size:auto_1.25rem] [content-visibility:auto]",
+                  targetLine === i + 1 && "bg-primary/10"
+                )}
               >
                 <span className="w-12 shrink-0 pr-3 text-right text-muted-foreground/60 tabular-nums select-none">
                   {i + 1}

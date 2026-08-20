@@ -1,5 +1,5 @@
 import type { LiveToolCall } from "@/lib/chat/chat-events"
-import type { Message } from "@/types/acp"
+import type { Message, ToolLocation } from "@/types/acp"
 
 /**
  * 子代理清单的提取。
@@ -142,6 +142,22 @@ export function collectSubagents(
     if (tool.isSubagent) put(tool)
   }
   return order.map((id) => toEntry(byID.get(id)!))
+}
+
+/**
+ * 每个子代理当前触碰的文件：取它名下最新一条带 locations 的流式调用。
+ * 只对本轮的流式条目有意义——历史条目的位置没有"正在"可言。
+ */
+export function subagentLocations(
+  liveTools: LiveToolCall[]
+): Map<string, ToolLocation> {
+  const map = new Map<string, ToolLocation>()
+  for (const tool of liveTools) {
+    if (!tool.subagentOf) continue
+    const loc = tool.locations?.find((l) => l.path)
+    if (loc) map.set(tool.subagentOf, loc)
+  }
+  return map
 }
 
 /** 判断一条工具调用是不是某个子代理干的——主对话流要把它们摘出去。 */

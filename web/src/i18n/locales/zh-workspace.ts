@@ -57,6 +57,7 @@ export const zhWorkspace = {
   },
   tree: {
     refresh: "刷新",
+    touched: "agent 正在触碰",
     empty: "目录为空",
     truncated: "条目过多，其余已省略",
     draftTitle: "工作区尚未就绪",
@@ -68,6 +69,8 @@ export const zhWorkspace = {
     emptyHint: "在文件树中点击文件即可预览。",
     rendered: "看渲染结果",
     source: "看源码",
+    followOn: "跟随 agent 正在触碰的文件",
+    followOff: "停止跟随",
     binary: "二进制文件，无法预览。",
     truncated: "内容过长，已截断显示。",
   },

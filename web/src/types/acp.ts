@@ -389,6 +389,16 @@ export interface SendInput {
   datasources?: string[]
 }
 
+/**
+ * tool_call 携带的文件位置（ACP 的 locations，follow-along 设计），
+ * 界面用它跟随 agent 正在触碰的文件。路径是绝对路径。
+ */
+export interface ToolLocation {
+  path: string
+  /** 1 起算的行号，agent 可不带。 */
+  line?: number
+}
+
 /** SSE 推来的事件类型。 */
 export type StreamEventKind =
   | "user_message"
@@ -422,6 +432,8 @@ export interface StreamEvent {
   rawOutput?: unknown
   /** tool_call 的内容块（diff 等），流式期间即可渲染。 */
   content?: unknown
+  /** tool_call 触碰的文件位置，供跟随视图与文件树状态点。 */
+  locations?: ToolLocation[]
   /** 这次工具调用启动了一个子代理（claude 的 Agent/Task、codex 的 subAgentActivity）。 */
   isSubagent?: boolean
   /** 这条是某个子代理干的，值为它所挂的启动调用 id。 */

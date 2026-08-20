@@ -108,8 +108,8 @@ export function WorkspaceProvider({
         const dock = apiRef.current
         if (dock) applyLayoutPreset(dock, preset)
       },
-      openPreview: (path) => {
-        previewRef.current = { path, mode: "file" }
+      openPreview: (path, line) => {
+        previewRef.current = { path, mode: "file", line }
         ensureOpen("preview")
         listenersRef.current.forEach((l) => l())
       },

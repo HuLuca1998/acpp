@@ -369,6 +369,7 @@ export default {
     toolCall: "Tool call",
     exitCode: "exit {{code}}",
     activity: "Thinking & tool calls",
+    touchedHint: "Open in the file viewer",
     copy: "Copy",
     copied: "Copied",
     plan: "Plan",

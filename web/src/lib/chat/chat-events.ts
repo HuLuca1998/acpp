@@ -13,6 +13,7 @@ import type {
   SessionSettings,
   SlashCommand,
   StreamEvent,
+  ToolLocation,
   TurnUsage,
 } from "@/types/acp"
 
@@ -25,6 +26,8 @@ export interface LiveToolCall {
   rawInput?: unknown
   rawOutput?: unknown
   content?: unknown
+  /** 这次调用触碰的文件位置（ACP locations）。 */
+  locations?: ToolLocation[]
   /** 子代理归属，见 StreamEvent 上的同名字段。 */
   isSubagent?: boolean
   subagentOf?: string
@@ -88,6 +91,11 @@ export interface ChatState {
   plan: PlanEntry[] | null
   /** 当前轮内已裁决的权限请求。 */
   permissions: ResolvedPermission[]
+  /**
+   * 本轮 agent 触碰过的文件位置：最新在前、按路径去重，轮结束清空。
+   * 供活动区「正在触碰」一行、文件树状态点与查看器跟随模式消费。
+   */
+  touched: ToolLocation[]
   /** busy 期间排队的插话，轮次自然结束后合并发出；中止后保留等用户处置。 */
   queued: QueuedMessage[]
 }
@@ -113,6 +121,7 @@ export const INITIAL_CHAT_STATE: ChatState = {
   permission: null,
   plan: null,
   permissions: [],
+  touched: [],
   queued: [],
 }
 
@@ -161,6 +170,7 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         ...prev,
         busy: true,
         stopReason: null,
+        touched: [],
         messages: isDupOfRebuilt
           ? prev.messages
           : isEchoOfOptimistic
@@ -188,6 +198,7 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
       return {
         ...prev,
         liveTools: mergeTool(prev.liveTools, ev),
+        touched: mergeTouched(prev.touched, ev.locations),
       }
 
     case "session_title":
@@ -279,6 +290,7 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         elicitation: null,
         permission: null,
         permissions: [],
+        touched: [],
       }
 
     case "error":
@@ -299,6 +311,25 @@ export function mergeInputs(inputs: SendInput[]): SendInput {
     images: inputs.flatMap((i) => i.images ?? []),
     files: [...new Set(inputs.flatMap((i) => i.files ?? []))],
   }
+}
+
+/** 触碰位置的保留上限：只为界面跟随服务，长轮不无限膨胀。 */
+const MAX_TOUCHED = 24
+
+/** 合并新触碰的位置：同路径移到最前（带上新行号），整体封顶。 */
+function mergeTouched(
+  prev: ToolLocation[],
+  incoming?: ToolLocation[]
+): ToolLocation[] {
+  if (!incoming?.length) return prev
+  const next = [...prev]
+  for (const loc of incoming) {
+    if (!loc?.path) continue
+    const index = next.findIndex((l) => l.path === loc.path)
+    if (index >= 0) next.splice(index, 1)
+    next.unshift(loc)
+  }
+  return next.slice(0, MAX_TOUCHED)
 }
 
 function upsert(messages: Message[], incoming: Message): Message[] {
@@ -324,6 +355,7 @@ function mergeTool(tools: LiveToolCall[], ev: StreamEvent): LiveToolCall[] {
         rawInput: ev.rawInput,
         rawOutput: ev.rawOutput,
         content: ev.content,
+        locations: ev.locations,
         isSubagent: ev.isSubagent,
         subagentOf: ev.subagentOf,
         subagentThreadId: ev.subagentThreadId,
@@ -343,6 +375,7 @@ function mergeTool(tools: LiveToolCall[], ev: StreamEvent): LiveToolCall[] {
     rawInput: ev.rawInput ?? current.rawInput,
     rawOutput: ev.rawOutput ?? current.rawOutput,
     content: ev.content ?? current.content,
+    locations: ev.locations ?? current.locations,
     // agent 会在后续 update 里漏带子代理标记，已知归属不能被空值冲掉。
     isSubagent: ev.isSubagent || current.isSubagent,
     subagentOf: ev.subagentOf || current.subagentOf,

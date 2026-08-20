@@ -4,9 +4,11 @@ import { BotIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 
 import { MarkdownContent } from "@/components/chat/markdown"
 import { api } from "@/lib/api"
+import { relativePath } from "@/lib/format"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { useChatPanel } from "@/components/workspace/chat-panel-context"
 import { StatusDot, type StatusTone } from "@/components/status-dot"
+import type { ToolLocation } from "@/types/acp"
 import {
   Accordion,
   AccordionContent,
@@ -16,6 +18,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   collectSubagents,
+  subagentLocations,
   type SubagentEntry,
   type SubagentState,
 } from "@/lib/subagents"
@@ -80,11 +83,16 @@ function SubagentItem({
   tone,
   expanded,
   sessionId,
+  location,
+  cwd,
 }: {
   entry: SubagentEntry
   tone: StatusTone
   expanded: boolean
   sessionId: number | null
+  /** 它正在触碰的文件（ACP locations），只在 running 时有意义。 */
+  location?: ToolLocation
+  cwd?: string
 }) {
   const { t } = useTranslation()
   // codex 的产出不在协议里，展开时才去 load 它那条独立 thread。拉过就留住，
@@ -133,6 +141,14 @@ function SubagentItem({
               <span className="truncate">{entry.description}</span>
             ) : null}
           </span>
+          {entry.state === "running" && location ? (
+            <span
+              title={location.path}
+              className="mt-0.5 block truncate font-mono text-[11px] font-normal text-muted-foreground/70"
+            >
+              {relativePath(location.path, cwd)}
+            </span>
+          ) : null}
         </span>
       </AccordionTrigger>
       <AccordionContent className="mx-3 space-y-2.5 border-t border-border/60 pt-2.5 pb-2.5">
@@ -155,6 +171,8 @@ function Group({
   collapsible,
   openIds,
   sessionId,
+  locations,
+  cwd,
 }: {
   state: SubagentState
   tone: StatusTone
@@ -162,6 +180,8 @@ function Group({
   collapsible: boolean
   openIds: string[]
   sessionId: number | null
+  locations: Map<string, ToolLocation>
+  cwd?: string
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
@@ -201,6 +221,8 @@ function Group({
               tone={tone}
               expanded={openIds.includes(entry.id)}
               sessionId={sessionId}
+              location={locations.get(entry.id)}
+              cwd={cwd}
             />
           ))}
         </div>
@@ -222,6 +244,11 @@ export const SubagentsPanel = memo(function SubagentsPanel() {
   const entries = useMemo(
     () => collectSubagents(chat.messages, chat.liveTools),
     [chat.messages, chat.liveTools]
+  )
+  // 各子代理当前触碰的文件：跟着流式条目走，轮结束自然消失。
+  const locations = useMemo(
+    () => subagentLocations(chat.liveTools),
+    [chat.liveTools]
   )
 
   if (!entries.length) {
@@ -251,6 +278,8 @@ export const SubagentsPanel = memo(function SubagentsPanel() {
             openIds={openIds}
             sessionId={chat.session?.id ?? null}
             entries={entries.filter((e) => e.state === state)}
+            locations={locations}
+            cwd={chat.session?.cwd}
           />
         ))}
       </Accordion>

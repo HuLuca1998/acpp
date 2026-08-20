@@ -16,6 +16,8 @@ export interface PreviewTarget {
   mode: "file" | "diff"
   /** diff 模式下的提交；空表示工作区里尚未提交的改动。 */
   sha?: string
+  /** file 模式下要定位到的行（1 起算），来自跟随视图或触碰行点击。 */
+  line?: number
 }
 
 /**
@@ -69,8 +71,8 @@ export interface WorkspaceValue {
   newTerminal: () => void
   /** 应用内置布局预设（终端实例原样保留）。 */
   applyPreset: (preset: LayoutPreset) => void
-  /** 打开文件预览：自动 ensureOpen 查看器面板并切到该文件。 */
-  openPreview: (path: string) => void
+  /** 打开文件预览：自动 ensureOpen 查看器面板并切到该文件，可带行号定位。 */
+  openPreview: (path: string, line?: number) => void
   /** 在查看器里以 diff 模式打开：sha 为空看工作区改动，否则看那条提交。 */
   openDiff: (path: string, sha?: string) => void
   /** 下载工作区里的文件；archive=true 时把目录打包成 zip。 */

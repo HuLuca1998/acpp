@@ -348,6 +348,7 @@ export default {
     toolCall: "工具调用",
     exitCode: "退出码 {{code}}",
     activity: "思考与工具调用",
+    touchedHint: "在查看器中打开",
     copy: "复制",
     copied: "已复制",
     plan: "任务计划",

@@ -56,6 +56,17 @@ export function displayPath(path: string, root?: string): string {
 }
 
 /**
+ * 把绝对路径折成相对 base 的短路径（不带前导斜杠）；不在 base 下时原样
+ * 返回。跟随视图用它把会话 cwd 下的长路径压短——与 displayPath 的差别是
+ * 这里不加 `~` 前缀，剩下的就是仓库内的相对路径，可直接对上文件树。
+ */
+export function relativePath(path: string, base?: string): string {
+  if (!path || !base) return path
+  const prefix = base.endsWith("/") ? base : `${base}/`
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path
+}
+
+/**
  * 字节数转人话。二进制单位（1024 进制）——这些数字来自文件系统，
  * 与 Finder / ls -lh 看到的对得上比「更标准」重要。
  */

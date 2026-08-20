@@ -60,6 +60,7 @@ export const enWorkspace = {
   },
   tree: {
     refresh: "Refresh",
+    touched: "Agent is touching this",
     empty: "Empty directory",
     truncated: "Too many entries, the rest are omitted",
     draftTitle: "Workspace not ready",
@@ -72,6 +73,8 @@ export const enWorkspace = {
     emptyHint: "Click a file in the file tree to preview it.",
     rendered: "Show rendered",
     source: "Show source",
+    followOn: "Follow files the agent touches",
+    followOff: "Stop following",
     binary: "Binary file, cannot preview.",
     truncated: "Content too long, display truncated.",
   },

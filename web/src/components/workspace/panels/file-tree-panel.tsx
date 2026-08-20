@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ChevronRightIcon,
@@ -17,10 +17,12 @@ import {
 import { cn } from "@/lib/utils"
 import type { TreeEntry } from "@/types/acp"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
+import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
 import {
   useGitOverview,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
+import { StatusDot } from "@/components/status-dot"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,6 +46,18 @@ export const FileTreePanel = memo(function FileTreePanel() {
   // 变更着色跟着共享的 git 汇总走：turn 结束与手动刷新都会重取，
   // 文件树不必自己再问一遍。
   const changes = useMemo(() => buildChangeMap(git.data), [git.data])
+  // agent 本轮触碰的文件（ACP locations）：亮一个呼吸状态点。上下文在
+  // 编排页可能不存在；用路径拼接的 key 记忆，聊天流的高频 chunk 不会
+  // 换 Set 引用、也就不会把整棵树拖着重渲染。
+  const chatPanel = useContext(ChatPanelContext)
+  const touchedKey =
+    chatPanel?.chat.busy && chatPanel.chat.touched.length > 0
+      ? chatPanel.chat.touched.map((l) => l.path).join("\n")
+      : ""
+  const touched = useMemo(
+    () => new Set(touchedKey ? touchedKey.split("\n") : []),
+    [touchedKey]
+  )
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [childrenByPath, setChildrenByPath] = useState<
@@ -165,6 +179,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
               onAddReference={ws.addReference}
               onDownload={ws.downloadFile}
               changes={changes}
+              touched={touched}
             />
           ))
         )}
@@ -178,8 +193,10 @@ export const FileTreePanel = memo(function FileTreePanel() {
   )
 })
 
-/** 单个树节点：固定行高，展开箭头只动 transform；右键出引用菜单。 */
-function TreeNode({
+/** 单个树节点：固定行高，展开箭头只动 transform；右键出引用菜单。
+ *  memo：树挂在聊天上下文下，流式 chunk 会带着父组件高频重渲染，
+ *  props 不变的节点不该跟着跑。 */
+const TreeNode = memo(function TreeNode({
   entry,
   depth,
   expanded,
@@ -189,6 +206,7 @@ function TreeNode({
   onAddReference,
   onDownload,
   changes,
+  touched,
 }: {
   entry: TreeEntry
   depth: number
@@ -200,6 +218,8 @@ function TreeNode({
   onDownload: (path: string, archive?: boolean) => void
   /** 绝对路径 → git 状态，用来给条目着色。 */
   changes: Map<string, FileChangeKind>
+  /** agent 本轮触碰过的绝对路径：条目尾部亮呼吸点，轮结束即灭。 */
+  touched: Set<string>
 }) {
   const { t } = useTranslation()
   const isDir = entry.kind === "dir"
@@ -209,6 +229,10 @@ function TreeNode({
     : changes.get(entry.path)
   const isOpen = isDir && expanded.has(entry.path)
   const children = entry.children ?? childrenByPath.get(entry.path)
+  // 目录冒泡：收起时也能看出 agent 正在哪一支里干活。
+  const isTouched = isDir
+    ? [...touched].some((p) => p.startsWith(`${entry.path}/`))
+    : touched.has(entry.path)
 
   return (
     <>
@@ -243,6 +267,11 @@ function TreeNode({
           <span className={cn("truncate", tone && CHANGE_TONE[tone])}>
             {entry.name}
           </span>
+          {isTouched ? (
+            <span title={t("workspace.tree.touched")} className="ml-auto pr-1">
+              <StatusDot tone="success" pulse />
+            </span>
+          ) : null}
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => onAddReference(entry.path)}>
@@ -282,6 +311,7 @@ function TreeNode({
               onAddReference={onAddReference}
               onDownload={onDownload}
               changes={changes}
+              touched={touched}
             />
           ))
         : null}
@@ -295,4 +325,4 @@ function TreeNode({
       ) : null}
     </>
   )
-}
+})
