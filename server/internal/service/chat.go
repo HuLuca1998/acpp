@@ -172,7 +172,9 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 	if settings, err := s.manager.Settings(key); err == nil {
 		cat.filterSettings(&settings)
 		view.Settings = &settings
-		s.saveSettingsSnapshot(sessionID, &settings)
+		// 这里刻意不写快照：查看会话是只读的，而它读到的可能正是一份还没
+		// 拨回去的默认值——写下去就把用户设过的值冲了。快照的写入口只有两个：
+		// 用户自己改（ApplySettings）和 agent 自己切（EventSettings）。
 	}
 	view.Commands = cat.filterCommands(s.manager.Commands(key))
 	return view, nil
@@ -266,11 +268,17 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	if err != nil {
 		return nil, err
 	}
+	// 新进程带着 agent 的默认设置醒来，先把用户设过的值拨回去，再去取统一
+	// 视图——否则下面这三件事全是错的：响应里的 Settings、写回的快照、
+	// 广播出去的 SSE。
+	restored := s.restoreSettings(ctx, sessionID, view.LastSettings)
 	cat := s.catalogFor(ctx, sessionID)
 	if settings, err := s.manager.Settings(key); err == nil {
 		cat.filterSettings(&settings)
 		view.Settings = &settings
-		s.saveSettingsSnapshot(sessionID, &settings)
+		if restored {
+			s.saveSettingsSnapshot(sessionID, &settings)
+		}
 		// 懒连接下 Open 多由 Send 顺路触发，前端不会拿到这份 HTTP 响应——
 		// 统一视图与命令清单同时走 SSE 广播一份。
 		br.Publish(StreamEvent{Kind: "settings", Settings: &settings})

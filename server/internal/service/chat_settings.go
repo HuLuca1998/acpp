@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
@@ -147,6 +148,76 @@ func (s *ChatService) saveSettingsSnapshot(sessionID uint, settings *acp.Setting
 		Where("id = ?", sessionID).Update("last_settings", snapshot).Error; err != nil {
 		slog.Warn("save settings snapshot", "session", sessionID, "err", err)
 	}
+}
+
+// settingsRestorePatch 算出把 current 拨回快照 last 需要下发的那几项。
+//
+// 一项要三样都成立才下发：快照里有、与当前值不同、且新进程确实支持它——
+// Apply 是逐项串行、遇错即停的，混进一个已经下线的模型 id 会让排在它后面
+// 的档位统统不生效。
+func settingsRestorePatch(current acp.Settings, last model.JSONMap) (acp.SettingsPatch, bool) {
+	var patch acp.SettingsPatch
+	changed := false
+
+	if v, _ := last["model"].(string); v != "" && v != current.CurrentModel &&
+		slices.ContainsFunc(current.Models, func(m acp.Model) bool { return m.ID == v }) {
+		patch.Model = &v
+		changed = true
+	}
+	if v, _ := last["effort"].(string); v != "" && acp.Effort(v) != current.CurrentEffort &&
+		slices.Contains(current.Efforts, acp.Effort(v)) {
+		e := acp.Effort(v)
+		patch.Effort = &e
+		changed = true
+	}
+	if v, _ := last["level"].(string); v != "" && acp.AccessLevel(v) != current.CurrentLevel &&
+		slices.Contains(current.Levels, acp.AccessLevel(v)) {
+		l := acp.AccessLevel(v)
+		patch.Level = &l
+		changed = true
+	}
+	if v, ok := last["plan"].(bool); ok && current.PlanSupported && v != current.PlanOn {
+		patch.Plan = &v
+		changed = true
+	}
+	if v, ok := last["fast"].(bool); ok && current.FastSupported && v != current.FastOn {
+		patch.Fast = &v
+		changed = true
+	}
+	return patch, changed
+}
+
+// restoreSettings 把会话最后一次生效的设置回放到刚拉起的子进程。
+//
+// 模型、思考深度、权限档都是 ACP 会话级的运行时状态，跟着子进程一起死：
+// 空闲回收（或崩溃）后重开，agent 给回来的是它自己的默认值。不回放的话，
+// 用户离开十分钟再发一条消息，模型和权限档就自己变了；更糟的是这份默认值
+// 随即被 saveSettingsSnapshot 写回快照，把用户设过的值永久冲掉。
+//
+// 只补差异项：session/load 可能已经恢复了一部分，重设一遍是白跑的 RPC。
+// 失败只记日志——设置没拨回来是遗憾，会话开不起来才是事故。
+//
+// 返回值是「快照现在可以安全覆盖了吗」：拨回来了、或者压根没什么要拨的，
+// 都是 true；只有真的拨失败才是 false，此时调用方必须留着旧快照——拿默认值
+// 盖上去，用户设过的值就再也找不回来了。
+func (s *ChatService) restoreSettings(ctx context.Context, sessionID uint, last model.JSONMap) bool {
+	if len(last) == 0 {
+		return true
+	}
+	key := sessionKey(sessionID)
+	current, err := s.manager.Settings(key)
+	if err != nil {
+		return true
+	}
+	patch, ok := settingsRestorePatch(current, last)
+	if !ok {
+		return true
+	}
+	if _, err := s.manager.Apply(ctx, key, patch); err != nil {
+		slog.Warn("restore session settings", "session", sessionID, "err", err)
+		return false
+	}
+	return true
 }
 
 // ApplySettings 逐项应用统一设置变更并广播最新视图（多标签页保持同步）。
