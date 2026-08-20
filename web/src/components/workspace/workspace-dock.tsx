@@ -205,12 +205,18 @@ export const WorkspaceDock = memo(function WorkspaceDock() {
   const ws = useWorkspace()
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // 只在真正卸载时摘句柄。依赖必须是稳定的 attachApi 而不是整个 ws：
+  // ws 每换一次（切会话、草稿态换目录都会换）都会跑一遍 cleanup，把句柄
+  // 摘掉，而挂句柄只发生在 dockview 首次 ready 那一次——从会话页点「新建
+  // 会话」之后，面板就此关不掉也切不动，正是这么来的。
+  const detach = ws.attachApi
   useEffect(() => {
+    const timer = saveTimer
     return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      ws.attachApi(null)
+      if (timer.current) clearTimeout(timer.current)
+      detach(null)
     }
-  }, [ws])
+  }, [detach])
 
   const onReady = useCallback(
     (event: DockviewReadyEvent) => {

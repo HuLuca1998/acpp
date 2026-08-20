@@ -14,7 +14,7 @@ import {
   RotateCwIcon,
 } from "lucide-react"
 
-import { api } from "@/lib/api"
+import { displayPath } from "@/lib/format"
 import {
   buildChangeMap,
   CHANGE_TONE,
@@ -23,6 +23,7 @@ import {
 } from "@/lib/git-status"
 import { cn } from "@/lib/utils"
 import type { TreeEntry } from "@/types/acp"
+import { useIdentity } from "@/hooks/identity-context"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
 import {
@@ -42,6 +43,25 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 
 /**
+ * 空目录的 children 占位。用同一个常量而不是每次 `[]`：引用稳定，
+ * TreeNode 的 memo 才拦得住无谓重渲染。
+ */
+const NO_CHILDREN: TreeEntry[] = []
+
+/**
+ * 树根的短标签：路径长就只留最后两段。
+ *
+ * 不用 CSS 的 `direction: rtl` 截断——那会把开头的 `/` 甩到末尾，
+ * `/Users/luca/acpp` 显示成 `Users/luca/acpp/`，看着像另一个路径。
+ * 悬停仍给完整路径。
+ */
+function rootLabel(path: string): string {
+  const segs = path.split("/").filter(Boolean)
+  if (segs.length <= 2) return path
+  return `…/${segs.slice(-2).join("/")}`
+}
+
+/**
  * 文件树面板：首屏一次拉两层（后端 depth=2），更深展开时按目录懒加载。
  * 懒加载的子目录内容放 childrenByPath，不回写树结构，保持更新扁平。
  */
@@ -49,7 +69,11 @@ export const FileTreePanel = memo(function FileTreePanel() {
   const { t } = useTranslation()
   const ws = useWorkspace()
   const [entries, setEntries] = useState<TreeEntry[] | null>(null)
+  // 树根的绝对路径：顶栏要显示「这棵树是哪个目录」——会话的工作目录和
+  // 工作区根长得像，不写出来根本分不清自己在看哪一个。
+  const [root, setRoot] = useState("")
   const [truncated, setTruncated] = useState(false)
+  const identity = useIdentity().identity
   const git = useGitOverview()
   // 变更着色跟着共享的 git 汇总走：turn 结束与手动刷新都会重取，
   // 文件树不必自己再问一遍。
@@ -71,6 +95,9 @@ export const FileTreePanel = memo(function FileTreePanel() {
   const [childrenByPath, setChildrenByPath] = useState<
     Map<string, TreeEntry[]>
   >(new Map())
+  // 懒加载失败的目录：没有它，失败等于「children 永远是 undefined」，
+  // 那个位置的 spinner 就会一直转下去，看着像卡死而不是出错。
+  const [failed, setFailed] = useState<Set<string>>(new Set())
 
   const load = useCallback(() => {
     if (!ws.ready) return
@@ -78,6 +105,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
       .workspaceTree(ws.sessionId, { depth: 2 })
       .then((listing) => {
         setError(null)
+        setRoot(listing.root)
         setEntries(listing.entries)
         setTruncated(listing.truncated ?? false)
         // 首屏默认展开第一层目录（即「默认展开 2 层」——根内容 + 一级目录内容全部可见）。
@@ -87,6 +115,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
           )
         )
         setChildrenByPath(new Map())
+        setFailed(new Set())
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err))
@@ -111,19 +140,28 @@ export const FileTreePanel = memo(function FileTreePanel() {
         }
         return next
       })
-      // 未展开过的深层目录：补拉一层。失败不打断树，行内静默（下次点击重试）。
+      // 未展开过的深层目录：补拉一层。**必须走 ws.scope**——草稿态没有会话，
+      // 请求得打 /workspace?cwd=，写死 api.sessions 会打到 /sessions/0 上，
+      // 失败又被静默吞掉，表现就是展开一个目录后永远转圈。
       if (!entry.listed && !childrenByPath.has(entry.path)) {
-        void api.sessions
+        setFailed((prev) => {
+          if (!prev.has(entry.path)) return prev
+          const next = new Set(prev)
+          next.delete(entry.path)
+          return next
+        })
+        void ws.scope
           .workspaceTree(ws.sessionId, { path: entry.path, depth: 1 })
           .then((listing) => {
             setChildrenByPath((prev) =>
               new Map(prev).set(entry.path, listing.entries)
             )
           })
-          .catch(() => {})
+          // 失败不打断整棵树，只在这一行标出来（收起再展开即重试）。
+          .catch(() => setFailed((prev) => new Set(prev).add(entry.path)))
       }
     },
-    [ws.sessionId, childrenByPath]
+    [ws.scope, ws.sessionId, childrenByPath]
   )
 
   if (!ws.ready) {
@@ -159,7 +197,13 @@ export const FileTreePanel = memo(function FileTreePanel() {
 
   return (
     <div className="flex h-full flex-col [contain:strict]">
-      <div className="flex h-8 shrink-0 items-center justify-end px-2">
+      <div className="flex h-8 shrink-0 items-center gap-1 px-2">
+        {/* 树根：路径长就从头部省略——尾巴（当前目录名）才是要认的那截。 */}
+        <Hint label={root || t("workspace.panels.files")} align="start">
+          <span className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground">
+            {rootLabel(displayPath(root, identity?.root))}
+          </span>
+        </Hint>
         <Hint
           label={t("workspace.tree.refresh")}
           desc={t("workspace.tree.refreshDesc")}
@@ -188,6 +232,7 @@ export const FileTreePanel = memo(function FileTreePanel() {
               depth={0}
               expanded={expanded}
               childrenByPath={childrenByPath}
+              failed={failed}
               onToggle={toggleDir}
               onOpenFile={ws.openPreview}
               onAddReference={ws.addReference}
@@ -215,6 +260,7 @@ const TreeNode = memo(function TreeNode({
   depth,
   expanded,
   childrenByPath,
+  failed,
   onToggle,
   onOpenFile,
   onAddReference,
@@ -226,6 +272,7 @@ const TreeNode = memo(function TreeNode({
   depth: number
   expanded: Set<string>
   childrenByPath: Map<string, TreeEntry[]>
+  failed: Set<string>
   onToggle: (entry: TreeEntry) => void
   onOpenFile: (path: string) => void
   onAddReference: (path: string) => void
@@ -242,7 +289,12 @@ const TreeNode = memo(function TreeNode({
     ? dirChangeKind(entry.path, changes)
     : changes.get(entry.path)
   const isOpen = isDir && expanded.has(entry.path)
-  const children = entry.children ?? childrenByPath.get(entry.path)
+  // `listed` = 后端已经列过这个目录：此时没有 children 就是**空目录**，
+  // 不是「还没加载」。少了这一层判断，首屏展开的空目录会挂着一个永远
+  // 转不完的 spinner（后端对空目录回的是 children: null）。
+  const children =
+    entry.children ??
+    (entry.listed ? NO_CHILDREN : childrenByPath.get(entry.path))
   // 目录冒泡：收起时也能看出 agent 正在哪一支里干活。
   const isTouched = isDir
     ? [...touched].some((p) => p.startsWith(`${entry.path}/`))
@@ -312,6 +364,14 @@ const TreeNode = memo(function TreeNode({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      {isOpen && children && children.length === 0 ? (
+        <div
+          className="flex h-6 items-center px-1.5 text-xs text-muted-foreground/70"
+          style={{ paddingLeft: `${(depth + 1) * 14 + 6}px` }}
+        >
+          {t("workspace.tree.empty")}
+        </div>
+      ) : null}
       {isOpen && children
         ? children.map((child) => (
             <TreeNode
@@ -320,6 +380,7 @@ const TreeNode = memo(function TreeNode({
               depth={depth + 1}
               expanded={expanded}
               childrenByPath={childrenByPath}
+              failed={failed}
               onToggle={onToggle}
               onOpenFile={onOpenFile}
               onAddReference={onAddReference}
@@ -331,10 +392,18 @@ const TreeNode = memo(function TreeNode({
         : null}
       {isOpen && !children ? (
         <div
-          className="flex h-6 items-center px-1.5"
+          className="flex h-6 items-center px-1.5 text-xs text-muted-foreground"
           style={{ paddingLeft: `${(depth + 1) * 14 + 6}px` }}
         >
-          <Spinner className="size-3 text-muted-foreground" />
+          {/* 加载失败要说出来：一个永远转的圈看着像卡死，用户只会一直等。
+              收起再展开即重试。 */}
+          {failed.has(entry.path) ? (
+            <span className="text-destructive/80">
+              {t("workspace.tree.loadFailed")}
+            </span>
+          ) : (
+            <Spinner className="size-3" />
+          )}
         </div>
       ) : null}
     </>

@@ -48,6 +48,12 @@ export function WorkspaceProvider({
     [sessionId, draftCwd]
   )
   const apiRef = useRef<DockviewApi | null>(null)
+  // 稳定引用：dock 拿它做「卸载时摘句柄」的 effect 依赖，跟着 value 一起
+  // 换新会让每次 sessionId/scope 变化都触发一次「摘句柄」，而挂句柄只在
+  // dockview 首次 ready 时发生一次——摘掉就再也接不回来了。
+  const attachApi = React.useCallback((next: DockviewApi | null) => {
+    apiRef.current = next
+  }, [])
   const previewRef = useRef<PreviewTarget | null>(null)
   const listenersRef = useRef(new Set<() => void>())
   const gitRef = useRef<GitStoreState>({
@@ -83,9 +89,7 @@ export function WorkspaceProvider({
        * 真正需要会话的面板（日志、子代理、终端）各自看 sessionId，不看这个。
        */
       ready: sessionId > 0 || draftCwd !== undefined,
-      attachApi: (api) => {
-        apiRef.current = api
-      },
+      attachApi,
       getApi: () => apiRef.current,
       ensureOpen,
       isOpen: (id) => apiRef.current?.getPanel(id) !== undefined,
