@@ -9,6 +9,7 @@ import {
 } from "@/lib/chat/chat-events"
 import {
   claimFirstSend,
+  isOptimisticMessage,
   optimisticUserMessage,
   releaseFirstSend,
 } from "@/lib/chat/first-send"
@@ -153,11 +154,26 @@ export function useChat(sessionId: number) {
       const history = await api.sessions.messages(sessionId, {
         limit: MESSAGE_PAGE,
       })
-      setState((prev) => ({
-        ...prev,
-        messages: history.items,
-        hasEarlier: history.items.length < history.total,
-      }))
+      setState((prev) => {
+        // 刚发出、服务端还没回声的乐观气泡不能被这份重建列表冲掉：
+        // turn_done 同时触发本次拉取与排队插话的 flush，插话的气泡是在
+        // 请求发出之后才进 messages 的，而重建列表按定义不含它——无条件
+        // 覆盖会让它闪现一下就消失，等几秒后 user_message 回声才重现。
+        const pending = prev.messages.filter(
+          (m) =>
+            isOptimisticMessage(m) &&
+            !history.items.some(
+              (h) => h.role === "user" && h.content === m.content
+            )
+        )
+        return {
+          ...prev,
+          messages: pending.length
+            ? [...history.items, ...pending]
+            : history.items,
+          hasEarlier: history.items.length < history.total,
+        }
+      })
     } catch {
       // 拉不到就等下一轮，流式态还在，界面不至于空白。
     }
