@@ -60,7 +60,7 @@ export function Hint({
           {shortcut}
         </span>
         {desc ? (
-          <span className="leading-snug text-background/65">{desc}</span>
+          <span className="leading-snug text-muted-foreground">{desc}</span>
         ) : null}
       </TooltipContent>
     </Tooltip>

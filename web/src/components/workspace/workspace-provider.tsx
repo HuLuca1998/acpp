@@ -34,9 +34,17 @@ export function WorkspaceProvider({
   children: React.ReactNode
 }) {
   // 会话建好前后用不同的作用域，但面板看到的是同一套方法签名。
+  //
+  // 判据是 `!== undefined` 而不是真假值：草稿态没手动选目录时 draftCwd 是
+  // **空串**，那不是「没有草稿」，而是「用这个身份的默认起点」——后端对
+  // `?cwd=` 空值本来就落到 Home(scope)（owner 是工作区根、访客是自己的
+  // root）。按真假值判会把这种最常见的情形当成没会话，整个工作区面板群
+  // 一起哑掉。
   const activeScope = React.useMemo(
     () =>
-      !sessionId && draftCwd ? draftWorkspaceScope(draftCwd) : api.sessions,
+      !sessionId && draftCwd !== undefined
+        ? draftWorkspaceScope(draftCwd)
+        : api.sessions,
     [sessionId, draftCwd]
   )
   const apiRef = useRef<DockviewApi | null>(null)
@@ -69,8 +77,12 @@ export function WorkspaceProvider({
     return {
       sessionId,
       scope: activeScope,
-      /** 有目录可看就算就绪：会话态看会话的 cwd，草稿态看选定的目录。 */
-      ready: sessionId > 0 || Boolean(draftCwd),
+      /**
+       * 有目录可看就算就绪：会话态看会话的 cwd，草稿态看选定的目录——
+       * 没选也算数，空 cwd 由后端落到默认起点（见上面 activeScope 的注释）。
+       * 真正需要会话的面板（日志、子代理、终端）各自看 sessionId，不看这个。
+       */
+      ready: sessionId > 0 || draftCwd !== undefined,
       attachApi: (api) => {
         apiRef.current = api
       },
