@@ -100,6 +100,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		var text []byte
 		var images []map[string]any
 		var files []string
+		var linked []string
 		for _, block := range prompt {
 			switch block.Type {
 			case "image":
@@ -111,6 +112,10 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 				if block.Resource != nil {
 					files = append(files, block.Resource.URI)
 				}
+			case "resource_link":
+				// 大文件的按需引用：也算附件，芯片上单独标注。
+				files = append(files, block.URI)
+				linked = append(linked, block.URI)
 			default:
 				text = append(text, block.Text...)
 			}
@@ -125,6 +130,9 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		}
 		if len(files) > 0 {
 			payload["files"] = files
+		}
+		if len(linked) > 0 {
+			payload["linkedFiles"] = linked
 		}
 		if len(payload) == 0 {
 			payload = nil

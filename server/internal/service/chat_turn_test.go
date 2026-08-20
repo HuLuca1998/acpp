@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"acpp/server/internal/acp"
@@ -43,4 +46,43 @@ func TestAdaptBlocksToPromptCaps(t *testing.T) {
 			t.Errorf("err = %v，期望 ErrInvalid", err)
 		}
 	})
+}
+
+// 大文件 @ 引用不再全文内嵌：超过阈值改发 resource_link（agent 按需读取），
+// 小文件维持 resource 内嵌；payload 记录 linkedFiles 子集供芯片标注。
+func TestBuildPromptBlocksResourceLink(t *testing.T) {
+	dir := t.TempDir()
+	small := filepath.Join(dir, "small.txt")
+	if err := os.WriteFile(small, []byte("短内容"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	big := filepath.Join(dir, "big.log")
+	if err := os.WriteFile(big, bytes.Repeat([]byte("x"), resourceLinkThreshold+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	blocks, payload, err := BuildPromptBlocks(dir, SendInput{
+		Content: "看看这两个文件",
+		Files:   []string{small, big},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) != 3 {
+		t.Fatalf("blocks = %d 个，期望 3（resource + resource_link + text）", len(blocks))
+	}
+	if blocks[0].Type != "resource" || blocks[0].Resource == nil {
+		t.Errorf("小文件应内嵌，实际 %+v", blocks[0])
+	}
+	if blocks[1].Type != "resource_link" || blocks[1].URI != "file://"+big || blocks[1].Size <= resourceLinkThreshold {
+		t.Errorf("大文件应发 resource_link，实际 %+v", blocks[1])
+	}
+	linked, _ := payload["linkedFiles"].([]string)
+	if len(linked) != 1 || linked[0] != big {
+		t.Errorf("linkedFiles = %v，期望只含大文件", payload["linkedFiles"])
+	}
+	files, _ := payload["files"].([]string)
+	if len(files) != 2 {
+		t.Errorf("files = %v，期望两个都在", payload["files"])
+	}
 }

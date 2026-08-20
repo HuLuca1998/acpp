@@ -426,6 +426,7 @@ export default {
       file: "引用文件",
       remove: "移除附件",
       imageUnsupported: "当前 agent 不支持图片输入",
+      linkedHint: "大文件不内嵌，agent 按需读取",
     },
     elicitation: {
       title: "Agent 请求你的输入",

@@ -250,6 +250,11 @@ type ContentBlock struct {
 	MimeType string `json:"mimeType,omitempty"`
 	// resource 块：内嵌的文件内容（embeddedContext）。
 	Resource *EmbeddedResource `json:"resource,omitempty"`
+	// resource_link 块：只给引用不内嵌内容，agent 需要时自行读取
+	//（2026-08 实测两端都正确消化：claude 走自己的 Read，codex 走 shell）。
+	URI  string `json:"uri,omitempty"`
+	Name string `json:"name,omitempty"`
+	Size int64  `json:"size,omitempty"`
 }
 
 // EmbeddedResource 是嵌进 prompt 的文件内容。
@@ -272,6 +277,12 @@ func ImageBlock(data, mimeType string) ContentBlock {
 // ResourceBlock 构造一个内嵌文件内容块（@ 引用）。
 func ResourceBlock(uri, text string) ContentBlock {
 	return ContentBlock{Type: "resource", Resource: &EmbeddedResource{URI: uri, Text: text}}
+}
+
+// ResourceLinkBlock 构造一个文件引用块：只给路径与大小，agent 按需读取。
+// 大文件用它替代全文内嵌，token 花在 agent 真正要读的部分上。
+func ResourceLinkBlock(uri, name string, size int64) ContentBlock {
+	return ContentBlock{Type: "resource_link", URI: uri, Name: name, Size: size}
 }
 
 // Text 从 Content 里取出文本，同时接受单个内容块和内容块数组两种形状。

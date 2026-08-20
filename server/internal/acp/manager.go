@@ -205,7 +205,10 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 	err := conn.Call(ctx, "initialize", InitializeParams{
 		ProtocolVersion: ProtocolVersion,
 		ClientCapabilities: ClientCapabilities{
-			FS:       FSCapability{ReadTextFile: true, WriteTextFile: true},
+			FS: FSCapability{ReadTextFile: true, WriteTextFile: true},
+			// terminal 保持 false 是实测决策（2026-08）：两端 adapter 声明
+			// true 后依然自带 shell 跑命令、零 terminal/* 反向调用——实现
+			// 这五个 handler 只会是死代码。adapter 侧行为变了再评估。
 			Terminal: false,
 			// 声明表单式 elicitation，agent 的交互式提问才会发过来。
 			Elicitation: &ElicitationCapability{},

@@ -40,6 +40,8 @@
 | 权限请求 | 带 Title/RawInput/Content；ExitPlanMode 走同通道 | 只有 options，其余字段空 |
 | 技能隔离 | 项目级 skillpack 目录注入 | CODEX_HOME 整体隔离 |
 | fs 代理 | 走（声明的 fs capability 会被真的调用） | 不走（自带 shell） |
+| terminal 代理 | **不走**（2026-08 实测：声明 terminal:true 后仍自带 shell 跑命令，零 terminal/* 反向调用） | **不走**（同左） |
+| resource_link | 消化（自带 Read 按路径读取） | 消化（shell 读取），大文件 @ 引用靠它按需读 |
 
 ## 4. 新增一个 agent 支持的步骤
 

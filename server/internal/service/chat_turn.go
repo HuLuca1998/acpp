@@ -168,6 +168,11 @@ func AppendDBReferences(blocks []acp.ContentBlock, payload model.JSONMap,
 	return blocks, payload
 }
 
+// resourceLinkThreshold：超过它的 @ 文件不再全文内嵌（一次性吃掉几万
+// token，agent 未必需要全文），改发 resource_link 让它按需自行读取
+//（2026-08 实测两端都正确消化）。
+const resourceLinkThreshold = 32 * 1024
+
 // BuildPromptBlocks 把发送入参翻译成 prompt 内容块，并给临时消息组展示
 // payload。@ 文件在这里读内容：路径相对会话 cwd 解析，读不到直接报错
 // （发出去一个空引用比报错更糟）。编排会话的发送共用（导出）。
@@ -176,6 +181,7 @@ func BuildPromptBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSON
 	payload := model.JSONMap{}
 
 	var files []string
+	var linked []string
 	for _, path := range in.Files {
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(cwd, path)
@@ -184,11 +190,15 @@ func BuildPromptBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSON
 		if err != nil {
 			return nil, nil, fmt.Errorf("%w: read %s: %s", ErrInvalid, path, err)
 		}
-		if info.IsDir() {
+		switch {
+		case info.IsDir():
 			// 文件夹引用嵌「目录清单」而不是递归全文（token 灾难）：
 			// agent 自有 fs 能力，给地图优于给全文（adr-002 §5.3）。
 			blocks = append(blocks, acp.ResourceBlock("file://"+path+"/", DirReferenceListing(path)))
-		} else {
+		case info.Size() > resourceLinkThreshold:
+			blocks = append(blocks, acp.ResourceLinkBlock("file://"+path, filepath.Base(path), info.Size()))
+			linked = append(linked, path)
+		default:
 			data, err := os.ReadFile(path)
 			if err != nil {
 				return nil, nil, fmt.Errorf("%w: read %s: %s", ErrInvalid, path, err)
@@ -199,6 +209,10 @@ func BuildPromptBlocks(cwd string, in SendInput) ([]acp.ContentBlock, model.JSON
 	}
 	if len(files) > 0 {
 		payload["files"] = files
+	}
+	if len(linked) > 0 {
+		// 大文件按需读取的子集：气泡上的附件芯片据此换图标与提示。
+		payload["linkedFiles"] = linked
 	}
 
 	var images []map[string]any

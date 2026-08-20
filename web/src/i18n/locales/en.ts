@@ -449,6 +449,7 @@ export default {
       file: "Reference a file",
       remove: "Remove attachment",
       imageUnsupported: "This agent does not accept image input",
+      linkedHint: "Large file — the agent reads it on demand",
     },
     elicitation: {
       title: "The agent needs your input",

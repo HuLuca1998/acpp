@@ -29,6 +29,7 @@ import {
   ArrowUpIcon,
   ChevronRightIcon,
   FileIcon,
+  LinkIcon,
   ShieldCheckIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -195,10 +196,13 @@ export const ChatMessage = memo(function ChatMessage({
 
   if (message.role === "user") {
     // 附件（图片 / @ 引用文件）由发送入参或转录重建带回 payload。
+    // linkedFiles 是大文件的按需引用子集（未内嵌，agent 自行读取）。
     const payload = message.payload as {
       images?: { data: string; mimeType: string }[]
       files?: string[]
+      linkedFiles?: string[]
     } | null
+    const linked = new Set(payload?.linkedFiles ?? [])
     return (
       <MessageRow align="end">
         {/* align=end 是 flex-row-reverse，头像作为第一个子元素落在右侧。 */}
@@ -234,10 +238,18 @@ export const ChatMessage = memo(function ChatMessage({
                   {payload.files.map((path) => (
                     <span
                       key={path}
-                      title={path}
+                      title={
+                        linked.has(path)
+                          ? `${path} · ${t("chat.attachments.linkedHint")}`
+                          : path
+                      }
                       className="flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs text-muted-foreground"
                     >
-                      <FileIcon className="size-3" />
+                      {linked.has(path) ? (
+                        <LinkIcon className="size-3" />
+                      ) : (
+                        <FileIcon className="size-3" />
+                      )}
                       <span className="max-w-40 truncate font-mono">
                         {path.split("/").pop()}
                       </span>
