@@ -76,8 +76,20 @@ export interface UpdateInfo {
   repo: string
   latestVersion?: string
   hasUpdate: boolean
-  /** release 描述（markdown 原文，按纯文本展示）。 */
+  /** 最新版本的 release 描述（markdown 原文，按纯文本展示）。 */
   notes?: string
+  /**
+   * 当前版本与最新版本之间**全部待更新版本**的日志，版本从新到旧。
+   * 跨版本更新时中间几版改了什么也该看得到，不能只给最后一步。
+   */
+  pending?: {
+    version: string
+    notes?: string
+    publishedAt?: string
+    url?: string
+  }[]
+  /** 待更新版本超过展示上限时，更早的还剩几个。 */
+  pendingMore?: number
   publishedAt?: string
   releaseUrl?: string
   assetName?: string

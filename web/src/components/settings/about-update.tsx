@@ -189,7 +189,46 @@ export function AboutUpdate() {
                   </span>
                 ) : null}
               </div>
-              {info.notes ? (
+              {/* 待更新的每一版各成一块：跨版本更新时中间几版改了什么，
+                  在这里一次看全，而不是只看到最新那一步。后端没给
+                  pending（老版本）时退回单条 notes。 */}
+              {info.pending?.length ? (
+                <div className="flex max-h-80 flex-col gap-2 overflow-auto">
+                  {info.pending.map((release) => (
+                    <div
+                      key={release.version}
+                      className="rounded-lg border border-border bg-muted/40 p-3"
+                    >
+                      <div className="mb-1.5 flex items-baseline gap-2">
+                        <span className="font-mono text-xs font-medium">
+                          v{release.version}
+                        </span>
+                        {release.publishedAt ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatDateTime(release.publishedAt, i18n.language)}
+                          </span>
+                        ) : null}
+                      </div>
+                      {release.notes ? (
+                        <pre className="text-xs whitespace-pre-wrap text-foreground/90">
+                          {release.notes}
+                        </pre>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {t("settingsPage.about.noNotes")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {info.pendingMore ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("settingsPage.about.moreVersions", {
+                        count: info.pendingMore,
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+              ) : info.notes ? (
                 <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
                   {info.notes}
                 </pre>

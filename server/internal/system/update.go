@@ -27,8 +27,14 @@ type UpdateInfo struct {
 	Repo           string `json:"repo"`
 	LatestVersion  string `json:"latestVersion,omitempty"`
 	HasUpdate      bool   `json:"hasUpdate"`
-	// Notes 是 release 描述（markdown 原文，前端按纯文本展示）。
-	Notes       string `json:"notes,omitempty"`
+	// Notes 是**最新版本**的 release 描述（markdown 原文，前端按纯文本展示）。
+	Notes string `json:"notes,omitempty"`
+	// Pending 是当前版本与最新版本之间**全部待更新版本**的日志，按版本
+	// 从新到旧。跨版本更新时只给最新那一条日志，中间几个版本改了什么就
+	// 全丢了——用户看到的是「更新说明」，不该只说最后一步。
+	// 上限 maxPendingNotes 条，更早的由 PendingMore 计数带出。
+	Pending     []ReleaseNote `json:"pending,omitempty"`
+	PendingMore int           `json:"pendingMore,omitempty"`
 	PublishedAt string `json:"publishedAt,omitempty"`
 	ReleaseURL  string `json:"releaseUrl,omitempty"`
 	AssetName   string `json:"assetName,omitempty"`
@@ -38,6 +44,21 @@ type UpdateInfo struct {
 	// 开发态（go run / make serve）只能看不能装。
 	CanApply bool `json:"canApply"`
 }
+
+// ReleaseNote 是一个版本的更新说明。
+type ReleaseNote struct {
+	Version     string `json:"version"`
+	Notes       string `json:"notes,omitempty"`
+	PublishedAt string `json:"publishedAt,omitempty"`
+	URL         string `json:"url,omitempty"`
+}
+
+// maxPendingNotes 是更新面板最多展开几条版本日志：跨很多版本时全列出来
+// 会把设置页顶成一面墙，更早的折成一句计数就够。
+const maxPendingNotes = 5
+
+// releasesPerPage 拉列表时的页大小，留出 draft/prerelease 被过滤掉的余量。
+const releasesPerPage = 20
 
 // Updater 负责版本检查（GitHub Releases）与 macOS 桌面版的自更新。
 type Updater struct {
@@ -91,6 +112,8 @@ type githubRelease struct {
 	Body        string `json:"body"`
 	HTMLURL     string `json:"html_url"`
 	PublishedAt string `json:"published_at"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
 	Assets      []struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
@@ -106,10 +129,14 @@ func (s *Updater) refresh(ctx context.Context) {
 	}
 	assetURL := ""
 
-	release, err := s.fetchLatest(ctx)
-	if err != nil {
+	releases, err := s.fetchReleases(ctx)
+	switch {
+	case err != nil:
 		info.CheckError = err.Error()
-	} else {
+	case len(releases) == 0:
+		info.CheckError = fmt.Sprintf("仓库 %s 还没有发布任何版本", s.repo)
+	default:
+		release := releases[0]
 		latest := strings.TrimPrefix(release.TagName, "v")
 		info.LatestVersion = latest
 		info.HasUpdate = versionLess(config.Version, latest)
@@ -123,6 +150,26 @@ func (s *Updater) refresh(ctx context.Context) {
 				break
 			}
 		}
+		// 待更新的每一版都收进来：跨版本更新时中间那几版改了什么，
+		// 用户在「更新说明」里就该看得到，而不是只看到最后一步。
+		// 按版本比较而不是按列表顺序过滤——GitHub 按发布时间倒序返回，
+		// 补发的旧版本会插在中间。
+		for _, r := range releases {
+			v := strings.TrimPrefix(r.TagName, "v")
+			if !versionLess(config.Version, v) {
+				continue
+			}
+			info.Pending = append(info.Pending, ReleaseNote{
+				Version:     v,
+				Notes:       r.Body,
+				PublishedAt: r.PublishedAt,
+				URL:         r.HTMLURL,
+			})
+		}
+		if len(info.Pending) > maxPendingNotes {
+			info.PendingMore = len(info.Pending) - maxPendingNotes
+			info.Pending = info.Pending[:maxPendingNotes]
+		}
 	}
 
 	s.mu.Lock()
@@ -131,10 +178,12 @@ func (s *Updater) refresh(ctx context.Context) {
 	s.mu.Unlock()
 }
 
-func (s *Updater) fetchLatest(ctx context.Context) (*githubRelease, error) {
+// fetchReleases 拉最近若干个 release，按 GitHub 的默认顺序（发布时间倒序）
+// 返回，草稿与预发布已滤掉——它们不该出现在用户的更新说明里。
+func (s *Updater) fetchReleases(ctx context.Context) ([]githubRelease, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	url := fmt.Sprintf("%s/repos/%s/releases/latest", s.apiBase, s.repo)
+	url := fmt.Sprintf("%s/repos/%s/releases?per_page=%d", s.apiBase, s.repo, releasesPerPage)
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -154,11 +203,18 @@ func (s *Updater) fetchLatest(ctx context.Context) (*githubRelease, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API %s", resp.Status)
 	}
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, fmt.Errorf("parse release: %w", err)
+	var all []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&all); err != nil {
+		return nil, fmt.Errorf("parse releases: %w", err)
 	}
-	return &release, nil
+	out := make([]githubRelease, 0, len(all))
+	for _, r := range all {
+		if r.Draft || r.Prerelease {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }
 
 // Apply 下载最新 release 的 zip，原地替换 .app bundle，然后拉起分离的

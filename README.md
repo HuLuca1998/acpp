@@ -176,7 +176,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/system/title-model` | 存标题模型配置，热更生效（启用时必须选模型） |
 | GET | `/api/system/title-model/models` | 列某个 ollama 端点上已装的模型（`?baseUrl=`，为空取默认地址） |
 | POST | `/api/system/title-model/test` | 用给定配置当场生成一个标题看效果，不落盘 |
-| GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查） |
+| GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查）。`pending` 带当前版本与最新版本之间**全部待更新版本**的日志（最多 5 条，更早的计入 `pendingMore`）——跨版本更新时中间几版改了什么也要看得到 |
 | POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录；`?files=1` 连文件、`?hidden=1` 含隐藏项；条目带大小与修改时间），供选择器导航 |
 | GET | `/api/fs/places` | 选择器侧边栏的默认位置（家目录/桌面/文稿/下载/工作区；租户只有自己的 root） |

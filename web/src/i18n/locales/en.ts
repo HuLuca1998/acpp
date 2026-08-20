@@ -619,6 +619,8 @@ export default {
       checkedAt: "Last checked {{time}}",
       neverChecked: "Not checked yet",
       autoCheckHint: "Auto-checks daily in the background",
+      noNotes: "No release notes for this version.",
+      moreVersions: "{{count}} earlier version(s) not listed",
       upToDate: "You're on the latest version.",
       apply: "Update & restart",
       applying: "Downloading & installing…",

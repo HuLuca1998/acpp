@@ -587,6 +587,8 @@ export default {
       checkedAt: "上次检查 {{time}}",
       neverChecked: "尚未检查",
       autoCheckHint: "后台每天自动检查一次",
+      noNotes: "这一版没有写更新说明。",
+      moreVersions: "另有 {{count}} 个更早的版本未列出",
       upToDate: "当前已是最新版本。",
       apply: "立即更新并重启",
       applying: "正在下载安装…",
