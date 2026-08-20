@@ -30,7 +30,7 @@ func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	listing, err := service.WorkspaceTree(r.Context(), cwd, r.URL.Query().Get("path"), queryInt(r, "depth", 1))
+	listing, err := service.WorkspaceTree(cwd, r.URL.Query().Get("path"), queryInt(r, "depth", 1))
 	if err != nil {
 		writeError(w, err)
 		return

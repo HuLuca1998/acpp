@@ -2,7 +2,6 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -20,7 +19,7 @@ import (
 //	│   ├── b/
 //	│   │   └── deep.txt   (第三层，depth=2 不应展开)
 //	│   └── x.txt
-//	├── ignored.txt        (gitignore 命中)
+//	├── ignored.txt        (gitignore 命中，但树是事实视图，照样展示)
 //	├── node_modules/junk.js  (固定黑名单)
 //	└── .git/…             (git init 产生，固定黑名单)
 func buildWorkspace(t *testing.T) string {
@@ -81,14 +80,15 @@ func TestWorkspaceTreeDepthAndFiltering(t *testing.T) {
 	cwd := buildWorkspace(t)
 	gitInit(t, cwd)
 
-	listing, err := WorkspaceTree(context.Background(), cwd, "", 2)
+	listing, err := WorkspaceTree(cwd, "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// 黑名单与 gitignore 都不该出现；目录排在文件前。
+	// 固定黑名单（.git、node_modules）不出现；gitignore 命中的照样展示；
+	// 目录排在文件前。
 	got := entryNames(listing.Entries)
-	want := []string{"a", ".gitignore", "c.txt"}
+	want := []string{"a", ".gitignore", "c.txt", "ignored.txt"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("level1 = %v, want %v", got, want)
 	}
@@ -106,7 +106,7 @@ func TestWorkspaceTreeDepthAndFiltering(t *testing.T) {
 	}
 
 	// 第二层单独请求：以 a 为根再取一层。
-	sub, err := WorkspaceTree(context.Background(), cwd, a.Path, 1)
+	sub, err := WorkspaceTree(cwd, a.Path, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestWorkspaceTreeGuard(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := WorkspaceTree(context.Background(), cwd, tc.path, 1); !errors.Is(err, ErrInvalid) {
+			if _, err := WorkspaceTree(cwd, tc.path, 1); !errors.Is(err, ErrInvalid) {
 				t.Fatalf("path %q: want ErrInvalid, got %v", tc.path, err)
 			}
 		})

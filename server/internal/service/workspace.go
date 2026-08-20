@@ -3,13 +3,11 @@ package service
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,8 +15,8 @@ import (
 )
 
 // workspaceSkip 是文件树永远不展示的目录/文件：没有浏览价值，且 .git
-// 展开会把仓库内部结构当成项目文件误导引用。其余垃圾目录（dist、build
-// 等）交给 gitignore 过滤——项目自己最清楚什么该忽略。
+// 展开会把仓库内部结构当成项目文件误导引用。除此之外的所有条目一律
+// 展示——gitignore 命中的产物目录（tmp、build 等）往往正是用户要看的。
 var workspaceSkip = map[string]bool{
 	".git":         true,
 	"node_modules": true,
@@ -64,9 +62,9 @@ type WorkspaceFileView struct {
 	Binary    bool   `json:"binary,omitempty"`
 }
 
-// WorkspaceTree 列出会话工作目录下的文件树，最多两层。gitignore 命中的
-// 条目被过滤（git 不可用时退化为全量展示——过滤是体验优化不是安全边界）。
-func WorkspaceTree(ctx context.Context, cwd, path string, depth int) (*TreeListing, error) {
+// WorkspaceTree 列出会话工作目录下的文件树，最多两层。除固定黑名单外
+// 全量展示，gitignore 命中的条目也照列——树是「磁盘上有什么」的事实视图。
+func WorkspaceTree(cwd, path string, depth int) (*TreeListing, error) {
 	if depth < 1 {
 		depth = 1
 	}
@@ -85,21 +83,12 @@ func WorkspaceTree(ctx context.Context, cwd, path string, depth int) (*TreeListi
 	if err != nil {
 		return nil, err
 	}
-	level1 = dropIgnored(ctx, cwd, level1)
 	if len(level1) > budget {
 		level1, listing.Truncated = level1[:budget], true
 	}
 	budget -= len(level1)
 
 	if depth >= 2 {
-		// 先列全部子目录再一次性 check-ignore：exec 次数随深度恒定（2 次），
-		// 不随目录数增长。
-		type sub struct {
-			idx      int
-			children []TreeEntry
-		}
-		var subs []sub
-		var paths []string
 		for i := range level1 {
 			if level1[i].Kind != "dir" {
 				continue
@@ -118,20 +107,7 @@ func WorkspaceTree(ctx context.Context, cwd, path string, depth int) (*TreeListi
 				children, listing.Truncated = children[:budget], true
 			}
 			budget -= len(children)
-			subs = append(subs, sub{i, children})
-			for _, c := range children {
-				paths = append(paths, c.Path)
-			}
-		}
-		ignored := gitIgnored(ctx, cwd, paths)
-		for _, s := range subs {
-			kept := make([]TreeEntry, 0, len(s.children))
-			for _, c := range s.children {
-				if !ignored[c.Path] {
-					kept = append(kept, c)
-				}
-			}
-			level1[s.idx].Children = kept
+			level1[i].Children = children
 		}
 	}
 
@@ -269,50 +245,6 @@ func listWorkspaceDir(dir string) ([]TreeEntry, error) {
 		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
 	})
 	return entries, nil
-}
-
-// dropIgnored 过滤掉 gitignore 命中的条目。
-func dropIgnored(ctx context.Context, cwd string, entries []TreeEntry) []TreeEntry {
-	paths := make([]string, len(entries))
-	for i, e := range entries {
-		paths[i] = e.Path
-	}
-	ignored := gitIgnored(ctx, cwd, paths)
-	if len(ignored) == 0 {
-		return entries
-	}
-	kept := make([]TreeEntry, 0, len(entries))
-	for _, e := range entries {
-		if !ignored[e.Path] {
-			kept = append(kept, e)
-		}
-	}
-	return kept
-}
-
-// gitIgnored 批量问 git 哪些路径被 ignore。git 不存在、cwd 不是仓库或
-// 命令失败时返回空集：过滤只是体验优化，缺了就全量展示，不报错。
-func gitIgnored(ctx context.Context, cwd string, paths []string) map[string]bool {
-	if len(paths) == 0 {
-		return nil
-	}
-	cmd := exec.CommandContext(ctx, "git", "-C", cwd, "check-ignore", "--stdin", "-z")
-	cmd.Stdin = strings.NewReader(strings.Join(paths, "\x00") + "\x00")
-	out, err := cmd.Output()
-	if err != nil {
-		// exit 1 = 没有任何命中，是正常结果；其余错误一律视作无过滤。
-		var ee *exec.ExitError
-		if !errors.As(err, &ee) || ee.ExitCode() != 1 {
-			return nil
-		}
-	}
-	ignored := make(map[string]bool)
-	for p := range bytes.SplitSeq(out, []byte{0}) {
-		if len(p) > 0 {
-			ignored[string(p)] = true
-		}
-	}
-	return ignored
 }
 
 // DirReferenceListing 生成文件夹引用嵌入 prompt 的两层目录清单：给 agent
