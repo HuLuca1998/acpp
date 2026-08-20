@@ -18,6 +18,7 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { StatusDot } from "@/components/status-dot"
+import { useActiveSessions } from "@/hooks/use-active-sessions"
 import { SESSION_STATE_TONE } from "@/lib/status-tone"
 import type { SessionGroup } from "@/lib/session-groups"
 import { ChevronRightIcon, PlusIcon } from "lucide-react"
@@ -36,6 +37,7 @@ export function NavProjects({
   label: string
   groups: SessionGroup[]
 }) {
+  const running = useActiveSessions()
   const { t } = useTranslation()
   const { pathname } = useLocation()
 
@@ -88,10 +90,19 @@ export function NavProjects({
                           isActive={pathname === `/sessions/${session.id}`}
                           render={<Link to={`/sessions/${session.id}`} />}
                         >
-                          {/* 正在对话的会话亮绿点呼吸，静止的灰点（§5.3）。 */}
+                          {/* 正在对话的会话亮绿点呼吸，静止的灰点（§5.3）。
+                              列表数据只在路由变化时拉，本页正在跑的那条
+                              靠活跃态广播补上——否则点永远不呼吸。 */}
                           <StatusDot
-                            tone={SESSION_STATE_TONE[session.state]}
-                            pulse={session.state === "active"}
+                            tone={
+                              running.has(session.id)
+                                ? "success"
+                                : SESSION_STATE_TONE[session.state]
+                            }
+                            pulse={
+                              running.has(session.id) ||
+                              session.state === "active"
+                            }
                           />
                           <span className="truncate">
                             {session.title ||

@@ -12,6 +12,7 @@ import {
   optimisticUserMessage,
   releaseFirstSend,
 } from "@/lib/chat/first-send"
+import { markSessionActive } from "@/lib/session-activity"
 import type {
   Message,
   SendInput,
@@ -90,6 +91,13 @@ export function useChat(sessionId: number) {
           session,
           settings: session.settings ?? null,
           commands: session.commands ?? [],
+          // 上下文水位从会话快照起步：SSE 的 usage 只在轮内流过，没有它
+          // 的话刚打开或已停止的会话看不到占用比例。实时事件到了再覆盖。
+          contextUsage:
+            prev.contextUsage ??
+            (session.lastUsage && session.lastUsage.size > 0
+              ? session.lastUsage
+              : null),
           // 首发的乐观消息还没落转录：空历史不许冲掉本地已渲染的内容。
           messages: items.length > 0 ? items : prev.messages,
           hasEarlier: items.length < history.total,
@@ -128,6 +136,15 @@ export function useChat(sessionId: number) {
     }
   }, [sessionId])
 
+  // 把「这条会话正在跑」告诉侧边栏：它的列表只在路由变化时拉，靠这条
+  // 广播才能实时亮起呼吸点。卸载时清掉——页面都不在了，标记不该留着。
+  useEffect(() => {
+    markSessionActive(sessionId, state.busy)
+  }, [sessionId, state.busy])
+  useEffect(() => {
+    return () => markSessionActive(sessionId, false)
+  }, [sessionId])
+
   // turn 结束后重新拉取消息：后端从转录重建的列表是权威版本，
   // 会替换流式期间的临时用户消息与流式拼接内容。
   // 顺带刷新会话详情——agent 这一轮可能切了 git 分支。
@@ -146,7 +163,15 @@ export function useChat(sessionId: number) {
     }
     try {
       const session = await api.sessions.get(sessionId)
-      setState((prev) => ({ ...prev, session }))
+      setState((prev) => ({
+        ...prev,
+        session,
+        contextUsage:
+          prev.contextUsage ??
+          (session.lastUsage && session.lastUsage.size > 0
+            ? session.lastUsage
+            : null),
+      }))
     } catch {
       // 会话详情拉不到不影响对话，下一轮再试。
     }
@@ -211,14 +236,27 @@ export function useChat(sessionId: number) {
   const send = useCallback(
     async (input: SendInput) => {
       cancelling.current = false
-      setState((prev) => ({ ...prev, busy: true, error: null }))
+      // 乐观上屏：send 在后端要先把 agent 进程拉起来（空闲回收后的会话
+      // 得重新握手 + session/load，几秒到几十秒），期间 HTTP 不返回、
+      // SSE 也没有回声——不先画出这条气泡，用户就是对着一个吞掉自己
+      // 消息的输入框干等。服务端回声到达时由 reducer 原位替换（那边认
+      // payload.local 的乐观标记）。
+      const optimistic = optimisticUserMessage(sessionId, input)
+      setState((prev) => ({
+        ...prev,
+        busy: true,
+        error: null,
+        messages: [...prev.messages, optimistic],
+      }))
       try {
         await api.sessions.send(sessionId, input)
       } catch (err) {
+        // 发失败了就把乐观气泡收回去——留着它等于谎称消息已经发出。
         setState((prev) => ({
           ...prev,
           busy: false,
           error: (err as Error).message,
+          messages: prev.messages.filter((m) => m.id !== optimistic.id),
         }))
       }
     },

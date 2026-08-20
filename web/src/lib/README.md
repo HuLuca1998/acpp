@@ -27,6 +27,7 @@
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |
+| session-activity.ts | 会话活跃态的进程内广播：会话页把「正在跑一轮」告诉侧边栏，免去为一个状态点轮询 | `markSessionActive`、`subscribeSessionActivity`、`getActiveSessions` |
 | session-groups.ts | 会话按工作目录分组（adr-007）：cwd 分桶、组内取最新、最多 5 组 × 5 条 | `groupSessionsByCwd`、`SessionGroup`、`MAX_GROUPS`                   |
 | desktop.ts        | 桌面壳（macOS app）的原生通道：环境判定与启动偏好读写，走 WKWebView 注入的消息口而非 HTTP | `isDesktop`、`desktopLaunch`、`LaunchPrefs` |
 | subagents.ts      | 子代理清单提取：两端形状（claude 的 Agent 调用 / codex 的独立 thread）归一成条目 | `collectSubagents`、`isSubagentWork`、`subagentLocations`、`SubagentEntry` |
@@ -39,6 +40,7 @@
 | -------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | use-async-data.ts    | 「进页面拉一次」的加载样板：cancelled 守卫 + data/error；轮询和分页不适用                                       | `useAsyncData`                                 |
 | use-paged-data.ts | 分页列表的标准接线：page/pageSize 状态 + 拉取 + 就地增删改                | `usePagedData`                                                       |
+| use-active-sessions.ts | 订阅会话活跃态广播（侧边栏状态点呼吸用）                                    | `useActiveSessions`                            |
 | use-chat.ts          | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决                                               | `useChat`                                      |
 | identity-context.ts  | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话                                                                  | `useDraftSession`                              |
