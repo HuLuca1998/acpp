@@ -418,6 +418,7 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Tools / Logs / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- **Discord 接入**：调研完成、未动工——bot 申请、软件内管理、频道 ↔ 工作目录映射、实现方案与测试策略见 [docs/discord-接入设计调研.md](docs/discord-接入设计调研.md)。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
