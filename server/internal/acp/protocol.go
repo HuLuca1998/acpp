@@ -402,7 +402,9 @@ type SessionUpdate struct {
 	Status     string          `json:"status,omitempty"`
 	RawInput   json.RawMessage `json:"rawInput,omitempty"`
 	RawOutput  json.RawMessage `json:"rawOutput,omitempty"`
-	// Locations 是工具触碰的文件位置 [{path}]，两端都带。
+	// Locations 是工具触碰的文件位置 [{path, line?}]（ACP 的 follow-along）。
+	// 2026-08 实测：**只有 claude 带**（read/edit 类工具带，execute 不带），
+	// codex 一条都不发——依赖它的界面功能对 codex 必须优雅降级。
 	Locations json.RawMessage `json:"locations,omitempty"`
 
 	// plan

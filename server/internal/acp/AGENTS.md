@@ -42,6 +42,8 @@
 | fs 代理 | 走（声明的 fs capability 会被真的调用） | 不走（自带 shell） |
 | terminal 代理 | **不走**（2026-08 实测：声明 terminal:true 后仍自带 shell 跑命令，零 terminal/* 反向调用） | **不走**（同左） |
 | resource_link | 消化（自带 Read 按路径读取） | 消化（shell 读取），大文件 @ 引用靠它按需读 |
+| tool_call 的 locations | **带**（read/edit 类；execute 不带） | **完全不带**（2026-08 实测）——跟随类界面功能只在 claude 上可见 |
+| plan 条目 | 会话级**累积**（第二轮含第一轮条目，已完成态保留） | 每轮独立，条目就是本轮任务 |
 
 ## 4. 新增一个 agent 支持的步骤
 

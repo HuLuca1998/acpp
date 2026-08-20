@@ -351,7 +351,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 				emit(model.Message{
 					Role:    model.RoleAgent,
 					Kind:    model.KindPermissionRequest,
-					Content: p.ToolCall.Title,
+					Content: permissionSubject(p.ToolCall),
 					Payload: payload,
 				}, entry.TS)
 			}
@@ -452,6 +452,28 @@ func applyUpdate(turn *rebuildTurn, u acp.SessionUpdate) {
 
 func trimmed(b []byte) string {
 	return strings.TrimSpace(string(b))
+}
+
+// permissionSubject 取「这次请求的是什么」作为裁决记录的正文。
+//
+// claude 给现成的 Title（"Write hello.txt"）；codex 一个 Title 都不带，
+// 但把命令放在 rawInput.command 里（实测形如 `"printf ... > f"`，值本身
+// 带一层引号）。没有它的话 codex 的历史裁决只剩一个 "execute"，看不出
+// 当初批准了什么——那正是这条记录最该回答的问题。
+func permissionSubject(tc acp.PermissionToolCall) string {
+	if tc.Title != "" {
+		return tc.Title
+	}
+	if len(tc.RawInput) == 0 {
+		return ""
+	}
+	var ri struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(tc.RawInput, &ri) != nil {
+		return ""
+	}
+	return strings.Trim(strings.TrimSpace(ri.Command), `"`)
 }
 
 // planEntries 判断 plan 原文是不是非空条目数组——空计划不值得占一条历史。

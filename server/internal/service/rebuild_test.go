@@ -438,3 +438,31 @@ func TestRebuildMessagesTurnUsage(t *testing.T) {
 		t.Errorf("turnUsage = %#v，期望挂上本轮计量", text.Payload["turnUsage"])
 	}
 }
+
+// codex 的权限请求不带 Title，命令在 rawInput.command 里（值自带一层
+// 引号）——裁决记录必须能从那里取出主语，否则历史里只剩一个 "execute"。
+func TestRebuildMessagesPermissionCodexShape(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "写个文件")),
+		wire(t, "recv", `{"jsonrpc":"2.0","id":200,"method":"session/request_permission","params":{"sessionId":"s","toolCall":{"toolCallId":"exec-1","kind":"execute","status":"pending","rawInput":{"command":"\"printf 'x' > /tmp/a.txt\"","cwd":"/repo"}},"options":[{"optionId":"approve","name":"Allow Once","kind":"allow_once"}]}}`),
+		wire(t, "send", `{"jsonrpc":"2.0","id":200,"result":{"outcome":{"outcome":"selected","optionId":"approve"}}}`),
+		wire(t, "recv", resultFrame(1)),
+	}
+	msgs := RebuildMessages(1, entries)
+
+	var perm *model.Message
+	for i := range msgs {
+		if msgs[i].Kind == model.KindPermissionRequest {
+			perm = &msgs[i]
+		}
+	}
+	if perm == nil {
+		t.Fatalf("没有裁决记录：%+v", msgs)
+	}
+	if perm.Content != "printf 'x' > /tmp/a.txt" {
+		t.Errorf("content = %q，期望取出 rawInput.command 并剥掉外层引号", perm.Content)
+	}
+	if perm.Payload["choice"] != "Allow Once" || perm.Payload["toolKind"] != "execute" {
+		t.Errorf("payload = %+v", perm.Payload)
+	}
+}
