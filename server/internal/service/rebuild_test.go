@@ -32,8 +32,9 @@ func resultFrame(id int) string {
 	return fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":{"stopReason":"end_turn"}}`, id)
 }
 
-// steering（插话注入当前轮）的用户消息必须重建成一条 user 消息，
-// 且不打断当前轮——agent 正文仍在轮末统一落成一条消息。
+// steering（插话注入当前轮）的用户消息必须重建成一条 user 消息，且落在
+// 时间线上自己的位置：插话之前的正文归前一条，之后的另起一条——插话是
+// 货真价实的打断。落到轮首（agent 全部内容之前）是错的。
 func TestRebuildMessagesSteering(t *testing.T) {
 	entries := []transcript.Entry{
 		wire(t, "send", promptFrame(1, "第一问")),
@@ -50,8 +51,9 @@ func TestRebuildMessagesSteering(t *testing.T) {
 		content string
 	}{
 		{model.RoleUser, "第一问"},
+		{model.RoleAgent, "回答前半。"},
 		{model.RoleUser, "插话内容"},
-		{model.RoleAgent, "回答前半。回答后半。"},
+		{model.RoleAgent, "回答后半。"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d messages, want %d: %+v", len(got), len(want), got)
@@ -84,8 +86,9 @@ func TestRebuildMessagesPromptQueueing(t *testing.T) {
 		content string
 	}{
 		{model.RoleUser, "长任务"},
+		{model.RoleAgent, "原轮前半。"},
 		{model.RoleUser, "引导插话 J"},
-		{model.RoleAgent, "原轮前半。原轮后半。"},
+		{model.RoleAgent, "原轮后半。"},
 		{model.RoleAgent, "这是对 J 的答复。"},
 	}
 	if len(got) != len(want) {
@@ -436,6 +439,42 @@ func TestRebuildMessagesTurnUsage(t *testing.T) {
 	usage, ok := text.Payload["turnUsage"].(*acp.Usage)
 	if !ok || usage.InputTokens != 120 || usage.OutputTokens != 45 {
 		t.Errorf("turnUsage = %#v，期望挂上本轮计量", text.Payload["turnUsage"])
+	}
+}
+
+// 插话是本轮时间线的最后一段（插完 agent 没再说话）时，轮末计量仍要挂在
+// agent 正文上——挂到用户自己的气泡上，hover 出来的就是一句用户消息带着
+// 本轮 token 数，语义直接错了。
+func TestRebuildMessagesTurnUsageSkipsInterjection(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "长任务")),
+		wire(t, "recv", chunkFrame("我开始干了。")),
+		wire(t, "send", `{"jsonrpc":"2.0","id":2,"method":"_session/steering","params":{"sessionId":"s","prompt":[{"type":"text","text":"顺手把 b 也做了"}]}}`),
+		wire(t, "recv", `{"jsonrpc":"2.0","id":1,"result":{"stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":20,"totalTokens":30}}}`),
+	}
+
+	msgs := RebuildMessages(1, entries)
+
+	for _, m := range msgs {
+		if m.Role != model.RoleUser {
+			continue
+		}
+		if _, bad := m.Payload["turnUsage"]; bad {
+			t.Fatalf("用户消息 %q 被挂上了本轮计量：%+v", m.Content, m.Payload)
+		}
+	}
+	var agentText *model.Message
+	for i := range msgs {
+		if msgs[i].Role == model.RoleAgent && msgs[i].Kind == model.KindText {
+			agentText = &msgs[i]
+		}
+	}
+	if agentText == nil {
+		t.Fatalf("没有 agent 正文：%+v", msgs)
+	}
+	usage, ok := agentText.Payload["turnUsage"].(*acp.Usage)
+	if !ok || usage.TotalTokens != 30 {
+		t.Errorf("turnUsage = %#v，期望挂在 agent 正文上", agentText.Payload["turnUsage"])
 	}
 }
 

@@ -29,13 +29,25 @@ type rebuildTurn struct {
 	plan json.RawMessage
 }
 
-// turnItem 是轮内时间线上的一段：一段连续的正文、一段连续的思考，
-// 或一次工具调用。
+// turnItem 是轮内时间线上的一段：一段连续的正文、一段连续的思考、
+// 一次工具调用，或用户在这一轮中途插的一句话。
 type turnItem struct {
 	kind model.MessageKind
 	// buf 是正文/思考的分片累积，工具调用不用。
 	buf    []byte
 	toolID string
+	// user 非 nil 表示这一段是轮内插话。它必须待在时间线上自己的位置：
+	// 轮内容攒到轮末才落，插话若在收到时就落出去，气泡会排到本轮全部
+	// agent 内容之前——用户在底部盯着回复，根本看不见自己刚插的那句。
+	user *model.Message
+	// ts 是插话自己的时刻，轮末统一落出时不该被拨成轮末时间。
+	ts time.Time
+}
+
+// appendUser 把轮内插话接到时间线末尾。它天然是正文的断点——
+// kind 留空，后续分片不会并进插话之前那一段。
+func (t *rebuildTurn) appendUser(m model.Message, ts time.Time) {
+	t.items = append(t.items, &turnItem{user: &m, ts: ts})
 }
 
 // appendChunk 把分片接到时间线末尾那段同类内容上；末尾不是同类
@@ -137,7 +149,14 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		if len(payload) == 0 {
 			payload = nil
 		}
-		emit(model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content, Payload: payload}, ts)
+		m := model.Message{Role: model.RoleUser, Kind: model.KindText, Content: content, Payload: payload}
+		// 轮进行中收到的用户消息就是插话，进当前轮时间线按时序落出；
+		// 轮外的（新一轮的提问）直接落成消息。
+		if turn != nil {
+			turn.appendUser(m, ts)
+			return
+		}
+		emit(m, ts)
 	}
 
 	flush := func(ts time.Time, stopReason string, usage *acp.Usage) {
@@ -153,6 +172,10 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			}
 		}
 		for i, it := range turn.items {
+			if it.user != nil {
+				emit(*it.user, it.ts)
+				continue
+			}
 			switch it.kind {
 			case model.KindText, model.KindThought:
 				content := trimmed(it.buf)
@@ -220,7 +243,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		if usage != nil && len(out) > flushedFrom {
 			at := len(out) - 1
 			for i := len(out) - 1; i >= flushedFrom; i-- {
-				if out[i].Kind == model.KindText {
+				if out[i].Kind == model.KindText && out[i].Role == model.RoleAgent {
 					at = i
 					break
 				}
@@ -260,25 +283,28 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 			if len(msg.ID) > 0 {
 				sentMethods[string(msg.ID)] = msg.Method
 			}
+			// 上一轮响应未到就来了新 prompt：claude 的 promptQueueing
+			// 排队（引导插话）。只进当前轮时间线不结轮——当前轮的内容
+			// 仍归它自己的响应收尾，排队轮的内容在那之后才开始。
+			queued := pendingPrompts > 0 && turn != nil
+			if !queued {
+				// 上一轮如果没等到响应（进程中途死了），先按无结论落掉——
+				// 落在提问之前，新提问才不会排到上一轮残留内容前面。
+				flush(entry.TS, "", nil)
+			}
 			var p acp.PromptParams
 			if err := json.Unmarshal(msg.Params, &p); err == nil {
 				emitUserBlocks(p.Prompt, entry.TS)
 			}
-			if pendingPrompts > 0 && turn != nil {
-				// 上一轮响应未到就来了新 prompt：claude 的 promptQueueing
-				// 排队（引导插话）。只产出 user 消息不结轮——当前轮的内容
-				// 仍归它自己的响应收尾，排队轮的内容在那之后才开始。
-				pendingPrompts++
+			pendingPrompts++
+			if queued {
 				continue
 			}
-			// 上一轮如果没等到响应（进程中途死了），先按无结论落掉。
-			flush(entry.TS, "", nil)
-			pendingPrompts++
 			turn = &rebuildTurn{tools: map[string]*rebuildTool{}}
 
 		case entry.Dir == "send" && msg.Method == "_session/steering":
-			// 插话注入正在跑的轮（codex steering）：产出用户消息但不结轮，
-			// 本轮的思考/工具/正文仍由这一轮的 prompt 响应统一收尾。
+			// 插话注入正在跑的轮（codex steering）：用户消息进当前轮时间线
+			// 但不结轮，本轮的思考/工具/正文仍由这一轮的 prompt 响应统一收尾。
 			var p acp.SteeringParams
 			if err := json.Unmarshal(msg.Params, &p); err == nil {
 				emitUserBlocks(p.Prompt, entry.TS)
