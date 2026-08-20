@@ -9,13 +9,13 @@ import { Placeholder } from "@/routes/placeholder"
 import { SessionChat } from "@/routes/session-chat"
 import { Sessions } from "@/routes/sessions"
 import { Tenants } from "@/routes/tenants"
+import { Tools } from "@/routes/tools"
 import { Settings } from "@/routes/settings"
 import { SkillDetail } from "@/routes/skill-detail"
 import { Skills } from "@/routes/skills"
 
 /** 尚未实现、但已在导航里占位的页面。 */
 const PLACEHOLDERS = [
-  { path: "tools", titleKey: "nav.tools", descKey: "placeholderPage.tools" },
   { path: "logs", titleKey: "nav.logs", descKey: "placeholderPage.logs" },
   { path: "help", titleKey: "nav.help", descKey: "placeholderPage.help" },
   { path: "search", titleKey: "nav.search", descKey: "placeholderPage.search" },
@@ -39,6 +39,8 @@ export function App() {
         <Route path="sessions/:id" element={<SessionChat />} />
         {/* 数据库连接（adr-008）：按项目 + 环境管理，会话侧只看得到本项目的。 */}
         <Route path="databases" element={<Databases />} />
+        {/* 工具台：我方 MCP server 暴露给 agent 的工具，人工查看与试运行。 */}
+        <Route path="tools" element={<Tools />} />
         <Route path="settings" element={<Settings />} />
         {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
         <Route path="connections" element={<Tenants />} />

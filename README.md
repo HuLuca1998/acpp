@@ -27,7 +27,7 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/             # 页面，与路由表一一对应：overview / sessions /
 │   │   │                       #   session-chat（工作区宿主，草稿态共用）/ skills / skill-detail /
-│   │   │                       #   databases / tenants（连接）/
+│   │   │                       #   databases / tools（MCP 工具台）/ tenants（连接）/
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
 │   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session /
@@ -41,6 +41,7 @@ acpp/
 │   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 十类面板
 │   │   │   ├── projects/       # 克隆仓库对话框（gh 清单 + URL）
 │   │   │   ├── db/             # 数据库：连接对话框、库表浏览、SQL 结果表格
+│   │   │   ├── tools/          # 工具台：工具清单、参数表单、响应视图、自定义请求、调用记录
 │   │   │   ├── overview/       # 概览页四张卡
 │   │   │   ├── settings/       # 设置页分区面板（内置工具 claude/codex 的配置面）
 │   │   │   └── *.tsx           # 跨域小组件：status-dot / diff-view / dir-picker / agent-icon / list-page-states
@@ -296,6 +297,18 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - 对话里 AI 的 `db_query` 有专用渲染——数据源标识、SQL、耗时、字段表头与可滚动数据，与配置页的 SQL 控制台是同一个组件（MCP 只回文本，前端按两端约定的制表符格式解析回结构化；解析不出来退回原始文本，不编造表格）。
 - 输入框里的 `/db` 是**本地斜杠命令**：前端拦截，结果浮在输入框上方，不进对话、不消耗 token、不用等 agent。`/db` 列本项目数据源，`/db dev` 列库，`/db dev mydb` 列表。
 
+## 工具台
+
+侧边栏「工具」页把**我方 MCP server 暴露给 agent 的工具**摊开给人看与试。页面的立场是复现 AI 那一侧：工具集、描述、参数、往返，全部走与 agent 完全相同的那条协议路径（`datasource.InspectMCP` 与会话侧的 `HandleMCP` 共用 `toolsForCwd`），页面上看到的就是模型此刻看到的那一份。
+
+- **先选项目**——工具集本身随项目的数据源变（`db_execute` 只在存在可写连接时才挂，没有可用数据源时整个面根本不会挂给 agent，页面会明说这件事）。
+- **工具清单**标两件事：读/写（MCP 标准注解 `readOnlyHint` / `destructiveHint`）与**被调用过几次**。一个从没被 AI 调过的工具，问题多半出在描述而不是实现上。
+- **详情**给的是**给模型看的描述原文**、按 `inputSchema` 生成的参数表单、Schema 原文，以及 agent 侧的工具全名（`mcp__acpp-db__db_query`，claude 的预批清单用的就是它）。
+- **试运行**填参数即可跑；**自定义请求**直接写 JSON-RPC 消息体（预填当前参数的 `tools/call`，另有 `initialize` / `ping` / `tools/list` 模板）——两者是同一个端点，试运行只是替你把请求体拼好了。agent 说「看不到这些工具」时，自己发一次 `tools/list` 看端点回了什么，是最快的一刀。
+- **结果**分两页：**结果**是模型真正读到的那段文本（数据库查询还原成表格，与对话里同一个组件），**原始 JSON** 是完整响应。协议错误（请求没被受理）与工具错误（跑了但失败）分开标——混成一句「出错了」等于把最有用的那半句删掉。
+- **会改数据的工具按下运行前先弹确认**，框里原样列出将要发出的参数。这里连的是真实数据库，跑下去的效果和 AI 自己调用一模一样。
+- **调用记录**记下每一次调用（AI 的与人工试运行的都记，来源分开标）：参数、返回、耗时、成败，可按工具/来源/只看失败筛。上方是按工具聚合的统计。记录是运行时观测不是账本——参数 4KB、返回 8KB 截断落库，全表留最近 2000 条。
+
 ## 安全姿态
 
 三层，缺一不可，且各自边界诚实：
@@ -396,7 +409,7 @@ cd web && npx shadcn@latest add <component>
 
 ## 尚未实现
 
-- 侧边栏的 Tools / Logs / Connections 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
 - **Discord 接入**：调研完成、未动工——bot 申请、软件内管理、频道 ↔ 工作目录映射、实现方案与测试策略见 [docs/discord-接入设计调研.md](docs/discord-接入设计调研.md)。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。

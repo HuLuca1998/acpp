@@ -658,4 +658,5 @@ export interface RemoteRepo {
 // 原样转出——文件按职责拆开，但 `@/types/acp` 仍是领域类型的单一入口，
 // 调用方不必记住哪个类型住在哪个文件里。
 export * from "./db"
+export * from "./mcp"
 export * from "./git"

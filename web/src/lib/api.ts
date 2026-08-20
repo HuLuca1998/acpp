@@ -52,6 +52,10 @@ import type {
   TreeListing,
   UpdateInfo,
   WorkspaceFile,
+  McpServer,
+  McpInspectResult,
+  McpCall,
+  McpToolStat,
 } from "@/types/acp"
 
 /** 开发环境走 vite proxy，生产环境同源。可用 VITE_API_BASE 覆盖。 */
@@ -682,5 +686,34 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
       }),
+  },
+
+  /**
+   * 工具台：我方 MCP server 暴露给 agent 的那套工具，摊开给人看与试。
+   * 与 agent 回连走的是同一条协议路径，只是上下文由 cwd 给而不是会话 token。
+   */
+  tools: {
+    /** 某个工作目录下的工具面（工具集随项目的数据源变，所以 cwd 是必要的）。 */
+    servers: (cwd?: string) =>
+      request<Paged<McpServer>>(`/tools/servers${pageQuery({ cwd })}`),
+    /**
+     * 发一条**原样的** JSON-RPC 消息给工具面。试运行只是替用户把
+     * tools/call 的请求体拼好了——两者走同一个端点，看到的往返也一样。
+     */
+    inspect: (input: { cwd?: string; request: unknown }) =>
+      request<McpInspectResult>("/tools/inspect", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    calls: (
+      params?: Partial<PageQuery> & {
+        server?: string
+        tool?: string
+        source?: string
+        errorsOnly?: string
+      }
+    ) => request<Paged<McpCall>>(`/tools/calls${pageQuery(params)}`),
+    callStats: () => request<Paged<McpToolStat>>("/tools/calls/stats"),
+    clearCalls: () => request<null>("/tools/calls", { method: "DELETE" }),
   },
 }
