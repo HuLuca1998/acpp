@@ -195,11 +195,6 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
       // 只为不掉进 default：真正的界面更新由会话列表的下次拉取完成。
       return prev
 
-    case "message_saved":
-      // 落库的完整内容是权威版本，用它取代流式拼出来的文本。
-      if (!ev.message) return prev
-      return { ...prev, messages: upsert(prev.messages, ev.message) }
-
     case "settings":
       // agent 侧改了设置（或我们主动变更后广播回来），整体替换视图。
       if (!ev.settings) return prev

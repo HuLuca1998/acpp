@@ -405,7 +405,6 @@ export type StreamEventKind =
   | "elicitation_done"
   | "turn_end"
   | "turn_done"
-  | "message_saved"
   | "session_title"
   | "task_update"
   | "error"
