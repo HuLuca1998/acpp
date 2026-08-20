@@ -57,7 +57,11 @@ export function Sessions() {
     setSorting,
     remove: dropRow,
     setError,
-  } = usePagedData((params) => api.sessions.list(params))
+  } = usePagedData((params) => api.sessions.list(params), {
+    // 默认按 id 倒序：会话编号就是创建顺序，最新建的排最前面。列表页要的是
+    // 「我刚开的那条在哪」，而不是「谁最近响过」——后者是侧边栏的活儿。
+    sort: [{ id: "id", desc: true }],
+  })
   async function remove(id: number) {
     try {
       await api.sessions.remove(id)
@@ -98,6 +102,18 @@ export function Sessions() {
   // 列 id 就是**数据库列名**：它要原样进 `?sort=`，再由后端的白名单校验。
   // 多一层「前端列名 → 数据库列名」的映射表，只会多一个能写错的地方。
   const columns: SessionColumn[] = [
+    {
+      id: "id",
+      accessorFn: (session: Session) => session.id,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("sessions.columnId")} />
+      ),
+      meta: {
+        label: t("sessions.columnId"),
+        className: "w-12 tabular-nums text-muted-foreground",
+      },
+      cell: ({ row }) => row.original.id,
+    },
     {
       id: "title",
       // accessorFn 只是让这列成为 accessor 列（display 列不可排序），

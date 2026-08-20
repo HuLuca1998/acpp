@@ -213,6 +213,7 @@ export default {
     empty: "No sessions yet",
     emptyHint:
       "Pick an agent and start a session — every conversation shows up here.",
+    columnId: "ID",
     columnTitle: "Title",
     agent: "Agent",
     creator: "Created by",

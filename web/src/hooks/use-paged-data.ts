@@ -22,18 +22,22 @@ export type SortState = { id: string; desc: boolean }[]
  * 一遍，用户以为看到的是「全部里最大的」，其实是「这 20 条里最大的」。
  *
  * 标识默认取 `id`，技能这类用名字当主键的传 keyOf 覆盖。
+ *
+ * `sort` 是初始排序，不传就交给后端的缺省顺序。它只是初值——用户点了表头
+ * 之后一切以用户为准，这里不会再把他的选择拽回来。
  */
 export function usePagedData<T>(
   fetcher: (params: PageQuery) => Promise<Paged<T>>,
   options?: {
     pageSize?: number
     keyOf?: (item: T) => string | number
+    sort?: SortState
   }
 ) {
   const keyOf = options?.keyOf ?? ((item: T) => (item as { id: number }).id)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(options?.pageSize ?? 20)
-  const [sorting, setSorting] = useState<SortState>([])
+  const [sorting, setSorting] = useState<SortState>(options?.sort ?? [])
   const sort = sorting[0]
   const { data, error, setData, setError } = useAsyncData(
     () =>

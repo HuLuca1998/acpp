@@ -203,6 +203,7 @@ export default {
     create: "新建会话",
     empty: "还没有会话",
     emptyHint: "选择一个 agent 并新建会话后，这里会列出全部对话记录。",
+    columnId: "ID",
     columnTitle: "标题",
     agent: "Agent",
     creator: "创建者",

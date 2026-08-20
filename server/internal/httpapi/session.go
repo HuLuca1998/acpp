@@ -27,7 +27,7 @@ func (h sessionHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	pageNum, pageSize := pageParams(r)
 
-	sort := sortParams(r, "title", "agent_id", "tenant_id", "message_count", "state", "updated_at", "created_at")
+	sort := sortParams(r, "id", "title", "agent_id", "tenant_id", "message_count", "state", "updated_at", "created_at")
 	sessions, total, err := h.sessions.List(r.Context(), scopeOf(r), agentID, pageNum, pageSize, sort.OrderBy(""))
 	if err != nil {
 		writeError(w, err)
