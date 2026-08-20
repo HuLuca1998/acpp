@@ -36,8 +36,17 @@ const (
 // service.ChatService 只认得下面的 Mounter 接口，datasource 只认得这个
 // Sessions 接口，两个业务包因此不互相 import。
 type Sessions interface {
-	CwdByMCPToken(ctx context.Context, token string) (string, error)
+	SessionByMCPToken(ctx context.Context, token string) (uint, string, error)
 	EnsureMCPToken(ctx context.Context, sessionID uint) (string, error)
+}
+
+// Calls 是调用观测的最小依赖：把一次工具调用记下来。同样用接口而不是
+// 具体类型，理由与 Sessions 一致——业务包之间不互相 import。
+//
+// 记录是尽力而为的旁路，所以没有返回值：观测失败不该让 AI 的工具调用
+// 跟着失败。为 nil 时不记（测试与不关心统计的装配都可以不传）。
+type Calls interface {
+	Record(ctx context.Context, rec model.MCPCall)
 }
 
 // Service 是数据源的业务面。
@@ -47,6 +56,7 @@ type Service struct {
 	// 用函数而不是值：工作区根在设置页可改，且立刻生效。
 	workspaceRoot func() string
 	sessions      Sessions
+	calls         Calls
 	// mcpBase 是 agent 回连的 MCP 端点前缀（http://127.0.0.1:<port>/api/mcp/db/）。
 	mcpBase string
 }
@@ -58,6 +68,13 @@ func NewService(db *gorm.DB, sessions Sessions, addr string) *Service {
 		sessions:      sessions,
 		mcpBase:       mcpBaseURL(addr),
 	}
+}
+
+// WithCalls 挂上调用观测。分开一个 setter 而不是塞进 NewService：
+// 记录是可选旁路，缺了数据源功能照常跑。
+func (s *Service) WithCalls(calls Calls) *Service {
+	s.calls = calls
+	return s
 }
 
 // mcpBaseURL 从监听地址推导 MCP 前缀：agent 子进程与我们同机，

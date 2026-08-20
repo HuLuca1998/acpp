@@ -239,17 +239,20 @@ func (s *SessionService) EnsureMCPToken(ctx context.Context, id uint) (string, e
 	return token, nil
 }
 
-// CwdByMCPToken 把 MCP 端点的 token 解析成会话工作目录。
+// SessionByMCPToken 把 MCP 端点的 token 解析成会话 id 与工作目录。
 // token 即凭证：查不到一律同一个错，不区分「不存在」与「无权」。
-func (s *SessionService) CwdByMCPToken(ctx context.Context, token string) (string, error) {
+//
+// 回 id 是为了给调用记录留归属——不然工具台上只能看到「有人调了
+// db_query」，看不出是哪条会话干的。
+func (s *SessionService) SessionByMCPToken(ctx context.Context, token string) (uint, string, error) {
 	if token == "" {
-		return "", fmt.Errorf("%w: mcp token", ErrNotFound)
+		return 0, "", fmt.Errorf("%w: mcp token", ErrNotFound)
 	}
 	var session model.Session
 	if err := s.db.WithContext(ctx).Where("mcp_token = ?", token).First(&session).Error; err != nil {
-		return "", fmt.Errorf("%w: mcp token", ErrNotFound)
+		return 0, "", fmt.Errorf("%w: mcp token", ErrNotFound)
 	}
-	return session.Cwd, nil
+	return session.ID, session.Cwd, nil
 }
 
 func (s *SessionService) Delete(ctx context.Context, scope Scope, id uint) error {

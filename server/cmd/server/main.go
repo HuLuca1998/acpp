@@ -16,6 +16,7 @@ import (
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/db"
 	"acpp/server/internal/httpapi"
+	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
@@ -108,7 +109,10 @@ func run() error {
 	// 数据库数据源：配置面 + 挂给会话的 MCP 工具面。两个方向都经这里
 	// 装配——chat 只认得 MCPMounter 接口，datasource 只认得 Sessions 接口，
 	// 两个业务包因此不互相 import。
-	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr)
+	// 工具调用记录：MCP 工具面每被调一次就落一条，工具台读它。
+	// 观测是旁路，datasource 只认得 Calls 接口。
+	mcpCalls := mcpcall.NewService(gdb)
+	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr).WithCalls(mcpCalls)
 	chatService.SetDataSources(datasourceService)
 
 	// 会话标题：两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到
@@ -141,6 +145,7 @@ func run() error {
 		Tenants:     tenantService,
 		Projects:    projectService,
 		DataSources: datasourceService,
+		MCPCalls:    mcpCalls,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

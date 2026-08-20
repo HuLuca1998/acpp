@@ -50,7 +50,7 @@ func Migrate(gdb *gorm.DB) error {
 	// messages 表已退役（adr-003）、roles/orch_sessions/orch_tasks 随编排下线
 	// 退役（adr-012）：旧库里已存在的表不动，这里不再创建。
 	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.SkillUsage{},
-		&model.Tenant{}, &model.DataSource{}); err != nil {
+		&model.Tenant{}, &model.DataSource{}, &model.MCPCall{}); err != nil {
 		return fmt.Errorf("automigrate: %w", err)
 	}
 	return nil

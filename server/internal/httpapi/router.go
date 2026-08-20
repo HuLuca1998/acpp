@@ -10,6 +10,7 @@ import (
 
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
+	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
@@ -32,6 +33,8 @@ type Services struct {
 	Tenants     *service.TenantService
 	Projects    *project.Service
 	DataSources *datasource.Service
+	// MCPCalls 是 MCP 工具调用的观测记录，工具台读它。
+	MCPCalls *mcpcall.Service
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -275,6 +278,15 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/workspace/datasources/{dsid}/tables", draftDatasources.sessionTables)
 	// agent 回连的数据库工具端点（token 是每条会话专属凭证）。
 	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)
+
+	// 工具台（页面 /tools）：看工具面、人工试运行、发自定义 JSON-RPC、
+	// 回看调用记录。owner 专属，与上面那条公开的回连端点刻意分前缀。
+	tools := toolsHandler{sources: svcs.DataSources, calls: svcs.MCPCalls}
+	api.HandleFunc("GET /api/tools/servers", tools.servers)
+	api.HandleFunc("POST /api/tools/inspect", tools.inspect)
+	api.HandleFunc("GET /api/tools/calls", tools.callList)
+	api.HandleFunc("GET /api/tools/calls/stats", tools.callStats)
+	api.HandleFunc("DELETE /api/tools/calls", tools.callClear)
 
 	// 工作区终端：REST 管生命周期，ws 桥 pty 双向流（adr-002 M3）。
 	terminals := terminalHandler{

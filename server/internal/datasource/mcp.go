@@ -30,30 +30,103 @@ func sourceArg() map[string]any {
 	}
 }
 
+// ServerName 是这个工具面在 agent 侧的 server 名（工具全名是
+// mcp__acpp-db__db_query 这种形状）。工具台展示分组时也用它。
+const ServerName = mcpServerName
+
 // HandleMCP 处理一条发到 /api/mcp/db/{token} 的 JSON-RPC 消息。
 func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any, bool) {
-	return mcp.Serve(ctx, mcpServerName, token, raw, func(ctx context.Context, token string) ([]mcp.Tool, error) {
-		if s.sessions == nil {
-			return nil, fmt.Errorf("datasource mcp not wired")
-		}
-		cwd, err := s.sessions.CwdByMCPToken(ctx, token)
-		if err != nil {
-			return nil, err
-		}
-		// 执行工具只在**存在可写数据源**时才出现在清单里：全是只读连接
-		// 的会话，模型连这个工具都看不到，也就不会去试。
-		sources, err := s.ForCwd(ctx, cwd, true)
-		if err != nil {
-			return nil, err
-		}
-		writable := false
-		for i := range sources {
-			if !sources[i].ReadOnly {
-				writable = true
-				break
+	// sessionID/cwd 由 Resolve 填好给 OnCall 用：Server 是每次请求现构造的，
+	// Resolve 一定跑在 OnCall 之前，所以闭包传值比让观测端再查一次库省事。
+	var sessionID uint
+	var cwd string
+
+	srv := mcp.Server{
+		Name: mcpServerName,
+		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
+			if s.sessions == nil {
+				return nil, fmt.Errorf("datasource mcp not wired")
 			}
+			id, dir, err := s.sessions.SessionByMCPToken(ctx, token)
+			if err != nil {
+				return nil, err
+			}
+			sessionID, cwd = id, dir
+			return s.toolsForCwd(ctx, dir)
+		},
+		OnCall: func(ctx context.Context, rec mcp.Call) {
+			s.record(ctx, rec, sessionID, cwd, model.MCPSourceAgent)
+		},
+	}
+	return srv.Serve(ctx, token, raw)
+}
+
+// InspectTools 列出一条工作目录下的工具声明，供工具台展示。
+//
+// 走的是与 agent 完全相同的那条 toolsForCwd：页面上看到的工具集、描述与
+// 参数，就是模型此刻看到的那一份。两边各算一次的话，页面迟早会骗人。
+func (s *Service) InspectTools(ctx context.Context, cwd string) ([]mcp.Declaration, error) {
+	tools, err := s.toolsForCwd(ctx, cwd)
+	if err != nil {
+		return nil, err
+	}
+	return mcp.Declare(tools), nil
+}
+
+// InspectMCP 以工作目录（而非会话 token）为上下文处理一条 JSON-RPC 消息，
+// 供工具台的试运行与自定义请求使用。
+//
+// 刻意让它走完整的协议外壳而不是直接调 Tool.Call：工具台的价值就在于
+// 复现 AI 那一侧的真实往返——参数怎么解析、错误包成什么形状、返回长什么
+// 样，都该和 agent 看到的一模一样。试运行只是替用户把 tools/call 的
+// 请求体拼好了而已。
+func (s *Service) InspectMCP(ctx context.Context, cwd string, raw []byte) (any, bool) {
+	srv := mcp.Server{
+		Name: mcpServerName,
+		Resolve: func(ctx context.Context, _ string) ([]mcp.Tool, error) {
+			return s.toolsForCwd(ctx, cwd)
+		},
+		OnCall: func(ctx context.Context, rec mcp.Call) {
+			s.record(ctx, rec, 0, cwd, model.MCPSourceManual)
+		},
+	}
+	return srv.Serve(ctx, "", raw)
+}
+
+// toolsForCwd 算出一条工作目录下可用的工具集。
+//
+// 执行工具只在**存在可写数据源**时才出现在清单里：全是只读连接的项目，
+// 模型连这个工具都看不到，也就不会去试。
+func (s *Service) toolsForCwd(ctx context.Context, cwd string) ([]mcp.Tool, error) {
+	sources, err := s.ForCwd(ctx, cwd, true)
+	if err != nil {
+		return nil, err
+	}
+	writable := false
+	for i := range sources {
+		if !sources[i].ReadOnly {
+			writable = true
+			break
 		}
-		return s.tools(cwd, writable), nil
+	}
+	return s.tools(cwd, writable), nil
+}
+
+// record 把一次工具调用交给观测端。没挂观测就什么都不做。
+func (s *Service) record(ctx context.Context, rec mcp.Call, sessionID uint, cwd, source string) {
+	if s.calls == nil {
+		return
+	}
+	s.calls.Record(ctx, model.MCPCall{
+		Server:     rec.Server,
+		Tool:       rec.Tool,
+		SessionID:  sessionID,
+		Source:     source,
+		Cwd:        cwd,
+		Args:       string(rec.Args),
+		Result:     rec.Result,
+		IsError:    rec.IsError,
+		DurationMs: rec.Duration.Milliseconds(),
 	})
 }
 
@@ -74,7 +147,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 	}
 
 	tools := []mcp.Tool{{
-		Name: "db_sources",
+		Name:        "db_sources",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
 		Description: "列出当前项目可用的数据库数据源（每个环境一条：local/dev/pre…）。" +
 			"不确定要连哪个环境时先调它。只能看到当前工作目录所属项目的数据源。",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
@@ -87,6 +161,7 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 		},
 	}, {
 		Name:        "db_tables",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
 		Description: "列出数据源那个库里的表与视图（表名、引擎、估算行数、注释）。",
 		InputSchema: map[string]any{
 			"type":       "object",
@@ -105,7 +180,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 			return renderTables(src, src.Database, list), nil
 		},
 	}, {
-		Name: "db_schema",
+		Name:        "db_schema",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
 		Description: "查看一张表的结构：列定义、索引与建表语句。" +
 			"写 SQL 前先看结构，不要凭表名猜字段。",
 		InputSchema: map[string]any{
@@ -129,7 +205,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 			return renderSchema(src, detail), nil
 		},
 	}, {
-		Name: "db_query",
+		Name:        "db_query",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
 		Description: "在数据源上查询数据（只能跑 SELECT / SHOW / DESC / EXPLAIN 一类语句，" +
 			"写语句会被拒绝——改数据用 db_execute）。可一次提交多条语句（分号分隔，" +
 			"按序执行、遇错即停）。结果默认最多 " + itoa(defaultMaxRows) +
@@ -151,7 +228,8 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 		return tools
 	}
 	return append(tools, mcp.Tool{
-		Name: "db_execute",
+		Name:        "db_execute",
+		Annotations: &mcp.Annotations{DestructiveHint: true},
 		Description: "在数据源上执行**会改变数据或结构**的 SQL（INSERT / UPDATE / DELETE / DDL）。" +
 			"只对没有开启只读的数据源可用，只读数据源上调用会被拒绝。" +
 			"可一次提交多条语句（分号分隔，按序执行、遇错即停；前面成功的不会回滚）。" +

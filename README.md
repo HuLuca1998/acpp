@@ -227,6 +227,11 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/datasources/{dsid}/databases` `/tables` | 同上但按会话过滤，项目之外的 id 按「不存在」处理 |
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
+| GET | `/api/tools/servers` | 工具台：当前上下文（`?cwd=`）下的 MCP 工具面——工具名、给模型看的描述原文、参数 JSON Schema、只读/破坏性注解，外加这个面会不会真的挂给 agent（数据源为空就不挂） |
+| POST | `/api/tools/inspect` | 工具台试运行与自定义请求（`{cwd, request}`，request 是**原样的** JSON-RPC 消息）：走与 agent 完全相同的协议路径，回完整响应与耗时；通知类消息回 `accepted:true`（协议上就没有响应） |
+| GET | `/api/tools/calls` | 调用记录（`?server=&tool=&source=&errorsOnly=1` + 分页，时间倒序） |
+| GET | `/api/tools/calls/stats` | 按工具聚合的调用统计（次数、失败数、平均耗时、最近使用） |
+| DELETE | `/api/tools/calls` | 清空调用记录 |
 
 SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`session_title`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图（含 `prompt` 内容能力：`{image, audio, embeddedContext}`，来自 initialize 的 `promptCapabilities`，claude/codex 由 adapter 按实测兜底，generic 按声明——前端据此门控图片按钮，后端在发送前把越界内容块收敛：resource 降级为 text、图片直接报错）；`usage` 是上下文用量 `{used, size}`（claude 会间歇附带累计费用 `cost:{amount,currency}`，状态栏顺带显示，codex 无此字段则不出现）；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`session_title` 在首轮结束后标题被模型重写时发一次（带新标题）。`tool_call` 另带一组子代理字段：`isSubagent`（这次调用派出了子代理）、`subagentOf`（这条是某个子代理干的，值为它所挂的启动调用 id）、codex 专用的 `subagentThreadId` / `subagentPath`；还带 `locations`（ACP 的 follow-along 位置 `[{path, line?}]`），前端用它做「正在触碰」指示（消息流小字 + 文件树呼吸点 + 查看器跟随模式 + 子代理面板当前文件）。**这组指示只在 claude 会话里出现**——2026-08 实测 claude 的 read/edit 工具带 locations、codex 一条都不发，没有位置信息时界面静默降级（不显示，不报错）。
 
@@ -237,6 +242,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
 - **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
 - **Project / Clone** — 都不入库：项目就是工作区根下的 git 仓库目录（扫盘得来，名字是相对根的路径），克隆任务只存在于内存（进程重启时 git 子进程也一起没了，留个「进行中」的假记录只会骗人）。
+- **MCPCall** — 一次 MCP 工具调用的观测记录：server、工具名、来源（`agent` = 子进程回连、`manual` = 工具台人工试运行）、会话 id、参数与返回文本、是否报错、耗时。**只记发生过的调用**，工具声明是代码不入库。参数 4KB / 返回 8KB 截断后落库，全表留最近 2000 条（超出按自增 id 裁最老的）——它是运行时观测不是账本。
 - **DataSource** — 一个外部 MySQL 数据源（adr-008）。身份是**项目 + 环境**两级（`pp-game` 的 `local`/`dev`/`pre`），组合唯一，`<项目>/<环境>` 即对外标识（AI 调工具时填的 `source`）。只存配置不存连接：每次调用都是「拨号 → 执行 → 关闭」的一次性连接（含 SSH 隧道），因此没有任何运行态字段。密码类字段永不出 API，响应只带 `hasPassword` 这类布尔位。
 
 ## 工作区面板

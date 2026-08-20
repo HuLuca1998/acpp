@@ -13,11 +13,12 @@
 | acp | ACP 协议客户端：JSON-RPC 连接、会话池、adapter（claude/codex/generic 差异）、技能隔离注入。不 import 本项目其他包 | 叶子 |
 | config | 环境变量配置、数据目录准备与迁移、路径工具 | 叶子 |
 | db | GORM 连接与 AutoMigrate | 基础 |
-| model | 数据模型（Agent / Session / Message / SkillUsage）与 JSON 字段类型 | 基础 |
+| model | 数据模型（Agent / Session / Message / SkillUsage / MCPCall）与 JSON 字段类型 | 基础 |
 | transcript | 会话转录 JSONL 的追加与读取（对话内容唯一的持久化） | 叶子 |
 | titler | 会话标题生成：把首句派生的标题换成本机小模型（ollama）给的概括。两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到，所以由本项目自己算。不 import 本项目其他包 | 叶子 |
 | stream | SSE 事件形状（Event）与广播器（Broker）：多订阅者、轮内重放、慢订阅丢弃。会话流（service）用 | 叶子 |
 | mcp | 我方 MCP server 的协议外壳：JSON-RPC 信封、工具声明与分发（initialize/ping/tools.list/tools.call）。数据源业务包提供工具集，协议外壳与之解耦 | 叶子 |
+| mcpcall | MCP 工具调用的观测记录与统计：谁调的、传了什么、拿回什么、花多久。工具台读它，数据源工具面写它（经窄接口，两包不互相 import）。留存有上限，长文本落库前截断 | 业务 |
 | service | 普通会话的业务规则：会话/对话/技能/工作区/终端/agent 配置；多租户身份与隔离范围（Scope） | 业务 |
 | project | 工作区项目（adr-007）：git 仓库发现、克隆（租户禁用凭证助手）、gh 远端仓库清单。磁盘即事实源，不入库；借 service 的哨兵错误与 Scope | 业务 |
 | datasource | 外部 MySQL 数据源（adr-008）：连接配置（项目 + 环境两级）、SSH 隧道拨号、库表探查、多段语句执行，以及挂给会话的 MCP 工具面。连接一次性、可见性按会话 cwd 所属项目过滤。借 service 的哨兵错误与 DefaultCwd | 业务 |
