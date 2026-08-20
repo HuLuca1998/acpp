@@ -136,6 +136,15 @@ func (s *ChatService) buildBlocks(ctx context.Context, cwd string, in SendInput)
 	return blocks, payload, nil
 }
 
+// dbReferenceGuidance 是跟着 @ 数据库引用一起下发的用法约定。
+//
+// 它**只在用户主动引用了数据库时**出现，不进会话开场——开场就铺一段数据库
+// 说明，等于每条会话都替用户按下「我要动数据库」（用户拍板）。工具本身照常
+// 挂着（见 datasource.MountsFor），要用随时能调，只是不再主动吆喝。
+const dbReferenceGuidance = "以上是用户引用的数据库内容。" +
+	"接着往下查就用 acpp-db 的 db_* 工具：写 SQL 前先用 db_schema 看表结构，不要凭表名猜字段；" +
+	"要改数据前先确认环境——`local` 和 `pre` 只差两个字母，跑错了不可撤销。"
+
 // AppendDBReferences 把展开好的数据库引用插进内容块。普通会话与编排共用。
 //
 // 插在正文之前而不是追加到末尾：BuildPromptBlocks 的约定是正文永远是
@@ -146,12 +155,14 @@ func AppendDBReferences(blocks []acp.ContentBlock, payload model.JSONMap,
 		return blocks, payload
 	}
 
-	refBlocks := make([]acp.ContentBlock, 0, len(refs))
+	refBlocks := make([]acp.ContentBlock, 0, len(refs)+1)
 	uris := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		refBlocks = append(refBlocks, acp.ResourceBlock(ref.URI, ref.Text))
 		uris = append(uris, ref.URI)
 	}
+	// 用法约定排在引用内容之后：先给材料再给规矩，紧挨着正文最有存在感。
+	refBlocks = append(refBlocks, acp.TextBlock(dbReferenceGuidance))
 
 	at := len(blocks)
 	if hasText && at > 0 {

@@ -30,22 +30,29 @@ type Injection struct {
 	AdditionalDirs []string
 }
 
-// Isolation（claude）：一切走 session/new 的 _meta.claudeCode.options。
-// settingSources 只开 project 档——不开 user 档，机器级 ~/.claude 全不加载；
-// plugins 以本地插件形式挂载控制端技能包；strictMcpConfig 封死项目 .mcp.json
-// 的自动放行。外加 CLAUDE_CODE_DISABLE_AUTO_MEMORY 防会话读写机器级记忆。
+// Isolation（claude）：一切走 session/new 的 _meta。技能隔离在
+// claudeCode.options 里——settingSources 只开 project 档（不开 user 档，
+// 机器级 ~/.claude 全不加载）；plugins 以本地插件形式挂载控制端技能包；
+// strictMcpConfig 封死项目 .mcp.json 的自动放行；外加
+// CLAUDE_CODE_DISABLE_AUTO_MEMORY 防会话读写机器级记忆。
+// 基础提示词走同级的 systemPrompt——**传对象 {append} 而不是字符串**，
+// 后者会整体替换 claude_code 的 preset（实测），那等于把 agent 本体换掉。
+//
+// 提示词不受技能包有无的影响：没配技能包也照样注入，两者只是恰好共用注入口。
 func (claudeAdapter) Isolation(in IsolationInput) Injection {
+	inj := Injection{
+		Env:  map[string]string{"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
+		Meta: map[string]any{"systemPrompt": map[string]any{"append": ClaudeInstructions()}},
+	}
 	if in.SkillpackDir == "" {
-		return Injection{}
+		return inj
 	}
-	return Injection{
-		Env: map[string]string{"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
-		Meta: map[string]any{"claudeCode": map[string]any{"options": map[string]any{
-			"settingSources":  []string{"project"},
-			"plugins":         []any{map[string]any{"type": "local", "path": in.SkillpackDir}},
-			"strictMcpConfig": true,
-		}}},
-	}
+	inj.Meta["claudeCode"] = map[string]any{"options": map[string]any{
+		"settingSources":  []string{"project"},
+		"plugins":         []any{map[string]any{"type": "local", "path": in.SkillpackDir}},
+		"strictMcpConfig": true,
+	}}
+	return inj
 }
 
 // Isolation（codex）：进程环境变量 CODEX_HOME 把 codex 的家目录整体重定向到
@@ -53,7 +60,8 @@ func (claudeAdapter) Isolation(in IsolationInput) Injection {
 // 彻底不在 codex 视野——连 /skills 命令都不再列出（会话级禁用做不到这点，
 // CODEX_CONFIG 的 enabled=false 只挡使用不挡显示）。控制端技能包软链进
 // codex-home/skills，项目级仍由会话 cwd 的 additionalDirectories 保留。
-// 认证与 provider 配置软链/复制自系统 ~/.codex（见 ensureCodexHome）。
+// 认证与 provider 配置软链/复制自系统 ~/.codex，基础提示词写 codex-home 的
+// AGENTS.md（见 ensureCodexHome）。
 func (codexAdapter) Isolation(in IsolationInput) Injection {
 	if in.SkillpackDir == "" {
 		return Injection{}
@@ -101,12 +109,24 @@ func mergeMeta(base, extra map[string]any) map[string]any {
 //     系统登录态、不复制密钥）；
 //   - config.toml 复制系统副本（codex 会往 config 写 trust_level 等，复制而非
 //     软链，避免污染系统 config；已存在就不覆盖，保留 codex 写入的会话态）；
-//   - skills 软链到 skillpack/skills（codex 只从这里发现技能，机器级不在视野）。
+//   - skills 软链到 skillpack/skills（codex 只从这里发现技能，机器级不在视野）；
+//   - AGENTS.md 写基础提示词（CodexInstructions）——codex 没有协议注入口，
+//     session/new 的 _meta 只认 additionalRoots，家目录的 AGENTS.md 是唯一
+//     稳定生效的口子（实测）。内容随版本变，每次比对覆盖，不做「已存在就跳过」。
 //
 // 系统 ~/.codex 缺 auth/config 时对应步骤跳过——未登录不是搭建失败。
 func ensureCodexHome(codexHome, skillpackDir, sysHome string) error {
 	if err := os.MkdirAll(codexHome, 0o755); err != nil {
 		return err
+	}
+
+	// 家目录级 AGENTS.md：与 claude 的 systemPrompt.append 等价的注入口。
+	// 用户项目里的 AGENTS.md 照常叠加，这里只补通用约定。
+	instructions := filepath.Join(codexHome, "AGENTS.md")
+	if cur, err := os.ReadFile(instructions); err != nil || string(cur) != CodexInstructions() {
+		if err := os.WriteFile(instructions, []byte(CodexInstructions()), 0o644); err != nil {
+			return err
+		}
 	}
 
 	authLink := filepath.Join(codexHome, "auth.json")

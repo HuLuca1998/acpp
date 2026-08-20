@@ -86,3 +86,38 @@ func TestBuildPromptBlocksResourceLink(t *testing.T) {
 		t.Errorf("files = %v，期望两个都在", payload["files"])
 	}
 }
+
+// 数据库用法约定只跟着 @ 引用走：有引用时插在引用之后、正文之前；
+// 没引用时一个字都不加（会话开场不主动提数据库）。
+func TestAppendDBReferencesGuidance(t *testing.T) {
+	base := []acp.ContentBlock{acp.TextBlock("这两张表什么关系？")}
+
+	t.Run("有引用时给约定", func(t *testing.T) {
+		blocks, payload := AppendDBReferences(base, nil, []DBReference{
+			{URI: "mysql://pp-game/local/users", Text: "CREATE TABLE users ..."},
+		}, true)
+
+		if len(blocks) != 3 {
+			t.Fatalf("blocks = %d 个，期望 3（引用 + 约定 + 正文）", len(blocks))
+		}
+		if blocks[0].Type != "resource" {
+			t.Errorf("第一块应是引用内容，实际 %+v", blocks[0])
+		}
+		if blocks[1].Type != "text" || blocks[1].Text != dbReferenceGuidance {
+			t.Errorf("第二块应是用法约定，实际 %+v", blocks[1])
+		}
+		if blocks[2].Text != "这两张表什么关系？" {
+			t.Errorf("正文必须留在最后，实际 %+v", blocks[2])
+		}
+		if uris, _ := payload["datasources"].([]string); len(uris) != 1 {
+			t.Errorf("datasources = %v，期望记下被引用的 URI", payload["datasources"])
+		}
+	})
+
+	t.Run("没引用时不加任何东西", func(t *testing.T) {
+		blocks, payload := AppendDBReferences(base, nil, nil, true)
+		if len(blocks) != 1 || payload != nil {
+			t.Fatalf("blocks = %+v payload = %v，期望原样返回", blocks, payload)
+		}
+	})
+}

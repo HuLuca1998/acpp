@@ -279,7 +279,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 两者都是**闸门不是边界**：明写 `别的库.表` 的 SQL 会被挡、`UPDATE` 开头的语句会被挡，但存储过程与动态 SQL 绕得过去。真正的边界始终是连接账号的授权范围——要硬保证，就给这条连接配一个只授权对应库、只有 SELECT 的账号。
 
-**AI 怎么用**：会话所在项目有可用数据源时才挂载 `acpp-db` 这个 MCP server（没有就完全不挂，免得工具清单里多几个用不了的条目）。工具分读写两路——`db_sources`（列数据源）、`db_databases`、`db_tables`、`db_schema`（列/索引/建表语句）、`db_query`（只读查询，写语句会被拒并引导去执行工具）；`db_execute`（改数据与结构）**只在存在非只读数据源时才出现在清单里**。claude 侧预批这些工具不弹权限卡，并注入一段说明要求「写 SQL 前先看表结构、环境不明确先问用户」。
+**AI 怎么用**：会话所在项目有可用数据源时才挂载 `acpp-db` 这个 MCP server（没有就完全不挂，免得工具清单里多几个用不了的条目）。工具分读写两路——`db_sources`（列数据源）、`db_databases`、`db_tables`、`db_schema`（列/索引/建表语句）、`db_query`（只读查询，写语句会被拒并引导去执行工具）；`db_execute`（改数据与结构）**只在存在非只读数据源时才出现在清单里**。claude 侧预批这些工具不弹权限卡。**挂的只有工具，没有提示词**——数据源清单与用法约定（先看表结构再写 SQL、改数据前确认环境）不进会话开场，等用户真的 `@` 引用了数据库，才随引用内容一起下发。开场就铺一段数据库说明，等于每条会话都替用户按下「我要动数据库」。
 
 **行数护栏在我们这侧**：最多 1000 行（默认 500）。不给用户的 SQL 自动加 `LIMIT`，也不在库上设任何会话变量——你的库我们只读它、不改它的行为。实现是流式游标逐行读，读满上限就取消这次查询让驱动断开，而不是把剩下几百万行读完再丢掉。**诚实的边界**：断开后正在回传结果的查询会因写失败很快中止，但还在扫描/排序、尚未吐数据的查询 MySQL 不会察觉客户端已走，会跑完那一段——要立刻杀掉得发 `KILL QUERY`，那是在库上动手，没做。
 
@@ -367,6 +367,12 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 | 附加 | env `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | 认证软链、配置复制自系统 `~/.codex` |
 
 不写 `~/.codex`、`~/.claude` 一个字节。generic runtime 无可靠注入口,不隔离。
+
+**基础提示词**（`acp.ClaudeInstructions()` / `acp.CodexInstructions()`，与隔离同批注入）：每条会话追加一段通用约定，目前只讲一件事——两步以上的请求先建待办清单再动手，逐步更新状态，且**必须用工具建**（界面的进度卡只认工具事件，正文里手写 markdown 复选框等于没建）。正文两端共用，工具那段按方言分开：claude 的待办工具是**延迟加载**的（会话开场 `TodoWrite` 不存在，`Task*` 六件套只有名字没有 schema），提示它先 `ToolSearch` 检索 `select:TaskCreate,TaskUpdate,TaskList`；codex 的 `update_plan` 原生可用，但计划每轮独立，提示它跨轮重列。
+
+注入口两端不同：claude 走 `_meta.systemPrompt.append`（**必须传对象 `{append}`**，传字符串会整体替换 claude_code 的 preset），codex 没有协议注入口（`session/new` 的 `_meta` 只认 additionalRoots），写 `<codex-home>/AGENTS.md`——内容随版本比对覆盖。这里只放与项目无关的通用约定，按项目才成立的内容（数据库那段）不进来。
+
+**为什么不直接关掉延迟加载**（2026-08-20 实测，claude-agent-acp 0.63.0 / agent-sdk 0.3.220）：SDK 没有这个开关。`tools` 显式数组会整体替换内置工具集（漏一个就废掉一项能力，且随版本漂移），`allowedTools` 里列出 `Task*` 不会加载 schema（实测无效），env `ENABLE_TOOL_SEARCH` 是内部 gate、设了不生效。所以只能在提示词里教它自己去取。
 
 codex 的 `CODEX_HOME` 隔离把家目录整体重定向到 `<dataDir>/codex-home`(codex 运行数据写这里,几 MB 量级),机器级技能连 `/skills` 都不再列出——比会话级禁用(`CODEX_CONFIG` 的 `enabled=false` 只挡使用不挡显示)彻底。家目录里 `auth.json` 软链系统的(静态 key、跟随登录态、不复制密钥),`config.toml` 复制系统副本(避免 codex 写回污染系统 config),`skills` 软链技能包。副作用:切换到本方案后,旧 codex 会话的 thread 存在系统 `~/.codex`、新 home 找不到,首次恢复会回退 `session/new`(丢一次上下文),之后正常。认证不隔离:claude 用系统钥匙串登录态、codex 用系统 `~/.codex` 的 auth/config。
 

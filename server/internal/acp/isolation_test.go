@@ -35,6 +35,29 @@ func TestClaudeAdapter_Isolation_MetaShape(t *testing.T) {
 	if plugin["type"] != "local" || plugin["path"] != "/data/skillpack" {
 		t.Fatalf("plugin = %v, want local plugin at skillpack dir", plugin)
 	}
+
+	// 基础提示词是**追加**：传字符串会整体替换 claude_code preset。
+	sp, ok := inj.Meta["systemPrompt"].(map[string]any)
+	if !ok {
+		t.Fatalf("systemPrompt = %v, want object form {append: ...}", inj.Meta["systemPrompt"])
+	}
+	if sp["append"] != ClaudeInstructions() {
+		t.Fatalf("systemPrompt.append = %v, want ClaudeInstructions()", sp["append"])
+	}
+}
+
+// 契约：没配技能包也要注入基础提示词——两者只是共用注入口，提示词不是隔离
+// 的附属品。此时 claudeCode.options 整块不出现（没有技能包可挂）。
+func TestClaudeAdapter_Isolation_InstructionsWithoutSkillpack(t *testing.T) {
+	inj := claudeAdapter{}.Isolation(IsolationInput{Cwd: "/work/proj", Home: "/home/u"})
+
+	sp, ok := inj.Meta["systemPrompt"].(map[string]any)
+	if !ok || sp["append"] != ClaudeInstructions() {
+		t.Fatalf("systemPrompt = %v, want {append: ClaudeInstructions()}", inj.Meta["systemPrompt"])
+	}
+	if _, ok := inj.Meta["claudeCode"]; ok {
+		t.Fatalf("claudeCode options must be absent without a skillpack, got %v", inj.Meta["claudeCode"])
+	}
 }
 
 // 契约：codex 的隔离用 CODEX_HOME 把家目录重定向到 <dataDir>/codex-home，
@@ -94,6 +117,36 @@ func TestCodexAdapter_Isolation_RedirectsCodexHome(t *testing.T) {
 	if err != nil || skillsTarget != filepath.Join(skillpack, "skills") {
 		t.Fatalf("skills link = %q (err %v), want symlink to skillpack/skills", skillsTarget, err)
 	}
+	// AGENTS.md 是 codex 唯一的提示词注入口（它没有协议注入口）。
+	got, err := os.ReadFile(filepath.Join(codexHome, "AGENTS.md"))
+	if err != nil || string(got) != CodexInstructions() {
+		t.Fatalf("AGENTS.md = %q (err %v), want CodexInstructions()", got, err)
+	}
+}
+
+// 契约：AGENTS.md 的内容随版本走——家目录里躺着旧文案时必须被覆盖，
+// 否则升级后老用户永远拿的是旧约定。
+func TestCodexAdapter_Isolation_RewritesStaleInstructions(t *testing.T) {
+	dataDir := t.TempDir()
+	skillpack := filepath.Join(dataDir, "skillpack")
+	if err := os.MkdirAll(filepath.Join(skillpack, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	codexHome := filepath.Join(dataDir, "codex-home")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(codexHome, "AGENTS.md")
+	if err := os.WriteFile(stale, []byte("# 上个版本的约定\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	codexAdapter{}.Isolation(IsolationInput{SkillpackDir: skillpack, Home: t.TempDir()})
+
+	got, err := os.ReadFile(stale)
+	if err != nil || string(got) != CodexInstructions() {
+		t.Fatalf("AGENTS.md = %q (err %v), want overwritten with CodexInstructions()", got, err)
+	}
 }
 
 // 契约：codex 缺 cwd 时 additionalDirectories 为空（不塞空串），隔离仍靠 CODEX_HOME。
@@ -115,10 +168,11 @@ func TestCodexAdapter_Isolation_OmitsEmptyCwd(t *testing.T) {
 	}
 }
 
-// 契约：SkillpackDir 为空 = 不隔离，三端都返回零值注入（会话沿用机器级）。
+// 契约：SkillpackDir 为空 = 不做技能隔离，codex 与 generic 返回零值注入
+// （会话沿用机器级）。claude 例外：它的提示词注入口与隔离同在 _meta，
+// 提示词照给，只是不挂技能包——见上面的 InstructionsWithoutSkillpack。
 func TestAdapters_Isolation_EmptySkillpackIsNoop(t *testing.T) {
 	adapters := map[string]Adapter{
-		"claude":  claudeAdapter{},
 		"codex":   codexAdapter{},
 		"generic": genericAdapter{},
 	}
