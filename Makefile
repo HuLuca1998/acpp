@@ -63,7 +63,7 @@ app: ## 打包 macOS 桌面版到 build/app/ACPP.app
 	scripts/build-macos-app.sh
 
 .PHONY: release
-release: ## 发布桌面版到 GitHub Releases（默认上个 tag +0.0.1；升 minor 用 make release VERSION=x.y.0）
+release: ## 发布桌面版到 GitHub Releases（默认上个 tag 逢十进位：0.5.9→0.6.0；跳版本用 make release VERSION=x.y.z）
 	scripts/release-macos.sh $(VERSION)
 
 .PHONY: check
