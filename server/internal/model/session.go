@@ -34,6 +34,13 @@ type Session struct {
 	// （model/effort/level/plan/fast），恢复会话的降级视图用它填 Current*，
 	// 让三种状态（新建/进行中/恢复）的设置控件显示一致。
 	LastSettings JSONMap `gorm:"type:text" json:"lastSettings,omitempty"`
+	// LastUsage 是最后一次上报的用量快照（used/size/cost）。
+	//
+	// 上下文水位只经 usage_update 通知流过，是彻头彻尾的事件态：会话一停、
+	// 页面一刷新就没了。可占用比例正是「这条会话还剩多少余量」这个问题的
+	// 答案，不该只在轮内可见——所以按 LastSettings 同款存快照，未连接的
+	// 会话也能显示最近的数字。轮末写一次，不跟着每条通知抖。
+	LastUsage JSONMap `gorm:"type:text" json:"lastUsage,omitempty"`
 	// MCPToken 是本会话专属 MCP 端点的路径令牌（/api/mcp/db/{token}）：
 	// agent 子进程带着它回连拿数据库工具。懒生成——只有真的挂载了工具面
 	// 的会话才有值。不出 API：它是凭证。

@@ -67,6 +67,8 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		br.Publish(StreamEvent{Kind: "settings", Settings: ev.Settings})
 
 	case acp.EventUsage:
+		// 记内存供轮末落库——上下文水位不该随会话停止而消失。
+		s.rememberUsage(sessionID, ev.Used, ev.Size, ev.Cost)
 		br.Publish(StreamEvent{Kind: "usage", Used: ev.Used, Size: ev.Size, Cost: ev.Cost})
 
 	case acp.EventCommands:

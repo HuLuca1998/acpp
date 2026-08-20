@@ -205,6 +205,15 @@ export interface Session {
   /** 当前是否有活着的 agent 子进程。 */
   running: boolean
   settings?: SessionSettings
+  /**
+   * 最近一次上报的用量快照（轮末落库）。上下文水位只经 SSE 通知流过，
+   * 会话一停就没了——靠它让未连接的会话也显示最近的占用比例与费用。
+   */
+  lastUsage?: {
+    used: number
+    size: number
+    cost?: { amount: number; currency: string }
+  }
   /** 活会话的斜杠命令清单，open 后可用。 */
   commands?: SlashCommand[]
   /** 工作目录当前的 git 分支（detached 时是短 hash），非 git 目录为空。 */

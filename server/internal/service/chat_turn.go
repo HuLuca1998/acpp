@@ -262,6 +262,9 @@ func adaptBlocksToPromptCaps(blocks []acp.ContentBlock, p acp.PromptCapabilities
 // 用 context.Background 是因为发起请求的 HTTP 连接早就返回了。
 func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.ContentBlock) {
 	ctx := context.Background()
+	// 用量快照落库放 defer：这一轮无论正常收尾、报错还是插话并入别的轮，
+	// 都该把最近的水位留下——恰恰是失败那轮最值得知道「还剩多少余量」。
+	defer s.saveUsageSnapshot(sessionID)
 
 	// active 的语义是「有一轮正在跑」，只在这里出现，结束时归 idle/error。
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).

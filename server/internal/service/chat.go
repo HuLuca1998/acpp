@@ -39,6 +39,16 @@ type ChatService struct {
 
 	mu      sync.Mutex
 	brokers map[uint]*stream.Broker
+	// usage 是每会话最近一次上报的用量快照（内存态）。usage_update 一轮
+	// 能来几十次，逐条写库既无意义又吵——收在这里，轮末落一次。
+	usage map[uint]*UsageSnapshot
+}
+
+// UsageSnapshot 是一条会话最近的上下文水位与费用。
+type UsageSnapshot struct {
+	Used int64          `json:"used"`
+	Size int64          `json:"size"`
+	Cost *acp.UsageCost `json:"cost,omitempty"`
 }
 
 // DataSources 是数据源能力的注入口。
@@ -85,6 +95,7 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 		transcripts: transcripts,
 		skillUsage:  skillUsage,
 		brokers:     make(map[uint]*stream.Broker),
+		usage:       make(map[uint]*UsageSnapshot),
 	}
 }
 
@@ -94,6 +105,40 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 // 本文件里对会话的读取一律用 OwnerScope：归属校验在 HTTP 入口一次性做完
 // （adr-007），到这里已经是「确认属于调用者」的会话 id，再过一次租户条件
 // 只会让内部流程（空闲回收、错误标记）无从下手。
+
+// rememberUsage 收下最近一次用量上报（内存），轮末由 saveUsageSnapshot 落库。
+// cost 只有 claude 间歇带，不带的那几条不能把已知费用冲掉。
+func (s *ChatService) rememberUsage(sessionID uint, used, size int64, cost *acp.UsageCost) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snap := s.usage[sessionID]
+	if snap == nil {
+		snap = &UsageSnapshot{}
+		s.usage[sessionID] = snap
+	}
+	snap.Used, snap.Size = used, size
+	if cost != nil {
+		snap.Cost = cost
+	}
+}
+
+// saveUsageSnapshot 把内存里的最近用量写进会话记录，供未连接的会话展示。
+func (s *ChatService) saveUsageSnapshot(sessionID uint) {
+	s.mu.Lock()
+	snap := s.usage[sessionID]
+	s.mu.Unlock()
+	if snap == nil || snap.Size == 0 {
+		return
+	}
+	payload := model.JSONMap{"used": snap.Used, "size": snap.Size}
+	if snap.Cost != nil {
+		payload["cost"] = snap.Cost
+	}
+	if err := s.db.Model(&model.Session{}).
+		Where("id = ?", sessionID).Update("last_usage", payload).Error; err != nil {
+		slog.Warn("save usage snapshot", "session", sessionID, "err", err)
+	}
+}
 
 func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, error) {
 	view, err := s.sessions.Get(ctx, OwnerScope(), sessionID)
@@ -262,6 +307,9 @@ func (s *ChatService) Close(ctx context.Context, sessionID uint) error {
 	s.transcripts.Close(sessionKey(sessionID))
 	s.mu.Lock()
 	delete(s.brokers, sessionID)
+	// 用量快照同在这把锁下：只删 broker 会把 usage 条目留到进程结束，
+	// 会话反复开关就是一路只增不删。
+	delete(s.usage, sessionID)
 	s.mu.Unlock()
 
 	return s.db.WithContext(ctx).Model(&model.Session{}).
