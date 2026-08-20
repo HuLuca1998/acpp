@@ -87,6 +87,9 @@ export default {
   backend: {
     connected: "Backend connected",
     unreachable: "Backend unreachable",
+    updated: "App updated to v{{version}}",
+    updatedDesc: "Reload to pick up the new interface.",
+    reload: "Reload",
   },
   language: {
     label: "Language",

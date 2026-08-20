@@ -45,3 +45,4 @@
 | identity-context.ts  | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话                                                                  | `useDraftSession`                              |
 | use-mobile.ts        | 移动端断点判断（shadcn 生成）                                                                                   | `useIsMobile`                                  |
+| use-version-watch.ts | 版本哨兵：轮询 /api/health，后端换版本就弹提示条请用户刷新（局域网访客不会自己刷新）                            | `useVersionWatch`                              |

@@ -86,6 +86,9 @@ export default {
   backend: {
     connected: "后端已连接",
     unreachable: "后端不可达",
+    updated: "应用已更新到 v{{version}}",
+    updatedDesc: "刷新后才会用上新版界面。",
+    reload: "刷新",
   },
   language: {
     label: "语言",
