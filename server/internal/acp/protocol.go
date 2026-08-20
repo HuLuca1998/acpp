@@ -51,6 +51,20 @@ type ClientCapabilities struct {
 	// Elicitation 声明后，agent 的交互式提问（AskUserQuestion 一类）
 	// 会作为 elicitation/create 反向调用发过来；不声明会被 agent 静默跳过。
 	Elicitation *ElicitationCapability `json:"elicitation,omitempty"`
+	// Session 声明 session.configOptions.boolean：允许 agent 下发
+	// type=boolean 的配置项（原生布尔 currentValue，解析在 FlexString）。
+	// 不声明的话 adapter 只会给 select 型的 on/off 假开关。
+	Session *SessionCapability `json:"session,omitempty"`
+}
+
+// SessionCapability 是 clientCapabilities.session 的能力子树。
+type SessionCapability struct {
+	ConfigOptions ConfigOptionsCapability `json:"configOptions"`
+}
+
+// ConfigOptionsCapability 里 boolean 字段非 null 即表示支持布尔型配置项。
+type ConfigOptionsCapability struct {
+	Boolean struct{} `json:"boolean"`
 }
 
 // ElicitationCapability 里 form 字段非 null 即表示支持表单式提问。
@@ -134,13 +148,39 @@ type Mode struct {
 // ConfigOption 是 agent 暴露的会话级配置项（模型族、协作模式、推理档等）。
 // codex-acp 实测全部是 type=select，value 都是字符串。
 type ConfigOption struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name"`
-	Description  string              `json:"description,omitempty"`
-	Category     string              `json:"category,omitempty"`
-	Type         string              `json:"type"`
-	CurrentValue string              `json:"currentValue,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Type        string `json:"type"`
+	// CurrentValue 兼容两种线级形状：select 型是字符串，boolean 型
+	//（我们已声明 session.configOptions.boolean）是原生布尔——一个
+	// 布尔值就不该让整份 configOptions 解析翻车。
+	CurrentValue FlexString          `json:"currentValue,omitempty"`
 	Options      []ConfigOptionValue `json:"options,omitempty"`
+}
+
+// FlexString 接受字符串或布尔的 JSON 值，布尔归一成 "true"/"false"。
+type FlexString string
+
+func (f *FlexString) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = FlexString(s)
+		return nil
+	}
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		if b {
+			*f = "true"
+		} else {
+			*f = "false"
+		}
+		return nil
+	}
+	// 其他标量（数字等）原样收下，语义留给 adapter 判断。
+	*f = FlexString(strings.Trim(string(data), `"`))
+	return nil
 }
 
 type ConfigOptionValue struct {

@@ -182,7 +182,7 @@ func modelsFrom(opt *ConfigOption) ([]Model, string) {
 	for _, v := range opt.Options {
 		models = append(models, Model{ID: v.Value, Name: v.Name, Description: v.Description})
 	}
-	return models, opt.CurrentValue
+	return models, string(opt.CurrentValue)
 }
 
 // effortsFrom 取配置项选项值与统一词汇表的交集，保持词汇表顺序。
@@ -203,7 +203,7 @@ func effortsFrom(opt *ConfigOption) ([]Effort, Effort) {
 	}
 	var current Effort
 	for _, e := range efforts {
-		if string(e) == opt.CurrentValue {
+		if string(e) == string(opt.CurrentValue) {
 			current = e
 			break
 		}
@@ -255,7 +255,9 @@ func boolFrom(opt *ConfigOption) (supported, on bool) {
 	if opt == nil {
 		return false, false
 	}
-	return true, opt.CurrentValue == "on"
+	// select 型的惯例值是 on/off；boolean 型（声明能力后 adapter 可发）
+	// 归一后是 true/false。两种都认。
+	return true, opt.CurrentValue == "on" || opt.CurrentValue == "true"
 }
 
 func onOff(on bool) string {

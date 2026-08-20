@@ -195,7 +195,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早） |
-| GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；gitignore + 固定黑名单过滤，路径限制在会话 cwd 内） |
+| GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；全量展示，仅过滤固定黑名单 .git/node_modules/.DS_Store，路径限制在会话 cwd 内） |
 | GET | `/api/sessions/{id}/fs/file` | 工作区文件预览（`?path=`；1MB 截断、二进制检测，同上 path guard） |
 | GET | `/api/sessions/{id}/git/overview` | git 汇总：分支、upstream、ahead/behind、变更文件（含 numstat）、未推送 commit；非仓库返回 `isRepo:false` |
 | GET | `/api/sessions/{id}/git/diff` | 单文件工作区 diff（`?path=`，返回 HEAD 版与工作区版全文，行级对齐在前端） |

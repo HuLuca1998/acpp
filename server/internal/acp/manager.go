@@ -209,6 +209,9 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 			Terminal: false,
 			// 声明表单式 elicitation，agent 的交互式提问才会发过来。
 			Elicitation: &ElicitationCapability{},
+			// 声明布尔型配置项支持：adapter 新版把 fast/plan 一类开关改成
+			// type=boolean 时我们能直接消化（FlexString + boolFrom 已兼容）。
+			Session: &SessionCapability{},
 		},
 	}, &init)
 	if err != nil {

@@ -165,7 +165,7 @@ func (s *Session) setConfigOption(ctx context.Context, configID, value string) e
 		// 响应没带全量时至少把本地这一项改掉。
 		for i := range s.caps.ConfigOptions {
 			if s.caps.ConfigOptions[i].ID == configID {
-				s.caps.ConfigOptions[i].CurrentValue = value
+				s.caps.ConfigOptions[i].CurrentValue = FlexString(value)
 			}
 		}
 	}
