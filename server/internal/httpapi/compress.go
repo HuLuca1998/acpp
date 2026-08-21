@@ -41,9 +41,11 @@ var compressibleTypes = []string{
 
 var gzipPool = sync.Pool{
 	New: func() any {
-		// BestSpeed：这些是本机/局域网传输，压缩比再高也换不回 CPU 时间。
-		// 对 JSON 与 JS 而言 1 档已经能压掉七八成。
-		w, _ := gzip.NewWriterLevel(nil, gzip.BestSpeed)
+		// 用标准默认档（6）而不是 BestSpeed。实测本项目的两类大响应：
+		// 175KB 的前端主分片 69KB→60KB（多花 2.5ms，而它带 immutable
+		// 缓存，一次更新只付一遍）；54KB 的消息列表 14.2KB→12.8KB
+		// （多花 0.25ms）。两边的代价都在噪声里，省下的字节是实的。
+		w, _ := gzip.NewWriterLevel(nil, gzip.DefaultCompression)
 		return w
 	},
 }
