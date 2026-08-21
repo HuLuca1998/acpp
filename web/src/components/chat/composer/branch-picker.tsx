@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
 
-import { useWorkspace } from "@/components/workspace/workspace-context"
+import {
+  useGitOverview,
+  useWorkspace,
+} from "@/components/workspace/workspace-context"
 import type { GitBranchView } from "@/types/acp"
 import { Hint } from "@/components/hint"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -27,13 +30,20 @@ import {
 /**
  * 输入卡下沿的分支控件：显示当前分支，点开可切换分支、开隔离工作区。
  *
- * 数据只在打开时拉——分支状态每次打开都可能已经被 agent 改过，缓存它
- * 只会显示陈旧信息；关着的时候更没必要为它 exec git。
+ * 分支名读工作区共享的 git 汇总（gitStore）——那份数据在轮末与 agent 每
+ * 干完一件事之后都会刷新，agent 自己 `git checkout` 换了分支，这里跟着变。
+ * 会话记录里的 gitBranch 只当兜底：它是打开会话那一刻的快照，agent 改完
+ * 分支之后它就在说旧话了。
+ *
+ * 分支**清单**仍只在打开面板时拉：那是一次额外的 exec git，关着的时候
+ * 没必要为它付钱。
  */
 export function BranchPicker({ fallback }: { fallback?: string }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { sessionId, scope } = useWorkspace()
+  const ws = useWorkspace()
+  const { sessionId, scope } = ws
+  const git = useGitOverview()
 
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<GitBranchView | null>(null)
@@ -61,6 +71,8 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
     try {
       setView(await scope.gitCheckout(sessionId, { branch, create }))
       setNewBranch("")
+      // 换了分支就是换了整个工作区：文件树、变更清单、提交链路全得跟着走。
+      ws.refreshWorkspace()
       toast.success(t("chat.branch.switched", { branch }))
     } catch (err) {
       toast.error((err as Error).message)
@@ -86,14 +98,22 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
     }
   }
 
-  const current = view?.current ?? fallback
+  // 打开过面板就以那一次的结果为准（用户可能刚在里面切过分支，gitStore
+  // 的刷新还在路上），否则读共享汇总，最后才回落到会话快照。
+  const current = view?.current ?? git.data?.branch ?? fallback
 
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        if (next) void load()
+        if (next) {
+          void load()
+        } else {
+          // 关上就把这一次的快照丢掉，显示交回 gitStore——不然 agent 之后
+          // 自己切了分支，胶囊还固执地显示打开面板那会儿看到的名字。
+          setView(null)
+        }
       }}
     >
       <Hint

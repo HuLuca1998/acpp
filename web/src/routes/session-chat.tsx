@@ -224,8 +224,16 @@ export function SessionChat() {
           <WorkspaceDock />
         </div>
       </ChatPanelContext.Provider>
-      {/* turn 结束刷新 git/文件树——agent 改完文件的时刻。 */}
-      <WorkspaceAutoRefresh busy={chat.busy} />
+      {/* 刷新 git/文件树：轮末一次，轮内每干完一件事也跟一次——agent 在
+          一轮里切分支、改文件，界面不该等到收工才说实话。 */}
+      <WorkspaceAutoRefresh
+        busy={chat.busy}
+        toolsDone={
+          chat.liveTools.filter(
+            (tool) => tool.status === "completed" || tool.status === "failed"
+          ).length
+        }
+      />
       {/* git 面板右键的「让 AI 分析」：直接发出去。点那一下的意图就是
           「现在分析给我看」，再让人回输入框按一次回车是多余的一步。
           草稿态还没有会话可发，退化成填进输入框。 */}

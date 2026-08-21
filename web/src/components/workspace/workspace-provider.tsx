@@ -255,17 +255,49 @@ export function WorkspaceReferenceSink({
   return null
 }
 
+/** 轮内刷新的合帧窗口：一次工具调用落地到界面跟上，最多等这么久。 */
+const TOOL_REFRESH_MS = 1500
+
 /**
- * turn 结束（busy 从 true 落回 false）时刷新工作区数据面——agent 刚改完
- * 文件的时刻。挂在 Provider 内任意处的行为组件，不渲染任何内容。
+ * 刷新工作区数据面的时机。挂在 Provider 内任意处的行为组件，不渲染内容。
+ *
+ * 两个触发点：
+ *  - turn 结束（busy 从 true 落回 false）——agent 收工的时刻；
+ *  - 轮内每完成一次工具调用——agent 干活是一整轮里陆续发生的，等到轮末
+ *    才刷新意味着它切了分支、改了文件之后，底部分支、变更清单、文件树
+ *    全在说旧话，一直说到这一轮结束（长任务能是十几分钟）。
+ *
+ * 工具调用一轮能来几十次，每次都 exec 一遍 git 不值当——按窗口合帧，
+ * 密集调用期间也只刷最后那一下。
  */
-export function WorkspaceAutoRefresh({ busy }: { busy: boolean }) {
+export function WorkspaceAutoRefresh({
+  busy,
+  toolsDone,
+}: {
+  busy: boolean
+  /** 本轮已完成的工具调用数；每 +1 表示 agent 刚干完一件事。 */
+  toolsDone?: number
+}) {
   const ws = useWorkspace()
   const prev = useRef(busy)
   useEffect(() => {
     if (prev.current && !busy) ws.refreshWorkspace()
     prev.current = busy
   }, [busy, ws])
+
+  const seenTools = useRef(toolsDone ?? 0)
+  useEffect(() => {
+    const done = toolsDone ?? 0
+    // 轮末清空 liveTools 会让计数落回 0，那一下由上面的 busy 分支管，
+    // 这里不重复刷。
+    if (done <= seenTools.current) {
+      seenTools.current = done
+      return
+    }
+    seenTools.current = done
+    const timer = setTimeout(() => ws.refreshWorkspace(), TOOL_REFRESH_MS)
+    return () => clearTimeout(timer)
+  }, [toolsDone, ws])
   return null
 }
 
