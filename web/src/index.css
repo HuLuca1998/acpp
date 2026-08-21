@@ -542,11 +542,13 @@
    主按钮有键帽光感，侧栏当前项被主色浸染。全部由语义 token 推导，
    五套 palette × 明暗两模式自动成立。 */
 
-/* 内容区氛围：顶部一层极淡的主色光晕。 */
+/* 内容区氛围：顶部一层极淡的主色光晕。
+   尺寸用固定值不用百分比：百分比渐变随盒子尺寸变化，窗口缩放时整个
+   内容区背景逐帧重光栅化；固定尺寸的渐变位图可以复用。 */
 [data-slot="sidebar-inset"] {
   background:
     radial-gradient(
-      120% 32rem at 50% -8rem,
+      96rem 32rem at 50% -8rem,
       color-mix(in oklch, var(--primary) 6%, transparent),
       transparent 70%
     ),
@@ -555,7 +557,7 @@
 .dark [data-slot="sidebar-inset"] {
   background:
     radial-gradient(
-      120% 32rem at 50% -8rem,
+      96rem 32rem at 50% -8rem,
       color-mix(in oklch, var(--primary) 9%, transparent),
       transparent 70%
     ),

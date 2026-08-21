@@ -110,10 +110,13 @@ export function Composer({
       <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 lg:px-6">
         {localPanel}
         {queue}
-        {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。 */}
+        {/* 材质卡片：半透明 + 背景模糊 + 顶缘受光的亮边，读作一块浮起的玻璃。
+            blur 用 md 不用 xl：模糊成本随半径平方涨，常驻的 24px 毛玻璃是
+            WKWebView 窗口缩放逐帧重采样的大头；半径减半 + 底色不透明度补偿，
+            视觉几乎不变。 */}
         <div
           data-slot="composer-shell"
-          className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl dark:border-border"
+          className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/90 backdrop-blur-md dark:border-border"
         >
           {menuOpen ? (
             <div className="absolute inset-x-2 bottom-[calc(100%+0.5rem)] max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">

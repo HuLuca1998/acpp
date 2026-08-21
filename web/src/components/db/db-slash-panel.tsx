@@ -52,7 +52,7 @@ export function DbSlashPanel({
   const picked = envArg ? pickSource(sources ?? [], envArg) : null
 
   return (
-    <div className="pointer-events-auto mb-2 overflow-hidden rounded-xl border border-border bg-card/95 backdrop-blur-xl transition-[opacity,translate] duration-200 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
+    <div className="pointer-events-auto mb-2 overflow-hidden rounded-xl border border-border bg-card/95 backdrop-blur-md transition-[opacity,translate] duration-200 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
       <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 text-xs">
         <DatabaseIcon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="font-medium">{t("db.title")}</span>
