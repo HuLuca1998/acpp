@@ -13,6 +13,7 @@ import { UploadDialog } from "@/components/chat/composer/upload-dialog"
 import { DirPicker } from "@/components/dir-picker/dir-picker"
 import {
   ChatPanelContext,
+  createDraftStore,
   type ChatPanelData,
 } from "@/components/workspace/chat-panel-context"
 import { WorkspaceDock } from "@/components/workspace/workspace-dock"
@@ -48,7 +49,9 @@ export function SessionChat() {
 
   const chat = useChat(sessionId)
   const newSession = useDraftSession(isNew, t("sessions.form.defaultModel"))
-  const [draft, setDraft] = useState("")
+  // 草稿住在 ref 化的 store 里而不是页面 state：打字不该重渲整棵工作区树
+  //（见 chat-panel-context 的 DraftStore 注释）。
+  const [draftStore] = useState(createDraftStore)
 
   // 待发送附件：图片（粘贴/选择）与 @ 引用的文件路径。
   const { identity } = useIdentity()
@@ -78,7 +81,7 @@ export function SessionChat() {
   }
 
   function submit() {
-    const content = draft.trim()
+    const content = draftStore.get().trim()
     if (
       !content &&
       images.length === 0 &&
@@ -90,14 +93,14 @@ export function SessionChat() {
     if (isNew) {
       if (!newSession.selected || newSession.creating) return
       // 组件跨 /sessions/new → /sessions/:id 复用不重挂，不清会残留到会话页。
-      setDraft("")
+      draftStore.set("")
       setImages([])
       setFiles([])
       setDbRefs([])
       void newSession.start(input)
       return
     }
-    setDraft("")
+    draftStore.set("")
     setImages([])
     setFiles([])
     setDbRefs([])
@@ -122,7 +125,7 @@ export function SessionChat() {
       datasources: qRefs,
     } = item.input
     if (content) {
-      setDraft((prev) => (prev ? `${prev}\n${content}` : content))
+      draftStore.set((prev) => (prev ? `${prev}\n${content}` : content))
     }
     if (qImages?.length) {
       setImages((prev) => [...prev, ...qImages])
@@ -186,8 +189,7 @@ export function SessionChat() {
     isNew,
     chat,
     newSession,
-    draft,
-    setDraft,
+    draftStore,
     images,
     files,
     dbRefs,
@@ -230,7 +232,7 @@ export function SessionChat() {
       <WorkspaceAskSink
         onAsk={(prompt) => {
           if (isNew) {
-            setDraft((prev) =>
+            draftStore.set((prev) =>
               prev.trim() ? `${prev.trimEnd()}\n\n${prompt}` : prompt
             )
             return
