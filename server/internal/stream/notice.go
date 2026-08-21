@@ -1,6 +1,10 @@
 package stream
 
-import "sync"
+import (
+	"sync"
+
+	"acpp/server/internal/acp"
+)
 
 // Notice 是一条与会话流无关的全局通知：某条会话上发生了值得打扰用户的事。
 //
@@ -10,13 +14,23 @@ import "sync"
 type Notice struct {
 	// Kind 固定是 "notify"，与全局流里的 hello、心跳区分。
 	Kind string `json:"kind"`
-	// Event 是这条通知的由来：permission / elicitation / turn_end / error。
+	// Event 是这条通知的由来：permission / elicitation / turn_end / error，
+	// 外加两条撤回信号 permission_done / elicitation_done——事情在页面上处理
+	// 掉了，挂在通知中心里的那条就得收回去，否则它还在替一个已经结束的
+	// 请求要决定。
 	Event string `json:"event"`
 
 	SessionID    uint   `json:"sessionId"`
 	SessionTitle string `json:"sessionTitle,omitempty"`
 	// Text 是给人看的一句话摘要（错误原因、agent 想干什么），可为空。
 	Text string `json:"text,omitempty"`
+
+	// PermissionID 与 Options 是决策专用：系统通知上的按钮就是这些选项，
+	// 按一下即裁决，用户不必先把窗口翻出来。
+	PermissionID string                 `json:"permissionId,omitempty"`
+	Options      []acp.PermissionOption `json:"options,omitempty"`
+	// ElicitationID 供撤回用：问题已经在页面上答完了，通知不该还挂着。
+	ElicitationID string `json:"elicitationId,omitempty"`
 
 	// TenantID 是会话归属，投递前的过滤依据。**不进 JSON**——它是路由信息，
 	// 不该出现在推给浏览器的载荷里。
@@ -32,8 +46,9 @@ const noticeBuffer = 16
 // 与 Broker 的分工：Broker 是一条会话流的内容管道，要重放、要顺序、丢一条
 // 就是残缺的消息；Hub 只送「发生了一件值得看一眼的事」，错过就错过。
 type Hub struct {
-	mu   sync.Mutex
-	subs map[chan Notice]uint
+	mu     sync.Mutex
+	subs   map[chan Notice]uint
+	closed bool
 }
 
 func NewHub() *Hub { return &Hub{subs: make(map[chan Notice]uint)} }
@@ -43,6 +58,12 @@ func NewHub() *Hub { return &Hub{subs: make(map[chan Notice]uint)} }
 func (h *Hub) Subscribe(tenantID uint) (<-chan Notice, func()) {
 	ch := make(chan Notice, noticeBuffer)
 	h.mu.Lock()
+	if h.closed {
+		// 服务正在关停：给一个已关闭的 channel，订阅方立刻收到流结束。
+		h.mu.Unlock()
+		close(ch)
+		return ch, func() {}
+	}
 	h.subs[ch] = tenantID
 	h.mu.Unlock()
 
@@ -64,6 +85,9 @@ func (h *Hub) Subscribe(tenantID uint) (<-chan Notice, func()) {
 func (h *Hub) Publish(n Notice) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
 	for ch, tenantID := range h.subs {
 		if tenantID != n.TenantID {
 			continue
@@ -73,5 +97,24 @@ func (h *Hub) Publish(n Notice) {
 		default:
 			// 订阅者跟不上就丢掉这条，不阻塞广播。
 		}
+	}
+}
+
+// Close 关掉全部订阅并拒绝新订阅，服务关停时调用。
+//
+// 为什么需要它：SSE 是不会自己收尾的在途请求，http.Server 的优雅关闭对它
+// 只能干等超时——每次重启白白拖上十秒，浏览器那头还以为连接好好的。关停时
+// 把订阅统一关闭，事件流 handler 立刻返回、连接立刻断，客户端马上进入
+// 重连，新进程一起来就能拿到新版本的 hello。
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	h.closed = true
+	for ch := range h.subs {
+		delete(h.subs, ch)
+		close(ch)
 	}
 }

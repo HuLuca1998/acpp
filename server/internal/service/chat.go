@@ -396,6 +396,19 @@ func (s *ChatService) markSessionError(sessionID uint, cause error) {
 	}
 }
 
+// CloseStreams 关掉全部会话事件流，服务关停时调用。
+//
+// SSE 是不会自己收尾的在途请求，优雅关闭对它只能干等超时——正在看会话的
+// 页面会把整个关停拖上十秒。统一关闭后浏览器立刻断线重连，新进程起来时
+// 凭 seq 与消息接口无损恢复。
+func (s *ChatService) CloseStreams() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, br := range s.brokers {
+		br.Close()
+	}
+}
+
 func (s *ChatService) brokerFor(sessionID uint) *stream.Broker {
 	s.mu.Lock()
 	defer s.mu.Unlock()

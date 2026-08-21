@@ -93,3 +93,46 @@ func TestHubDropsInsteadOfBlocking(t *testing.T) {
 		t.Fatal("Publish 被慢订阅者卡住了")
 	}
 }
+
+// 关停必须让订阅者立刻收到流结束，而不是留他们干等心跳；晚到的退订
+// 不能把已关的 channel 再关一次（panic）。
+func TestHubCloseEndsSubscribers(t *testing.T) {
+	hub := NewHub()
+	ch, cancel := hub.Subscribe(1)
+
+	hub.Close()
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("Close 后不该还能收到通知")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close 后订阅 channel 应立即关闭")
+	}
+	cancel()                                         // 不该 panic
+	hub.Publish(Notice{Kind: "notify", TenantID: 1}) // 也不该 panic
+
+	// 关停后的新订阅同样立刻结束。
+	late, _ := hub.Subscribe(2)
+	if _, ok := <-late; ok {
+		t.Fatal("关停后的新订阅应拿到已关闭的 channel")
+	}
+}
+
+// Broker 同款语义：Close 与订阅方 cancel 谁先谁关，另一方安静退场。
+func TestBrokerCloseThenCancel(t *testing.T) {
+	b := NewBroker()
+	ch, cancel := b.Subscribe()
+
+	b.Close()
+	if _, ok := <-ch; ok {
+		t.Fatal("Close 后订阅 channel 应已关闭")
+	}
+	cancel()                       // 不该 panic
+	b.Publish(Event{Kind: "noop"}) // 不该 panic
+
+	late, _ := b.Subscribe()
+	if _, ok := <-late; ok {
+		t.Fatal("关停后的新订阅应拿到已关闭的 channel")
+	}
+}

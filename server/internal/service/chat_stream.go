@@ -13,6 +13,10 @@ import (
 // 广播机制与事件形状归 internal/stream，聊天与编排两族共用）。
 type StreamEvent = stream.Event
 
+// StreamNotice 是一条全局通知（别名指向 stream.Notice，形状与广播机制
+// 同样归 internal/stream）。
+type StreamNotice = stream.Notice
+
 // handleEvent 把 ACP 事件转成 SSE 事件推给浏览器。
 // 持久化不在这里发生——线级消息已经由 WireTap 写进转录。
 func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Event) {
@@ -59,10 +63,14 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 			Options:      ev.Options,
 			PlanReview:   ev.PlanReview,
 		})
-		s.notify(sessionID, "permission", ev.Title)
+		s.notify(sessionID, StreamNotice{
+			Event: "permission", Text: ev.Title,
+			PermissionID: ev.PermissionID, Options: ev.Options,
+		})
 
 	case acp.EventPermissionDone:
 		br.Publish(StreamEvent{Kind: "permission_done", PermissionID: ev.PermissionID})
+		s.notify(sessionID, StreamNotice{Event: "permission_done", PermissionID: ev.PermissionID})
 
 	case acp.EventSettings:
 		// agent 自行改配置推来的视图同样要过配置页的取舍。
@@ -87,21 +95,24 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 			Text:          ev.Text,
 			RawInput:      ev.RawInput,
 		})
-		s.notify(sessionID, "elicitation", ev.Text)
+		s.notify(sessionID, StreamNotice{
+			Event: "elicitation", Text: ev.Text, ElicitationID: ev.ElicitationID,
+		})
 
 	case acp.EventElicitationDone:
 		br.Publish(StreamEvent{Kind: "elicitation_done", ElicitationID: ev.ElicitationID})
+		s.notify(sessionID, StreamNotice{Event: "elicitation_done", ElicitationID: ev.ElicitationID})
 
 	case acp.EventPlan:
 		br.Publish(StreamEvent{Kind: "plan", Entries: ev.Entries})
 
 	case acp.EventTurnEnd:
 		br.Publish(StreamEvent{Kind: "turn_end", StopReason: string(ev.StopReason), Usage: ev.Usage})
-		s.notify(sessionID, "turn_end", s.takeTail(sessionID))
+		s.notify(sessionID, StreamNotice{Event: "turn_end", Text: s.takeTail(sessionID)})
 
 	case acp.EventError:
 		br.Publish(StreamEvent{Kind: "error", Error: ev.Error})
-		s.notify(sessionID, "error", ev.Error)
+		s.notify(sessionID, StreamNotice{Event: "error", Text: ev.Error})
 	}
 }
 
@@ -120,7 +131,7 @@ const noticeTextRunes = 120
 // 这里只如实上报「发生了什么」，不判断该不该弹——那要知道用户此刻在看哪
 // 一页、页面在不在前台，只有客户端清楚（见 stream.Notice）。为此查一次
 // 会话拿归属与标题：通知是低频事件（一轮最多几条），不值得为它多养一份缓存。
-func (s *ChatService) notify(sessionID uint, event, text string) {
+func (s *ChatService) notify(sessionID uint, n StreamNotice) {
 	if s.notices == nil {
 		return
 	}
@@ -128,14 +139,12 @@ func (s *ChatService) notify(sessionID uint, event, text string) {
 	if err := s.db.First(&session, sessionID).Error; err != nil {
 		return
 	}
-	s.notices.Publish(stream.Notice{
-		Kind:         "notify",
-		Event:        event,
-		SessionID:    sessionID,
-		SessionTitle: session.Title,
-		Text:         summarizeNotice(text),
-		TenantID:     session.TenantID,
-	})
+	n.Kind = "notify"
+	n.SessionID = sessionID
+	n.SessionTitle = session.Title
+	n.Text = summarizeNotice(n.Text)
+	n.TenantID = session.TenantID
+	s.notices.Publish(n)
 }
 
 // summarizeNotice 把一段正文压成通知能显示的一行：折叠全部空白再截断。

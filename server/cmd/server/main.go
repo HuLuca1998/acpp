@@ -184,6 +184,11 @@ func run() error {
 		return err
 	case <-ctx.Done():
 		slog.Info("shutting down")
+		// 先掐断 SSE 长连接再走优雅关闭：它们不会自己收尾，留着只会让
+		// Shutdown 干等超时。浏览器随即断线重连，新进程起来就能接上——
+		// 更新提示的及时性就押在这次重连上。
+		noticeHub.Close()
+		chatService.CloseStreams()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)

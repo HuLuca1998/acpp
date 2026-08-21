@@ -65,6 +65,7 @@ type Broker struct {
 	subs   map[chan Event]struct{}
 	seq    int
 	replay []Event
+	closed bool
 }
 
 func NewBroker() *Broker {
@@ -78,6 +79,12 @@ func (b *Broker) Subscribe() (<-chan Event, func()) {
 	// 容量必须装得下整个 backlog：长轮的事件数可以超过 subscriberBuffer，
 	// 非阻塞补发会把尾部（含 turn_done）静默丢掉，前端 busy 就永久卡死。
 	ch := make(chan Event, max(subscriberBuffer, len(b.replay)+subscriberBuffer))
+	if b.closed {
+		// 服务正在关停：给一个已关闭的 channel，订阅方立刻收到流结束。
+		b.mu.Unlock()
+		close(ch)
+		return ch, func() {}
+	}
 	// 补发必须在临界区内完成：一旦注册进 subs，并发 Publish 就会向 ch 直投，
 	// 锁外补发会让新事件抢在 backlog 前面，订阅者看到 Seq 乱序、chunk 错拼。
 	// 容量已保证装得下全部 backlog，持锁 send 不会阻塞。
@@ -87,21 +94,39 @@ func (b *Broker) Subscribe() (<-chan Event, func()) {
 	b.subs[ch] = struct{}{}
 	b.mu.Unlock()
 
-	var once sync.Once
+	// close 以「还在 subs 里」为前提：Close 关掉全部订阅后，晚到的 cancel
+	// 查不到成员就什么都不做——两边都可能先动手，谁先谁关，不能各关一次。
 	cancel := func() {
-		once.Do(func() {
-			b.mu.Lock()
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if _, ok := b.subs[ch]; ok {
 			delete(b.subs, ch)
-			b.mu.Unlock()
 			close(ch)
-		})
+		}
 	}
 	return ch, cancel
+}
+
+// Close 关掉全部订阅并拒绝新订阅，服务关停时调用（理由见 Hub.Close）。
+func (b *Broker) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return
+	}
+	b.closed = true
+	for ch := range b.subs {
+		delete(b.subs, ch)
+		close(ch)
+	}
 }
 
 func (b *Broker) Publish(ev Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.closed {
+		return
+	}
 	b.seq++
 	ev.Seq = b.seq
 	b.replay = append(b.replay, ev)
