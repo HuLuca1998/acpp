@@ -118,6 +118,24 @@ func (h workspaceHandler) compare(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, compare)
 }
 
+// table 把 csv/tsv/xlsx 解析成表格视图（多页工作簿一次给全）。
+//
+// 与 fs/file 分开是因为它们是两件事：那个给的是「文件的字节」，这个给的
+// 是「摊平后的行列」——同一个 csv，源码视图与表格视图都要能看。
+func (h workspaceHandler) table(w http.ResponseWriter, r *http.Request) {
+	cwd, err := h.cwdOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	view, err := service.WorkspaceTable(cwd, r.URL.Query().Get("path"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, view)
+}
+
 // download 原样下发一个工作区文件（浏览器另存为）。预览接口是给「看」的
 // （文本、截断、二进制只标记），下载要的是原始字节。
 func (h workspaceHandler) download(w http.ResponseWriter, r *http.Request) {

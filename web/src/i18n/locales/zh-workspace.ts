@@ -79,6 +79,7 @@ export const zhWorkspace = {
     openExternalDesc:
       "新标签页打开，PDF、图片、音视频交给浏览器渲染；认不出的格式退成下载",
     mediaUnsupported: "这个浏览器放不了该格式",
+    tableEmpty: "这张表是空的",
     binary: "二进制文件，无法预览。",
     truncated: "内容过长，已截断显示。",
   },

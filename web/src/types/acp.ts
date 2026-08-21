@@ -355,6 +355,24 @@ export interface WorkspaceFile {
   binary?: boolean
 }
 
+/** 表格文件里的一页，与 service.TableSheet 对齐。 */
+export interface TableSheet {
+  name: string
+  rows: string[][]
+  /** 这一页有内容没下发（行数或列数超限）。 */
+  truncated?: boolean
+}
+
+/**
+ * 能摊平成表格的文件，与 service.TableView 对齐。
+ * csv/tsv 是只有一页的特例，xlsx 一个文件多页。
+ */
+export interface TableView {
+  path: string
+  name: string
+  sheets: TableSheet[]
+}
+
 /** 工作区终端实例，与 service.TerminalInfo 对齐。 */
 export interface TerminalInfo {
   id: string

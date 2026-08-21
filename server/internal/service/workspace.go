@@ -3,6 +3,7 @@ package service
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,9 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // workspaceSkip 是文件树永远不展示的目录/文件：没有浏览价值，且 .git
@@ -368,4 +372,174 @@ func WorkspaceZip(cwd, path string, w io.Writer) (string, error) {
 		return "", err
 	}
 	return name, zw.Close()
+}
+
+// ——— 表格文件预览 ———
+//
+// csv/tsv 与 xlsx 摊平成同一个形状：前者是只有一页的特例，后者一个文件
+// 多页。前端因此只需要一个表格渲染器，不必为「像 Excel 的东西」写两套。
+
+const (
+	// maxTableRows / maxTableCols 是下发上限。表格是拿来「看一眼」的，
+	// 十万行摊到浏览器里只会把面板拖垮——超了截断并如实标记。
+	maxTableRows = 5000
+	maxTableCols = 200
+	// maxTableBytes 是可解析的文件大小上限：xlsx 是压缩包，解析要整个
+	// 读进内存，没有闸门的话一个几百 MB 的报表能把进程撑爆。
+	maxTableBytes = 32 << 20
+)
+
+// TableSheet 是表格文件里的一页。
+type TableSheet struct {
+	Name string     `json:"name"`
+	Rows [][]string `json:"rows"`
+	// Truncated 表示这一页有内容没下发（行数或列数超限）。
+	Truncated bool `json:"truncated,omitempty"`
+}
+
+// TableView 是「能摊平成表格」的文件的统一视图。
+type TableView struct {
+	Path   string       `json:"path"`
+	Name   string       `json:"name"`
+	Sheets []TableSheet `json:"sheets"`
+}
+
+// IsTableFile 报告这个路径能不能走表格预览。前端据此决定拉哪个端点。
+func IsTableFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".csv", ".tsv", ".xlsx", ".xlsm", ".xltx":
+		return true
+	}
+	return false
+}
+
+// WorkspaceTable 把 csv/tsv/xlsx 解析成表格视图。
+func WorkspaceTable(cwd, path string) (*TableView, error) {
+	if path == "" {
+		return nil, fmt.Errorf("%w: path required", ErrInvalid)
+	}
+	target, err := workspacePath(cwd, path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("%w: not a file", ErrInvalid)
+	}
+	if info.Size() > maxTableBytes {
+		return nil, fmt.Errorf("%w: 文件超过 %d MB，表格预览撑不住这个体量", ErrInvalid, maxTableBytes>>20)
+	}
+
+	view := &TableView{Path: target, Name: filepath.Base(target)}
+	switch strings.ToLower(filepath.Ext(target)) {
+	case ".csv", ".tsv":
+		sheet, err := readDelimited(target)
+		if err != nil {
+			return nil, err
+		}
+		view.Sheets = []TableSheet{*sheet}
+	case ".xlsx", ".xlsm", ".xltx":
+		sheets, err := readWorkbook(target)
+		if err != nil {
+			return nil, err
+		}
+		view.Sheets = sheets
+	default:
+		return nil, fmt.Errorf("%w: %s 不是表格文件", ErrInvalid, filepath.Base(target))
+	}
+	return view, nil
+}
+
+// readDelimited 读 csv/tsv。
+func readDelimited(target string) (*TableSheet, error) {
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		return nil, fmt.Errorf("read table: %w", err)
+	}
+	raw = decodeText(raw)
+
+	reader := csv.NewReader(bytes.NewReader(raw))
+	// 不要求每行列数一致：手写的 csv 常有空尾列，为此报错太严苛。
+	reader.FieldsPerRecord = -1
+	reader.LazyQuotes = true
+	if strings.EqualFold(filepath.Ext(target), ".tsv") {
+		reader.Comma = '\t'
+	}
+
+	sheet := &TableSheet{Name: filepath.Base(target)}
+	for len(sheet.Rows) < maxTableRows {
+		row, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			return sheet, nil
+		}
+		if err != nil {
+			// 半路解析失败就把已读到的交出去：看半张表也好过一句报错。
+			if len(sheet.Rows) > 0 {
+				sheet.Truncated = true
+				return sheet, nil
+			}
+			return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+		}
+		sheet.Rows = append(sheet.Rows, clampRow(row, sheet))
+	}
+	sheet.Truncated = true
+	return sheet, nil
+}
+
+// readWorkbook 读 xlsx 的每一页。取的是**显示值**（日期、百分比按单元格
+// 格式渲染后的样子），不是底层序列号——预览要的是人看到的那张表。
+func readWorkbook(target string) ([]TableSheet, error) {
+	f, err := excelize.OpenFile(target)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	defer f.Close()
+
+	names := f.GetSheetList()
+	sheets := make([]TableSheet, 0, len(names))
+	for _, name := range names {
+		rows, err := f.GetRows(name)
+		if err != nil {
+			// 单页坏了不牵连整本：留个空页，其余照常看。
+			sheets = append(sheets, TableSheet{Name: name})
+			continue
+		}
+		sheet := TableSheet{Name: name}
+		if len(rows) > maxTableRows {
+			rows, sheet.Truncated = rows[:maxTableRows], true
+		}
+		for _, row := range rows {
+			sheet.Rows = append(sheet.Rows, clampRow(row, &sheet))
+		}
+		sheets = append(sheets, sheet)
+	}
+	return sheets, nil
+}
+
+// clampRow 砍掉超宽的列并在页上标记截断。
+func clampRow(row []string, sheet *TableSheet) []string {
+	if len(row) > maxTableCols {
+		sheet.Truncated = true
+		return row[:maxTableCols]
+	}
+	return row
+}
+
+// decodeText 把内容归一成 UTF-8：剥 BOM，非法 UTF-8 按 GBK 再试一次。
+//
+// 中文环境里这是刚需——Excel 导出的 csv 默认就是 GBK，直接当 UTF-8 读
+// 会整张表变成问号。判据是「解不出合法 UTF-8」而不是猜编码：真是 UTF-8
+// 的文件不会走到这一步。
+func decodeText(raw []byte) []byte {
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	if utf8.Valid(raw) {
+		return raw
+	}
+	if decoded, err := simplifiedchinese.GBK.NewDecoder().Bytes(raw); err == nil {
+		return decoded
+	}
+	return raw
 }

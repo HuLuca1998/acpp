@@ -199,6 +199,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/tool-calls/{toolCallId}/output` | 一次工具调用的完整入出参（`{rawInput, rawOutput}`），工具卡展开那一刻按需取 |
 | GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；全量展示，仅过滤固定黑名单 .git/node_modules/.DS_Store，路径限制在会话 cwd 内） |
 | GET | `/api/sessions/{id}/fs/file` | 工作区文件预览（`?path=`；1MB 截断、二进制检测，同上 path guard） |
+| GET | `/api/sessions/{id}/fs/table` | csv/tsv/xlsx 摊平成表格（`?path=`，返回 `{sheets:[{name,rows,truncated}]}`，csv 是只有一页的特例）。csv 走标准库、xlsx 走 excelize；非 UTF-8 的 csv 按 GBK 兜底解码（Excel 导出默认就是它）；5000 行 / 200 列 / 32MB 三道闸，超了如实标记 |
 | GET | `/api/sessions/{id}/fs/download` | 原样下发文件（`?path=`；`?archive=1` 把目录边打包边发 zip）。`?inline=1` 改成**浏览器内预览**：按扩展名给真实 Content-Type + `Content-Disposition: inline`，PDF/图片/音视频/纯文本浏览器自己就画得出来；HTML/SVG 这类可能自带脚本的加 `CSP: sandbox`（同源下不设防就能读走身份 cookie），白名单外的类型回落成另存为 |
 | GET | `/api/sessions/{id}/git/overview` | git 汇总：分支、upstream、ahead/behind、变更文件（含 numstat）、未推送 commit；非仓库返回 `isRepo:false` |
 | GET | `/api/sessions/{id}/git/diff` | 单文件工作区 diff（`?path=`，返回 HEAD 版与工作区版全文，行级对齐在前端） |

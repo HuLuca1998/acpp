@@ -200,6 +200,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	draft := workspaceHandler{cwdOf: draftCwd}
 	api.HandleFunc("GET /api/workspace/fs/entries", draft.tree)
 	api.HandleFunc("GET /api/workspace/fs/file", draft.file)
+	api.HandleFunc("GET /api/workspace/fs/table", draft.table)
 	api.HandleFunc("GET /api/workspace/fs/download", draft.download)
 	api.HandleFunc("GET /api/workspace/git/overview", draft.gitOverview)
 	api.HandleFunc("GET /api/workspace/git/diff", draft.gitDiff)
@@ -233,6 +234,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/fs/entries", workspace.tree)
 	api.HandleFunc("GET /api/sessions/{id}/fs/file", workspace.file)
 	// 原样下载（右键「下载」）：与预览分开——预览会截断、二进制只标记。
+	api.HandleFunc("GET /api/sessions/{id}/fs/table", workspace.table)
 	api.HandleFunc("GET /api/sessions/{id}/fs/download", workspace.download)
 	// git 数据面：overview 供 diff/commit 两面板共享，diff/commit 按需取全文。
 	api.HandleFunc("GET /api/sessions/{id}/git/overview", workspace.gitOverview)

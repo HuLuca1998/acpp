@@ -83,6 +83,7 @@ export const enWorkspace = {
     openExternalDesc:
       "Opens a new tab — the browser renders PDFs, images and media; unknown formats fall back to download",
     mediaUnsupported: "This browser cannot play this format",
+    tableEmpty: "This sheet is empty",
     binary: "Binary file, cannot preview.",
     truncated: "Content too long, display truncated.",
   },

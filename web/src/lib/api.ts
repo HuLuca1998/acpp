@@ -41,6 +41,7 @@ import type {
   SkillFileContent,
   SkillScript,
   SkillScriptRunInput,
+  TableView,
   SkillScriptRunResult,
   SkillUpdateInput,
   SkillUsage,
@@ -178,6 +179,9 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
      */
     downloadUrl: (id: number, path: string, archive = false) =>
       `${BASE}${at(id, `/fs/download?path=${encodeURIComponent(path)}${archive ? "&archive=1" : ""}`)}`,
+    /** csv/tsv/xlsx 解析成表格（多页工作簿一次给全）。 */
+    workspaceTable: (id: number, path: string) =>
+      request<TableView>(at(id, `/fs/table?path=${encodeURIComponent(path)}`)),
     /**
      * 在浏览器里直接看这个文件的地址（新标签打开）。
      *

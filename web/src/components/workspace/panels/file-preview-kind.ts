@@ -35,3 +35,40 @@ export function previewKind(path: string | null): PreviewKind | null {
   const ext = path.split(".").pop()?.toLowerCase()
   return ext ? (KIND_BY_EXT[ext] ?? null) : null
 }
+
+/** csv/tsv/xlsx：能摊平成行列，交给表格渲染器（与服务端 IsTableFile 对齐）。 */
+export function isTableFile(path: string | null): boolean {
+  if (!path) return false
+  const ext = path.split(".").pop()?.toLowerCase()
+  return ext === "csv" || ext === "tsv" || ext === "xlsx" || ext === "xlsm"
+}
+
+/** html：既能看渲染结果，也能看源码。 */
+export function isHtmlFile(path: string | null): boolean {
+  if (!path) return false
+  const ext = path.split(".").pop()?.toLowerCase()
+  return ext === "html" || ext === "htm"
+}
+
+export function isMarkdownFile(path: string | null): boolean {
+  if (!path) return false
+  const ext = path.split(".").pop()?.toLowerCase()
+  return ext === "md" || ext === "markdown"
+}
+
+/**
+ * 这个文件有没有「源码形态」可看。
+ *
+ * xlsx 是压缩过的二进制，切到源码只会看到一堆乱码——它只有表格一种形态，
+ * 切换按钮就不该出现。csv 有：它本来就是文本，逗号在哪儿有时正是要看的。
+ */
+export function hasSourceView(path: string | null): boolean {
+  if (!path) return false
+  const ext = path.split(".").pop()?.toLowerCase()
+  return ext !== "xlsx" && ext !== "xlsm"
+}
+
+/** 有渲染形态的文件（相对于源码形态）：markdown / html / 表格。 */
+export function hasRichView(path: string | null): boolean {
+  return isMarkdownFile(path) || isHtmlFile(path) || isTableFile(path)
+}

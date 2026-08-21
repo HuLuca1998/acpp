@@ -10,13 +10,21 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import type { GitDiffView, WorkspaceFile } from "@/types/acp"
+import type { GitDiffView, TableView, WorkspaceFile } from "@/types/acp"
 import { DiffView } from "@/components/diff-view"
 import { Hint } from "@/components/hint"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
-import { previewKind } from "@/components/workspace/panels/file-preview-kind"
+import {
+  hasRichView,
+  hasSourceView,
+  isHtmlFile,
+  isMarkdownFile,
+  isTableFile,
+  previewKind,
+} from "@/components/workspace/panels/file-preview-kind"
 import { MediaPreview } from "@/components/workspace/panels/file-preview-media"
+import { TablePreview } from "@/components/workspace/panels/file-preview-table"
 import {
   usePreviewTarget,
   useWorkspace,
@@ -54,6 +62,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   // 跟随定位的行号：只在 file 模式有意义。
   const targetLine = mode === "file" ? target?.line : undefined
   const [file, setFile] = useState<WorkspaceFile | null>(null)
+  const [table, setTable] = useState<TableView | null>(null)
   const [diff, setDiff] = useState<GitDiffView | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,18 +85,28 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   // 图片/音视频/PDF 走浏览器原生渲染，不拉正文——把一个 mp4 读成字符串
   // 只会得到一堆乱码和一次白拉的流量。
   const media = mode === "diff" ? null : previewKind(path)
+  // 「渲染形态 vs 源码形态」：markdown 看排版、html 看页面、csv/xlsx 看表格。
+  // diff 永远是源码——那一栏比的是文本改动。
+  const rich = mode !== "diff" && !raw && hasRichView(path)
+  const showTable = rich && isTableFile(path)
+  const showHtml = rich && isHtmlFile(path)
 
   // 依赖收窄到字段级：跟随时同一文件只变行号，不该整个重拉一遍内容。
   useEffect(() => {
-    if (!path || !ws.sessionId || media) return
+    // 这几种都不需要正文：媒体与 html 渲染形态由浏览器按 URL 自己取。
+    if (!path || !ws.sessionId || media || showHtml) return
     let stale = false
     setLoading(true)
     setError(null)
     setFile(null)
     setDiff(null)
+    setTable(null)
 
-    const request =
-      mode === "diff"
+    const request = showTable
+      ? ws.scope
+          .workspaceTable(ws.sessionId, path)
+          .then((view) => ({ table: view }))
+      : mode === "diff"
         ? sha
           ? ws.scope
               .gitCommitFile(ws.sessionId, sha, path)
@@ -102,7 +121,8 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     request
       .then((result) => {
         if (stale) return
-        if ("diff" in result) setDiff(result.diff)
+        if ("table" in result) setTable(result.table)
+        else if ("diff" in result) setDiff(result.diff)
         else setFile(result.file)
       })
       .catch((err) => {
@@ -114,16 +134,16 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     return () => {
       stale = true
     }
-  }, [path, mode, sha, media, ws.sessionId, ws.scope])
+  }, [path, mode, sha, media, showHtml, showTable, ws.sessionId, ws.scope])
 
   // 定位到行：行高固定 leading-5（20px），content-visibility 的估算尺寸
   // 与之一致，按行数换算滚动位置即可，顶部留三行上下文。
   useEffect(() => {
     if (!targetLine || !file || file.binary) return
-    if (isMarkdown(path) && !raw) return
+    if (rich) return
     const el = bodyRef.current
     if (el) el.scrollTop = Math.max(0, (targetLine - 1) * 20 - 60)
-  }, [targetLine, file, path, raw])
+  }, [targetLine, file, rich])
 
   const { lines, clipped } = useMemo(() => {
     if (!file || file.binary) return { lines: [], clipped: false }
@@ -191,7 +211,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
             </button>
           </Hint>
         ) : null}
-        {isMarkdown(path) && target?.mode !== "diff" ? (
+        {hasRichView(path) && hasSourceView(path) && mode !== "diff" ? (
           <Hint
             label={t(
               raw ? "workspace.preview.rendered" : "workspace.preview.source"
@@ -258,14 +278,40 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         </Hint>
       </div>
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
-        {media ? (
+        {showHtml ? (
+          <iframe
+            src={ws.scope.previewUrl(ws.sessionId, path)}
+            title={path}
+            // 服务端给 html 的 inline 响应打了 CSP sandbox，这里的 sandbox
+            // 属性是第二道：页面里的脚本一律不跑，它与我们同源。
+            sandbox=""
+            className="size-full border-0 bg-background"
+          />
+        ) : media ? (
           <MediaPreview
             kind={media}
             src={ws.scope.previewUrl(ws.sessionId, path)}
             name={path}
           />
         ) : error ? (
-          <div className="p-3 text-xs text-destructive">{error}</div>
+          // 预览失败（多半是文件太大或格式解析不了）不该是条死路：说清
+          // 原因，同时把「交给浏览器」这条出路摆在旁边。
+          <div className="flex flex-col items-start gap-2 p-3 text-xs">
+            <span className="text-destructive">{error}</span>
+            <button
+              type="button"
+              className="rounded-md text-primary transition-colors duration-150 hover:underline"
+              onClick={() =>
+                window.open(
+                  ws.scope.previewUrl(ws.sessionId, path),
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+            >
+              {t("workspace.preview.openExternal")}
+            </button>
+          </div>
         ) : diff ? (
           diff.binary ? (
             <div className="p-3 text-xs text-muted-foreground">
@@ -299,7 +345,9 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
               {t("workspace.preview.openExternal")}
             </button>
           </div>
-        ) : file && isMarkdown(path) && !raw ? (
+        ) : table ? (
+          <TablePreview view={table} />
+        ) : file && isMarkdownFile(path) && !raw ? (
           <div className="px-4 py-3">
             <MarkdownContent>{file.content}</MarkdownContent>
           </div>
@@ -333,10 +381,3 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     </div>
   )
 })
-
-/** 只按扩展名判断：内容嗅探对 markdown 不可靠，也没必要。 */
-function isMarkdown(path: string | null): boolean {
-  if (!path) return false
-  const lower = path.toLowerCase()
-  return lower.endsWith(".md") || lower.endsWith(".markdown")
-}
