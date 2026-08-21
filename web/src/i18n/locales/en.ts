@@ -42,8 +42,6 @@ export default {
     toggleSidebar: "Collapse / expand sidebar",
     recentSessions: "Recent Sessions",
     viewAll: "View all",
-    resume: "Resume",
-    export: "Export",
   },
   overview: {
     chartTitle: "Activity",

@@ -1,30 +1,23 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { MoreHorizontalIcon } from "lucide-react"
+
 import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar"
-import {
-  MoreHorizontalIcon,
-  PlayIcon,
-  ShareIcon,
-  Trash2Icon,
-} from "lucide-react"
 
-/** 侧边栏「最近会话」分组。 */
+/**
+ * 侧边栏「最近会话」平铺分组：会话都没有工作目录时的退化形态
+ *（有目录就走 NavProjects 按项目分组）。
+ *
+ * 条目只做跳转，不带行内菜单——原来那个菜单里的三项（继续/导出/删除）
+ * 从来没接过处理器，点了什么都不会发生。真正的会话管理在会话列表页。
+ */
 export function NavRecent({
   label,
   items,
@@ -37,7 +30,6 @@ export function NavRecent({
   }[]
 }) {
   const { t } = useTranslation()
-  const { isMobile } = useSidebar()
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
@@ -49,38 +41,6 @@ export function NavRecent({
               {item.icon}
               <span>{item.name}</span>
             </SidebarMenuButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <SidebarMenuAction
-                    showOnHover
-                    className="aria-expanded:bg-muted"
-                  />
-                }
-              >
-                <MoreHorizontalIcon />
-                <span className="sr-only">{t("nav.viewAll")}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-32"
-                side={isMobile ? "bottom" : "right"}
-                align={isMobile ? "end" : "start"}
-              >
-                <DropdownMenuItem>
-                  <PlayIcon />
-                  <span>{t("nav.resume")}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <ShareIcon />
-                  <span>{t("nav.export")}</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive">
-                  <Trash2Icon />
-                  <span>{t("common.delete")}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </SidebarMenuItem>
         ))}
         <SidebarMenuItem>
