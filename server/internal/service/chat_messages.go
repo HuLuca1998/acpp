@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -103,10 +104,17 @@ func (s *ChatService) Messages(sessionID uint, limit int, before uint) ([]model.
 	return slimMessages(all), total, nil
 }
 
-// rawOutputLimit 是单条工具调用输出下发给界面的上限。工具卡的滚动区里
-// 几十 KB 已远超可读范围，再多只是把打开会话的响应撑到几 MB——传输、
-// 解析、渲染一路全卡。转录里保留完整原文，截断只发生在读路径。
-const rawOutputLimit = 64 * 1024
+// rawOutputLimit 是消息列表里单条工具输出的预览上限。历史加载的优先级
+// 是正文先行：工具卡默认折叠，它的大输出没道理在打开会话时就全量下发
+// ——超限的截成预览 + 标记，前端展开那一刻经 ToolOutput 按需取全量。
+// 转录里保留完整原文，截断只发生在列表读路径。
+const rawOutputLimit = 4 * 1024
+
+// rawInputLimit / rawInputFieldLimit：入参通常是命令行这类小字段，但
+// Write 类工具会把整个文件内容塞进来。整体超限时把超长字符串字段截成
+// 预览，命令、路径这类关键小字段保持完好。
+const rawInputLimit = 4 * 1024
+const rawInputFieldLimit = 2 * 1024
 
 // slimMessages 把超大的工具输出截到上限并打上标记供界面说明。
 // 消息来自共享的重建缓存，只能拷贝不能就地改。
@@ -132,11 +140,8 @@ func slimPayload(p model.JSONMap) (model.JSONMap, bool) {
 	if p == nil {
 		return p, false
 	}
-	raw, ok := p["rawOutput"].(json.RawMessage)
-	if !ok || len(raw) <= rawOutputLimit {
-		return p, false
-	}
-	// 数据库查询的结果是结构化 JSON，截断会让前端解析不出结果表格。
+	// 数据库查询整体豁免：语句在 rawInput、结果表格要完整 JSON 才解析
+	// 得出来，截了功能就没了。
 	if ri, ok := p["rawInput"].(json.RawMessage); ok {
 		var probe struct {
 			SQL string `json:"sql"`
@@ -145,15 +150,54 @@ func slimPayload(p model.JSONMap) (model.JSONMap, bool) {
 			return p, false
 		}
 	}
-	slim, ok := truncateRawOutput(raw)
-	if !ok {
+
+	var next model.JSONMap
+	mutable := func() model.JSONMap {
+		if next == nil {
+			next = make(model.JSONMap, len(p)+2)
+			maps.Copy(next, p)
+		}
+		return next
+	}
+
+	if raw, ok := p["rawOutput"].(json.RawMessage); ok && len(raw) > rawOutputLimit {
+		if slim, ok := truncateRawOutput(raw); ok {
+			m := mutable()
+			m["rawOutput"] = slim
+			m["rawOutputTruncated"] = true
+		}
+	}
+	if raw, ok := p["rawInput"].(json.RawMessage); ok && len(raw) > rawInputLimit {
+		if slim, ok := truncateRawInput(raw); ok {
+			m := mutable()
+			m["rawInput"] = slim
+			m["rawInputTruncated"] = true
+		}
+	}
+	if next == nil {
 		return p, false
 	}
-	next := make(model.JSONMap, len(p)+1)
-	maps.Copy(next, p)
-	next["rawOutput"] = slim
-	next["rawOutputTruncated"] = true
 	return next, true
+}
+
+// truncateRawInput 把入参对象里超长的字符串字段截成预览，其余原样。
+// 认不出对象形状的原样保留。
+func truncateRawInput(raw json.RawMessage) (json.RawMessage, bool) {
+	var obj map[string]any
+	if json.Unmarshal(raw, &obj) != nil {
+		return nil, false
+	}
+	changed := false
+	for k, v := range obj {
+		if s, ok := v.(string); ok && len(s) > rawInputFieldLimit {
+			obj[k] = cutText(s, rawInputFieldLimit)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil, false
+	}
+	return marshalRaw(obj)
 }
 
 // truncateRawOutput 认 rawOutput 的三种线级形状（与前端 tool-call 的
@@ -207,6 +251,36 @@ func marshalRaw(v any) (json.RawMessage, bool) {
 		return nil, false
 	}
 	return b, true
+}
+
+// ToolDetail 是一次工具调用的完整入出参，供展开折叠时按需拉取。
+type ToolDetail struct {
+	RawInput  json.RawMessage `json:"rawInput,omitempty"`
+	RawOutput json.RawMessage `json:"rawOutput,omitempty"`
+}
+
+// ToolOutput 返回一次工具调用的完整入出参。消息列表里超大字段默认
+// 截成预览下发（slimMessages），用户展开工具卡时按需来取这一条——
+// 打开会话保持轻，完整信息也一直可达。
+func (s *ChatService) ToolOutput(sessionID uint, toolCallID string) (*ToolDetail, error) {
+	all, err := s.rebuildAll(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	// 同一 toolCallId 理论上只出现一次；从尾部找起，最新的先命中。
+	for _, m := range slices.Backward(all) {
+		if m.Kind != model.KindToolCall || m.Payload == nil {
+			continue
+		}
+		if m.Payload["toolCallId"] != toolCallID {
+			continue
+		}
+		detail := &ToolDetail{}
+		detail.RawInput, _ = m.Payload["rawInput"].(json.RawMessage)
+		detail.RawOutput, _ = m.Payload["rawOutput"].(json.RawMessage)
+		return detail, nil
+	}
+	return nil, ErrNotFound
 }
 
 // BackfillMessageCounts 为历史会话补消息数缓存（新列上线时全是 0）。

@@ -314,8 +314,8 @@ export default {
       "The agent keeps the context, so every later turn only needs your own line.",
     toolCall: "Tool call",
     exitCode: "exit {{code}}",
-    outputTruncated:
-      "Output too large — showing the beginning only (full text lives in the transcript)",
+    loadingFullOutput: "Loading full content…",
+    retryFullOutput: "Failed to load full content — click to retry",
     activity: "Thinking & tool calls",
     touchedHint: "Open in the file viewer",
     copy: "Copy",

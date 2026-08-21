@@ -225,6 +225,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}", sessions.get)
 	api.HandleFunc("DELETE /api/sessions/{id}", sessions.remove)
 	api.HandleFunc("GET /api/sessions/{id}/messages", sessions.listMessages)
+	api.HandleFunc("GET /api/sessions/{id}/tool-calls/{toolCallId}/output", sessions.toolOutput)
 	api.HandleFunc("GET /api/sessions/{id}/transcript", sessions.transcript)
 
 	// 工作区面板数据面：文件树（depth≤2 一次返回，gitignore 过滤）与文件预览。

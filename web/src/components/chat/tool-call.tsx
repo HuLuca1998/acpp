@@ -1,6 +1,8 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useParams } from "react-router"
 
+import { api } from "@/lib/api"
 import {
   isDbQueryCall,
   parseDbToolOutput,
@@ -64,7 +66,8 @@ export interface ToolCallPayload {
   }[]
   /** 这次调用派出了子代理——它的产出是 markdown 报告，不是终端输出。 */
   isSubagent?: boolean
-  /** 输出超过下发上限被后端截断（转录里保留完整原文）。 */
+  /** 入参/输出超过下发上限被截成预览（完整版展开时按需拉取）。 */
+  rawInputTruncated?: boolean
   rawOutputTruncated?: boolean
 }
 
@@ -247,7 +250,10 @@ function hasDetail(payload: ToolCallPayload | null | undefined): boolean {
   return Boolean(
     (payload.content ?? []).some((c) => c.type === "diff") ||
     payload.rawInput ||
-    payload.rawOutput
+    payload.rawOutput ||
+    // 重字段被瘦身掉也算有详情：展开那一刻按需拉全量。
+    payload.rawInputTruncated ||
+    payload.rawOutputTruncated
   )
 }
 
@@ -265,6 +271,51 @@ export function ToolCallBlock({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  // 历史加载的优先级是正文先行：列表里工具输出只有小预览
+  // （rawOutputTruncated），展开这一刻才按需取全量。会话 id 从路由取：
+  // 历史工具卡只在会话页出现，payload 里没有会话信息，为它在每层组件
+  // 穿一个 prop 不值得。
+  const sessionId = Number(useParams().id) || 0
+  const [full, setFull] = useState<{
+    rawInput?: ToolCallPayload["rawInput"]
+    rawOutput?: ToolCallPayload["rawOutput"]
+  } | null>(null)
+  const [fullFailed, setFullFailed] = useState(false)
+  const toolCallId = payload?.toolCallId
+  const truncated = Boolean(
+    payload?.rawOutputTruncated || payload?.rawInputTruncated
+  )
+  const wantFull = Boolean(open && truncated && full == null && !fullFailed)
+  useEffect(() => {
+    if (!wantFull || !sessionId || !toolCallId) return
+    let cancelled = false
+    api.sessions
+      .toolOutput(sessionId, toolCallId)
+      .then((res) => {
+        if (!cancelled) {
+          setFull(res as typeof full)
+        }
+      })
+      .catch(() => {
+        // 拉不到就保持预览，给一条可点重试的说明。
+        if (!cancelled) setFullFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [wantFull, sessionId, toolCallId])
+  // 取回全量后原位替换，界面其余部分不动。
+  const effective =
+    payload && truncated && full != null
+      ? {
+          ...payload,
+          rawInput: (full.rawInput ?? payload.rawInput) as
+            ToolCallPayload["rawInput"],
+          rawOutput: full.rawOutput ?? payload.rawOutput,
+          rawInputTruncated: false,
+          rawOutputTruncated: false,
+        }
+      : payload
   const expandable = hasDetail(payload)
   const Icon = isDbQueryCall(payload?.rawInput)
     ? DatabaseIcon
@@ -320,13 +371,22 @@ export function ToolCallBlock({
         />
         {header}
       </Marker>
-      {open && payload ? (
+      {open && effective ? (
         <div className="pl-6 transition-[opacity,translate] duration-200 ease-snappy starting:-translate-y-0.5 starting:opacity-0 motion-reduce:starting:translate-y-0">
-          <ToolCallDetail payload={payload} />
-          {payload.rawOutputTruncated ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("chat.outputTruncated")}
+          <ToolCallDetail payload={effective} />
+          {wantFull && sessionId && toolCallId ? (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Spinner className="size-3" />
+              {t("chat.loadingFullOutput")}
             </p>
+          ) : fullFailed ? (
+            <button
+              type="button"
+              onClick={() => setFullFailed(false)}
+              className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {t("chat.retryFullOutput")}
+            </button>
           ) : null}
         </div>
       ) : null}

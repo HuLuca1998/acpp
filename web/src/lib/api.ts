@@ -471,6 +471,11 @@ export const api = {
         `/sessions/${id}/messages${s ? `?${s}` : ""}`
       )
     },
+    /** 一次工具调用的完整入出参：列表里超大字段默认截成预览，展开时取全量。 */
+    toolOutput: (id: number, toolCallId: string) =>
+      request<{ rawInput?: unknown; rawOutput?: unknown }>(
+        `/sessions/${id}/tool-calls/${encodeURIComponent(toolCallId)}/output`
+      ),
 
     /** 拉起 agent 子进程并完成 ACP 握手，重复调用是安全的。 */
     open: (id: number) =>
