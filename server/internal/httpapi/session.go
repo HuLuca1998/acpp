@@ -151,6 +151,28 @@ func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// toolOutput 返回一次工具调用的完整入出参——列表里超大字段默认截成
+// 预览（rawInputTruncated / rawOutputTruncated 标记），展开工具卡时走这里。
+func (h sessionHandler) toolOutput(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	detail, err := h.chat.ToolOutput(id, r.PathValue("toolCallId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, detail)
+}
+
 // transcript 原样下发会话的 JSONL 转录，供导出与调试。
 func (h sessionHandler) transcript(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
