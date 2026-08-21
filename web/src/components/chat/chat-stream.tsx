@@ -2,12 +2,10 @@ import { memo, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-  ActivityMessage,
   ActivitySection,
-  ChatMessage,
-  EarlierSentinel,
   LiveToolMarker,
 } from "@/components/chat/chat-messages"
+import { ChatHistory } from "@/components/chat/chat-history"
 import { ElicitationCard } from "@/components/chat/cards/elicitation-card"
 import { FileEditCard } from "@/components/chat/file-edit-card"
 import { StreamingMarkdown } from "@/components/chat/markdown"
@@ -29,7 +27,7 @@ import {
 } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
 import type { ChatState } from "@/lib/chat/chat-events"
-import { groupMessages, type Block } from "@/lib/chat/message-blocks"
+import { groupMessages, turnStartsOf } from "@/lib/chat/message-blocks"
 import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 
 /**
@@ -110,18 +108,24 @@ export const ChatStream = memo(function ChatStream({
   }, [hasMessages])
 
   // 子代理干活的工具调用不进主流（去子代理面板），这里先摘干净再分类。
-  const mainTools = chat.liveTools.filter((tool) => !tool.subagentOf)
-  // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
-  const liveEdits = mainTools.filter((tool) => tool.kind === "edit")
-  const liveOthers = mainTools.filter((tool) => tool.kind !== "edit")
+  // 四趟遍历合成一次 memo：正文分片每 80ms 换一次状态，而工具清单在两次
+  // 工具事件之间是不动的，没道理跟着分片重算。
+  const { liveEdits, liveOthers, activeTool } = useMemo(() => {
+    const main = chat.liveTools.filter((tool) => !tool.subagentOf)
+    return {
+      // 文件编辑独立成消息条，其余工具调用照旧进「思考与工具调用」折叠区。
+      liveEdits: main.filter((tool) => tool.kind === "edit"),
+      liveOthers: main.filter((tool) => tool.kind !== "edit"),
+      // 折叠头上显示「正在干的那件事」：最后一个未完成的工具调用。
+      activeTool: main.findLast(
+        (tool) => tool.status !== "completed" && tool.status !== "failed"
+      ),
+    }
+  }, [chat.liveTools])
   const liveActivityCount =
     (chat.streamingThought ? 1 : 0) +
     liveOthers.length +
     chat.permissions.length
-  // 折叠头上显示「正在干的那件事」：最后一个未完成的工具调用。
-  const activeTool = [...mainTools]
-    .reverse()
-    .find((tool) => tool.status !== "completed" && tool.status !== "failed")
   // 一轮开始就在等 agent 说第一句话，这时候没有任何内容可挂——单独一条
   // 「思考中」占位。
   const idleBusy =
@@ -172,58 +176,17 @@ export const ChatStream = memo(function ChatStream({
         />
         <MessageScrollerViewport ref={viewportRef} preserveScrollOnPrepend>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
-            {chat.hasEarlier ? (
-              <MessageScrollerItem scrollAnchor={false}>
-                <EarlierSentinel onVisible={chat.loadEarlier} />
-              </MessageScrollerItem>
-            ) : null}
-            {blocks.map((block) => {
-              const key = blockKey(block)
-              // 用户消息自带靠右的头像行，不进 agent 侧的对齐槽。
-              // 这里内联判断而不用 isUserBlock：类型谓词会把 else 分支里的
-              // chat 块一起排除掉，下面就取不到 block.message 了。
-              if (block.type === "chat" && block.message.role === "user") {
-                // 不设 scrollAnchor：锚定会把新用户消息滚到视口顶并
-                // 打断贴底跟随，与 autoScroll 的跟随体验相互矛盾。
-                return (
-                  <MessageScrollerItem key={key} messageId={key}>
-                    <ChatMessage message={block.message} userName={userName} />
-                  </MessageScrollerItem>
-                )
-              }
-              const avatar = turnStarts.has(key) ? (
-                <AgentAvatar flavor={flavor} name={chat.session?.agentName} />
-              ) : undefined
-              return (
-                <MessageScrollerItem
-                  key={key}
-                  messageId={block.type === "activity" ? undefined : key}
-                  scrollAnchor={false}
-                >
-                  <AgentRow avatar={avatar}>
-                    {block.type === "chat" ? (
-                      <ChatMessage message={block.message} />
-                    ) : block.type === "edit" ? (
-                      <FileEditCard
-                        payload={
-                          (block.message.payload ?? {}) as ToolCallPayload
-                        }
-                        status={
-                          (block.message.payload as ToolCallPayload | null)
-                            ?.status
-                        }
-                      />
-                    ) : (
-                      <ActivitySection count={block.items.length}>
-                        {block.items.map((item) => (
-                          <ActivityMessage key={item.id} message={item} />
-                        ))}
-                      </ActivitySection>
-                    )}
-                  </AgentRow>
-                </MessageScrollerItem>
-              )
-            })}
+            {/* 历史区单独 memo：轮内一动不动，不该跟着流式每帧重建
+                （见 chat-history.tsx）。 */}
+            <ChatHistory
+              blocks={blocks}
+              turnStarts={turnStarts}
+              flavor={flavor}
+              agentName={chat.session?.agentName}
+              userName={userName}
+              hasEarlier={chat.hasEarlier}
+              loadEarlier={chat.loadEarlier}
+            />
 
             {/* 任务计划：随 plan 事件实时更新；轮结束后由重建的 plan
                 快照消息（历史卡）接力展示最终状态。 */}
@@ -413,31 +376,3 @@ export const ChatStream = memo(function ChatStream({
     </MessageScrollerProvider>
   )
 })
-
-/** 块的稳定 key：活动块自带 key，其余用消息 id。 */
-function blockKey(block: Block): string {
-  return block.type === "activity" ? block.key : String(block.message.id)
-}
-
-/**
- * 算出哪些块是「一轮的开头」——头像只戳在那儿，同一轮后续的块留空槽。
- * liveStartsTurn 说的是历史里最后一句是人说的：那这一轮的活内容就是开头。
- */
-function turnStartsOf(blocks: Block[]): {
-  starts: Set<string>
-  liveStartsTurn: boolean
-} {
-  const starts = new Set<string>()
-  let live = true
-  for (const block of blocks) {
-    if (block.type === "chat" && block.message.role === "user") {
-      live = true
-      continue
-    }
-    if (live) {
-      starts.add(blockKey(block))
-      live = false
-    }
-  }
-  return { starts, liveStartsTurn: live }
-}

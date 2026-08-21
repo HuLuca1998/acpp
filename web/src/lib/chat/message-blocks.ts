@@ -53,3 +53,32 @@ export function groupMessages(messages: Message[]): Block[] {
   }
   return blocks
 }
+
+/** 块的稳定 key：活动块自带 key，其余用消息 id。 */
+export function blockKey(block: Block): string {
+  return block.type === "activity" ? block.key : String(block.message.id)
+}
+
+/**
+ * 算出哪些块是「一轮的开头」——头像只戳在那儿，同一轮后续的块留空槽。
+ * liveStartsTurn 说的是历史里最后一句是人说的：那这一轮的活内容就是开头，
+ * 头像该给实时区排在最前的那一块。
+ */
+export function turnStartsOf(blocks: Block[]): {
+  starts: Set<string>
+  liveStartsTurn: boolean
+} {
+  const starts = new Set<string>()
+  let live = true
+  for (const block of blocks) {
+    if (block.type === "chat" && block.message.role === "user") {
+      live = true
+      continue
+    }
+    if (live) {
+      starts.add(blockKey(block))
+      live = false
+    }
+  }
+  return { starts, liveStartsTurn: live }
+}
