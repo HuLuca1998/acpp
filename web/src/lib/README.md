@@ -24,7 +24,7 @@
 | mcp-tool.ts       | MCP 工具的读法：破坏性判定、JSON-RPC 请求拼装、响应拆解（协议错误与工具错误分开）；工具台与调用记录共用 | `isDestructive`、`toolFullName`、`buildToolCall`、`buildRequest`、`initialArgs`、`coerceArgs`、`isRequired`、`readResponse`、`prettyJSON`、`parseJSON` |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |
 | chat/usage.ts     | 会话累计用量：把历史各轮的 turnUsage 相加（用量面板用）              | `sumSessionUsage`、`SessionUsageTotals`                              |
-| chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）                     | `groupMessages`                                                      |
+| chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）与块的身份/轮首判定 | `groupMessages`、`blockKey`、`turnStartsOf`                          |
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |
