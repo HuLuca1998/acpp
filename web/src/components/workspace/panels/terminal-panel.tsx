@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { IDockviewPanelProps } from "dockview-react"
-import { Terminal } from "@xterm/xterm"
-import { FitAddon } from "@xterm/addon-fit"
-import "@xterm/xterm/css/xterm.css"
+import type { Terminal } from "@xterm/xterm"
+import type { FitAddon } from "@xterm/addon-fit"
 import { TerminalIcon } from "lucide-react"
 
 import { api } from "@/lib/api"
@@ -19,6 +18,12 @@ import {
 } from "@/components/ui/empty"
 
 type TermStatus = "boot" | "live" | "exited"
+
+/** 按需加载回来的 xterm 构造器。 */
+type XtermModule = {
+  Terminal: typeof Terminal
+  FitAddon: typeof FitAddon
+}
 
 /** 把语义 token 解析成 xterm 能吃的具体色值（oklch → rgb 由浏览器代劳）。 */
 function resolveColor(varName: string, fallback: string): string {
@@ -50,11 +55,30 @@ export const TerminalPanel = memo(function TerminalPanel(
     (props.params as { termId?: string })?.termId ?? ""
   )
   const [visible, setVisible] = useState(props.api.isVisible)
+  // xterm 本体（连同它的样式表）按需加载：330KB，是整个前端最大的单个
+  // 依赖，而绝大多数会话从头到尾不开终端。真的要开一个了才去下载。
+  const [xterm, setXterm] = useState<XtermModule | null>(null)
 
   useEffect(() => {
     const d = props.api.onDidVisibilityChange((e) => setVisible(e.isVisible))
     return () => d.dispose()
   }, [props.api])
+
+  useEffect(() => {
+    if (!termId || xterm) return
+    let alive = true
+    void Promise.all([
+      import("@xterm/xterm"),
+      import("@xterm/addon-fit"),
+      import("@xterm/xterm/css/xterm.css"),
+    ]).then(([term, addon]) => {
+      // 分片在途期间面板可能已经关掉了，落地后先确认自己还活着。
+      if (alive) setXterm({ Terminal: term.Terminal, FitAddon: addon.FitAddon })
+    })
+    return () => {
+      alive = false
+    }
+  }, [termId, xterm])
 
   // 首次可见且还没有 pty：现场 spawn 一个并把 termId 写回面板参数
   //（进布局序列化，刷新后凭它重连）。
@@ -74,9 +98,9 @@ export const TerminalPanel = memo(function TerminalPanel(
   // xterm 实例与 ws 连接的生命周期：termId 变化（重启）时整体重建。
   useEffect(() => {
     const host = hostRef.current
-    if (!termId || !ws.sessionId || !host) return
+    if (!termId || !ws.sessionId || !host || !xterm) return
 
-    const term = new Terminal({
+    const term = new xterm.Terminal({
       fontFamily:
         "ui-monospace, SFMono-Regular, Menlo, Monaco, 'Courier New', monospace",
       fontSize: 12,
@@ -92,7 +116,7 @@ export const TerminalPanel = memo(function TerminalPanel(
         selectionBackground: "rgba(128, 128, 128, 0.35)", // check-ignore: xterm 选区罩层
       },
     })
-    const fit = new FitAddon()
+    const fit = new xterm.FitAddon()
     term.loadAddon(fit)
     term.open(host)
     fit.fit()
@@ -147,7 +171,7 @@ export const TerminalPanel = memo(function TerminalPanel(
       termRef.current = null
       sockRef.current = null
     }
-  }, [termId, ws.sessionId, ws.scope])
+  }, [termId, ws.sessionId, ws.scope, xterm])
 
   // tab 切回来时补一次 fit（隐藏期间的尺寸变化 ResizeObserver 可能测不到）。
   useEffect(() => {
