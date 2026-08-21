@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -152,6 +152,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 **分页协议**：所有列表端点统一收 `?page=&pageSize=`（页码从 1 起，缺省 20，上限 200，解析在 `httpapi.pageParams`），统一回 `{items, total, page, pageSize}`。事实源是数据库的走 LIMIT/OFFSET，是磁盘的（技能）在内存切片——形状对调用方一致。
 
 **排序协议**：列表端点另收 `?sort=<字段>&order=asc|desc`。字段名是**数据库列名**（技能没有数据库，沿用同样的 snake_case 写法），走白名单校验后才拼进 `ORDER BY`——那是不能用占位符的位置；认不出的字段当没排序，不报错。排序**必须在服务端做**：客户端排序在分页列表上是错的，它只会把当前这一页重排一遍，用户以为看到的是「全部里最大的」，其实是「这 20 条里最大的」。同理，技能的内存排序也在切页之前。
+
+**传输**：文本响应（JSON / HTML / JS / CSS）统一走 gzip，由 `httpapi.withCompression` 惰性决定——响应类型与体量都够了才压。三条边界原样直通，压错比不压严重得多：**SSE**（压了分片会攒在压缩窗口里，第一个 token 迟到）、**带 Range 的请求**（日志面板每 2 秒尾随读转录、媒体预览拖进度条，都靠字节偏移对齐）、**WebSocket 升级**（连接要被 Hijack 走）。静态产物按内容哈希永久缓存（`immutable`），入口 HTML 恒 `no-cache` 走协商——那是「更新完不用手动刷新」的前提。前端产物本身按路由懒加载（终端模拟器与图表库都不进首屏），配上压缩后首次打开的传输量是 270 KB。全栈的性能盘点、每一项的改前改后数字与复现方法见 [docs/性能优化-2026-08](docs/性能优化-2026-08.md)。
 
 前端四个列表页（会话 / 访客 / 数据库 / 技能）共用 `usePagedData` + `DataTable`：翻页、每页行数、表头三态排序（无序 → 升 → 降 → 无序）都发给后端，列显隐留在客户端（那是一个人此刻想看什么，不是配置）。行为（改排序或每页行数回第一页、删空当前页退回上一页）因此只有一套。
 
@@ -437,4 +439,5 @@ cd web && npx shadcn@latest add <component>
 - **Discord 接入**：调研完成、未动工——bot 申请、软件内管理、频道 ↔ 工作目录映射、实现方案与测试策略见 [docs/discord-接入设计调研.md](docs/discord-接入设计调研.md)。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
+- **消息流与 diff 的虚拟滚动**：现在靠 `content-visibility:auto` 让屏外内容不绘制，元素与 DOM 节点仍然全在，几千条的会话滚动仍有代价。与另两项性能遗留（`git status` 的地板耗时、局域网场景的 h2c）一起记在 [docs/性能优化-2026-08](docs/性能优化-2026-08.md) 末尾。
 - **默认档**：会话开在 runtime 默认档上（codex 默认 auto-edit 级、claude 默认 safe 级——两端不同），未强制归一；用户可在会话内随时切统一权限档。
