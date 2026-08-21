@@ -4,16 +4,73 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"time"
 
 	"acpp/server/internal/model"
 )
 
+// rebuildCacheEntry 是一次转录重建的结果，键定在文件的 (size, mtime) 上：
+// 转录是 append-only 的，两者都没变就没有新内容，重建结果必然一致。
+// 消息切片对外只读（Messages 只做 reslice），可以安全共享。
+type rebuildCacheEntry struct {
+	size    int64
+	modTime time.Time
+	msgs    []model.Message
+	lastUse time.Time
+}
+
+// maxRebuildCache 是缓存的会话数上限。长会话的重建结果几 MB 起步，
+// 无限攒着会把内存吃穿；本地面板同时在看的会话就那么几条，超限淘汰
+// 最久未用的即可。
+const maxRebuildCache = 8
+
 func (s *ChatService) rebuildAll(sessionID uint) ([]model.Message, error) {
+	// stat 在 Read 之前取：读的过程中转录可能又追加了，用读前的快照
+	// 存缓存宁可下次多判一回失效，也绝不把旧内容标成新版本。
+	info, err := os.Stat(s.transcripts.Path(sessionKey(sessionID)))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 新会话还没有转录，与 Store.Read 的语义一致：空列表。
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat transcript: %w", err)
+	}
+
+	s.rebuildMu.Lock()
+	if e, ok := s.rebuilds[sessionID]; ok && e.size == info.Size() && e.modTime.Equal(info.ModTime()) {
+		e.lastUse = time.Now()
+		msgs := e.msgs
+		s.rebuildMu.Unlock()
+		return msgs, nil
+	}
+	s.rebuildMu.Unlock()
+
 	entries, err := s.transcripts.Read(sessionKey(sessionID))
 	if err != nil {
 		return nil, fmt.Errorf("read transcript: %w", err)
 	}
-	return RebuildMessages(sessionID, entries), nil
+	msgs := RebuildMessages(sessionID, entries)
+
+	s.rebuildMu.Lock()
+	s.rebuilds[sessionID] = &rebuildCacheEntry{
+		size:    info.Size(),
+		modTime: info.ModTime(),
+		msgs:    msgs,
+		lastUse: time.Now(),
+	}
+	if len(s.rebuilds) > maxRebuildCache {
+		var oldest uint
+		var oldestUse time.Time
+		for id, e := range s.rebuilds {
+			if oldest == 0 || e.lastUse.Before(oldestUse) {
+				oldest, oldestUse = id, e.lastUse
+			}
+		}
+		delete(s.rebuilds, oldest)
+	}
+	s.rebuildMu.Unlock()
+	return msgs, nil
 }
 
 // Messages 从转录重建消息并按尾部分页：limit<=0 表示全量；
