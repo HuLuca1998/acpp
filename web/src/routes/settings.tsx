@@ -11,6 +11,7 @@ import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
 import { DesktopLaunchCard } from "@/components/settings/desktop-launch"
+import { NotificationsCard } from "@/components/settings/notifications"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
 import { TitleModelCard } from "@/components/settings/title-model"
@@ -170,8 +171,9 @@ export function Settings() {
             <>
               {/* 工作区根在数据目录之上：它才是每天要打交道的那个目录。 */}
               <WorkspaceDirCard info={info} onChange={setInfo} />
-              {/* 只在 macOS 壳里渲染，浏览器里整块不出现。 */}
+              {/* 这两块只在 macOS 壳里渲染，浏览器里整块不出现。 */}
               <DesktopLaunchCard />
+              <NotificationsCard />
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">

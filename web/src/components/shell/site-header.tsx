@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import { Hint } from "@/components/hint"
+import { NotifyMenu } from "@/components/shell/notify-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -31,9 +32,12 @@ export function SiteHeader({
           className="mx-2 h-4 data-vertical:self-auto"
         />
         <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
-        {children ? (
-          <div className="ml-auto flex items-center gap-2">{children}</div>
-        ) : null}
+        {/* 通知开关常驻最右：局域网访客进不了设置页（adr-007），这是两种
+            身份都够得着的唯一位置。 */}
+        <div className="ml-auto flex items-center gap-2">
+          {children}
+          <NotifyMenu />
+        </div>
       </div>
     </header>
   )

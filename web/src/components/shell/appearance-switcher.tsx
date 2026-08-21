@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Hint } from "@/components/hint"
+import { Button } from "@/components/ui/button"
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import {
   PALETTES,
@@ -47,8 +49,11 @@ function PaletteSwatch({ palette }: { palette: Palette }) {
   )
 }
 
-/** 外观切换（侧栏项）：明暗模式 + 完整主题方案，即时生效并持久化。 */
-export function AppearanceSwitcher() {
+/**
+ * 外观切换：明暗模式 + 完整主题方案，即时生效并持久化。
+ * iconOnly 是侧栏底部一行装四个入口的紧凑形态（菜单内容不变）。
+ */
+export function AppearanceSwitcher({ iconOnly }: { iconOnly?: boolean }) {
   const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const [palette, setPalette] = useState<Palette>(() => loadPalette())
@@ -58,13 +63,29 @@ export function AppearanceSwitcher() {
     setPalette(next)
   }
 
-  return (
-    <SidebarMenuItem>
-      <DropdownMenu>
+  const menu = (
+    <DropdownMenu>
+      {iconOnly ? (
+        <Hint label={t("appearance.label")}>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                aria-label={t("appearance.label")}
+              />
+            }
+          >
+            <SwatchBookIcon className="size-4" />
+          </DropdownMenuTrigger>
+        </Hint>
+      ) : (
         <DropdownMenuTrigger render={<SidebarMenuButton />}>
           <SwatchBookIcon />
           <span>{t("appearance.label")}</span>
         </DropdownMenuTrigger>
+      )}
         <DropdownMenuContent side="right" align="end" className="w-44">
           <DropdownMenuGroup>
             <DropdownMenuLabel>{t("appearance.theme")}</DropdownMenuLabel>
@@ -93,7 +114,8 @@ export function AppearanceSwitcher() {
             ))}
           </DropdownMenuGroup>
         </DropdownMenuContent>
-      </DropdownMenu>
-    </SidebarMenuItem>
+    </DropdownMenu>
   )
+
+  return iconOnly ? menu : <SidebarMenuItem>{menu}</SidebarMenuItem>
 }

@@ -1,4 +1,5 @@
 import { zhWorkspace } from "./zh-workspace"
+import { zhNotify } from "./zh-notify"
 import { zhDb } from "./zh-db"
 
 export default {
@@ -86,10 +87,10 @@ export default {
   backend: {
     connected: "后端已连接",
     unreachable: "后端不可达",
-    updated: "应用已更新到 v{{version}}",
-    updatedDesc: "刷新后才会用上新版界面。",
+    updateAvailable: "有新版本",
     reload: "刷新",
   },
+  notify: zhNotify,
   language: {
     label: "语言",
     zh: "中文",
@@ -500,6 +501,24 @@ export default {
     openFailed: "无法连接 agent",
   },
   settingsPage: {
+    notifications: {
+      title: "系统通知",
+      description: "agent 停下来等你决策、答完一轮或出错时，发一条 macOS 通知。",
+      authorized: "已授权",
+      provisional: "临时授权",
+      denied: "已拒绝",
+      notDetermined: "尚未授权",
+      unknown: "状态未知",
+      recheck: "重新检查",
+      enable: "开启通知",
+      openSettings: "打开系统设置",
+      deniedTitle: "通知已被拒绝",
+      deniedDesc:
+        "系统只允许弹一次授权框，拒绝之后应用自己再也弹不出来了——只能到系统设置里手动打开。",
+      notInApps: "应用不在「应用程序」目录，通知拿不到授权",
+      notInAppsDesc:
+        "放在别处时请求授权会直接失败、连系统弹窗都不出现。把 ACPP 拖进「应用程序」再重新打开即可。当前位置：",
+    },
     desktopLaunch: {
       title: "启动方式",
       description: "只在 macOS 桌面应用里可用——改的是这台机器的登录项。",

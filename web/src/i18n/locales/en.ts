@@ -1,4 +1,5 @@
 import { enWorkspace } from "./en-workspace"
+import { enNotify } from "./en-notify"
 import { enDb } from "./en-db"
 
 export default {
@@ -87,10 +88,10 @@ export default {
   backend: {
     connected: "Backend connected",
     unreachable: "Backend unreachable",
-    updated: "App updated to v{{version}}",
-    updatedDesc: "Reload to pick up the new interface.",
+    updateAvailable: "Update available",
     reload: "Reload",
   },
+  notify: enNotify,
   language: {
     label: "Language",
     zh: "中文",
@@ -525,6 +526,25 @@ export default {
     openFailed: "Could not connect to the agent",
   },
   settingsPage: {
+    notifications: {
+      title: "System notifications",
+      description:
+        "Send a macOS notification when an agent stops for your decision, finishes a turn, or fails.",
+      authorized: "Authorized",
+      provisional: "Provisional",
+      denied: "Denied",
+      notDetermined: "Not asked yet",
+      unknown: "Unknown",
+      recheck: "Re-check",
+      enable: "Enable notifications",
+      openSettings: "Open System Settings",
+      deniedTitle: "Notifications are denied",
+      deniedDesc:
+        "macOS only ever shows the permission prompt once. After a refusal the app can no longer bring it back — it has to be turned on in System Settings.",
+      notInApps: "App is outside /Applications, so notifications cannot be authorized",
+      notInAppsDesc:
+        "Anywhere else the request fails outright and no system prompt appears at all. Move ACPP into Applications and reopen it. Current location: ",
+    },
     desktopLaunch: {
       title: "Launch behaviour",
       description:

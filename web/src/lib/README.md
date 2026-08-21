@@ -30,7 +30,10 @@
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |
 | session-activity.ts | 会话活跃态的进程内广播：会话页把「正在跑一轮」告诉侧边栏，免去为一个状态点轮询 | `markSessionActive`、`subscribeSessionActivity`、`getActiveSessions` |
 | session-groups.ts | 会话按工作目录分组（adr-007）：cwd 分桶、组内取最新、最多 5 组 × 5 条 | `groupSessionsByCwd`、`SessionGroup`、`MAX_GROUPS`                   |
-| desktop.ts        | 桌面壳（macOS app）的原生通道：环境判定与启动偏好读写，走 WKWebView 注入的消息口而非 HTTP | `isDesktop`、`desktopLaunch`、`LaunchPrefs` |
+| desktop.ts        | 桌面壳（macOS app）的原生通道：环境判定、启动偏好、系统通知（授权/发送/撤回），走 WKWebView 注入的消息口而非 HTTP | `isDesktop`、`desktopLaunch`、`desktopNotify`、`NotifyStatus`、`NOTIFICATION_ACTION_EVENT` |
+| notify/prefs.ts   | 通知偏好读写（localStorage）：这台设备上的这个人想不想被打扰，不跨设备同步 | `loadNotifyPrefs`、`saveNotifyPrefs`、`NotifyPrefs`、`DEFAULT_NOTIFY_PREFS` |
+| notify/in-page.ts | 页内通知形式（浏览器唯一可用的手段）：标题闪烁、Web Audio 合成提示音、「用户在不在看」判定 | `flashTitle`、`stopFlashTitle`、`playChime`、`isUserWatching` |
+| notify/store.ts   | 通知中心的存量（模块级广播，内存态不落盘）：同 id 覆盖、按优先级排序（update 最高）、上限裁剪 | `pushNotice`、`dismissNotice`、`clearNotices`、`Notice`、`NoticeKind` |
 | subagents.ts      | 子代理清单提取：两端形状（claude 的 Agent 调用 / codex 的独立 thread）归一成条目 | `collectSubagents`、`isSubagentWork`、`subagentLocations`、`SubagentEntry` |
 | status-tone.ts    | 会话/agent 状态 → StatusDot 色调的统一映射                            | `SESSION_STATE_TONE`、`AGENT_STATUS_TONE`、`StatusTone`              |
 | utils.ts          | 类名合并（shadcn 标配）                                               | `cn`                                                                 |
@@ -46,4 +49,7 @@
 | identity-context.ts  | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话                                                                  | `useDraftSession`                              |
 | use-mobile.ts        | 移动端断点判断（shadcn 生成）                                                                                   | `useIsMobile`                                  |
-| use-version-watch.ts | 版本哨兵：轮询 /api/health，后端换版本就弹提示条请用户刷新（局域网访客不会自己刷新）                            | `useVersionWatch`                              |
+| use-version-watch.ts | 版本哨兵：后端换版本就报出新版本号，侧栏状态条就地给刷新入口（局域网访客不会自己刷新）                         | `useVersionWatch`                              |
+| use-server-events.ts | 全局事件流 /api/events 的单一连接（模块级）+ 订阅 hook；含断线退避重连                                          | `useServerEvents`                              |
+| use-notifications.ts | 通知：判断该不该打扰（偏好 + 用户在不在看这一页），落进通知中心并分派提示（桌面壳系统通知 / 浏览器标题闪烁 + 声音）；含系统通知回调的裁决处理 | `useNotifications`                             |
+| use-notices.ts       | 订阅通知中心存量（useSyncExternalStore 接 lib/notify/store.ts）                                                | `useNotices`                                   |

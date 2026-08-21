@@ -453,6 +453,38 @@ export interface StreamEvent {
 }
 
 /**
+ * 全局事件流（`/api/events`）上的一条事件。它与会话流是两回事：会话流送
+ * 内容，这条流只送两种「与会话内容无关的信号」。
+ */
+export interface ServerEvent {
+  kind: "hello" | "notify"
+  /** hello：连上时后端的版本，变了就说明 app 更新过。 */
+  version?: string
+  /** notify：这条通知的由来。 */
+  event?: NoticeEvent
+  sessionId?: number
+  sessionTitle?: string
+  /** 给人看的一句话摘要（后端已折叠空白并截断）。 */
+  text?: string
+  /** 决策专用：系统通知上的按钮就是这些选项，按一下即裁决。 */
+  permissionId?: string
+  options?: PermissionOption[]
+  elicitationId?: string
+}
+
+/**
+ * 通知的由来。带 `_done` 的两条是**撤回信号**——事情已经在页面上处理掉了，
+ * 挂在通知中心里的那条得收回去，否则它还在替一个结束了的请求要决定。
+ */
+export type NoticeEvent =
+  | "permission"
+  | "permission_done"
+  | "elicitation"
+  | "elicitation_done"
+  | "turn_end"
+  | "error"
+
+/**
  * agent 交互式提问的一道题，从 elicitation 的 requestedSchema 解析而来。
  * options 来自 oneOf；otherFieldId 指向对应的自由输入字段（`__other`）。
  */

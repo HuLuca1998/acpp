@@ -6,7 +6,7 @@ import { IdentityGate } from "@/components/shell/identity-gate"
 import { SiteHeader } from "@/components/shell/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useIsOwner } from "@/hooks/identity-context"
-import { useVersionWatch } from "@/hooks/use-version-watch"
+import { useNotifications } from "@/hooks/use-notifications"
 
 /**
  * 只有 owner 能进的页面（adr-007）。租户手敲 URL 也进不去——后端对应的
@@ -67,9 +67,10 @@ function OwnerOnlyRedirect({ children }: { children: React.ReactNode }) {
 }
 
 function Shell({ title }: { title: string }) {
-  // 后端换版本就提示刷新。挂在 shell 上而不是某个页面：局域网访客可能
-  // 一直停在会话页，也可能停在列表页，哪一页都得知道 app 更新过。
-  useVersionWatch()
+  // 通知挂在 shell 上而不是某个页面：agent 停下来等决策时，用户很可能正停
+  // 在别的会话或列表页，哪一页都得知道。（版本更新的提示长在侧栏底部的
+  // 状态条里，见 components/shell/backend-status.tsx。）
+  useNotifications()
 
   return (
     <SidebarProvider
