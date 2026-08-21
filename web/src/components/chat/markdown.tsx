@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -44,8 +45,9 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
 /**
  * 渲染 agent 输出的 markdown 正文。
  * prose 配色映射到主题变量（见 index.css），深浅色主题都一致。
+ * memo：解析是渲染路径上最贵的一步，文本没变就不该重来一遍。
  */
-export function MarkdownContent({
+export const MarkdownContent = memo(function MarkdownContent({
   children,
   className,
 }: {
@@ -77,6 +79,58 @@ export function MarkdownContent({
       >
         {children}
       </ReactMarkdown>
+    </div>
+  )
+})
+
+/**
+ * 把流式文本切成「已定稿的段落块 + 活跃尾段」。切点只选在围栏代码块
+ * 之外的空行上——流式是纯追加，空行之前的内容不会再变，按块渲染就能
+ * 让 memo 挡住已定稿部分的重复解析。
+ */
+function splitStableBlocks(text: string): { blocks: string[]; tail: string } {
+  const blocks: string[] = []
+  let blockStart = 0
+  let inFence = false
+  let i = 0
+  while (i < text.length) {
+    const lineEnd = text.indexOf("\n", i)
+    if (lineEnd === -1) break
+    const line = text.slice(i, lineEnd)
+    // 围栏可缩进至多 3 空格；再深就是缩进代码块里的字面 ```，不算围栏。
+    if (/^ {0,3}(```|~~~)/.test(line)) {
+      inFence = !inFence
+    } else if (!inFence && line.trim() === "") {
+      const chunk = text.slice(blockStart, lineEnd + 1)
+      // 连续空行攒进下一块的开头，空白不值得独立成块。
+      if (chunk.trim() !== "") {
+        blocks.push(chunk)
+        blockStart = lineEnd + 1
+      }
+    }
+    i = lineEnd + 1
+  }
+  return { blocks, tail: text.slice(blockStart) }
+}
+
+/**
+ * 流式正文渲染。整篇每个分片都全量重解析的成本随文本线性上涨（一轮长
+ * 回答等于 O(n²) 的解析总量），是流式期间最大的 CPU 开销；分块后只有
+ * 活跃尾段重解析。分块渲染与整篇渲染在个别边角（跨空行的嵌套列表、
+ * 引用式链接定义）有细微差异，轮结束后正文由重建消息整篇渲染接管，
+ * 不留痕。块间距 gap-4 对齐 prose-sm 的段落间距。
+ */
+export function StreamingMarkdown({ children }: { children: string }) {
+  const { blocks, tail } = useMemo(
+    () => splitStableBlocks(children),
+    [children]
+  )
+  return (
+    <div className="flex flex-col gap-4">
+      {blocks.map((block, index) => (
+        <MarkdownContent key={index}>{block}</MarkdownContent>
+      ))}
+      {tail.trim() !== "" ? <MarkdownContent>{tail}</MarkdownContent> : null}
     </div>
   )
 }

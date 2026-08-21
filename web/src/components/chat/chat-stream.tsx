@@ -10,7 +10,7 @@ import {
 } from "@/components/chat/chat-messages"
 import { ElicitationCard } from "@/components/chat/cards/elicitation-card"
 import { FileEditCard } from "@/components/chat/file-edit-card"
-import { MarkdownContent } from "@/components/chat/markdown"
+import { StreamingMarkdown } from "@/components/chat/markdown"
 import { AgentAvatar, AgentRow } from "@/components/chat/message-shell"
 import { PermissionCard } from "@/components/chat/cards/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
@@ -268,7 +268,7 @@ export const ChatStream = memo(function ChatStream({
             {chat.streamingText ? (
               <MessageScrollerItem scrollAnchor={false}>
                 <AgentRow avatar={liveAvatar("text")}>
-                  <MarkdownContent>{chat.streamingText}</MarkdownContent>
+                  <StreamingMarkdown>{chat.streamingText}</StreamingMarkdown>
                 </AgentRow>
               </MessageScrollerItem>
             ) : null}
