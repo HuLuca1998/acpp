@@ -93,6 +93,27 @@ type rebuildTool struct {
 // ——正文被工具调用打断处就是消息的断点。
 // 进行中的半轮不产出——那部分由前端的流式态渲染。
 func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message {
+	decoded := make([]wireEntry, 0, len(entries))
+	for _, e := range entries {
+		var msg wireMsg
+		if json.Unmarshal(e.Msg, &msg) != nil {
+			continue
+		}
+		decoded = append(decoded, wireEntry{TS: e.TS, Dir: e.Dir, Msg: msg})
+	}
+	return rebuildEntries(sessionID, decoded)
+}
+
+// wireEntry 是转录一行的解码结果。与 transcript.Entry 的区别只在 Msg 已经
+// 解成了 wireMsg——重建的读路径一次解到位，不再解两遍（见 Store.ReadLines）。
+type wireEntry struct {
+	TS  time.Time
+	Dir string
+	Msg wireMsg
+}
+
+// rebuildEntries 是重建的本体，输入是已解码的行。
+func rebuildEntries(sessionID uint, entries []wireEntry) []model.Message {
 	var out []model.Message
 	nextID := uint(1)
 	emit := func(m model.Message, ts time.Time) {
@@ -284,10 +305,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 	}
 
 	for _, entry := range entries {
-		var msg wireMsg
-		if err := json.Unmarshal(entry.Msg, &msg); err != nil {
-			continue
-		}
+		msg := entry.Msg
 
 		switch {
 		case entry.Dir == "send" && (msg.Method == "session/new" || msg.Method == "session/load"):

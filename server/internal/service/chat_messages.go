@@ -61,9 +61,9 @@ func (s *ChatService) rebuildAll(sessionID uint) ([]model.Message, error) {
 	s.rebuilding[sessionID] = call
 	s.rebuildMu.Unlock()
 
-	entries, err := s.transcripts.Read(sessionKey(sessionID))
+	entries, err := s.readWireEntries(sessionID)
 	if err == nil {
-		call.msgs = RebuildMessages(sessionID, entries)
+		call.msgs = rebuildEntries(sessionID, entries)
 	} else {
 		call.err = fmt.Errorf("read transcript: %w", err)
 	}
@@ -91,6 +91,29 @@ func (s *ChatService) rebuildAll(sessionID uint) ([]model.Message, error) {
 	s.rebuildMu.Unlock()
 	close(call.done)
 	return call.msgs, call.err
+}
+
+// readWireEntries 把转录一行一行解成重建要的形状，**一遍解到位**。
+// 走 transcript.Read 的话同一行要解两遍（先抄出 msg，再解 msg），
+// 几十 MB 的转录上那是上百毫秒的白工。
+func (s *ChatService) readWireEntries(sessionID uint) ([]wireEntry, error) {
+	var entries []wireEntry
+	err := s.transcripts.ReadLines(sessionKey(sessionID), func(line []byte) bool {
+		var row struct {
+			TS  time.Time `json:"ts"`
+			Dir string    `json:"dir"`
+			Msg wireMsg   `json:"msg"`
+		}
+		// 半行（进程被杀时写了一半）跳过，不让整份转录不可读。
+		if json.Unmarshal(line, &row) == nil {
+			entries = append(entries, wireEntry(row))
+		}
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // rebuildCall 是一次正在跑的重建，供并发的后来者搭车。
