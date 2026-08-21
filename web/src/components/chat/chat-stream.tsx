@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -51,8 +52,16 @@ export interface ChatStreamSource extends ChatState {
 /**
  * 消息流：历史消息块 + 计划卡 + 实时活动区（思考/工具/权限）+ 流式正文
  * + 挂起交互卡片 + 结束原因。只消费传入状态，不持有任何自己的状态。
+ *
+ * memo 是必须的：useChat 的返回值引用只在聊天状态真变时更换，宿主页面
+ * 因打字等无关状态的高频重渲染到此为止——否则每个按键都要 reconcile
+ * 整条消息流。
  */
-export function ChatStream({ chat }: { chat: ChatStreamSource }) {
+export const ChatStream = memo(function ChatStream({
+  chat,
+}: {
+  chat: ChatStreamSource
+}) {
   const { t } = useTranslation()
   const flavor = chat.session?.agentFlavor
   const userName = chat.session?.tenantName
@@ -79,9 +88,13 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
     !chat.elicitation &&
     !chat.permission
 
-  const blocks = groupMessages(chat.messages)
+  // 分组只依赖消息列表：流式分片、工具状态等高频更新不重算。
+  const blocks = useMemo(() => groupMessages(chat.messages), [chat.messages])
   // 头像只戳每轮的第一条 agent 内容，其余留空槽。
-  const { starts: turnStarts, liveStartsTurn } = turnStartsOf(blocks)
+  const { starts: turnStarts, liveStartsTurn } = useMemo(
+    () => turnStartsOf(blocks),
+    [blocks]
+  )
   // 活内容（这一轮还在跑的部分）按渲染顺序排一遍，头像给排在最前的那块。
   // 声明式地先算好，别在 JSX 里边渲染边翻标志位——那是渲染期改渲染期的
   // 状态，React 编译器会拦。
@@ -351,7 +364,7 @@ export function ChatStream({ chat }: { chat: ChatStreamSource }) {
       </MessageScroller>
     </MessageScrollerProvider>
   )
-}
+})
 
 /** 块的稳定 key：活动块自带 key，其余用消息 id。 */
 function blockKey(block: Block): string {
