@@ -17,6 +17,7 @@
 | db-result.ts      | 数据库 MCP 工具输出文本 → 结构化结果（对话里渲染真表格用）；格式与后端 datasource/render.go 共同约定 | `parseDbToolOutput`、`isDbQueryCall`、`ParsedDbResult`              |
 | elicitation.ts    | elicitation JSON Schema 解析成结构化问题与作答收集                    | `parseElicitationSchema`、`answerFor`                                |
 | files.ts          | 浏览器文件 → base64 图片附件、剪贴板取图                              | `fileToImageAttachment`、`imagesFromClipboard`                       |
+| chat/draft-store.ts | 输入框草稿的 ref 化 store（打字不重渲页面树，由输入卡自己订阅）    | `createDraftStore`、`DraftStore`                                     |
 | chat/first-send.ts | 草稿页 → 会话页的首发交棒：乐观用户消息、派发状态与失败通知          | `stashFirstSend`、`claimFirstSend`、`optimisticUserMessage`、`isOptimisticMessage` |
 | local-commands.ts | 本地斜杠命令（前端自己执行、不发给 agent）的解析与补全清单合并        | `parseLocalCommand`、`withLocalCommands`、`LOCAL_COMMANDS`          |
 | format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |

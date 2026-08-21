@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Hint } from "@/components/hint"
@@ -12,7 +13,7 @@ import { SplitIcon, XIcon } from "lucide-react"
  * 名字预填一个带时间戳的默认值——多数人只是想要「一个干净的地方」，
  * 不想为它取名；要取也就在原地改。
  */
-export function WorktreeToggle({
+export const WorktreeToggle = memo(function WorktreeToggle({
   value,
   onChange,
 }: {
@@ -62,7 +63,7 @@ export function WorktreeToggle({
       </Hint>
     </span>
   )
-}
+})
 
 /** `wt-0817-1530`：短、可读、当天多开也不撞名。 */
 function defaultWorktreeName(): string {

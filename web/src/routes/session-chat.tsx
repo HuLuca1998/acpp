@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router"
 
 import { useChat } from "@/hooks/use-chat"
 import { useDraftSession } from "@/hooks/use-draft-session"
+import { createDraftStore } from "@/lib/chat/draft-store"
 import { useIdentity } from "@/hooks/identity-context"
 import type { ImageAttachment } from "@/types/acp"
 import { fileToImageAttachment } from "@/lib/files"
@@ -13,7 +14,6 @@ import { UploadDialog } from "@/components/chat/composer/upload-dialog"
 import { DirPicker } from "@/components/dir-picker/dir-picker"
 import {
   ChatPanelContext,
-  createDraftStore,
   type ChatPanelData,
 } from "@/components/workspace/chat-panel-context"
 import { WorkspaceDock } from "@/components/workspace/workspace-dock"
@@ -50,7 +50,7 @@ export function SessionChat() {
   const chat = useChat(sessionId)
   const newSession = useDraftSession(isNew, t("sessions.form.defaultModel"))
   // 草稿住在 ref 化的 store 里而不是页面 state：打字不该重渲整棵工作区树
-  //（见 chat-panel-context 的 DraftStore 注释）。
+  //（见 lib/chat/draft-store.ts 的注释）。
   const [draftStore] = useState(createDraftStore)
 
   // 待发送附件：图片（粘贴/选择）与 @ 引用的文件路径。
@@ -75,10 +75,10 @@ export function SessionChat() {
   const draftCwd =
     newSession.cwd.trim() || identity?.root || t("sessions.form.cwdPlaceholder")
 
-  async function addImages(picked: File[]) {
+  const addImages = useCallback(async (picked: File[]) => {
     const attachments = await Promise.all(picked.map(fileToImageAttachment))
     setImages((prev) => [...prev, ...attachments])
-  }
+  }, [])
 
   function submit() {
     const content = draftStore.get().trim()
@@ -114,7 +114,7 @@ export function SessionChat() {
   }
 
   /** 撤回一条排队插话：从队列移除并回填输入框与附件托盘。 */
-  function recallQueued(id: number) {
+  function recallQueuedImpl(id: number) {
     const item = chat.queued.find((q) => q.id === id)
     if (!item) return
     chat.removeQueued(id)
@@ -139,7 +139,7 @@ export function SessionChat() {
   }
 
   /** 「调整方向」：把排队插话立即发出，插进正在跑的轮（steering）。 */
-  function steerQueued(id: number) {
+  function steerQueuedImpl(id: number) {
     const item = chat.queued.find((q) => q.id === id)
     if (!item) return
     chat.removeQueued(id)
@@ -154,6 +154,86 @@ export function SessionChat() {
       void chat.send({ content: text })
     }
   }
+
+  // 命令面（那些「按一下会发生什么」的回调）与内容面分开对待：内容随每轮
+  // 流式变化，命令面不该跟着换新引用——换了，下游的 memo 就全部作废，
+  // 设置胶囊、附件盘、排队条会跟着正文分片每 80ms 陪跑一次。
+  const commands = useMemo(
+    () => ({
+      removeImage: (i: number) =>
+        setImages((prev) => prev.filter((_, idx) => idx !== i)),
+      removeFile: (i: number) =>
+        setFiles((prev) => prev.filter((_, idx) => idx !== i)),
+      removeDbRef: (i: number) =>
+        setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
+      openImagePicker: () => imageInputRef.current?.click(),
+      openFilePicker: () => setFilePickerOpen(true),
+      openDbRefPicker: () => setDbRefPickerOpen(true),
+      openUpload: () => setUploadOpen(true),
+      openCwdPicker: () => setCwdPickerOpen(true),
+    }),
+    []
+  )
+
+  // 这四个要读当前的 chat 与附件状态，直接 useCallback 会把 chat 拉进依赖
+  // ——那等于没稳定（chat 每 80ms 换一次）。改成 ref 转发：对外的引用恒定，
+  // 内部永远看得到最新那一份。
+  const latest = useRef({
+    submit,
+    sendSuggestion,
+    recallQueuedImpl,
+    steerQueuedImpl,
+  })
+  // 每次渲染后同步。写在 effect 里而不是渲染期直接赋值：渲染期改 ref 在
+  // 并发渲染下读到的值不确定（与 use-server-events.ts 同一处理）。
+  useEffect(() => {
+    latest.current = {
+      submit,
+      sendSuggestion,
+      recallQueuedImpl,
+      steerQueuedImpl,
+    }
+  })
+  const stable = useMemo(
+    () => ({
+      submit: () => latest.current.submit(),
+      sendSuggestion: (text: string) => latest.current.sendSuggestion(text),
+      recallQueued: (id: number) => latest.current.recallQueuedImpl(id),
+      steerQueued: (id: number) => latest.current.steerQueuedImpl(id),
+    }),
+    []
+  )
+
+  const chatPanelData: ChatPanelData = useMemo(
+    () => ({
+      isNew,
+      chat,
+      newSession,
+      draftStore,
+      images,
+      files,
+      dbRefs,
+      addDbRef,
+      addImages,
+      draftCwd,
+      ...commands,
+      ...stable,
+    }),
+    [
+      isNew,
+      chat,
+      newSession,
+      draftStore,
+      images,
+      files,
+      dbRefs,
+      addDbRef,
+      addImages,
+      draftCwd,
+      commands,
+      stable,
+    ]
+  )
 
   if (chat.loading) {
     return (
@@ -183,31 +263,6 @@ export function SessionChat() {
         </EmptyContent>
       </Empty>
     )
-  }
-
-  const chatPanelData: ChatPanelData = {
-    isNew,
-    chat,
-    newSession,
-    draftStore,
-    images,
-    files,
-    dbRefs,
-    removeImage: (i) => setImages((prev) => prev.filter((_, idx) => idx !== i)),
-    removeFile: (i) => setFiles((prev) => prev.filter((_, idx) => idx !== i)),
-    removeDbRef: (i) => setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
-    addDbRef,
-    addImages: (picked) => void addImages(picked),
-    submit,
-    sendSuggestion,
-    recallQueued,
-    steerQueued,
-    openImagePicker: () => imageInputRef.current?.click(),
-    openFilePicker: () => setFilePickerOpen(true),
-    openDbRefPicker: () => setDbRefPickerOpen(true),
-    openUpload: () => setUploadOpen(true),
-    openCwdPicker: () => setCwdPickerOpen(true),
-    draftCwd,
   }
 
   return (

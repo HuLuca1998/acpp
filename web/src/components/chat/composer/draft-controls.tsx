@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { useDraftSession } from "@/hooks/use-draft-session"
@@ -18,7 +19,7 @@ import { BotIcon, SparklesIcon } from "lucide-react"
  * 会话创建后被 SettingsSelectors 取代——那时模型只能在当前 ACP 内切。
  * 工作目录不在这里：它与老会话共用输入卡下沿的 ComposerStatus。
  */
-export function DraftControls({
+export const DraftControls = memo(function DraftControls({
   draft,
 }: {
   draft: ReturnType<typeof useDraftSession>
@@ -83,4 +84,4 @@ export function DraftControls({
       ) : null}
     </>
   )
-}
+})

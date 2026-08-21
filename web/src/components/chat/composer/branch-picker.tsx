@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { memo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
@@ -38,7 +38,11 @@ import {
  * 分支**清单**仍只在打开面板时拉：那是一次额外的 exec git，关着的时候
  * 没必要为它付钱。
  */
-export function BranchPicker({ fallback }: { fallback?: string }) {
+export const BranchPicker = memo(function BranchPicker({
+  fallback,
+}: {
+  fallback?: string
+}) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const ws = useWorkspace()
@@ -261,7 +265,7 @@ export function BranchPicker({ fallback }: { fallback?: string }) {
       </PopoverContent>
     </Popover>
   )
-}
+})
 
 function BranchLabel({ branch }: { branch: string }) {
   return (

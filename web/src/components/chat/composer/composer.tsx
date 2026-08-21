@@ -1,7 +1,8 @@
-import { useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { SlashCommand } from "@/types/acp"
+import type { DraftStore } from "@/lib/chat/draft-store"
 import { imagesFromClipboard } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/hint"
@@ -26,8 +27,7 @@ function fuzzyMatch(text: string, query: string): boolean {
  * 右下角按状态切换 发送 / 中止 / 创建中。会话页与草稿页共用。
  */
 export function Composer({
-  value,
-  onChange,
+  draft,
   onSubmit,
   onCancel,
   busy = false,
@@ -42,8 +42,13 @@ export function Composer({
   queue,
   localPanel,
 }: {
-  value: string
-  onChange: (value: string) => void
+  /**
+   * 草稿的外部 store。**刻意不收 value/onChange**：那样每个按键都要把
+   * 新值一路传下来，途中的宿主组件（对话面板）必须跟着重渲染，它下面
+   * 的设置胶囊、分支选择器、附件盘也一起陪跑。订阅收在这里，打字只重渲
+   * 输入卡自己。
+   */
+  draft: DraftStore
   onSubmit: () => void
   /** 一轮进行中时的中止动作；busy 且提供了它才显示中止键。 */
   onCancel?: () => void
@@ -68,6 +73,8 @@ export function Composer({
   localPanel?: React.ReactNode
 }) {
   const { t } = useTranslation()
+  const value = useSyncExternalStore(draft.subscribe, draft.get)
+  const onChange = draft.set
   const canSend = !disabled && !pending && value.trim() !== ""
 
   // "/" 补全：只在整条输入是一个未完成的命令词时出现。
