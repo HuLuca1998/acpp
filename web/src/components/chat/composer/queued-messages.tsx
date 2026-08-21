@@ -30,7 +30,7 @@ export function QueuedMessages({
       {items.map((q) => (
         <div
           key={q.id}
-          className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/80 py-2 pr-2 pl-3 shadow-md backdrop-blur-xl transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0"
+          className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/90 py-2 pr-2 pl-3 shadow-md backdrop-blur-md transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0"
         >
           <CornerDownRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate text-sm">
