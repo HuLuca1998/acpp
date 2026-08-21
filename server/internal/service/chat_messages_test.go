@@ -1,8 +1,12 @@
 package service
 
 import (
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
+	"acpp/server/internal/model"
 	"acpp/server/internal/transcript"
 )
 
@@ -98,5 +102,71 @@ func TestMessagesTailPaging(t *testing.T) {
 	}
 	if len(empty) != 0 || total != 0 {
 		t.Fatalf("empty session: got %d messages (total %d), want 0", len(empty), total)
+	}
+}
+
+func toolCallFrame(id, rawInput, rawOutput string) string {
+	return fmt.Sprintf(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call","toolCallId":%q,"title":"run","kind":"execute","status":"completed","rawInput":%s,"rawOutput":%s}}}`, id, rawInput, rawOutput)
+}
+
+// 超过上限的工具输出下发时截断并打标记；带 sql 的调用（结果表格要
+// 完整 JSON 才解析得出来）不截。转录里的原文不受影响。
+func TestMessagesTruncatesHugeRawOutput(t *testing.T) {
+	store, err := transcript.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewChatService(nil, nil, nil, store, nil)
+	const sessionID = 5
+	key := sessionKey(sessionID)
+
+	huge, err := json.Marshal(strings.Repeat("长输出x", 20_000)) // ~200KB
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Append(key, "send", []byte(promptFrame(1, "跑一下")))
+	store.Append(key, "recv", []byte(toolCallFrame("t1", `{"command":"cat big"}`, string(huge))))
+	store.Append(key, "recv", []byte(toolCallFrame("t2", `{"sql":"select 1"}`, string(huge))))
+	store.Append(key, "recv", []byte(resultFrame(1)))
+
+	msgs, _, err := svc.Messages(sessionID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var execCall, sqlCall *model.Message
+	for i := range msgs {
+		if msgs[i].Kind != model.KindToolCall {
+			continue
+		}
+		switch msgs[i].Payload["toolCallId"] {
+		case "t1":
+			execCall = &msgs[i]
+		case "t2":
+			sqlCall = &msgs[i]
+		}
+	}
+	if execCall == nil || sqlCall == nil {
+		t.Fatalf("tool calls missing from rebuild: %+v", msgs)
+	}
+
+	slim, ok := execCall.Payload["rawOutput"].(json.RawMessage)
+	if !ok || len(slim) > rawOutputLimit+1024 {
+		t.Errorf("exec rawOutput not truncated: %d bytes", len(slim))
+	}
+	if execCall.Payload["rawOutputTruncated"] != true {
+		t.Error("exec call missing rawOutputTruncated marker")
+	}
+	// 截断后仍须是合法 JSON 字符串。
+	var text string
+	if err := json.Unmarshal(slim, &text); err != nil {
+		t.Errorf("truncated rawOutput is invalid JSON: %v", err)
+	}
+
+	if sqlRaw, _ := sqlCall.Payload["rawOutput"].(json.RawMessage); len(sqlRaw) != len(huge) {
+		t.Errorf("sql rawOutput must stay intact: got %d, want %d", len(sqlRaw), len(huge))
+	}
+	if _, marked := sqlCall.Payload["rawOutputTruncated"]; marked {
+		t.Error("sql call must not be marked truncated")
 	}
 }

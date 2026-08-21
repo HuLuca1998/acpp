@@ -297,6 +297,7 @@ export default {
     emptyHint: "会话上下文由 agent 保持，后续每轮只需要发你这一句。",
     toolCall: "工具调用",
     exitCode: "退出码 {{code}}",
+    outputTruncated: "输出过大，仅展示开头部分（完整内容在转录里）",
     activity: "思考与工具调用",
     touchedHint: "在查看器中打开",
     copy: "复制",

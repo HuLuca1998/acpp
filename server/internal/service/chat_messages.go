@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"time"
+	"unicode/utf8"
 
 	"acpp/server/internal/model"
 )
@@ -97,7 +100,113 @@ func (s *ChatService) Messages(sessionID uint, limit int, before uint) ([]model.
 	if limit > 0 && len(all) > limit {
 		all = all[len(all)-limit:]
 	}
-	return all, total, nil
+	return slimMessages(all), total, nil
+}
+
+// rawOutputLimit 是单条工具调用输出下发给界面的上限。工具卡的滚动区里
+// 几十 KB 已远超可读范围，再多只是把打开会话的响应撑到几 MB——传输、
+// 解析、渲染一路全卡。转录里保留完整原文，截断只发生在读路径。
+const rawOutputLimit = 64 * 1024
+
+// slimMessages 把超大的工具输出截到上限并打上标记供界面说明。
+// 消息来自共享的重建缓存，只能拷贝不能就地改。
+func slimMessages(msgs []model.Message) []model.Message {
+	out := msgs
+	copied := false
+	for i, m := range msgs {
+		slim, changed := slimPayload(m.Payload)
+		if !changed {
+			continue
+		}
+		if !copied {
+			out = make([]model.Message, len(msgs))
+			copy(out, msgs)
+			copied = true
+		}
+		out[i].Payload = slim
+	}
+	return out
+}
+
+func slimPayload(p model.JSONMap) (model.JSONMap, bool) {
+	if p == nil {
+		return p, false
+	}
+	raw, ok := p["rawOutput"].(json.RawMessage)
+	if !ok || len(raw) <= rawOutputLimit {
+		return p, false
+	}
+	// 数据库查询的结果是结构化 JSON，截断会让前端解析不出结果表格。
+	if ri, ok := p["rawInput"].(json.RawMessage); ok {
+		var probe struct {
+			SQL string `json:"sql"`
+		}
+		if json.Unmarshal(ri, &probe) == nil && probe.SQL != "" {
+			return p, false
+		}
+	}
+	slim, ok := truncateRawOutput(raw)
+	if !ok {
+		return p, false
+	}
+	next := make(model.JSONMap, len(p)+1)
+	maps.Copy(next, p)
+	next["rawOutput"] = slim
+	next["rawOutputTruncated"] = true
+	return next, true
+}
+
+// truncateRawOutput 认 rawOutput 的三种线级形状（与前端 tool-call 的
+// outputOf 对齐）：纯字符串、MCP content 数组、{formatted_output} 对象。
+// 认不出的形状原样保留——宁可响应大，也不能发出截坏的 JSON。
+func truncateRawOutput(raw json.RawMessage) (json.RawMessage, bool) {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return marshalRaw(cutText(s, rawOutputLimit))
+	}
+	var arr []map[string]any
+	if json.Unmarshal(raw, &arr) == nil {
+		budget := rawOutputLimit
+		for _, part := range arr {
+			if text, ok := part["text"].(string); ok {
+				kept := cutText(text, budget)
+				budget -= len(kept)
+				part["text"] = kept
+			}
+		}
+		return marshalRaw(arr)
+	}
+	var obj map[string]any
+	if json.Unmarshal(raw, &obj) == nil {
+		if text, ok := obj["formatted_output"].(string); ok {
+			obj["formatted_output"] = cutText(text, rawOutputLimit)
+			return marshalRaw(obj)
+		}
+	}
+	return nil, false
+}
+
+// cutText 按字节上限截断，退到合法的 UTF-8 边界（最多回退 3 字节）。
+func cutText(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if len(s) <= limit {
+		return s
+	}
+	cut := s[:limit]
+	for len(cut) > 0 && !utf8.ValidString(cut) {
+		cut = cut[:len(cut)-1]
+	}
+	return cut
+}
+
+func marshalRaw(v any) (json.RawMessage, bool) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	return b, true
 }
 
 // BackfillMessageCounts 为历史会话补消息数缓存（新列上线时全是 0）。
