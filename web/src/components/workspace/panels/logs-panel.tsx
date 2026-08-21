@@ -1,9 +1,11 @@
 import { memo, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
 
 import { cn } from "@/lib/utils"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { useWorkspace } from "@/components/workspace/workspace-context"
+import { usePanelVisible } from "@/hooks/use-panel-visible"
 
 /** 渲染上限：logs 是调试窗口，只保留最近这么多帧，太早的丢弃。 */
 const MAX_LINES = 1000
@@ -50,17 +52,20 @@ function parseLine(line: string): WireLine | null {
  * logs 面板：实时跟随会话的线级转录（JSONL，每行一帧 JSON-RPC）。
  * 轮询 + Range 字节续读增量；贴底跟随，用户上翻自动暂停。
  */
-export const LogsPanel = memo(function LogsPanel() {
+export const LogsPanel = memo(function LogsPanel(props: IDockviewPanelProps) {
   const { t } = useTranslation()
   const ws = useWorkspace()
+  const visible = usePanelVisible(props.api)
   const [lines, setLines] = useState<WireLine[]>([])
   const [expanded, setExpanded] = useState<number | null>(null)
   const offsetRef = useRef(0)
   const bufferRef = useRef("")
   const viewportRef = useRef<HTMLDivElement>(null)
 
+  // 藏在 tab 后面就不轮询——offset 续读是增量的，切回来那一刻
+  // 立即补拉，错过的行一次到齐。
   useEffect(() => {
-    if (!ws.sessionId) return
+    if (!ws.sessionId || !visible) return
     let cancelled = false
     // 防并发重入：首次全量拉取慢于轮询间隔时，interval 会用同一个 offset
     // 再发一次，两个响应各自 append 同一段内容——日志整段翻倍。
@@ -105,7 +110,7 @@ export const LogsPanel = memo(function LogsPanel() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [ws.sessionId, ws.scope])
+  }, [ws.sessionId, ws.scope, visible])
 
   // 贴底跟随：内容渲染完成后再滚（在 pull 里滚会拿到旧的 scrollHeight）。
   // 用户上翻查看历史即暂停，滚回底部自动恢复。

@@ -1,6 +1,9 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
 import { toast } from "sonner"
+
+import { useVisibleLoad } from "@/hooks/use-panel-visible"
 
 import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
 import {
@@ -45,7 +48,9 @@ function unpushedShas(overview: GitOverview | null): Set<string> {
  * 顶部固定一条「工作区改动」——它是时间线上「还没提交的那一段」，
  * 点它变更面板就回到未提交状态，与选中某条提交是同一种操作。
  */
-export const HistoryPanel = memo(function HistoryPanel() {
+export const HistoryPanel = memo(function HistoryPanel(
+  props: IDockviewPanelProps
+) {
   const { t, i18n } = useTranslation()
   const ws = useWorkspace()
   const selection = useGitSelection()
@@ -90,10 +95,9 @@ export const HistoryPanel = memo(function HistoryPanel() {
     [ws, ref]
   )
 
-  useEffect(() => {
-    load(0)
-    return ws.onWorkspaceRefresh(() => load(0))
-  }, [load, ws])
+  // 藏在 tab 后面时不响应刷新广播，切回来再补一次（回到第一页）。
+  const reload = useCallback(() => load(0), [load])
+  useVisibleLoad(props.api, ws.onWorkspaceRefresh, reload)
 
   /** 写操作统一走这里：跑命令 → 刷工作区 → 把 git 的原话报出来。 */
   const run = async (label: string, op: () => Promise<unknown>) => {

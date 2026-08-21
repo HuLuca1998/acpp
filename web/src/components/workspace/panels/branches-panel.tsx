@@ -1,6 +1,9 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
 import { toast } from "sonner"
+
+import { useVisibleLoad } from "@/hooks/use-panel-visible"
 
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
@@ -52,7 +55,9 @@ function mainBranchOf(names: string[]): string | null {
  * 时不会冒出「对比这两条分支」，当前分支不会出现「迁出」，脏工作区不会
  * 给你一个点了必然失败的切换。
  */
-export const BranchesPanel = memo(function BranchesPanel() {
+export const BranchesPanel = memo(function BranchesPanel(
+  props: IDockviewPanelProps
+) {
   const { t } = useTranslation()
   const ws = useWorkspace()
   const selection = useGitSelection()
@@ -82,11 +87,9 @@ export const BranchesPanel = memo(function BranchesPanel() {
       })
   }, [ws])
 
-  useEffect(() => {
-    load()
-    // agent 改完东西（turn 结束）分支可能已经不是原来那条了。
-    return ws.onWorkspaceRefresh(load)
-  }, [load, ws])
+  // agent 改完东西（turn 结束）分支可能已经不是原来那条了；藏在 tab
+  // 后面时不白拉，切回来再补。
+  useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
 
   /** 写操作走同一条路：跑命令 → 换视图 → 刷工作区 → 报结果。 */
   const run = useCallback(
