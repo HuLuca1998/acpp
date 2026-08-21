@@ -89,6 +89,7 @@ export default {
     unreachable: "后端不可达",
     updateAvailable: "有新版本",
     reload: "刷新",
+    changelog: "版本日志",
   },
   notify: zhNotify,
   language: {

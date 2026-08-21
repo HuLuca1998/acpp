@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 import {
   ChevronsUpDownIcon,
+  HistoryIcon,
   LanguagesIcon,
   PlugZapIcon,
   RefreshCwIcon,
@@ -34,7 +35,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-type Health = { status: "ok"; version: string } | { status: "down" } | null
+type Health =
+  | { status: "ok"; version: string; repo: string }
+  | { status: "down" }
+  | null
 
 /**
  * 侧栏底部的用户条目：身份 + 全部次级入口收进一个菜单（shadcn 的
@@ -63,7 +67,8 @@ export function NavUser({
     api
       .health()
       .then((res) => {
-        if (!cancelled) setHealth({ status: "ok", version: res.version })
+        if (!cancelled)
+          setHealth({ status: "ok", version: res.version, repo: res.repo })
       })
       .catch(() => {
         if (!cancelled) setHealth({ status: "down" })
@@ -140,6 +145,26 @@ export function NavUser({
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator />
+
+            {/* 版本日志：跳发布仓库的 Releases 页——仓库标识来自后端配置
+                （health 的 repo），前端不写死。与状态行同一节：都是「这个
+                app 的版本」话题。 */}
+            {health?.status === "ok" && health.repo ? (
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  render={
+                    <a
+                      href={`https://github.com/${health.repo}/releases`}
+                      target="_blank"
+                      rel="noreferrer"
+                    />
+                  }
+                >
+                  <HistoryIcon />
+                  {t("backend.changelog")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            ) : null}
 
             {/* 后端状态：有更新时是可点的刷新项，其余是纯信息行。 */}
             {updated ? (

@@ -90,6 +90,7 @@ export default {
     unreachable: "Backend unreachable",
     updateAvailable: "Update available",
     reload: "Reload",
+    changelog: "Release notes",
   },
   notify: enNotify,
   language: {

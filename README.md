@@ -157,7 +157,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/health` | 健康检查与版本 |
+| GET | `/api/health` | 健康检查与版本（`{status, version, repo}`，repo 是发布仓库标识，前端拼版本日志链接用） |
 | GET | `/api/events` | **全局 SSE 流**（与会话无关）：连上先收 `{kind:"hello", version}`，之后推 `{kind:"notify", ...}`。两个用途见下方「更新后怎么让所有人刷新」与「通知」 |
 | GET | `/api/auth/me` | 当前身份（owner / 租户 / 被停用 / 匿名）。未认证也返回 200，前端据此渲染邀请页 |
 | POST | `/api/auth/redeem` | 用邀请链接里的 token 换 HttpOnly cookie（`{token}`） |

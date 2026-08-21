@@ -51,10 +51,13 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api := http.NewServeMux()
 
 	// 版本号在 config.Version（构建期 ldflags 注入），随 health 返回供前端确认。
+	// repo 是发布仓库（owner/repo）：前端用它拼版本日志链接，单一事实源在
+	// 配置（ACP_UPDATE_REPO / 构建期注入），不在前端写死。
 	api.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeData(w, http.StatusOK, map[string]string{
 			"status":  "ok",
 			"version": config.Version,
+			"repo":    cfg.UpdateRepo,
 		})
 	})
 
