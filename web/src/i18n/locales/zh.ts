@@ -42,8 +42,6 @@ export default {
     toggleSidebar: "收起 / 展开侧边栏",
     recentSessions: "最近会话",
     viewAll: "查看全部",
-    resume: "继续",
-    export: "导出",
   },
   overview: {
     chartTitle: "活动趋势",
