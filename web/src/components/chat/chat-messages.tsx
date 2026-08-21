@@ -45,9 +45,17 @@ export function EarlierSentinel({ onVisible }: { onVisible: () => void }) {
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) onVisible()
-    })
+    // 提前一屏预取：快速上滚时内容多半已就位，不在顶部干等。root 必须
+    // 指到消息滚动容器，rootMargin 才相对它计算。
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) onVisible()
+      },
+      {
+        root: el.closest('[data-slot="message-scroller-viewport"]'),
+        rootMargin: "800px 0px 0px 0px",
+      }
+    )
     observer.observe(el)
     return () => observer.disconnect()
   }, [onVisible])

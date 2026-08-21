@@ -239,6 +239,18 @@ export function useChat(sessionId: number) {
     }
   }, [sessionId])
 
+  // 最早一条消息 id 的镜像，给 loadEarlier 当游标。不能用
+  // setState(updater) 顺手读：React 只在队列为空时才急切执行 updater，
+  // 流式会话几乎总有排队更新，读出来恒是初值——哨兵转着圈却什么都
+  // 不拉，就是这么坏的。
+  const earliestId = useRef(0)
+  useEffect(() => {
+    const first = state.messages[0]
+    // 乐观/临时消息的 id 是毫秒时间戳（>1e12），拿它当游标会把整段
+    // 历史重新拉一遍接在前面；只认转录重建的小行号 id。
+    earliestId.current = first && first.id < 1e12 ? first.id : 0
+  }, [state.messages])
+
   // 「加载更早」：以当前最早一条重建消息的 id 为游标向前翻页。
   // 由滚动到顶的哨兵自动触发，ref 防重入（观察器可能连续报告可见）。
   const loadingEarlier = useRef(false)
@@ -246,11 +258,7 @@ export function useChat(sessionId: number) {
     if (loadingEarlier.current) return
     loadingEarlier.current = true
     try {
-      let before = 0
-      setState((prev) => {
-        before = prev.messages[0]?.id ?? 0
-        return prev
-      })
+      const before = earliestId.current
       if (!before) return
       const res = await api.sessions.messages(sessionId, {
         limit: MESSAGE_PAGE,
