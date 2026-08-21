@@ -310,6 +310,31 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
   }
 }
 
+/**
+ * 用旧对象引用替换内容相同的新消息。轮末刷新 / 「加载更早」拿到的重建
+ * 列表整体是新对象，直接替换会让全部消息条的 memo 一起失效——整份历史
+ * 的 markdown 重新解析一遍，就是轮结束后那一下卡顿。重建 id 是转录行号
+ * （append-only，跨请求稳定），消息一旦落成历史就不可变，id + 内容 +
+ * 时刻都相同即可安全复用旧引用。
+ */
+export function reconcileMessages(
+  prev: Message[],
+  next: Message[]
+): Message[] {
+  if (prev.length === 0) return next
+  const byId = new Map(prev.map((m) => [m.id, m]))
+  return next.map((m) => {
+    const old = byId.get(m.id)
+    return old &&
+      old.content === m.content &&
+      old.kind === m.kind &&
+      old.role === m.role &&
+      old.createdAt === m.createdAt
+      ? old
+      : m
+  })
+}
+
 /** 把排队的多条插话合并成一轮的入参：文本空行连接，附件串联去重。 */
 export function mergeInputs(inputs: SendInput[]): SendInput {
   return {

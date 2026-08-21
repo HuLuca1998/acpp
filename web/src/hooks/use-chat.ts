@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api, ApiError } from "@/lib/api"
 import {
   INITIAL_CHAT_STATE,
   mergeInputs,
+  reconcileMessages,
   reduceChatEvent,
   type ChatState,
 } from "@/lib/chat/chat-events"
@@ -211,11 +212,11 @@ export function useChat(sessionId: number) {
               (h) => h.role === "user" && h.content === m.content
             )
         )
+        // 内容没变的消息复用旧引用，memo 的消息条不因整表替换而重渲。
+        const items = reconcileMessages(prev.messages, history.items)
         return {
           ...prev,
-          messages: pending.length
-            ? [...history.items, ...pending]
-            : history.items,
+          messages: pending.length ? [...items, ...pending] : items,
           hasEarlier: history.items.length < history.total,
         }
       })
@@ -440,15 +441,30 @@ export function useChat(sessionId: number) {
     [sessionId]
   )
 
-  return {
-    ...state,
-    send,
-    enqueue,
-    removeQueued,
-    cancel,
-    applySettings,
-    resolvePermission,
-    resolveElicitation,
-    loadEarlier,
-  }
+  // 返回值引用只在状态真变时更换：宿主页面每次重渲染（比如打字的每个
+  // 按键）都会重跑这里，展开成新对象会让 memo 的 ChatStream 形同虚设。
+  return useMemo(
+    () => ({
+      ...state,
+      send,
+      enqueue,
+      removeQueued,
+      cancel,
+      applySettings,
+      resolvePermission,
+      resolveElicitation,
+      loadEarlier,
+    }),
+    [
+      state,
+      send,
+      enqueue,
+      removeQueued,
+      cancel,
+      applySettings,
+      resolvePermission,
+      resolveElicitation,
+      loadEarlier,
+    ]
+  )
 }
