@@ -31,6 +31,7 @@ import type {
   RemoteRepo,
   SendInput,
   Session,
+  SessionOutline,
   SessionSettings,
   SettingsPatch,
   Skill,
@@ -471,6 +472,11 @@ export const api = {
         `/sessions/${id}/messages${s ? `?${s}` : ""}`
       )
     },
+    /**
+     * 提问索引：会话里全部用户提问的锚点与文案，对话左侧的索引条用它跳转。
+     * 覆盖整条会话——服务端在已缓存的重建结果上遍历，与界面加载到哪儿无关。
+     */
+    outline: (id: number) => request<SessionOutline>(`/sessions/${id}/outline`),
     /** 一次工具调用的完整入出参：列表里超大字段默认截成预览，展开时取全量。 */
     toolOutput: (id: number, toolCallId: string) =>
       request<{ rawInput?: unknown; rawOutput?: unknown }>(

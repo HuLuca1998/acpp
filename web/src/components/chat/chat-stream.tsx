@@ -11,6 +11,7 @@ import {
 import { ElicitationCard } from "@/components/chat/cards/elicitation-card"
 import { FileEditCard } from "@/components/chat/file-edit-card"
 import { StreamingMarkdown } from "@/components/chat/markdown"
+import { MessageIndex } from "@/components/chat/message-index"
 import { AgentAvatar, AgentRow } from "@/components/chat/message-shell"
 import { PermissionCard } from "@/components/chat/cards/permission-card"
 import { PlanCard } from "@/components/chat/plan-card"
@@ -160,7 +161,15 @@ export const ChatStream = memo(function ChatStream({
     // autoScroll 让流式输出贴底跟随（用户上翻自动暂停、滚回底部恢复），
     // 「加载更早」prepend 时保持视口位置不跳。
     <MessageScrollerProvider defaultScrollPosition="end" autoScroll>
-      <MessageScroller>
+      {/* @container 是给索引条用的：它按**面板**宽度决定收不收，而不是
+          按视口——对话面板在工作区里可以被拖成一条窄缝。 */}
+      <MessageScroller className="@container">
+        {/* 提问索引贴在左侧空白列，不进滚动区（跟着滚就不是索引了）。 */}
+        <MessageIndex
+          sessionId={chat.session?.id ?? 0}
+          busy={chat.busy}
+          loadEarlier={chat.loadEarlier}
+        />
         <MessageScrollerViewport ref={viewportRef} preserveScrollOnPrepend>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
             {chat.hasEarlier ? (
@@ -280,10 +289,7 @@ export const ChatStream = memo(function ChatStream({
             {chat.busy && chat.touched[0] ? (
               <MessageScrollerItem scrollAnchor={false}>
                 <AgentRow>
-                  <TouchedFile
-                    loc={chat.touched[0]}
-                    cwd={chat.session?.cwd}
-                  />
+                  <TouchedFile loc={chat.touched[0]} cwd={chat.session?.cwd} />
                 </AgentRow>
               </MessageScrollerItem>
             ) : null}

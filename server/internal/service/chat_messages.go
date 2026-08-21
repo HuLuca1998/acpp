@@ -330,6 +330,9 @@ const (
 	// outlineFallbackRunes 是回落文案的截断长度：没有摘要时索引显示提问
 	// 首行的这么多字。
 	outlineFallbackRunes = 60
+	// outlineReplyRunes 是气泡里回答预览的长度：够两行，不够读完——它是
+	// 认路用的路标，不是内容本身。
+	outlineReplyRunes = 90
 	// maxDigestBatch 是一次后台补齐的条数上限。老会话第一次打开可能攒了
 	// 上百条长提问，一口气跑完要几分钟且把本机模型占满——分批跑，剩下的
 	// 下次打开接着补。
@@ -354,6 +357,10 @@ type OutlineEntry struct {
 	// Digested 说明这行文案是模型精简过的，还是提问首行的截断。界面据此
 	// 决定要不要在气泡里补一句提问原文。
 	Digested bool `json:"digested"`
+	// Reply 是这一轮 agent 回答的开头，给索引气泡当第二行——光有提问，
+	// 一列相似的刻度还是分不清哪轮是哪轮，「问了什么 + 答了什么」才定位
+	// 得到。取不到（这一轮还没回答完）就是空串。
+	Reply string `json:"reply,omitempty"`
 }
 
 // SessionOutline 是一条会话的完整提问索引。
@@ -382,7 +389,17 @@ func (s *ChatService) Outline(sessionID uint) (SessionOutline, error) {
 	seen := make(map[string]bool)
 
 	for _, m := range all {
-		if m.Role != model.RoleUser || m.Kind != model.KindText {
+		if m.Kind != model.KindText {
+			continue
+		}
+		if m.Role == model.RoleAgent {
+			// 上一条提问的回答开头：一轮里 agent 会说好几段，只要第一段。
+			if n := len(items); n > 0 && items[n-1].Reply == "" {
+				items[n-1].Reply = previewLine(m.Content, outlineReplyRunes)
+			}
+			continue
+		}
+		if m.Role != model.RoleUser {
 			continue
 		}
 		content := strings.TrimSpace(m.Content)
@@ -430,16 +447,26 @@ func isLongPrompt(content string) bool {
 // 空白后截断。取首行而不是开头 N 个字——贴了一大段日志再提问的形态里，
 // 首行往往就是那句人话。
 func outlineFallback(content string) string {
-	line := content
-	for _, l := range strings.Split(content, "\n") {
+	return previewLine(content, outlineFallbackRunes)
+}
+
+// previewLine 取一段文本的首个非空行，压掉多余空白后截断。
+// 取首行而不是开头 N 个字——贴了一大段日志再提问的形态里，首行往往就是
+// 那句人话；agent 的回答同理，第一行通常是结论。
+func previewLine(text string, maxRunes int) string {
+	line := text
+	for _, l := range strings.Split(text, "\n") {
 		if strings.TrimSpace(l) != "" {
 			line = l
 			break
 		}
 	}
 	line = strings.Join(strings.Fields(line), " ")
-	if r := []rune(line); len(r) > outlineFallbackRunes {
-		return string(r[:outlineFallbackRunes]) + "…"
+	// agent 的回答第一行常是 markdown 标题或加粗结论，符号进了气泡就是
+	// 噪音——只剥行首标记，行内的代码反引号留着（那多半是标识符本身）。
+	line = strings.TrimLeft(line, "#*->` \t")
+	if r := []rune(line); len(r) > maxRunes {
+		return string(r[:maxRunes]) + "…"
 	}
 	return line
 }

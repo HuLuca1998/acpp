@@ -321,6 +321,9 @@ export default {
     copy: "Copy",
     copied: "Copied",
     plan: "Plan",
+    outline: {
+      title: "Prompt index",
+    },
     expand: "Show more",
     collapse: "Show less",
     suggestions: {
@@ -370,9 +373,11 @@ export default {
         fast: "Same model, faster output",
       },
       inTurn: {
-        effort: "This turn is already running — takes effect from the next turn",
+        effort:
+          "This turn is already running — takes effect from the next turn",
         levelNow: "Takes effect right away, for the rest of this turn too",
-        levelNext: "This turn already started — takes effect from the next turn",
+        levelNext:
+          "This turn already started — takes effect from the next turn",
         locked: "Changeable once this turn finishes",
       },
     },
@@ -544,7 +549,8 @@ export default {
       deniedTitle: "Notifications are denied",
       deniedDesc:
         "macOS only ever shows the permission prompt once. After a refusal the app can no longer bring it back — it has to be turned on in System Settings.",
-      notInApps: "App is outside /Applications, so notifications cannot be authorized",
+      notInApps:
+        "App is outside /Applications, so notifications cannot be authorized",
       notInAppsDesc:
         "Anywhere else the request fails outright and no system prompt appears at all. Move ACPP into Applications and reopen it. Current location: ",
     },

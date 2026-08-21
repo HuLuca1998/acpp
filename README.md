@@ -195,7 +195,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早）。**正文优先**：工具调用的超大入出参截成预览下发（`rawInputTruncated` / `rawOutputTruncated` 标记），完整版展开时按需拉 |
-| GET | `/api/sessions/{id}/outline` | 提问索引：会话里全部用户提问的锚点与文案（`{items:[{messageId, text, createdAt, digested}], pending}`），供对话左侧的索引条跳转。不分页——服务端在已缓存的重建结果上遍历，覆盖整条会话而与界面加载到哪儿无关 |
+| GET | `/api/sessions/{id}/outline` | 提问索引：会话里全部用户提问的锚点与文案（`{items:[{messageId, text, createdAt, digested, reply}], pending}`，`reply` 是这一轮回答的开头，给索引气泡当第二行），供对话左侧的索引条跳转。不分页——服务端在已缓存的重建结果上遍历，覆盖整条会话而与界面加载到哪儿无关 |
 | GET | `/api/sessions/{id}/tool-calls/{toolCallId}/output` | 一次工具调用的完整入出参（`{rawInput, rawOutput}`），工具卡展开那一刻按需取 |
 | GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；全量展示，仅过滤固定黑名单 .git/node_modules/.DS_Store，路径限制在会话 cwd 内） |
 | GET | `/api/sessions/{id}/fs/file` | 工作区文件预览（`?path=`；1MB 截断、二进制检测，同上 path guard） |
@@ -274,7 +274,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 | 面板 | 管什么 |
 | --- | --- |
-| 对话 | 不可关闭，永远在 |
+| 对话 | 不可关闭，永远在。左侧空白列是**提问索引**：一格一条用户提问，静息只露当前读到的那一段（9 格），鼠标移过去展开整条会话，指着谁谁伸长（Dock 式放大镜），气泡给「问了什么 + 答了什么」，点了跳过去——落点还没加载就自动把「加载更早」泵到那一条为止。面板窄到正文要占满时整条收起 |
 | 文件树 | 工作目录的目录树，右键加 @ 引用 |
 | 查看器 | 文件内容 / 改动两种形态——「现在什么样」与「改了什么」是同一个阅读动作的两面 |
 | 分支 | 本地/远端/标签；点选驱动其他 git 面板，⌘ 点第二条进对比模式 |

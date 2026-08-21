@@ -304,6 +304,9 @@ export default {
     copy: "复制",
     copied: "已复制",
     plan: "任务计划",
+    outline: {
+      title: "提问索引",
+    },
     expand: "展开",
     collapse: "收起",
     suggestions: {
@@ -506,7 +509,8 @@ export default {
   settingsPage: {
     notifications: {
       title: "系统通知",
-      description: "agent 停下来等你决策、答完一轮或出错时，发一条 macOS 通知。",
+      description:
+        "agent 停下来等你决策、答完一轮或出错时，发一条 macOS 通知。",
       authorized: "已授权",
       provisional: "临时授权",
       denied: "已拒绝",

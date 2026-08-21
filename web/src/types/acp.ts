@@ -528,6 +528,29 @@ export interface Message {
   createdAt: string
 }
 
+/**
+ * 对话索引的一格：一条用户提问的锚点与文案。
+ *
+ * `messageId` 与消息列表里的 id 同源，界面用它滚到对应消息；`text` 是
+ * 提问首行的截断，或本机小模型对长提问的一句话精简（见 `digested`）。
+ */
+export interface OutlineEntry {
+  messageId: number
+  text: string
+  createdAt: string
+  /** 文案是模型精简过的（false 表示是提问首行的截断）。 */
+  digested: boolean
+  /** 这一轮 agent 回答的开头，给索引气泡当第二行；没答完就没有。 */
+  reply?: string
+}
+
+/** 一条会话的完整提问索引。不分页——它抽的就是「整条会话有哪些提问」。 */
+export interface SessionOutline {
+  items: OutlineEntry[]
+  /** 还在后台等模型精简的条数，非零说明过一会儿文案还会更好。 */
+  pending: number
+}
+
 export interface Paged<T> {
   items: T[]
   total: number
