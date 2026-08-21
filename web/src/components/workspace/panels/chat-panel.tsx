@@ -270,7 +270,8 @@ export const ChatPanel = memo(function ChatPanel() {
         ) : (
           <SettingsSelectors
             settings={chat.settings}
-            disabled={chat.busy}
+            disabled={false}
+            busy={chat.busy}
             onApply={chat.applySettings}
           />
         )}

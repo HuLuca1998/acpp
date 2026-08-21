@@ -348,6 +348,12 @@ export default {
         plan: "先出方案等你点头，才开始改",
         fast: "同一个模型，出字更快",
       },
+      inTurn: {
+        effort: "这一轮已经在跑，改动从下一轮生效",
+        levelNow: "改动立刻生效，这一轮剩下的操作照新档走",
+        levelNext: "这一轮已经开始，改动从下一轮生效",
+        locked: "这一轮跑完才能改",
+      },
     },
     status: {
       context: "上下文 {{used}} / {{size}} · {{percent}}%",

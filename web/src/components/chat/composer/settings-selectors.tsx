@@ -31,14 +31,35 @@ import {
 export function SettingsSelectors({
   settings,
   disabled,
+  busy = false,
   onApply,
 }: {
   settings: SessionSettings | null
+  /** 控件整体不可用（草稿态正在创建会话）。 */
   disabled: boolean
+  /** 一轮正在跑：只有权限档与思考深度还能改，见下面的锁定策略。 */
+  busy?: boolean
   onApply: (patch: SettingsPatch) => Promise<void>
 }) {
   const { t } = useTranslation()
   if (!settings) return null
+
+  // 轮进行中锁住模型 / 计划 / 快速：换模型是换一整条上下文的事，plan 与
+  // fast 改了当前轮也不认——留着能点只会让人以为这一轮变了。权限档与
+  // 思考深度反过来：前者是「agent 正在乱来，立刻管住它」的唯一手段，
+  // 后者是给下一轮预约，两个都得在轮里够得着。
+  const lockedInTurn = disabled || busy
+  // 生效时机两端不同，照实说：claude 每次工具调用现读权限档，切了这一轮
+  // 剩下的操作立刻照新档走；codex 的档位是轮开始时的快照，本轮不认
+  // （2026-08 实测）。认不出的 runtime 按保守的「下一轮」说——说小了不会
+  // 骗人，说大了会。
+  const levelNote = busy
+    ? settings.flavor === "claude"
+      ? t("chat.settings.inTurn.levelNow")
+      : t("chat.settings.inTurn.levelNext")
+    : undefined
+  const effortNote = busy ? t("chat.settings.inTurn.effort") : undefined
+  const lockedNote = busy ? t("chat.settings.inTurn.locked") : undefined
 
   return (
     <>
@@ -54,7 +75,8 @@ export function SettingsSelectors({
             value: m.id,
             name: m.name,
           }))}
-          disabled={disabled}
+          disabled={lockedInTurn}
+          note={lockedNote}
           onChange={(v) => void onApply({ model: v })}
         />
       ) : null}
@@ -71,6 +93,7 @@ export function SettingsSelectors({
             name: t(`chat.settings.effort.${e}`),
           }))}
           disabled={disabled}
+          note={effortNote}
           onChange={(v) => void onApply({ effort: v as EffortLevel })}
         />
       ) : null}
@@ -88,6 +111,7 @@ export function SettingsSelectors({
             description: t(`chat.settings.levelDesc.${l}`),
           }))}
           disabled={disabled}
+          note={levelNote}
           onChange={(v) => void onApply({ level: v as AccessLevel })}
         />
       ) : null}
@@ -98,7 +122,8 @@ export function SettingsSelectors({
           label={t("chat.settings.plan")}
           desc={t("chat.settings.hints.plan")}
           on={settings.planOn}
-          disabled={disabled}
+          disabled={lockedInTurn}
+          note={lockedNote}
           onToggle={(on) => void onApply({ plan: on })}
         />
       ) : null}
@@ -109,10 +134,22 @@ export function SettingsSelectors({
           label={t("chat.settings.fast")}
           desc={t("chat.settings.hints.fast")}
           on={settings.fastOn}
-          disabled={disabled}
+          disabled={lockedInTurn}
+          note={lockedNote}
           onToggle={(on) => void onApply({ fast: on })}
         />
       ) : null}
+    </>
+  )
+}
+
+/** 说明气泡的第二段：基础说明，加一行轮进行中的生效时机（有才显示）。 */
+function HintDesc({ desc, note }: { desc: string; note?: string }) {
+  if (!note) return <>{desc}</>
+  return (
+    <>
+      {desc}
+      <span className="mt-1 block text-foreground">{note}</span>
     </>
   )
 }
@@ -122,6 +159,7 @@ function SettingToggle({
   icon,
   label,
   desc,
+  note,
   on,
   disabled,
   onToggle,
@@ -130,12 +168,14 @@ function SettingToggle({
   label: string
   /** 悬停说明：开关名本身说不清它到底改了什么。 */
   desc: string
+  /** 轮进行中的补充说明（生效时机 / 为什么点不动）。 */
+  note?: string
   on: boolean
   disabled: boolean
   onToggle: (on: boolean) => void
 }) {
   return (
-    <Hint label={label} desc={desc}>
+    <Hint label={label} desc={<HintDesc desc={desc} note={note} />}>
       <button
         type="button"
         aria-pressed={on}
@@ -159,6 +199,7 @@ function CapSelect({
   icon,
   label,
   desc,
+  note,
   value,
   placeholder,
   options,
@@ -170,6 +211,8 @@ function CapSelect({
    *  不说它是哪个维度的——那句话由悬停说明补。 */
   label: string
   desc: string
+  /** 轮进行中的补充说明（生效时机 / 为什么点不动）。 */
+  note?: string
   value: string
   /** 当前值不在选项里（如 runtime 默认态）时显示的占位文案。 */
   placeholder?: string
@@ -186,7 +229,7 @@ function CapSelect({
         if (typeof v === "string" && v && v !== value) onChange(v)
       }}
     >
-      <Hint label={label} desc={desc}>
+      <Hint label={label} desc={<HintDesc desc={desc} note={note} />}>
         <SelectTrigger
           size="sm"
           aria-label={label}

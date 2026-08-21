@@ -365,6 +365,12 @@ export default {
         plan: "Propose a plan first, act only after you approve",
         fast: "Same model, faster output",
       },
+      inTurn: {
+        effort: "This turn is already running — takes effect from the next turn",
+        levelNow: "Takes effect right away, for the rest of this turn too",
+        levelNext: "This turn already started — takes effect from the next turn",
+        locked: "Changeable once this turn finishes",
+      },
     },
     status: {
       context: "Context {{used}} / {{size}} · {{percent}}%",
