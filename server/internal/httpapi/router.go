@@ -225,6 +225,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}", sessions.get)
 	api.HandleFunc("DELETE /api/sessions/{id}", sessions.remove)
 	api.HandleFunc("GET /api/sessions/{id}/messages", sessions.listMessages)
+	api.HandleFunc("GET /api/sessions/{id}/outline", sessions.outline)
 	api.HandleFunc("GET /api/sessions/{id}/tool-calls/{toolCallId}/output", sessions.toolOutput)
 	api.HandleFunc("GET /api/sessions/{id}/transcript", sessions.transcript)
 

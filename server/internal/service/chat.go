@@ -57,6 +57,11 @@ type ChatService struct {
 	// 重建可能耗几百毫秒，不该拿着 broker 那把锁干这个。
 	rebuildMu sync.Mutex
 	rebuilds  map[uint]*rebuildCacheEntry
+
+	// digesting 标记哪些会话正在后台补提问摘要（见 outline.go）。索引会被
+	// 反复请求，没有它每次请求都会起一批算同样东西的任务。
+	digestMu  sync.Mutex
+	digesting map[uint]bool
 }
 
 // UsageSnapshot 是一条会话最近的上下文水位与费用。
@@ -97,6 +102,8 @@ func (s *ChatService) SetDataSources(d DataSources) { s.sources = d }
 type Titler interface {
 	Enabled() bool
 	Generate(ctx context.Context, user, assistant string) (string, error)
+	// Summarize 把一段长提问压成对话索引用的一句话（见 outline.go）。
+	Summarize(ctx context.Context, prompt string) (string, error)
 }
 
 // SetTitler 装上标题生成能力。装配期调用一次，之后只读。
@@ -116,6 +123,7 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 		tails:       make(map[uint]string),
 		usage:       make(map[uint]*UsageSnapshot),
 		rebuilds:    make(map[uint]*rebuildCacheEntry),
+		digesting:   make(map[uint]bool),
 	}
 }
 

@@ -41,6 +41,16 @@ type Session struct {
 	// 答案，不该只在轮内可见——所以按 LastSettings 同款存快照，未连接的
 	// 会话也能显示最近的数字。轮末写一次，不跟着每条通知抖。
 	LastUsage JSONMap `gorm:"type:text" json:"lastUsage,omitempty"`
+	// PromptDigests 是长提问的一句话摘要缓存，键为提问正文的内容指纹
+	// （见 service.PromptFingerprint），值是外部小模型生成的索引文案。
+	//
+	// 键刻意不用消息 id：消息是从转录重建出来的，id 是行号，重建逻辑一变
+	// 就会整体漂移，摘要跟着错位到别的提问上——那比没有摘要更糟。内容指纹
+	// 只要提问原文没变就永远命中，天然幂等。
+	//
+	// 不出 API：索引条要的是已经拼好的条目（service.Outline），不是这份
+	// 中间缓存。
+	PromptDigests JSONMap `gorm:"type:text" json:"-"`
 	// MCPToken 是本会话专属 MCP 端点的路径令牌（/api/mcp/db/{token}）：
 	// agent 子进程带着它回连拿数据库工具。懒生成——只有真的挂载了工具面
 	// 的会话才有值。不出 API：它是凭证。

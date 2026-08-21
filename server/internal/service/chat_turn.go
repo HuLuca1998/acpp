@@ -313,6 +313,9 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 		// 标题升级借这次重建的结果，不再单独读一遍转录。异步是因为它要
 		// 等外部模型，而这一轮的收尾不该被它拖住。
 		go s.refineTitle(sessionID, br, all)
+		// 对话索引的提问摘要同理：趁热把刚发的这句长提问算出来，下次打开
+		// 会话左侧的索引直接就是精简过的文案（见 outline.go）。
+		go s.digestTurnPrompt(sessionID, all)
 	}
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", sessionID).Updates(updates).Error; err != nil {
 		slog.Error("save stop reason", "session", sessionID, "err", err)

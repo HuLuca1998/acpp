@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
 	"os"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -310,4 +313,267 @@ func (s *ChatService) BackfillMessageCounts(ctx context.Context) {
 // TranscriptPath 返回会话转录文件的路径，供原始日志下载。
 func (s *ChatService) TranscriptPath(sessionID uint) string {
 	return s.transcripts.Path(sessionKey(sessionID))
+}
+
+// 对话索引：把一条会话里的用户提问抽成可跳转的锚点，供界面在对话左侧
+// 排成一列刻度。
+//
+// 数据不另存一份——消息本来就是从转录重建的，而重建结果已经带缓存常驻
+// 内存（见 chat_messages.go），这里只是在那份全量上过一遍。所以索引天然
+// 覆盖**整条会话**，跟界面分页加载到哪儿无关。
+
+const (
+	// digestThreshold 是「值得跑模型」的提问长度（rune）。短提问首行就是
+	// 最好的索引文案，「继续」「这个再改改」精简完还是它自己，跑一轮推理
+	// 纯属白等。
+	digestThreshold = 60
+	// outlineFallbackRunes 是回落文案的截断长度：没有摘要时索引显示提问
+	// 首行的这么多字。
+	outlineFallbackRunes = 60
+	// maxDigestBatch 是一次后台补齐的条数上限。老会话第一次打开可能攒了
+	// 上百条长提问，一口气跑完要几分钟且把本机模型占满——分批跑，剩下的
+	// 下次打开接着补。
+	maxDigestBatch = 40
+	// maxDigestEntries 是单条会话的摘要缓存条数上限，防止超长会话把这个
+	// JSON 字段撑成几百 KB。超限后不再新增，已有的照常用。
+	maxDigestEntries = 800
+	// digestFlushEvery 是补齐过程中的落库间隔（条）。全跑完才写一次的话，
+	// 中途退出就前功尽弃；每条都写又太吵。
+	digestFlushEvery = 8
+	// digestTimeout 与标题生成同理：ollama 冷启动要把模型载进内存，
+	// 十几秒是常态，而这是后台任务，等得起。
+	digestTimeout = 90 * time.Second
+)
+
+// OutlineEntry 是索引条上的一格：一条用户提问的锚点与文案。
+type OutlineEntry struct {
+	// MessageID 与消息列表里的 id 同源，界面用它滚到对应消息。
+	MessageID uint      `json:"messageId"`
+	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"createdAt"`
+	// Digested 说明这行文案是模型精简过的，还是提问首行的截断。界面据此
+	// 决定要不要在气泡里补一句提问原文。
+	Digested bool `json:"digested"`
+}
+
+// SessionOutline 是一条会话的完整提问索引。
+type SessionOutline struct {
+	Items []OutlineEntry `json:"items"`
+	// Pending 是还在后台等模型精简的长提问条数。界面看到非零就知道文案
+	// 之后还会变好，可以过一会儿再拉一次。
+	Pending int `json:"pending"`
+}
+
+// Outline 抽出会话里全部用户提问，拼成可跳转的索引。
+//
+// 长提问的摘要走缓存：命中就用，没命中先回落首行并在后台补齐——索引要
+// 立刻能用，不能为了好看的文案让界面干等外部模型。
+func (s *ChatService) Outline(sessionID uint) (SessionOutline, error) {
+	all, err := s.rebuildAll(sessionID)
+	if err != nil {
+		return SessionOutline{}, err
+	}
+
+	digests := s.loadDigests(sessionID)
+	items := make([]OutlineEntry, 0, 16)
+	// 缺摘要的长提问按原文收集，去重后交给后台——同一句话问两遍只该跑
+	// 一次模型。
+	var missing []string
+	seen := make(map[string]bool)
+
+	for _, m := range all {
+		if m.Role != model.RoleUser || m.Kind != model.KindText {
+			continue
+		}
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		entry := OutlineEntry{
+			MessageID: m.ID,
+			Text:      outlineFallback(content),
+			CreatedAt: m.CreatedAt,
+		}
+		if isLongPrompt(content) {
+			key := PromptFingerprint(content)
+			if digest := digests[key]; digest != "" {
+				entry.Text = digest
+				entry.Digested = true
+			} else if !seen[key] {
+				seen[key] = true
+				missing = append(missing, content)
+			}
+		}
+		items = append(items, entry)
+	}
+
+	if len(missing) > 0 {
+		s.startDigestFill(sessionID, missing)
+	}
+	return SessionOutline{Items: items, Pending: len(missing)}, nil
+}
+
+// PromptFingerprint 是提问正文的内容指纹，用作摘要缓存的键。
+// 取 sha256 前 8 字节：本地一条会话几百条提问，碰撞概率可以忽略，而全长
+// 摘要键会让缓存字段白白大一倍。
+func PromptFingerprint(content string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(content)))
+	return hex.EncodeToString(sum[:8])
+}
+
+// isLongPrompt 判断这条提问值不值得跑模型精简。
+func isLongPrompt(content string) bool {
+	return len([]rune(content)) > digestThreshold
+}
+
+// outlineFallback 是没有摘要时的索引文案：提问的首个非空行，压掉多余
+// 空白后截断。取首行而不是开头 N 个字——贴了一大段日志再提问的形态里，
+// 首行往往就是那句人话。
+func outlineFallback(content string) string {
+	line := content
+	for _, l := range strings.Split(content, "\n") {
+		if strings.TrimSpace(l) != "" {
+			line = l
+			break
+		}
+	}
+	line = strings.Join(strings.Fields(line), " ")
+	if r := []rune(line); len(r) > outlineFallbackRunes {
+		return string(r[:outlineFallbackRunes]) + "…"
+	}
+	return line
+}
+
+// loadDigests 读一条会话的摘要缓存。读不到就当空——索引照常出，只是全
+// 用回落文案。
+func (s *ChatService) loadDigests(sessionID uint) map[string]string {
+	if s.db == nil {
+		return nil
+	}
+	var sess model.Session
+	if err := s.db.Select("prompt_digests").First(&sess, sessionID).Error; err != nil {
+		slog.Debug("outline: 读摘要缓存失败", "session", sessionID, "err", err)
+		return nil
+	}
+	out := make(map[string]string, len(sess.PromptDigests))
+	for k, v := range sess.PromptDigests {
+		if str, ok := v.(string); ok && str != "" {
+			out[k] = str
+		}
+	}
+	return out
+}
+
+// startDigestFill 起一个后台任务补齐缺失的摘要。同一条会话同时只跑一个
+// ——索引会被反复请求（打开、切面板、轮询），每次都起一批会把本机模型
+// 排满，而它们要算的还是同一批东西。
+func (s *ChatService) startDigestFill(sessionID uint, prompts []string) {
+	if s.titler == nil || !s.titler.Enabled() {
+		return
+	}
+	s.digestMu.Lock()
+	if s.digesting[sessionID] {
+		s.digestMu.Unlock()
+		return
+	}
+	if s.digesting == nil {
+		s.digesting = make(map[uint]bool)
+	}
+	s.digesting[sessionID] = true
+	s.digestMu.Unlock()
+
+	go func() {
+		defer func() {
+			s.digestMu.Lock()
+			delete(s.digesting, sessionID)
+			s.digestMu.Unlock()
+		}()
+		s.fillDigests(sessionID, prompts)
+	}()
+}
+
+// fillDigests 串行跑模型补齐摘要并分批落库。
+//
+// 串行是刻意的：本机就一个 ollama，并发只会让每一条都变慢，而这是后台
+// 任务，快慢没人等。单条失败跳过——下次打开会话再补，界面这期间用回落
+// 文案，看不出异常。
+func (s *ChatService) fillDigests(sessionID uint, prompts []string) {
+	if len(prompts) > maxDigestBatch {
+		prompts = prompts[:maxDigestBatch]
+	}
+	got := make(map[string]string, len(prompts))
+	flush := func() {
+		if len(got) == 0 {
+			return
+		}
+		s.storeDigests(sessionID, got)
+		got = make(map[string]string, digestFlushEvery)
+	}
+
+	for _, prompt := range prompts {
+		ctx, cancel := context.WithTimeout(context.Background(), digestTimeout)
+		digest, err := s.titler.Summarize(ctx, prompt)
+		cancel()
+		if err != nil {
+			slog.Debug("outline: 摘要生成失败", "session", sessionID, "err", err)
+			continue
+		}
+		got[PromptFingerprint(prompt)] = digest
+		if len(got) >= digestFlushEvery {
+			flush()
+		}
+	}
+	flush()
+}
+
+// storeDigests 把新算出的摘要并进会话的缓存字段。
+//
+// 读-改-写而不是整体覆盖：这期间可能有别的轮刚落了自己的摘要。补齐任务
+// 每条会话同时只有一个，剩下的竞争窗口窄到可以接受——真丢了一条，下次
+// 打开会话补回来。
+func (s *ChatService) storeDigests(sessionID uint, got map[string]string) {
+	if s.db == nil {
+		return
+	}
+	merged := s.loadDigests(sessionID)
+	if merged == nil {
+		merged = make(map[string]string, len(got))
+	}
+	for k, v := range got {
+		if len(merged) >= maxDigestEntries {
+			break
+		}
+		merged[k] = v
+	}
+	payload := make(model.JSONMap, len(merged))
+	for k, v := range merged {
+		payload[k] = v
+	}
+	if err := s.db.Model(&model.Session{}).Where("id = ?", sessionID).
+		Update("prompt_digests", payload).Error; err != nil {
+		slog.Warn("outline: 摘要落库失败", "session", sessionID, "err", err)
+	}
+}
+
+// digestTurnPrompt 在轮末给这一轮的用户提问补摘要——新提问下次打开会话
+// 就已经是精简过的，不必等界面请求索引时再现算。短提问与已有缓存直接跳过。
+func (s *ChatService) digestTurnPrompt(sessionID uint, all []model.Message) {
+	if s.titler == nil || !s.titler.Enabled() {
+		return
+	}
+	// 末条用户提问就是刚发的那一句。
+	content := ""
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].Role == model.RoleUser && all[i].Kind == model.KindText {
+			content = strings.TrimSpace(all[i].Content)
+			break
+		}
+	}
+	if content == "" || !isLongPrompt(content) {
+		return
+	}
+	if s.loadDigests(sessionID)[PromptFingerprint(content)] != "" {
+		return
+	}
+	s.startDigestFill(sessionID, []string{content})
 }

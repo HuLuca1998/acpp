@@ -151,6 +151,35 @@ func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// outline 返回会话的提问索引：全部用户提问的锚点与文案，供界面在对话
+// 左侧排成一列可跳转的刻度。
+//
+// 不分页也没有游标——它抽的是「整条会话有哪些提问」，本来就该一次看全，
+// 而且服务端是在已缓存的重建结果上遍历，成本与消息列表的一页相当。
+func (h sessionHandler) outline(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	outline, err := h.chat.Outline(id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if outline.Items == nil {
+		// 没有提问是合法状态（会话刚建）：契约是数组，不能序列化成 null。
+		outline.Items = []service.OutlineEntry{}
+	}
+	writeData(w, http.StatusOK, outline)
+}
+
 // toolOutput 返回一次工具调用的完整入出参——列表里超大字段默认截成
 // 预览（rawInputTruncated / rawOutputTruncated 标记），展开工具卡时走这里。
 func (h sessionHandler) toolOutput(w http.ResponseWriter, r *http.Request) {

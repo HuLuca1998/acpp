@@ -195,6 +195,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
 | GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早）。**正文优先**：工具调用的超大入出参截成预览下发（`rawInputTruncated` / `rawOutputTruncated` 标记），完整版展开时按需拉 |
+| GET | `/api/sessions/{id}/outline` | 提问索引：会话里全部用户提问的锚点与文案（`{items:[{messageId, text, createdAt, digested}], pending}`），供对话左侧的索引条跳转。不分页——服务端在已缓存的重建结果上遍历，覆盖整条会话而与界面加载到哪儿无关 |
 | GET | `/api/sessions/{id}/tool-calls/{toolCallId}/output` | 一次工具调用的完整入出参（`{rawInput, rawOutput}`），工具卡展开那一刻按需取 |
 | GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；全量展示，仅过滤固定黑名单 .git/node_modules/.DS_Store，路径限制在会话 cwd 内） |
 | GET | `/api/sessions/{id}/fs/file` | 工作区文件预览（`?path=`；1MB 截断、二进制检测，同上 path guard） |
@@ -260,7 +261,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 ## 数据模型
 
 - **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。产品形态上固定为内置的 claude / codex 两条记录（启动时缺失自动预置、按 name 判存不覆盖用户配置，见 adr-005），API 仍是通用的 `/api/agents`。`flavor` / `models` / `commands` / `skeleton` 是注册/更新后自动探测的缓存（拉临时会话读能力）：模型与命令供草稿态展示与 `/` 补全（条目带 `disabled` 标记，重探不清空取舍）；`skeleton` 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），与模型清单一起构成未连接会话的完整降级设置视图。模型条目支持 `alias`（配置页起显示别名，所有模型下拉优先显示）；`fastPolicy` 是快速模式取舍（首探按 flavor 落默认：claude 因额外计费默认 off，其余 on；off 时快速开关不出现在任何界面）。
-- **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
+- **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`promptDigests` 是长提问的一句话摘要缓存（对话索引用，键是提问正文的内容指纹而不是消息 id——消息 id 是转录行号，重建逻辑一变就整体漂移），不出 API。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
 - **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
 - **Project / Clone** — 都不入库：项目就是工作区根下的 git 仓库目录（扫盘得来，名字是相对根的路径），克隆任务只存在于内存（进程重启时 git 子进程也一起没了，留个「进行中」的假记录只会骗人）。
@@ -366,7 +367,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 | `ACP_DATA_DIR` | `~/.acpp` | 数据根目录（db 与转录都派生于它）。优先级：本变量 > `~/.acpp/config.json` 里设置面板选定的目录 > 默认。首次启动自动创建；旧版 `server/data` 的存量数据自动迁入（拷贝，原数据保留） |
 | `ACP_DSN` | `<dataDir>/acp.db` | SQLite 文件路径（显式设置时覆盖派生值） |
 | 工作区根 | `~/acpp` | 不是环境变量：在 **设置 → 系统** 里选，存 `~/.acpp/config.json`。agent 干活的地方与访客 root 的父目录，与数据目录刻意分开 |
-| 会话标题模型 | 关闭 | 不是环境变量：在 **设置 → 系统** 里配，存 `~/.acpp/config.json`。开启后首轮结束时用本机 ollama 把标题从「首句前 15 字」换成模型概括；关闭或调用失败都退回首句派生 |
+| 会话标题模型 | 关闭 | 不是环境变量：在 **设置 → 系统** 里配，存 `~/.acpp/config.json`。开启后首轮结束时用本机 ollama 把标题从「首句前 15 字」换成模型概括；关闭或调用失败都退回首句派生。同一个模型还负责对话索引的提问摘要：只有超过 60 字的长提问才跑（短提问首行就是最好的索引文案），结果按内容指纹缓存进会话，没开或跑挂了索引就用提问首行 |
 | `ACP_CORS_ORIGINS` | `http://localhost:45173` | 允许的跨域来源，逗号分隔 |
 | `ACP_WEB_DIR` | 空 | 前端产物目录，设置后由后端托管静态文件 |
 | `ACP_MAX_SESSIONS` | `8` | 同时活着的 agent 子进程上限 |
