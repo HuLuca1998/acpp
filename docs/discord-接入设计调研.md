@@ -2,6 +2,11 @@
 
 > 状态:**调研完成,未动工**。这是设计方案与采集到的事实,不是已实现功能的描述。
 > 动工前需过一遍 [§8 待拍板](#8-待拍板) 的产品决策。入口:README「尚未实现」一节。
+>
+> 修订 2026-08-21:对齐仓库这两天的变化——**通知体系落地**([adr-013](adr-013-通知体系.md),
+> Discord 改为其第三个分派端,见 §4.5)、**编排与角色下线**([adr-012](adr-012-编排与角色下线.md),
+> 清除全部编排引用)、能力面补全([adr-011](adr-011-acp-能力面补全.md),附件门控)、
+> 权限卡不再 60 秒超时、轮中可改设置、用量快照落库等(散见各节)。
 
 ## 0. 定位
 
@@ -80,7 +85,7 @@ Discord 客户端的开发者模式(设置 → 高级)——虽然配对码方�
 - `ownerUserId`:唯一被响应的用户(见 §2.3 配对码)。
 - `testUserIds`:测试 bot 的 uid 白名单,默认空;只在测试时填,生产语义与 owner 相同但
   仅限绑定到测试项目的频道(实现里硬限制)。
-- `notifyChannelId`:全局通知频道(编排任务、系统事件);空 = 不发全局通知。
+- `notifyChannelId`:通知分派频道——通知体系(adr-013)的 Discord 出口(§4.5);空 = 不分派。
 
 ### 2.2 设置页与 API
 
@@ -132,8 +137,8 @@ Discord 服务器                       acpp
 - 绑定对象限定为**项目**(工作区根下的 git 仓库),不支持任意目录——数据源可见性、
   路径闸等安全底座都以项目为边界,Discord 不引入新的边界形状。cwd 细化到子目录 /
   worktree 放在会话级(§4.6)。
-- 论坛频道(Forum Channel)也可绑定:帖子在 API 层就是子区,代码同一套。适合编排
-  (任务=帖子+状态标签),M3 之后再说。
+- 论坛频道(Forum Channel)也能绑:帖子在 API 层就是子区,代码同一套。原本设想给
+  编排当任务看板,编排已下线(adr-012)——此形态暂无用例,仅记档备用,不排期。
 
 ### 3.2 事实源:SQLite 两张表
 
@@ -194,7 +199,7 @@ type DiscordThread struct {
 ### 4.2 包结构与依赖方向
 
 ```
-server/internal/discordbridge/     业务层,与 orch 同级
+server/internal/discordbridge/     业务层,与 datasource / system 同级
 ├── gateway.go    连接管理:token/intents、连接与重连、Ready 恢复、命令注册
 ├── bridge.go     映射表读写 + 事件泵编排(每条绑定会话一个 pump goroutine)
 ├── pump.go       事件泵:Subscribe → 聚合 → 节流渲染 → 定稿
@@ -203,7 +208,7 @@ server/internal/discordbridge/     业务层,与 orch 同级
 └── config.go     discord 配置节的读写(config.json)
 ```
 
-依赖方向 `discordbridge → {service, project, stream, model, config}`,与 orch 同构,合规。
+依赖方向 `discordbridge → {service, project, stream, model, config}`,与其他业务包同构,合规。
 装配在 `cmd/server/main.go`;httpapi 新增 system_discord.go 一个 handler 文件。
 **service / stream / acp / project 零改动**——桥是第二个前端,全部走现有导出方法:
 
@@ -212,6 +217,7 @@ server/internal/discordbridge/     业务层,与 orch 同级
 | 建会话 | `SessionService.Create(ctx, OwnerScope(), SessionInput{AgentID, Cwd, Title, Worktree})` |
 | 发消息 | `ChatService.Send(ctx, id, SendInput{Content, Images, Files})`(异步,立即返回) |
 | 订阅事件 | `ChatService.Subscribe(sessionID)`(per-session broker,多订阅者,轮内重放) |
+| 订阅通知 | `stream.Hub.Subscribe(tenantID)`(装配层的 noticeHub,0 = owner,§4.5) |
 | 裁决 | `ChatService.ResolvePermission / ResolveElicitation` |
 | 中止/设置 | `ChatService.Cancel / ApplySettings` |
 | 定稿消息 | `ChatService.Messages(sessionID, limit, before)`(转录重建) |
@@ -236,7 +242,9 @@ MessageCreate(频道根)
 → 以该消息开子区(名 = DeriveTitle(内容),≤15 字符合子区名 100 上限)
 → SessionService.Create(cwd = 项目根, agentID = 频道默认, title 同名)
 → 写 DiscordThread 映射,启动事件泵
-→ 附件里的图片下载转 base64 进 SendInput.Images(≤10MB,Discord 上限本来就低于我们 32MiB)
+→ 附件里的图片下载转 base64 进 SendInput.Images(≤10MB,Discord 上限本来就低于我们 32MiB;
+   **按 promptCapabilities 门控**,adr-011——agent 不支持图片时回明确提示,不静默吞掉,
+   与 web 输入框按能力隐藏附件入口是同一条规则)
 → ChatService.Send(懒连接语义照旧)
 ```
 
@@ -244,10 +252,37 @@ MessageCreate(频道根)
 归档子区收到消息 Discord 自动复活它,我们这侧就是普通 send(`session/load` 恢复上下文)。
 **并发满**(`ACP_MAX_SESSIONS`,第 9 条拉不起来):回「⏳ 并发已满,稍后重试」,不静默。
 
-### 4.5 出站:事件泵(核心)
+### 4.5 出站 ①:通知分派(adr-013 的第三个分派端,M1/M2 的全部)
 
-每条绑定会话一个常驻 goroutine(几百条也只是几百个空闲 goroutine,Go 不在乎;
-好处是 **web 侧发起的轮同样被镜像**,不用琢磨订阅时机):
+后端已有全局通知底座,动工时**零后端改动**:`stream.Hub` 由装配层注入 `ChatService`,
+四类值得打扰的事(permission / elicitation / turn_end / error)加两条撤回信号
+(permission_done / elicitation_done)以 `stream.Notice` 广播。浏览器经 `GET /api/events`
+消费(侧栏通知中心),macOS 壳发系统通知——**Discord 桥就是第三个分派端**:进程内
+`noticeHub.Subscribe(0)`(owner 身份),把 Notice 渲染进 `notifyChannelId`。
+
+- **分派判断**:adr-013 定的是「后端只广播,弹不弹由客户端判断」。Discord 的判断最简单——
+  它存在的意义就是「人不在机器前」,四类默认全发;要静音就关 enabled 或清 notifyChannelId,
+  不做逐类偏好(通知中心已有逐类开关,不重复一套)。
+- **决策通知天生带按钮**:Notice 载荷自带 `PermissionID` + `Options`(agent 给的选项,≤4 个)
+  ——这正是 macOS 系统通知动态按钮的数据源,同一份载荷在 Discord 渲染成按钮行绰绰有余
+  (5 个/行上限)。M1 可先发不可点的卡,M2 接上 interaction 回传后同一张卡升级为可点。
+- **撤回收口**:permission_done / elicitation_done 到达时把对应通知消息编辑为终态
+  (「已在别处处理 ✓」)——与通知中心、系统通知的撤回行为一致,不会有哪端挂着已死的请求。
+  桥按 `PermissionID` / `ElicitationID` 记消息 id,内存态、重启即弃,与 Hub 不重放的语义一致。
+- **elicitation 对齐壳的取舍**:结构化多题(选择 + 自由输入混合)塞不进一条通知,壳的做法是
+  不带按钮、点开会话回答。Discord 同策:通知卡带跳转链接;仅纯单选题上按钮,modal 承载
+  多题留到 M3 后按实际形状评估,不提前承诺。
+- **与 M3 泵的去重**:绑定了子区的会话,裁决卡由泵发在子区里(上下文就在旁边),Hub 这条
+  不再往通知频道重复发;未绑定会话才走通知频道。判定一条:查 DiscordThread 映射。
+
+Hub 不重放、慢订阅丢弃(缓冲 16)——错过的打扰没有补发价值,悬着的事以会话侧卡片
+(转录重建)为事实源,这与桥的定稿路径(§4.5B)是同一个哲学。
+
+### 4.5B 出站 ②:事件泵(M3 对话镜像的核心)
+
+M1/M2 用不到本节——只有绑定子区的会话才需要逐 chunk 镜像。每条绑定会话一个常驻
+goroutine(几百条也只是几百个空闲 goroutine,Go 不在乎;好处是 **web 侧发起的轮同样
+被镜像**,不用琢磨订阅时机):
 
 ```
 ch, cancel := chat.Subscribe(sessionID)
@@ -276,6 +311,10 @@ for ev := range ch:
 按重建结果分段(≤2000 字/条,断点优先落在代码块边界)重发。这与 web 前端
 「流式拼接 → 重建取代」是同一模式,**broker 丢事件的容错也因此同构**——慢订阅丢了
 chunk 不要紧,定稿以重建为准。超长内容(diff、长代码)转附件(`.md`/`.patch`)。
+重建器如今除正文/思考/工具调用外还产出 **plan 快照**(折叠一行进度)、
+**权限裁决记录**(kind=permission_request,谁请求 + 用户选了什么)与挂在末段正文上的
+**本轮 token 计量**(payload.turnUsage)——定稿因此可以带裁决记录行与 token footer,
+数据全部现成,桥只做渲染。
 
 ### 4.6 斜杠命令清单
 
@@ -287,8 +326,8 @@ chunk 不要紧,定稿以重建为准。超长内容(diff、长代码)转附件(
 | `/sessions` | — | 本频道(项目)会话列表,每条带子区跳转链接;未绑定频道列全部 |
 | `/watch` | `session`(autocomplete=近期会话) | 给已有 web 会话开子区并绑定(web 会话默认不自动开子区,防刷屏) |
 | `/cancel` | — | 子区内:中止当前轮 |
-| `/settings` | `model?` `effort?` `level?` `plan?` `fast?` | 子区内:ApplySettings;无参时显示当前值 |
-| `/status` | — | 子区内:会话状态(running/stopReason/token 用量);频道根:项目概况 |
+| `/settings` | `model?` `effort?` `level?` `plan?` `fast?` | 子区内:ApplySettings;无参时显示当前值。**轮进行中也可改**(权限档与思考深度已支持轮中热切),回收重开后设置会被回放,不丢 |
+| `/status` | — | 子区内:会话状态(running / stopReason / 上下文占比——用量快照已落库,**未连接的会话也有数**;claude 另有累计费用);频道根:项目概况 |
 | `/db` | `env?` `database?` | 数据源速查(同 web 的本地 `/db`,ForCwd 过滤天然生效) |
 | `/git` | `sub: status\|log\|diff` | 只读 git 摘要(embed);diff 超长转附件 |
 | `/cat` | `path`(autocomplete) | 文件预览(code block / 附件) |
@@ -301,7 +340,9 @@ agent 自己认(与 web 输入框行为一致,Discord 只是少了补全)。
 - 按钮 `custom_id` 方案:`p:<sessionID>:<permissionID>:<optionID>`(≤100 字符;ACP 的 id
   都是短 uuid,放得下;放不下再降级为泵内存里的序号表——挂起裁决本来就活不过进程重启)。
 - 收到按钮 interaction:三道闸 → `ResolvePermission` → ack + 编辑原消息为终态。
-  迟到的点击(已裁决/已超时)回 ephemeral「已处理过了」。
+  迟到的点击(已裁决/已失效)回 ephemeral「已处理过了」。
+- **远程慢批的前提已在主干落地**:权限卡不再 60 秒自动取消,agent 无限期挂起等裁决,
+  且 turn 进行中(含等待裁决)不会被空闲回收——人在外面隔一小时再批也成立。
 - modal 提交 → `ResolveElicitation(id, "accept", {text: …})`。
 
 ### 4.8 回环与镜像
@@ -319,6 +360,8 @@ agent 自己认(与 web 输入框行为一致,Discord 只是少了补全)。
   会话还在跑或结束,定稿路径(`Messages()`)补全一切。断线超过一轮的极端情况,
   子区里缺一轮镜像——`/status` 可查,不做补发(复杂度不值)。
 - **acpp 正常、Discord 全站故障**:泵的 REST 调用失败只记日志,会话主链路零影响。
+- **agent 未登录**:握手失败如今返回明确的登录引导(替代模糊报错)——桥原样转发到
+  子区/通知频道;登录动作只能回本机完成,Discord 里给指引即可,不装作能代办。
 
 ### 4.10 安全清单
 
@@ -334,12 +377,13 @@ agent 自己认(与 web 输入框行为一致,Discord 只是少了补全)。
 
 | 阶段 | 范围 | 交付判断 |
 | --- | --- | --- |
-| M1 通知 | config + 设置页 + 只发不收:turn_done/error/permission 挂起推 `notifyChannelId`(webhook 或 bot REST 均可) | 手机收到「agent 在等你批准」 |
-| M2 遥控 | Gateway + `/claim`、三道闸、权限/elicitation 按钮裁决、`/sessions` `/cancel` `/status` | 手机上把卡住的轮批完 |
-| M3 对话 | `/bind` 映射、频道根开会话、子区续聊、事件泵全量、定稿分段、`/new` `/watch` `/settings` | 子区里跑完一个完整任务 |
-| M4 查询 | `/db` `/git` `/cat`、附件、论坛频道(编排) | 按需 |
+| M1 通知 | config + 设置页 + 通知分派(§4.5):`noticeHub.Subscribe(0)` → 四类通知卡推 `notifyChannelId`,撤回信号编辑收口;决策卡先不可点 | 手机收到「agent 在等你批准」,web 处理后 Discord 卡片同步收口 |
+| M2 遥控 | Gateway 交互面 + `/claim`、三道闸、决策卡升级为按钮裁决、`/sessions` `/cancel` `/status` | 手机上把卡住的轮批完 |
+| M3 对话 | `/bind` 映射、频道根开会话、子区续聊、事件泵(§4.5B)全量、定稿分段、`/new` `/watch` `/settings` | 子区里跑完一个完整任务 |
+| M4 查询 | `/db` `/git` `/cat`、附件 | 按需 |
 
-M1 的事件订阅层就是 M3 泵的地基,没有丢弃式工作。每阶段独立可交付、独立提交。
+M1 踩通知体系的 Hub,M3 踩会话流的 Broker——两个现成底座,互不重叠,都不是丢弃式
+工作。每阶段独立可交付、独立提交。
 
 ## 5. 自主测试与观察
 
@@ -363,7 +407,8 @@ M1 的事件订阅层就是 M3 泵的地基,没有丢弃式工作。每阶段独
 - **L1 Go 测试(无网络,大头)**:渲染纯函数(分段断点、活动卡合并、custom_id 编解码、
   spoiler/附件降级)、映射表迁移、防回环 pending 集合、泵状态机(把 disgo 的收发抽成
   接口,喂录制的 `stream.Event` 序列断言出站调用序列)。interaction 的 handler 逻辑
-  (裁决落点)同样可测——它只是「解参 → 调 service」。
+  (裁决落点)同样可测——它只是「解参 → 调 service」。通知分派同理:测试里直接向
+  `stream.Hub` Publish 一条 Notice,断言桥的出站渲染与撤回编辑。
 - **L2 双 bot 冒烟(真实 Discord,自动)**:同一服务器下 `#acpp-test` 频道绑一个一次性
   测试项目;测试 bot 发消息驱动,轮询 REST 读回断言。覆盖:开会话、流式出现且定稿、
   插话、归档复活、并发满提示、非白名单消息被无视。跑在本机(需要两个 token 的 env),
