@@ -252,18 +252,24 @@ export function useChat(sessionId: number) {
   }, [state.messages])
 
   // 「加载更早」：以当前最早一条重建消息的 id 为游标向前翻页。
-  // 由滚动到顶的哨兵自动触发，ref 防重入（观察器可能连续报告可见）。
+  // 由滚动到顶的哨兵自动触发，ref 防重入（哨兵的泵取循环可能连续调用）。
+  // 返回这一轮有没有拿到新消息——哨兵靠它决定继续泵还是停下，
+  // 失败/没有更早的都返回 false，别让泵取循环空转打请求。
   const loadingEarlier = useRef(false)
-  const loadEarlier = useCallback(async () => {
-    if (loadingEarlier.current) return
+  const loadEarlier = useCallback(async (): Promise<boolean> => {
+    if (loadingEarlier.current) return false
     loadingEarlier.current = true
     try {
       const before = earliestId.current
-      if (!before) return
+      if (!before) return false
       const res = await api.sessions.messages(sessionId, {
         limit: MESSAGE_PAGE,
         before,
       })
+      // 游标当场推进，不等 effect：哨兵的泵取循环隔一帧就来下一轮，
+      // useEffect 的调度赶不上它，游标不动就会重复拉同一页。
+      const first = res.items[0]
+      if (first && first.id < 1e12) earliestId.current = first.id
       setState((prev) => {
         const merged = [...res.items, ...prev.messages]
         return {
@@ -272,8 +278,10 @@ export function useChat(sessionId: number) {
           hasEarlier: res.items.length > 0 && merged.length < res.total,
         }
       })
+      return res.items.length > 0
     } catch (err) {
       setState((prev) => ({ ...prev, error: (err as Error).message }))
+      return false
     } finally {
       loadingEarlier.current = false
     }

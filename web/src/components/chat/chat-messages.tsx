@@ -35,29 +35,78 @@ import {
   WrenchIcon,
 } from "lucide-react"
 
+/** 顶部哨兵的预取提前量：距视口这么近就开始拉，快速上滚不用在顶部干等。 */
+const PREFETCH_PX = 800
+
 /**
- * 顶部哨兵：滚进视野即自动加载更早的消息——无按钮无等待感，
+ * 顶部哨兵：滚近视野即自动加载更早的消息——无按钮无等待感，
  * prepend 时视口位置由 preserveScrollOnPrepend 保持不跳。
+ *
+ * IntersectionObserver 只在交叉状态**翻转**时回调：prepend 进来的多是
+ * 折叠的工具块，新增高度常常不足以把哨兵推出预取区，交叉状态不翻转
+ * 就再也等不到下一次回调——加载就此死掉，转圈却不动。所以 observer
+ * 只负责唤醒，醒着的泵取循环自己用几何位置判断要不要继续，直到哨兵
+ * 离开预取区、没有更早的（组件随 hasEarlier=false 卸载）或一轮没有
+ * 进展（请求失败，等用户再滚动重新唤醒）。
  */
-export function EarlierSentinel({ onVisible }: { onVisible: () => void }) {
+export function EarlierSentinel({
+  onVisible,
+}: {
+  /** 拉一页更早的消息；返回这一轮有没有拿到新内容。 */
+  onVisible: () => Promise<boolean>
+}) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    // 提前一屏预取：快速上滚时内容多半已就位，不在顶部干等。root 必须
-    // 指到消息滚动容器，rootMargin 才相对它计算。
+    const root = el.closest('[data-slot="message-scroller-viewport"]')
+    let disposed = false
+    let pumping = false
+
+    const inRange = () => {
+      if (disposed || !el.isConnected) return false
+      const rect = el.getBoundingClientRect()
+      const bounds = root?.getBoundingClientRect()
+      const top = bounds ? bounds.top : 0
+      const bottom = bounds ? bounds.bottom : window.innerHeight
+      return rect.bottom >= top - PREFETCH_PX && rect.top <= bottom
+    }
+
+    const pump = async () => {
+      if (pumping) return
+      pumping = true
+      try {
+        while (inRange()) {
+          const progressed = await onVisible()
+          if (!progressed) break
+          // 等一帧让 prepend 落地、滚动锚定完成，再量下一轮的位置。
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve())
+          )
+        }
+      } finally {
+        pumping = false
+      }
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) onVisible()
+        if (entries.some((e) => e.isIntersecting)) void pump()
       },
-      {
-        root: el.closest('[data-slot="message-scroller-viewport"]'),
-        rootMargin: "800px 0px 0px 0px",
-      }
+      { root, rootMargin: `${PREFETCH_PX}px 0px 0px 0px` }
     )
-    observer.observe(el)
-    return () => observer.disconnect()
+    // 延迟启动：打开会话的落底动作要跟 content-visibility 的高度收敛
+    // 纠缠几帧（见 ChatStream 的落底稳定器），这期间哨兵会短暂路过
+    // 预取区——立刻开拉只会跟落底互相拉扯。落稳之后再开始观察。
+    const startTimer = setTimeout(() => {
+      if (!disposed) observer.observe(el)
+    }, 600)
+    return () => {
+      disposed = true
+      clearTimeout(startTimer)
+      observer.disconnect()
+    }
   }, [onVisible])
 
   return (

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react"
+import { memo, useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -36,7 +36,8 @@ import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
  * 绑死 useChat 的返回值——任何返回结构兼容形状的流状态机都能渲染。
  */
 export interface ChatStreamSource extends ChatState {
-  loadEarlier: () => Promise<void> | void
+  /** 拉一页更早的消息；返回有没有拿到新内容（哨兵的泵取循环靠它停下）。 */
+  loadEarlier: () => Promise<boolean>
   resolvePermission: (
     id: string,
     optionId: string,
@@ -65,6 +66,47 @@ export const ChatStream = memo(function ChatStream({
   const { t } = useTranslation()
   const flavor = chat.session?.agentFlavor
   const userName = chat.session?.tenantName
+
+  // 打开落底稳定器。消息条挂着 content-visibility:auto，屏外内容按
+  // 估算高度占位，滚动原语一次性 scrollTop=scrollHeight 会停在半路
+  // （滚动过程中真实渲染不断改写 scrollHeight）。初次内容就绪后连续
+  // 几帧把视口钉到底直到高度收敛；用户一碰滚轮立刻让位。
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const pinnedOnce = useRef(false)
+  const hasMessages = chat.messages.length > 0
+  useEffect(() => {
+    if (pinnedOnce.current || !hasMessages) return
+    const el = viewportRef.current
+    if (!el) return
+    pinnedOnce.current = true
+    let cancelled = false
+    let tries = 0
+    let stableFrames = 0
+    const stop = () => {
+      cancelled = true
+    }
+    const settle = () => {
+      if (cancelled) return
+      const target = el.scrollHeight - el.clientHeight
+      if (Math.abs(el.scrollTop - target) > 4) {
+        el.scrollTop = target
+        stableFrames = 0
+      } else {
+        stableFrames++
+      }
+      // 连续几帧稳在底部才算收敛（content-visibility 的真实渲染会分几帧
+      // 改写 scrollHeight）；一秒兜底，不无限纠缠。
+      if (stableFrames < 5 && ++tries < 60) requestAnimationFrame(settle)
+    }
+    el.addEventListener("wheel", stop, { passive: true })
+    el.addEventListener("touchstart", stop, { passive: true })
+    requestAnimationFrame(settle)
+    return () => {
+      cancelled = true
+      el.removeEventListener("wheel", stop)
+      el.removeEventListener("touchstart", stop)
+    }
+  }, [hasMessages])
 
   // 子代理干活的工具调用不进主流（去子代理面板），这里先摘干净再分类。
   const mainTools = chat.liveTools.filter((tool) => !tool.subagentOf)
@@ -119,11 +161,11 @@ export const ChatStream = memo(function ChatStream({
     // 「加载更早」prepend 时保持视口位置不跳。
     <MessageScrollerProvider defaultScrollPosition="end" autoScroll>
       <MessageScroller>
-        <MessageScrollerViewport preserveScrollOnPrepend>
+        <MessageScrollerViewport ref={viewportRef} preserveScrollOnPrepend>
           <MessageScrollerContent className="mx-auto w-full max-w-3xl px-4 pt-4 pb-48 lg:px-6">
             {chat.hasEarlier ? (
               <MessageScrollerItem scrollAnchor={false}>
-                <EarlierSentinel onVisible={() => void chat.loadEarlier()} />
+                <EarlierSentinel onVisible={chat.loadEarlier} />
               </MessageScrollerItem>
             ) : null}
             {blocks.map((block) => {
