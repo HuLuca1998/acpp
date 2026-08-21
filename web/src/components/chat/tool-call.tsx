@@ -64,6 +64,8 @@ export interface ToolCallPayload {
   }[]
   /** 这次调用派出了子代理——它的产出是 markdown 报告，不是终端输出。 */
   isSubagent?: boolean
+  /** 输出超过下发上限被后端截断（转录里保留完整原文）。 */
+  rawOutputTruncated?: boolean
 }
 
 /** 归一化三种 rawOutput 形状，取正文与退出码。 */
@@ -321,6 +323,11 @@ export function ToolCallBlock({
       {open && payload ? (
         <div className="pl-6 transition-[opacity,translate] duration-200 ease-snappy starting:-translate-y-0.5 starting:opacity-0 motion-reduce:starting:translate-y-0">
           <ToolCallDetail payload={payload} />
+          {payload.rawOutputTruncated ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("chat.outputTruncated")}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
