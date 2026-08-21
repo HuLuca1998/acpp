@@ -28,16 +28,28 @@ function usageTone(percent: number): { stroke: string; fill: string } {
   return { stroke: "stroke-primary", fill: "bg-primary" }
 }
 
+/** 货币格式化器缓存：语言 + 币种就那么几组，没必要每次重建。 */
+const moneyFormatters = new Map<string, Intl.NumberFormat | null>()
+
 /** 本地化货币；认不出的货币码退化成「数字 + 代码」。 */
 function moneyOf(amount: number, currency: string, locale: string): string {
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency,
-    }).format(amount)
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`
+  const key = `${locale}|${currency}`
+  let formatter = moneyFormatters.get(key)
+  if (formatter === undefined) {
+    try {
+      formatter = new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency,
+      })
+    } catch {
+      // 认不出的币种：记成 null，下次不再试。
+      formatter = null
+    }
+    moneyFormatters.set(key, formatter)
   }
+  return formatter
+    ? formatter.format(amount)
+    : `${amount.toFixed(2)} ${currency}`
 }
 
 /** 面板里的一行：左标签右数值，数值等宽防跳动。 */
