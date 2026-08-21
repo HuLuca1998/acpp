@@ -2,173 +2,182 @@ package service
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
-// buildGitRepo 造一个有两条提交与工作区变更的真实仓库：
-//
-//	commit1: a.txt ("one\ntwo\n")
-//	commit2: a.txt 改第二行、b.txt 新增
-//	工作区:  a.txt 再改、c.txt untracked
-func buildGitRepo(t *testing.T) string {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	cwd := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", cwd}, args...)...)
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Skipf("git %v failed: %v: %s", args, err, out)
-		}
-	}
-	write := func(name, content string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(cwd, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+// git 汇总改成并发扇出之后，「哪条命令的输出对应哪个字段」不再由执行顺序
+// 保证，而是由 key 保证——接错一条不会报错，只会让界面安静地少一块信息。
+// 这几个测试盯的就是这件事：在真实仓库上跑，逐字段核对。
 
-	git("init", "-q")
-	write("a.txt", "one\ntwo\n")
-	git("add", ".")
-	git("commit", "-q", "-m", "first")
-	write("a.txt", "one\nTWO\n")
-	write("b.txt", "bee\n")
-	git("add", ".")
-	git("commit", "-q", "-m", "second")
-	write("a.txt", "one\nTWO\nthree\n")
-	write("c.txt", "cee\ncee\n")
-	return cwd
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
 }
 
-func TestWorkspaceGitOverview(t *testing.T) {
-	cwd := buildGitRepo(t)
-
-	overview, err := WorkspaceGitOverview(context.Background(), cwd)
+// 契约：非 git 目录返回 IsRepo=false 而不是错误（会话开在普通目录是常态）。
+func TestWorkspaceGitOverview_NonRepo(t *testing.T) {
+	view, err := WorkspaceGitOverview(context.Background(), t.TempDir())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("err = %v, want nil", err)
 	}
-	if !overview.IsRepo {
-		t.Fatal("should detect repo")
+	if view.IsRepo {
+		t.Error("普通目录不该被当成仓库")
 	}
-	if overview.Upstream != "" {
-		t.Fatalf("no upstream expected, got %q", overview.Upstream)
+	if view.Files == nil || view.Commits == nil {
+		t.Error("清单必须是空切片而不是 nil：JSON 里 null 与 [] 对前端是两种东西")
+	}
+}
+
+// 契约：无 upstream 的仓库照样给出分支、改动清单与最近提交
+// （前端据 Upstream 为空把提交列表标注成「最近」而不是「未推送」）。
+func TestWorkspaceGitOverview_ReportsBranchAndChanges(t *testing.T) {
+	dir := gitRepo(t)
+
+	// 三种改动各一份：改过的已跟踪文件、新增的未跟踪文件、删除的文件。
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\nchanged\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	view, err := WorkspaceGitOverview(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if !view.IsRepo {
+		t.Fatal("IsRepo = false, want true")
+	}
+	if view.Branch != "main" {
+		t.Errorf("Branch = %q, want main", view.Branch)
+	}
+	if view.Root == "" {
+		t.Error("Root 为空：变更清单的路径相对它，界面靠它对应到文件树")
+	}
+	if view.Upstream != "" {
+		t.Errorf("Upstream = %q, want 空（本地仓库没有远端）", view.Upstream)
+	}
+	if len(view.Commits) != 1 {
+		t.Errorf("Commits = %d 条, want 1（无 upstream 时退化为最近提交）", len(view.Commits))
 	}
 
 	byPath := map[string]GitFileChange{}
-	for _, f := range overview.Files {
+	for _, f := range view.Files {
 		byPath[f.Path] = f
 	}
-	a, ok := byPath["a.txt"]
-	if !ok || a.Status != "M" || a.Added != 1 || a.Deleted != 0 {
-		t.Fatalf("a.txt change wrong: %+v (ok=%v)", a, ok)
+	readme, ok := byPath["README.md"]
+	if !ok {
+		t.Fatalf("改动清单缺 README.md：%+v", view.Files)
 	}
-	c, ok := byPath["c.txt"]
-	if !ok || c.Status != "A" || c.Added != 2 {
-		t.Fatalf("untracked c.txt wrong: %+v (ok=%v)", c, ok)
+	if readme.Added != 1 || readme.Deleted != 0 {
+		t.Errorf("README.md 行数 = +%d/-%d, want +1/-0（numstat 接错了）", readme.Added, readme.Deleted)
 	}
-
-	// 无 upstream 退化为最近提交列表，第一条是 second。
-	if len(overview.Commits) != 2 || overview.Commits[0].Subject != "second" {
-		t.Fatalf("commits wrong: %+v", overview.Commits)
+	added, ok := byPath["new.txt"]
+	if !ok {
+		t.Fatalf("改动清单缺未跟踪的 new.txt：%+v", view.Files)
 	}
-	if overview.Commits[0].Short == "" || overview.Commits[0].Time == 0 {
-		t.Fatalf("commit meta incomplete: %+v", overview.Commits[0])
+	if added.Status != "A" || added.Added != 3 {
+		t.Errorf("new.txt = status %q +%d, want A +3", added.Status, added.Added)
 	}
 }
 
-func TestWorkspaceGitOverviewNotRepo(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
+// 契约：有 upstream 时报出 upstream 名与领先/落后数，提交列表只含未推送的那些。
+func TestWorkspaceGitOverview_ReportsUpstreamAheadBehind(t *testing.T) {
+	origin := gitRepo(t)
+	// 造一个能当远端的裸仓库并推上去，再在本地多提交一条。
+	clone := t.TempDir()
+	gitRun(t, ".", "clone", "-q", origin, clone)
+	gitRun(t, clone, "config", "user.email", "test@example.com")
+	gitRun(t, clone, "config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(clone, "later.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
 	}
-	overview, err := WorkspaceGitOverview(context.Background(), t.TempDir())
+	gitRun(t, clone, "add", ".")
+	gitRun(t, clone, "commit", "-m", "later")
+
+	view, err := WorkspaceGitOverview(context.Background(), clone)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("err = %v", err)
 	}
-	if overview.IsRepo {
-		t.Fatal("bare tempdir must not be a repo")
+	if view.Upstream == "" {
+		t.Fatal("Upstream 为空：克隆出来的仓库应当有跟踪分支")
+	}
+	if view.Ahead != 1 || view.Behind != 0 {
+		t.Errorf("ahead/behind = %d/%d, want 1/0", view.Ahead, view.Behind)
+	}
+	if len(view.Commits) != 1 || view.Commits[0].Subject != "later" {
+		t.Errorf("未推送提交 = %+v, want 只有 later 一条", view.Commits)
 	}
 }
 
-func TestWorkspaceGitDiff(t *testing.T) {
-	cwd := buildGitRepo(t)
+// 契约：并发请求同一份只读视图时共享一次执行——面板、tab 徽标、分支胶囊
+// 同时要的是同一个事实，没道理各跑一遍 git。
+func TestShareGit_CoalescesConcurrentCalls(t *testing.T) {
+	var mu sync.Mutex
+	runs := 0
+	release := make(chan struct{})
 
-	t.Run("修改文件：HEAD 版对工作区版", func(t *testing.T) {
-		view, err := WorkspaceGitDiff(context.Background(), cwd, "a.txt")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if view.OldText != "one\nTWO\n" || view.NewText != "one\nTWO\nthree\n" {
-			t.Fatalf("diff texts wrong: %+v", view)
-		}
-	})
+	work := func(context.Context) (int, error) {
+		mu.Lock()
+		runs++
+		mu.Unlock()
+		<-release // 卡住执行，让后来者必然撞上进行中的这一次
+		return 42, nil
+	}
 
-	t.Run("untracked：old 为空", func(t *testing.T) {
-		view, err := WorkspaceGitDiff(context.Background(), cwd, "c.txt")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if view.OldText != "" || view.NewText != "cee\ncee\n" {
-			t.Fatalf("untracked diff wrong: %+v", view)
-		}
-	})
+	const callers = 5
+	results := make([]int, callers)
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Go(func() {
+			results[i], errs[i] = shareGit(context.Background(), "test:coalesce", work)
+		})
+	}
+	// 让五个 goroutine 都进到 shareGit 里（首个开跑、其余排到它后面）再放行。
+	// 与 golang.org/x/sync/singleflight 自己的测试同一手法。
+	time.Sleep(200 * time.Millisecond)
+	close(release)
+	wg.Wait()
 
-	t.Run("越界拒绝", func(t *testing.T) {
-		if _, err := WorkspaceGitDiff(context.Background(), cwd, "../x"); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("want ErrInvalid, got %v", err)
+	mu.Lock()
+	defer mu.Unlock()
+	if runs != 1 {
+		t.Errorf("执行了 %d 次, want 1（合流没生效）", runs)
+	}
+	for i := range callers {
+		if errs[i] != nil {
+			t.Errorf("caller %d: %v", i, errs[i])
 		}
-	})
+		if results[i] != 42 {
+			t.Errorf("caller %d 拿到 %d, want 42", i, results[i])
+		}
+	}
 }
 
-func TestWorkspaceGitCommit(t *testing.T) {
-	cwd := buildGitRepo(t)
-	overview, err := WorkspaceGitOverview(context.Background(), cwd)
-	if err != nil || len(overview.Commits) == 0 {
-		t.Fatalf("need commits: %v", err)
+// 契约：合流不是缓存——前一次跑完之后再问，必须重新执行拿最新状态。
+func TestShareGit_DoesNotCache(t *testing.T) {
+	var runs int
+	work := func(context.Context) (int, error) {
+		runs++
+		return runs, nil
 	}
-	second := overview.Commits[0]
-
-	t.Run("详情带文件清单", func(t *testing.T) {
-		detail, diff, err := WorkspaceGitCommit(context.Background(), cwd, second.SHA, "")
-		if err != nil || diff != nil {
-			t.Fatalf("unexpected: %v %v", err, diff)
+	for want := 1; want <= 3; want++ {
+		got, err := shareGit(context.Background(), "test:nocache", work)
+		if err != nil {
+			t.Fatalf("err = %v", err)
 		}
-		if detail.Commit.Subject != "second" {
-			t.Fatalf("meta wrong: %+v", detail.Commit)
+		if got != want {
+			t.Fatalf("第 %d 次拿到 %d：合流退化成缓存了，界面会显示旧状态", want, got)
 		}
-		paths := []string{}
-		for _, f := range detail.Files {
-			paths = append(paths, f.Path)
-		}
-		if strings.Join(paths, ",") != "a.txt,b.txt" {
-			t.Fatalf("files wrong: %v", paths)
-		}
-	})
-
-	t.Run("单文件前后全文", func(t *testing.T) {
-		_, diff, err := WorkspaceGitCommit(context.Background(), cwd, second.SHA, "a.txt")
-		if err != nil || diff == nil {
-			t.Fatalf("unexpected: %v", err)
-		}
-		if diff.OldText != "one\ntwo\n" || diff.NewText != "one\nTWO\n" {
-			t.Fatalf("commit diff wrong: %+v", diff)
-		}
-	})
-
-	t.Run("坏 sha 拒绝", func(t *testing.T) {
-		if _, _, err := WorkspaceGitCommit(context.Background(), cwd, "$(rm)", ""); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("want ErrInvalid, got %v", err)
-		}
-	})
+	}
 }

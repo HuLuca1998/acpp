@@ -8,8 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // 工作区 git 数据面（adr-002 M2）：overview 一次返回分支/领先落后/变更
@@ -66,37 +69,171 @@ type GitCommitDetail struct {
 
 var shaPattern = regexp.MustCompile(`^[0-9a-fA-F]{4,64}$`)
 
+// ── 只读视图的请求合流 ──────────────────────────────────────────────
+//
+// 同一条会话的 git 汇总会被好几处同时要：变更面板、tab 上的改动数徽标、
+// 底部分支胶囊，外加另开一个浏览器窗口看同一条会话。它们要的是同一份
+// 事实，没道理各跑一遍 git。合流只去掉重复执行，**不缓存**——第二个
+// 请求等的是正在跑的那一次，拿到的仍是此刻的真实状态。
+
+type sharedGitCall struct {
+	done chan struct{}
+	val  any
+	err  error
+}
+
+var (
+	gitShareMu sync.Mutex
+	gitShare   = map[string]*sharedGitCall{}
+)
+
+// shareGit 让同一 key 上并发的只读 git 视图共享一次执行。
+func shareGit[T any](ctx context.Context, key string, fn func(context.Context) (T, error)) (T, error) {
+	var zero T
+
+	gitShareMu.Lock()
+	if call, ok := gitShare[key]; ok {
+		gitShareMu.Unlock()
+		select {
+		case <-call.done:
+		case <-ctx.Done():
+			return zero, ctx.Err()
+		}
+		if call.err != nil {
+			return zero, call.err
+		}
+		v, _ := call.val.(T)
+		return v, nil
+	}
+	call := &sharedGitCall{done: make(chan struct{})}
+	gitShare[key] = call
+	gitShareMu.Unlock()
+
+	// 执行用不带取消的 ctx：第一个发起者中途走了（切了 tab、关了窗口）
+	// 不该把还在等结果的其他人一起打断。加超时兜住卡死的仓库。
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gitShareTimeout)
+	call.val, call.err = fn(runCtx)
+	cancel()
+
+	gitShareMu.Lock()
+	delete(gitShare, key)
+	gitShareMu.Unlock()
+	close(call.done)
+
+	if call.err != nil {
+		return zero, call.err
+	}
+	v, _ := call.val.(T)
+	return v, nil
+}
+
+// gitShareTimeout 是共享执行的上限。只读命令在正常仓库上是毫秒级，
+// 到这个量级只可能是仓库卡在网络文件系统上。
+const gitShareTimeout = 30 * time.Second
+
+// ── git 命令的并发扇出 ──────────────────────────────────────────────
+//
+// git 的每次调用都是一次进程启动 + 仓库打开。单条在中型仓库上 10~15ms，
+// 而 overview 要跑七条、branches 要跑八条——串起来就是 90 毫秒，偏偏这
+// 两条正是「agent 每干完一件事就刷一次」的路径（见 WorkspaceAutoRefresh）。
+// 这些命令彼此不依赖，没有理由排队。
+
+// gitOut 是一条命令的结果。
+type gitOut struct {
+	text string
+	err  error
+}
+
+// ok 返回去掉尾部换行的输出；命令失败时返回空串与 false。
+// git 的很多子命令「失败」是正常局面（没有 upstream、不是仓库），
+// 调用方多半只想要「拿到了就用，没拿到就跳过」。
+func (o gitOut) ok() (string, bool) {
+	if o.err != nil {
+		return "", false
+	}
+	return strings.TrimRight(o.text, "\n"), true
+}
+
+// runGitParallel 并发执行一组互不依赖的 git 命令，按 key 返回结果。
+// 任何一条失败都不影响其余——错误留在各自的 gitOut 里由调用方处置。
+func runGitParallel(ctx context.Context, cwd string, cmds map[string][]string) map[string]gitOut {
+	out := make(map[string]gitOut, len(cmds))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for key, args := range cmds {
+		wg.Go(func() {
+			text, err := runGit(ctx, cwd, args...)
+			mu.Lock()
+			out[key] = gitOut{text: text, err: err}
+			mu.Unlock()
+		})
+	}
+	wg.Wait()
+	return out
+}
+
+// unpushedLogArgs 是未推送提交列表的固定前缀（字段用 \x01 分隔，见 parseCommitLine）。
+var unpushedLogArgs = []string{"log", "--format=%H%x01%h%x01%s%x01%an%x01%ct"}
+
 // WorkspaceGitOverview 汇总会话工作目录的 git 状态。非 git 仓库不是错误，
 // 诚实返回 isRepo=false 由前端画空态。
 func WorkspaceGitOverview(ctx context.Context, cwd string) (*GitOverview, error) {
+	return shareGit(ctx, "overview:"+cwd, func(ctx context.Context) (*GitOverview, error) {
+		return gitOverview(ctx, cwd)
+	})
+}
+
+func gitOverview(ctx context.Context, cwd string) (*GitOverview, error) {
 	overview := &GitOverview{Files: []GitFileChange{}, Commits: []GitCommit{}}
 
-	if root, err := runGit(ctx, cwd, "rev-parse", "--show-toplevel"); err == nil {
-		overview.Root = strings.TrimSpace(root)
-	}
+	// 全部一轮发出去。未推送提交的两种取法（有无 upstream）都先跑，事后
+	// 挑一份——多一个并发进程不占额外墙钟时间，比先问再跑多一整轮划算。
+	res := runGitParallel(ctx, cwd, map[string][]string{
+		"root":     {"rev-parse", "--show-toplevel"},
+		"branch":   {"rev-parse", "--abbrev-ref", "HEAD"},
+		"upstream": {"rev-parse", "--abbrev-ref", "@{u}"},
+		"counts":   {"rev-list", "--left-right", "--count", "@{u}...HEAD"},
+		"status":   {"status", "--porcelain", "-z"},
+		"numstat":  {"diff", "--numstat", "-z", "HEAD", "--"},
+		"unpushed": append(slices.Clone(unpushedLogArgs), "@{u}..HEAD"),
+		"recent":   append(slices.Clone(unpushedLogArgs), "-n", "20"),
+	})
 
-	branch, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
+	if root, ok := res["root"].ok(); ok {
+		overview.Root = root
+	}
+	branch, ok := res["branch"].ok()
+	if !ok {
+		// HEAD 都读不到就不是仓库：诚实返回 isRepo=false 由前端画空态。
 		return overview, nil
 	}
 	overview.IsRepo = true
-	overview.Branch = strings.TrimSpace(branch)
+	overview.Branch = branch
 
-	if up, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "@{u}"); err == nil {
-		overview.Upstream = strings.TrimSpace(up)
+	if up, ok := res["upstream"].ok(); ok {
+		overview.Upstream = up
 	}
 	if overview.Upstream != "" {
-		if counts, err := runGit(ctx, cwd, "rev-list", "--left-right", "--count", "@{u}...HEAD"); err == nil {
-			parts := strings.Fields(counts)
-			if len(parts) == 2 {
+		if counts, ok := res["counts"].ok(); ok {
+			if parts := strings.Fields(counts); len(parts) == 2 {
 				overview.Behind, _ = strconv.Atoi(parts[0])
 				overview.Ahead, _ = strconv.Atoi(parts[1])
 			}
 		}
 	}
 
-	overview.Files = gitStatusFiles(ctx, cwd)
-	overview.Commits = gitUnpushed(ctx, cwd, overview.Upstream)
+	statusOut, _ := res["status"].ok()
+	numstatOut, _ := res["numstat"].ok()
+	overview.Files = parseStatusFiles(cwd, statusOut, numstatOut)
+
+	// 无 upstream 时退化为最近 20 条（前端据 Upstream 空标注）。
+	logKey := "unpushed"
+	if overview.Upstream == "" {
+		logKey = "recent"
+	}
+	if out, ok := res[logKey].ok(); ok {
+		overview.Commits = parseCommitLines(out)
+	}
 	return overview, nil
 }
 
@@ -167,7 +304,12 @@ func WorkspaceGitCommit(ctx context.Context, cwd, sha, path string) (*GitCommitD
 // ---- 内部实现 ----
 
 func runGit(ctx context.Context, cwd string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", cwd}, args...)...)
+	// --no-optional-locks：读类命令（status/diff）默认会顺手刷新并**回写**
+	// 索引，为此要拿 index.lock。而 agent 就在同一个仓库里干活，它自己的
+	// git 也在抢这把锁——面板刷新偶发的几百毫秒卡顿就是这么来的。加上它，
+	// 读操作彻底不写盘、不上锁；代价只是索引缓存不被顺带刷新。
+	full := append([]string{"--no-optional-locks", "-C", cwd}, args...)
+	cmd := exec.CommandContext(ctx, "git", full...)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -221,19 +363,18 @@ func finishDiffView(view *GitDiffView) {
 	}
 }
 
-// gitStatusFiles 解析 `status --porcelain -z`，行数统计并入 numstat；
-// untracked 文件现场数行（有上限），比显示"未知"更有用。
-func gitStatusFiles(ctx context.Context, cwd string) []GitFileChange {
-	out, err := runGit(ctx, cwd, "status", "--porcelain", "-z")
-	if err != nil {
+// parseStatusFiles 解析 `status --porcelain -z` 与 `diff --numstat -z`，
+// 行数统计并入 numstat；untracked 文件现场数行（有上限），比显示"未知"更有用。
+//
+// 只解析不执行：两条命令由调用方并发跑完再把输出递进来（见 runGitParallel）。
+func parseStatusFiles(cwd, statusOut, numstatOut string) []GitFileChange {
+	if statusOut == "" {
 		return []GitFileChange{}
 	}
-	stats := parseNumstat("")
-	if numOut, err := runGit(ctx, cwd, "diff", "--numstat", "-z", "HEAD", "--"); err == nil {
-		stats = parseNumstat(numOut)
-	}
+	stats := parseNumstat(numstatOut)
 
 	files := []GitFileChange{}
+	out := statusOut
 	fields := strings.Split(out, "\x00")
 	for i := 0; i < len(fields); i++ {
 		entry := fields[i]
@@ -262,18 +403,8 @@ func gitStatusFiles(ctx context.Context, cwd string) []GitFileChange {
 	return files
 }
 
-func gitUnpushed(ctx context.Context, cwd, upstream string) []GitCommit {
-	rangeArg := "@{u}..HEAD"
-	args := []string{"log", "--format=%H%x01%h%x01%s%x01%an%x01%ct"}
-	if upstream == "" {
-		args = append(args, "-n", "20")
-	} else {
-		args = append(args, rangeArg)
-	}
-	out, err := runGit(ctx, cwd, args...)
-	if err != nil {
-		return []GitCommit{}
-	}
+// parseCommitLines 把 `log --format=...` 的输出解析成提交列表。
+func parseCommitLines(out string) []GitCommit {
 	commits := []GitCommit{}
 	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
 		if commit, ok := parseCommitLine(line); ok {

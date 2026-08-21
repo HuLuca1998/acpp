@@ -50,11 +50,33 @@ type GitBranchView struct {
 }
 
 // WorkspaceGitBranches 读分支与工作区清单，供会话底部的分支控件用。
+//
+// 八条命令一轮并发发出（理由见 workspace_git.go 的 runGitParallel）：分支
+// 控件是会话底部常驻的，每次工作区刷新都要重读，串行跑等于每次刷新都停
+// 那么久。
 func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, error) {
 	if cwd == "" {
 		return &GitBranchView{}, nil
 	}
-	if _, err := runGit(ctx, cwd, "rev-parse", "--is-inside-work-tree"); err != nil {
+	return shareGit(ctx, "branches:"+cwd, func(ctx context.Context) (*GitBranchView, error) {
+		return gitBranches(ctx, cwd)
+	})
+}
+
+func gitBranches(ctx context.Context, cwd string) (*GitBranchView, error) {
+
+	res := runGitParallel(ctx, cwd, map[string][]string{
+		"inside":    {"rev-parse", "--is-inside-work-tree"},
+		"head":      {"rev-parse", "--abbrev-ref", "HEAD"},
+		"short":     {"rev-parse", "--short", "HEAD"},
+		"status":    {"status", "--porcelain"},
+		"worktrees": {"worktree", "list", "--porcelain"},
+		"local":     {"branch", "--format=%(refname:short)"},
+		"remote":    {"branch", "-r", "--format=%(refname:short)"},
+		"tags":      {"tag", "--list", "--sort=-creatordate"},
+	})
+
+	if _, ok := res["inside"].ok(); !ok {
 		return &GitBranchView{}, nil
 	}
 
@@ -68,24 +90,26 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		Worktrees: []GitWorktree{},
 	}
 
-	head, err := runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		return nil, err
+	head, ok := res["head"].ok()
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrInvalid, res["head"].err)
 	}
-	view.Current = strings.TrimSpace(head)
+	view.Current = head
 	if view.Current == "HEAD" {
 		view.Detached = true
-		if short, err := runGit(ctx, cwd, "rev-parse", "--short", "HEAD"); err == nil {
-			view.Current = strings.TrimSpace(short)
+		if short, ok := res["short"].ok(); ok {
+			view.Current = short
 		}
 	}
 
-	if status, err := runGit(ctx, cwd, "status", "--porcelain"); err == nil {
+	if status, ok := res["status"].ok(); ok {
 		view.Dirty = strings.TrimSpace(status) != ""
 	}
 
-	if worktrees := parseWorktrees(ctx, cwd); worktrees != nil {
-		view.Worktrees = worktrees
+	if out, ok := res["worktrees"].ok(); ok {
+		if worktrees := parseWorktrees(out, cwd); worktrees != nil {
+			view.Worktrees = worktrees
+		}
 	}
 	byBranch := map[string]string{}
 	for _, wt := range view.Worktrees {
@@ -94,8 +118,8 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		}
 	}
 
-	if out, err := runGit(ctx, cwd, "branch", "--format=%(refname:short)"); err == nil {
-		for _, name := range strings.Split(strings.TrimSpace(out), "\n") {
+	if out, ok := res["local"].ok(); ok {
+		for name := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
@@ -108,8 +132,8 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		}
 	}
 
-	if out, err := runGit(ctx, cwd, "branch", "-r", "--format=%(refname:short)"); err == nil {
-		for _, name := range strings.Split(strings.TrimSpace(out), "\n") {
+	if out, ok := res["remote"].ok(); ok {
+		for name := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 			name = strings.TrimSpace(name)
 			// origin/HEAD 是个符号引用，不是能切过去的分支。
 			if name == "" || strings.HasSuffix(name, "/HEAD") {
@@ -119,8 +143,8 @@ func WorkspaceGitBranches(ctx context.Context, cwd string) (*GitBranchView, erro
 		}
 	}
 	// 标签按创建时间倒序取前 50：老标签谁也不会在面板里翻到底。
-	if out, err := runGit(ctx, cwd, "tag", "--list", "--sort=-creatordate"); err == nil {
-		for _, name := range strings.Split(strings.TrimSpace(out), "\n") {
+	if out, ok := res["tags"].ok(); ok {
+		for name := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
@@ -259,12 +283,9 @@ func RemoveWorktree(ctx context.Context, scope Scope, path string) error {
 
 // parseWorktrees 解析 `git worktree list --porcelain`：每条记录以空行分隔，
 // 字段是 `worktree <path>` / `branch refs/heads/<name>` / `detached`。
-func parseWorktrees(ctx context.Context, cwd string) []GitWorktree {
-	out, err := runGit(ctx, cwd, "worktree", "list", "--porcelain")
-	if err != nil {
-		return nil
-	}
-
+// parseWorktrees 解析 `worktree list --porcelain` 的输出。
+// 只解析不执行：命令由 WorkspaceGitBranches 并发跑完再递进来。
+func parseWorktrees(out, cwd string) []GitWorktree {
 	var (
 		list    []GitWorktree
 		current GitWorktree
