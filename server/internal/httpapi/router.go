@@ -13,6 +13,7 @@ import (
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
+	"acpp/server/internal/stream"
 	"acpp/server/internal/system"
 	"acpp/server/internal/titler"
 )
@@ -35,6 +36,8 @@ type Services struct {
 	DataSources *datasource.Service
 	// MCPCalls 是 MCP 工具调用的观测记录，工具台读它。
 	MCPCalls *mcpcall.Service
+	// Notices 是全局通知广播口，全局事件流从这里取本人名下的通知。
+	Notices *stream.Hub
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -55,8 +58,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		})
 	})
 
-	// 全局事件流：页面挂着它感知后端换版本，断开重连本身就是信号（见 events.go）。
-	api.HandleFunc("GET /api/events", serverEvents)
+	// 全局事件流：版本哨兵 + 本人名下会话的通知（见 events.go）。
+	api.HandleFunc("GET /api/events", eventsHandler{notices: svcs.Notices}.stream)
 
 	// 身份：邀请兑换、身份自查、退出（adr-007）。这三条是公开路径，
 	// 未认证也能访问——否则前端连「我需要邀请链接」都问不出来。

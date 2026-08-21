@@ -37,8 +37,16 @@ type ChatService struct {
 	// titler 生成会话标题；nil 或未启用时退回首句派生。
 	titler Titler
 
+	// notices 是全局通知广播口，供客户端决定要不要打扰用户。可为 nil
+	//（不广播，会话照常可用）。
+	notices *stream.Hub
+
 	mu      sync.Mutex
 	brokers map[uint]*stream.Broker
+	// tails 是每会话本轮正文的尾巴，轮末给通知做摘要。**单独一把锁**：
+	// 正文分片一轮能来几千次，不该去争 broker 那把锁。
+	tailsMu sync.Mutex
+	tails   map[uint]string
 	// usage 是每会话最近一次上报的用量快照（内存态）。usage_update 一轮
 	// 能来几十次，逐条写库既无意义又吵——收在这里，轮末落一次。
 	usage map[uint]*UsageSnapshot
@@ -87,6 +95,9 @@ type Titler interface {
 // SetTitler 装上标题生成能力。装配期调用一次，之后只读。
 func (s *ChatService) SetTitler(t Titler) { s.titler = t }
 
+// SetNotifyHub 注入全局通知广播口（装配层调用）。
+func (s *ChatService) SetNotifyHub(h *stream.Hub) { s.notices = h }
+
 func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
 	return &ChatService{
 		db:          db,
@@ -95,6 +106,7 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 		transcripts: transcripts,
 		skillUsage:  skillUsage,
 		brokers:     make(map[uint]*stream.Broker),
+		tails:       make(map[uint]string),
 		usage:       make(map[uint]*UsageSnapshot),
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"acpp/server/internal/model"
 	"acpp/server/internal/project"
 	"acpp/server/internal/service"
+	"acpp/server/internal/stream"
 	"acpp/server/internal/system"
 	"acpp/server/internal/titler"
 	"acpp/server/internal/transcript"
@@ -124,6 +125,11 @@ func run() error {
 	})
 	chatService.SetTitler(titleService)
 
+	// 全局通知广播口：会话上发生了值得打扰用户的事（等你决策、有话要问、
+	// 答完了、出错了）从这里出去，客户端自己决定弹不弹、怎么弹。
+	noticeHub := stream.NewHub()
+	chatService.SetNotifyHub(noticeHub)
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -140,6 +146,7 @@ func run() error {
 		System:      system.NewService(gdb, cfg),
 		Skills:      service.NewSkillService(cfg.DataDir, skillUsage),
 		SkillUsage:  skillUsage,
+		Notices:     noticeHub,
 		Update:      updateService,
 		Titler:      titleService,
 		Tenants:     tenantService,

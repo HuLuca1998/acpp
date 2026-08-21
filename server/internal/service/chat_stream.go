@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/model"
 	"acpp/server/internal/stream"
 )
 
@@ -16,6 +18,7 @@ type StreamEvent = stream.Event
 func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Event) {
 	switch ev.Kind {
 	case acp.EventMessage:
+		s.rememberTail(sessionID, ev.Text)
 		br.Publish(StreamEvent{Kind: "message_chunk", Text: ev.Text})
 
 	case acp.EventThought:
@@ -56,6 +59,7 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 			Options:      ev.Options,
 			PlanReview:   ev.PlanReview,
 		})
+		s.notify(sessionID, "permission", ev.Title)
 
 	case acp.EventPermissionDone:
 		br.Publish(StreamEvent{Kind: "permission_done", PermissionID: ev.PermissionID})
@@ -83,6 +87,7 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 			Text:          ev.Text,
 			RawInput:      ev.RawInput,
 		})
+		s.notify(sessionID, "elicitation", ev.Text)
 
 	case acp.EventElicitationDone:
 		br.Publish(StreamEvent{Kind: "elicitation_done", ElicitationID: ev.ElicitationID})
@@ -92,9 +97,11 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 
 	case acp.EventTurnEnd:
 		br.Publish(StreamEvent{Kind: "turn_end", StopReason: string(ev.StopReason), Usage: ev.Usage})
+		s.notify(sessionID, "turn_end", s.takeTail(sessionID))
 
 	case acp.EventError:
 		br.Publish(StreamEvent{Kind: "error", Error: ev.Error})
+		s.notify(sessionID, "error", ev.Error)
 	}
 }
 
@@ -102,4 +109,67 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 // 当前轮已经发生的事件会先补给新订阅者，刷新页面不会丢掉正在跑的这一轮。
 func (s *ChatService) Subscribe(sessionID uint) (<-chan StreamEvent, func()) {
 	return s.brokerFor(sessionID).Subscribe()
+}
+
+// noticeTextRunes 是通知摘要的长度上限。系统通知与页内提示都只有一两行的
+// 位置，多给的字符不会被显示，只会把有用的部分挤出去。
+const noticeTextRunes = 120
+
+// notify 把一件值得打扰用户的事广播到全局流。
+//
+// 这里只如实上报「发生了什么」，不判断该不该弹——那要知道用户此刻在看哪
+// 一页、页面在不在前台，只有客户端清楚（见 stream.Notice）。为此查一次
+// 会话拿归属与标题：通知是低频事件（一轮最多几条），不值得为它多养一份缓存。
+func (s *ChatService) notify(sessionID uint, event, text string) {
+	if s.notices == nil {
+		return
+	}
+	var session model.Session
+	if err := s.db.First(&session, sessionID).Error; err != nil {
+		return
+	}
+	s.notices.Publish(stream.Notice{
+		Kind:         "notify",
+		Event:        event,
+		SessionID:    sessionID,
+		SessionTitle: session.Title,
+		Text:         summarizeNotice(text),
+		TenantID:     session.TenantID,
+	})
+}
+
+// summarizeNotice 把一段正文压成通知能显示的一行：折叠全部空白再截断。
+func summarizeNotice(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) <= noticeTextRunes {
+		return text
+	}
+	return string(runes[:noticeTextRunes]) + "…"
+}
+
+// rememberTail 收下正文分片的尾巴，供轮末通知做摘要。
+//
+// 留尾不留头：一轮结束时用户想知道的是结论，而结论在最后一段话里。只留
+// 上限的两倍长度，再长的轮次也不会在内存里攒出一整篇回答。
+func (s *ChatService) rememberTail(sessionID uint, text string) {
+	if s.notices == nil || text == "" {
+		return
+	}
+	s.tailsMu.Lock()
+	defer s.tailsMu.Unlock()
+	tail := s.tails[sessionID] + text
+	if runes := []rune(tail); len(runes) > noticeTextRunes*2 {
+		tail = string(runes[len(runes)-noticeTextRunes*2:])
+	}
+	s.tails[sessionID] = tail
+}
+
+// takeTail 取走本轮攒下的正文尾巴——取走即清空，下一轮从头攒。
+func (s *ChatService) takeTail(sessionID uint) string {
+	s.tailsMu.Lock()
+	defer s.tailsMu.Unlock()
+	tail := s.tails[sessionID]
+	delete(s.tails, sessionID)
+	return tail
 }
