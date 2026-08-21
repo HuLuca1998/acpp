@@ -50,6 +50,13 @@ type ChatService struct {
 	// usage 是每会话最近一次上报的用量快照（内存态）。usage_update 一轮
 	// 能来几十次，逐条写库既无意义又吵——收在这里，轮末落一次。
 	usage map[uint]*UsageSnapshot
+
+	// rebuilds 是转录重建结果的缓存（见 chat_messages.go）。打开会话、
+	// 轮末刷新、「加载更早」都会重复请求同一份重建，长会话的转录几 MB
+	// 起步，每次全量读盘 + 解析是历史页卡顿的主因。**单独一把锁**：
+	// 重建可能耗几百毫秒，不该拿着 broker 那把锁干这个。
+	rebuildMu sync.Mutex
+	rebuilds  map[uint]*rebuildCacheEntry
 }
 
 // UsageSnapshot 是一条会话最近的上下文水位与费用。
@@ -108,6 +115,7 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 		brokers:     make(map[uint]*stream.Broker),
 		tails:       make(map[uint]string),
 		usage:       make(map[uint]*UsageSnapshot),
+		rebuilds:    make(map[uint]*rebuildCacheEntry),
 	}
 }
 
