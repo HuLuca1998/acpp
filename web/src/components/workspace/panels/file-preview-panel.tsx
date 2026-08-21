@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   AtSignIcon,
   CodeIcon,
+  ExternalLinkIcon,
   EyeIcon,
   FileTextIcon,
   LocateFixedIcon,
@@ -14,6 +15,8 @@ import { DiffView } from "@/components/diff-view"
 import { Hint } from "@/components/hint"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
+import { previewKind } from "@/components/workspace/panels/file-preview-kind"
+import { MediaPreview } from "@/components/workspace/panels/file-preview-media"
 import {
   usePreviewTarget,
   useWorkspace,
@@ -70,9 +73,13 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     ws.openPreview(head.path, head.line)
   }, [head, ws])
 
+  // 图片/音视频/PDF 走浏览器原生渲染，不拉正文——把一个 mp4 读成字符串
+  // 只会得到一堆乱码和一次白拉的流量。
+  const media = mode === "diff" ? null : previewKind(path)
+
   // 依赖收窄到字段级：跟随时同一文件只变行号，不该整个重拉一遍内容。
   useEffect(() => {
-    if (!path || !ws.sessionId) return
+    if (!path || !ws.sessionId || media) return
     let stale = false
     setLoading(true)
     setError(null)
@@ -107,7 +114,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     return () => {
       stale = true
     }
-  }, [path, mode, sha, ws.sessionId, ws.scope])
+  }, [path, mode, sha, media, ws.sessionId, ws.scope])
 
   // 定位到行：行高固定 leading-5（20px），content-visibility 的估算尺寸
   // 与之一致，按行数换算滚动位置即可，顶部留三行上下文。
@@ -214,6 +221,27 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
               : t("workspace.git.workingTree")}
           </span>
         ) : null}
+        {mode !== "diff" ? (
+          <Hint
+            label={t("workspace.preview.openExternal")}
+            desc={t("workspace.preview.openExternalDesc")}
+          >
+            <button
+              type="button"
+              aria-label={t("workspace.preview.openExternal")}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+              onClick={() =>
+                window.open(
+                  ws.scope.previewUrl(ws.sessionId, path),
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+            >
+              <ExternalLinkIcon className="size-3.5" />
+            </button>
+          </Hint>
+        ) : null}
         <Hint
           label={t("workspace.refMenu.addReference")}
           desc={t("workspace.refMenu.addReferenceDesc")}
@@ -230,7 +258,13 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         </Hint>
       </div>
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
-        {error ? (
+        {media ? (
+          <MediaPreview
+            kind={media}
+            src={ws.scope.previewUrl(ws.sessionId, path)}
+            name={path}
+          />
+        ) : error ? (
           <div className="p-3 text-xs text-destructive">{error}</div>
         ) : diff ? (
           diff.binary ? (
@@ -247,8 +281,23 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
             </div>
           )
         ) : file?.binary ? (
-          <div className="p-3 text-xs text-muted-foreground">
-            {t("workspace.preview.binary")}
+          <div className="flex flex-col items-start gap-2 p-3 text-xs text-muted-foreground">
+            <span>{t("workspace.preview.binary")}</span>
+            {/* 认不出的格式也给条出路：浏览器打得开就打开，打不开它会
+                退成下载，两种结果都比一句「二进制文件」有用。 */}
+            <button
+              type="button"
+              className="rounded-md text-primary transition-colors duration-150 hover:underline"
+              onClick={() =>
+                window.open(
+                  ws.scope.previewUrl(ws.sessionId, path),
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+            >
+              {t("workspace.preview.openExternal")}
+            </button>
           </div>
         ) : file && isMarkdown(path) && !raw ? (
           <div className="px-4 py-3">

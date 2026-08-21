@@ -79,6 +79,10 @@ export const enWorkspace = {
     followOff: "Stop following",
     followDesc: "Jumps to whichever file the agent touches next",
     sourceDesc: "Toggle between rendered output and markdown source",
+    openExternal: "Open in browser",
+    openExternalDesc:
+      "Opens a new tab — the browser renders PDFs, images and media; unknown formats fall back to download",
+    mediaUnsupported: "This browser cannot play this format",
     binary: "Binary file, cannot preview.",
     truncated: "Content too long, display truncated.",
   },

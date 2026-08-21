@@ -75,6 +75,10 @@ export const zhWorkspace = {
     followOff: "停止跟随",
     followDesc: "AI 每碰一个文件，这里就自动切过去",
     sourceDesc: "在渲染结果与 markdown 源码之间来回切",
+    openExternal: "在浏览器里打开",
+    openExternalDesc:
+      "新标签页打开，PDF、图片、音视频交给浏览器渲染；认不出的格式退成下载",
+    mediaUnsupported: "这个浏览器放不了该格式",
     binary: "二进制文件，无法预览。",
     truncated: "内容过长，已截断显示。",
   },

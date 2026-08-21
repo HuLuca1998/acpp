@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 
 	"acpp/server/internal/service"
 )
@@ -148,9 +149,65 @@ func (h workspaceHandler) download(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	setAttachment(w, filepath.Base(target))
+	name := filepath.Base(target)
+
+	// inline=1 是「在浏览器里直接看」：给出真实类型并让浏览器自己渲染
+	// ——PDF、图片、音视频、纯文本它全都会画，比在面板里各写一个渲染器
+	// 划算得多。认不出的类型照旧走另存为：浏览器打不开的东西，摆出一个
+	// 空白标签页不如老老实实给文件。
+	if ctype := inlineContentType(name); ctype != "" && r.URL.Query().Get("inline") == "1" {
+		w.Header().Set("Content-Type", ctype)
+		w.Header().Set("Content-Disposition",
+			fmt.Sprintf("inline; filename=%q; filename*=UTF-8''%s",
+				name, url.PathEscape(name)))
+		// 会执行脚本的文档才上沙箱。这些字节来自工作目录，可能是 agent 刚
+		// 下载或生成的 HTML/SVG——它们与本应用同源，不设防就能在页面里跑
+		// 脚本、读走身份 cookie（adr-007 的凭证就在那儿）。
+		//
+		// 反过来，**不能**给所有类型一律套沙箱：浏览器的内建 PDF 查看器在
+		// 沙箱文档里用不了，结果是本该看得见的 PDF 变成一个下载框（实测
+		// Chrome 就是这样）。图片、音视频本身不执行脚本，不需要这道防线。
+		if sandboxedTypes[strings.ToLower(filepath.Ext(name))] {
+			w.Header().Set("Content-Security-Policy", "sandbox")
+		}
+		// 类型是我们按扩展名说了算的，不许浏览器再去嗅探内容改主意。
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		http.ServeFile(w, r, target)
+		return
+	}
+
+	setAttachment(w, name)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	http.ServeFile(w, r, target)
+}
+
+// inlineContentType 给浏览器能自己渲染的文件类型；返回空串表示「让它下载」。
+//
+// 白名单而不是 mime.TypeByExtension 全放行：系统 mime 表里有一堆浏览器
+// 根本不认的类型（.doc、.zip……），报出去只会得到一个空白标签页。
+var inlineTypes = map[string]string{
+	".txt": "text/plain; charset=utf-8", ".log": "text/plain; charset=utf-8",
+	".md": "text/plain; charset=utf-8", ".csv": "text/plain; charset=utf-8",
+	".tsv": "text/plain; charset=utf-8", ".json": "application/json; charset=utf-8",
+	".xml": "text/plain; charset=utf-8", ".yaml": "text/plain; charset=utf-8",
+	".yml":  "text/plain; charset=utf-8",
+	".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
+	".pdf": "application/pdf",
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+	".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif",
+	".bmp": "image/bmp", ".ico": "image/x-icon", ".svg": "image/svg+xml",
+	".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+	".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+	".m4a": "audio/mp4", ".flac": "audio/flac",
+}
+
+// sandboxedTypes 是「可能自带脚本」的类型：inline 下发时必须落进无源沙箱。
+var sandboxedTypes = map[string]bool{
+	".html": true, ".htm": true, ".svg": true, ".xml": true,
+}
+
+func inlineContentType(name string) string {
+	return inlineTypes[strings.ToLower(filepath.Ext(name))]
 }
 
 // setAttachment 让浏览器走「另存为」。filename* 用 RFC 5987 编码，中文名

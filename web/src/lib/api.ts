@@ -178,6 +178,15 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
      */
     downloadUrl: (id: number, path: string, archive = false) =>
       `${BASE}${at(id, `/fs/download?path=${encodeURIComponent(path)}${archive ? "&archive=1" : ""}`)}`,
+    /**
+     * 在浏览器里直接看这个文件的地址（新标签打开）。
+     *
+     * 与 downloadUrl 同一个端点，差别是 `inline=1`：服务端给出真实类型并
+     * 让浏览器自己渲染——PDF、图片、音视频、纯文本它全都会画。认不出的
+     * 类型服务端照旧回落成另存为，所以这个地址对任何文件都是安全的。
+     */
+    previewUrl: (id: number, path: string) =>
+      `${BASE}${at(id, `/fs/download?path=${encodeURIComponent(path)}&inline=1`)}`,
     /** git 汇总：分支/领先落后/变更文件/未推送 commit，diff 与 commit 面板共享。 */
     gitOverview: (id: number) => request<GitOverview>(at(id, `/git/overview`)),
     /** 工作区单文件 diff（HEAD 版对工作区版的两端全文）。 */
