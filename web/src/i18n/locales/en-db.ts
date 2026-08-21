@@ -66,6 +66,10 @@ export const enDb = {
   readOnlyHint:
     "While on, write statements are rejected and the AI is not even given the execute tool — only the query one. Turn it off to allow changing data or schema. This is a gate, not a boundary: stored procedures and dynamic SQL get around it; for a hard guarantee, give this connection an account that only has SELECT.",
   readOnlyBadge: "read-only",
+  readonlyUserHint:
+    "No read-only account yet? A password has been generated — copy these two statements and run them on the server; copying also fills the password field above.",
+  readonlyUserCopied: "SQL copied — password filled into the form",
+  readonlyUserCopiedKept: "SQL copied (password field already set, left as is)",
   disabledHint:
     "Disabled sources are not exposed to the AI, but stay editable here.",
   tabGeneral: "General",

@@ -63,6 +63,10 @@ export const zhDb = {
   readOnlyHint:
     "开着时软件层拒绝一切写语句，AI 那边连「执行」工具都不会挂上——它只看得到查询工具。关掉才允许改数据与改结构。这是闸门不是边界：存储过程、动态 SQL 绕得过去，要绝对不可写就给这条连接配一个只有 SELECT 的账号。",
   readOnlyBadge: "只读",
+  readonlyUserHint:
+    "还没有只读账号？密码已替你生成，复制这两句去库上执行即可——复制时会顺手把密码填进上面的密码框。",
+  readonlyUserCopied: "建号语句已复制，密码已同步填入密码框",
+  readonlyUserCopiedKept: "建号语句已复制（密码框已有内容，未覆盖）",
   disabledHint: "停用后不会挂给 AI，页面里仍可查看与编辑。",
   tabGeneral: "常规",
   tabSSH: "SSH",

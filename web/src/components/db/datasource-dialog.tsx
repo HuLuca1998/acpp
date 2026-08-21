@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { api, ApiError } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import type {
   DataSource,
   DataSourceInput,
@@ -40,7 +41,39 @@ import { UriDialog } from "@/components/db/uri-dialog"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
-import { CheckCircle2Icon, FolderOpenIcon, XCircleIcon } from "lucide-react"
+import {
+  CheckCircle2Icon,
+  CopyIcon,
+  FolderOpenIcon,
+  XCircleIcon,
+} from "lucide-react"
+
+/** URI 里带 SSH 却没带私钥路径时的缺省——本机约定私钥放这。 */
+const DEFAULT_SSH_KEY_PATH = "~/.ssh/key"
+
+// 与 `openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 32` 同款：
+// 62 字符字母数字表取 32 位（约 190 bit 熵），拒绝采样保证均匀。
+const PASSWORD_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+function generatePassword(length = 32): string {
+  const out: string[] = []
+  while (out.length < length) {
+    for (const b of crypto.getRandomValues(new Uint8Array(length * 2))) {
+      if (b >= 248) continue // 248 = 62*4，再往上取模就不均匀了
+      out.push(PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length])
+      if (out.length === length) break
+    }
+  }
+  return out.join("")
+}
+
+function readonlyUserSQL(password: string): string {
+  return [
+    `CREATE USER 'readonly'@'%' IDENTIFIED BY '${password}';`,
+    `GRANT SELECT, SHOW VIEW ON *.* TO 'readonly'@'%';`,
+  ].join("\n")
+}
 
 /**
  * 连接编辑对话框：常规 / SSH / 高级三个页签（形态照 Navicat，做同一件事
@@ -111,7 +144,7 @@ function DataSourceForm({
     env: source?.env ?? "",
     host: source?.host ?? "127.0.0.1",
     port: source?.port ?? 3306,
-    user: source?.user ?? "root",
+    user: source?.user ?? "readonly",
     password: "",
     database: source?.database ?? "",
     params: source?.params ?? "",
@@ -128,6 +161,8 @@ function DataSourceForm({
     disabled: source?.disabled ?? false,
   }))
   const [saving, setSaving] = useState(false)
+  // 只读建号语句里现场生成的密码，对话框打开期间保持不变。
+  const [genPassword] = useState(generatePassword)
   const [test, setTest] = useState<TestState>({ status: "idle" })
   const [sshTest, setSSHTest] = useState<TestState>({ status: "idle" })
   const [uriOpen, setUriOpen] = useState(false)
@@ -158,6 +193,19 @@ function DataSourceForm({
       return null
     } finally {
       setSaving(false)
+    }
+  }
+
+  // 复制建号 SQL 时把生成的密码顺手填进密码框——库里建的号和这条连接存
+  // 的密码天然一致。密码框已有内容（手敲过 / 编辑态的「留空=不改」）就不
+  // 碰，只复制。
+  async function copyReadonlySQL() {
+    await copyText(readonlyUserSQL(genPassword))
+    if (!form.password) {
+      set("password", genPassword)
+      toast.success(t("db.readonlyUserCopied"))
+    } else {
+      toast.success(t("db.readonlyUserCopiedKept"))
     }
   }
 
@@ -314,6 +362,31 @@ function DataSourceForm({
                 />
               </Field>
             </div>
+
+            {/* 只读建号引导：软件层的只读开关挡不住存储过程/动态 SQL（高级
+                页签里说了），真正的边界是账号授权——所以新建默认 readonly，
+                并把可直接执行的建号语句摆在手边。 */}
+            <Field>
+              <p className="text-xs text-muted-foreground">
+                {t("db.readonlyUserHint")}
+              </p>
+              <div className="flex items-start gap-2">
+                <code className="min-w-0 flex-1 rounded-lg border border-border bg-muted/40 px-2.5 py-2 font-mono text-xs leading-5 break-all whitespace-pre-wrap">
+                  {readonlyUserSQL(genPassword)}
+                </code>
+                <Hint label={t("common.copy")} align="end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t("common.copy")}
+                    onClick={() => void copyReadonlySQL()}
+                  >
+                    <CopyIcon />
+                  </Button>
+                </Hint>
+              </div>
+            </Field>
 
             {/* 一条连接只对应一个库，所以这里是必选而不是可填：
                 选定之后所有入口（界面、斜杠命令、AI）都锁死在它上面。 */}
@@ -574,8 +647,17 @@ function DataSourceForm({
         sourceId={source?.id ?? 0}
         onOpenChange={setUriOpen}
         onImport={(parsed) => {
-          setForm((prev) => ({ ...prev, ...parsed }))
+          // Navicat 的 URI 通常不带私钥路径：带 SSH 却没路径时补上本机
+          // 缺省，免得每次导入都手填一遍。
+          setForm((prev) => {
+            const next = { ...prev, ...parsed }
+            if (next.sshEnabled && !next.sshKeyPath) {
+              next.sshKeyPath = DEFAULT_SSH_KEY_PATH
+            }
+            return next
+          })
           setTest({ status: "idle" })
+          setSSHTest({ status: "idle" })
         }}
       />
 
