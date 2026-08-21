@@ -102,7 +102,10 @@ func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, pa
 
 	views := make([]SessionView, 0, len(sessions))
 	for i := range sessions {
-		views = append(views, *s.toView(&sessions[i]))
+		// 列表不读 git 分支：只有会话页底部的状态条用得上它（拿的是
+		// 单条 Get），而侧栏每次换路由都要拉一页 50 条——那就是每次导航
+		// 一百多次多余的磁盘读。
+		views = append(views, *s.toView(&sessions[i], false))
 	}
 	s.fillTenantNames(ctx, views)
 	return views, total, nil
@@ -184,7 +187,7 @@ func (s *SessionService) Get(ctx context.Context, scope Scope, id uint) (*Sessio
 	if err != nil {
 		return nil, fmt.Errorf("get session %d: %w", id, err)
 	}
-	view := s.toView(&session)
+	view := s.toView(&session, true)
 	if session.TenantID != 0 {
 		var tenant model.Tenant
 		if err := s.db.WithContext(ctx).First(&tenant, session.TenantID).Error; err == nil {
@@ -245,7 +248,7 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 	}
 
 	session.Agent = &agent
-	return s.toView(&session), nil
+	return s.toView(&session, true), nil
 }
 
 // EnsureMCPToken 懒生成会话专属的 MCP 端点令牌（agent 子进程带它回连拿
@@ -298,14 +301,18 @@ func (s *SessionService) Delete(ctx context.Context, scope Scope, id uint) error
 	return nil
 }
 
-func (s *SessionService) toView(session *model.Session) *SessionView {
+// toView 把记录转成对外视图。withBranch 决定要不要现读工作目录的 git 分支
+// ——那是两次磁盘读，只有单条会话的视图值得付（列表页不显示分支）。
+func (s *SessionService) toView(session *model.Session, withBranch bool) *SessionView {
 	// MessageCount 由 HTTP 层从转录重建结果填充，消息本身不进库。
 	view := SessionView{Session: *session}
 	if session.Agent != nil {
 		view.AgentName = session.Agent.Name
 		view.AgentFlavor = session.Agent.Flavor
 	}
-	view.GitBranch = gitBranch(view.Cwd)
+	if withBranch {
+		view.GitBranch = gitBranch(view.Cwd)
+	}
 	return &view
 }
 
