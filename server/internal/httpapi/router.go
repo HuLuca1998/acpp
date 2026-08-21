@@ -332,7 +332,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		root.Handle("/", spaHandler(cfg.WebDir))
 	}
 
-	return withRecover(withLogging(withCORS(cfg.CORSOrigins, root)))
+	// 压缩放在最内层：它要包住真正产出响应体的那个 writer，日志中间件
+	// 记录的仍是 handler 写出的状态码。
+	return withRecover(withLogging(withCORS(cfg.CORSOrigins, withCompression(root))))
 }
 
 // corsHosts 把 CORS origin 列表转成 ws 升级用的 host pattern
