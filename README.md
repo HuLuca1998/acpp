@@ -216,7 +216,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/system/workspace-dir` | 改工作区根（`{workspaceDir}`）：agent 干活的地方与访客 root 的父目录，立刻生效 |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用。**turn 进行中也能改**：界面在轮里只放开权限档与思考深度（前者是就地管住 agent 的唯一手段，后者给下一轮预约），模型/plan/fast 锁到轮末。生效时机两端不同——权限档 claude 立刻对本轮生效、codex 要等下一轮（档位是轮开始时的快照），思考深度两端一律下一轮；控件的悬停说明照实写明 |
-| POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消） |
+| POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消）。卡片挂起最长 **30 分钟**（等真人点选的反向调用统一这个时限，含交互式提问；机器应答的 fs 读写仍是 1 分钟），超时按 cancelled 回给 agent，那一步工具调用随即失败 |
 | GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?…}`；密码永不下发，响应只给 `hasPassword` 标志位） |
 | GET/PUT/DELETE | `/api/datasources/{id}` | 连接详情 / 更新（密码留空=不改） / 删除 |
 | POST | `/api/datasources/{id}/test` | 测试连接（连不上返回 200 带 `{ok:false, error}`，那是配置问题不是服务故障） |

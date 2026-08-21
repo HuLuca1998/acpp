@@ -29,12 +29,24 @@ const (
 	closeGraceSignal = 2 * time.Second
 )
 
-// 反向调用的应答时限：普通请求一分钟；交互式提问要等真人作答，
-// 给到和一轮 prompt 同级别的时间。
+// 反向调用的应答时限分两档：机器答的（fs 读写）一分钟绰绰有余；要等真人
+// 点选的（权限裁决、交互式提问）给到半小时——人离开工位倒杯水、或者局域网
+// 里的访客晚几分钟才看到卡片，那一步都不该已经被判成拒绝。半小时是有限值
+// 而不是无限：真忘了这回事时，agent 子进程不该永远悬在那儿等。
 const (
-	reverseCallTimeout     = time.Minute
-	elicitationCallTimeout = 10 * time.Minute
+	reverseCallTimeout = time.Minute
+	humanCallTimeout   = 30 * time.Minute
 )
+
+// reverseTimeout 给一次反向调用挑应答时限。
+func reverseTimeout(method string) time.Duration {
+	switch method {
+	case "session/request_permission", "elicitation/create":
+		return humanCallTimeout
+	default:
+		return reverseCallTimeout
+	}
+}
 
 // Handler 处理 agent 反向调用。fs 方法只有在 initialize 里声明了对应
 // capability 时才会被调到。
@@ -303,11 +315,7 @@ func (c *Conn) handleNotification(msg rpcMessage) {
 
 // handleRequest 处理 agent 的反向调用。每个请求都必须回，agent 在阻塞等。
 func (c *Conn) handleRequest(msg rpcMessage) {
-	timeout := reverseCallTimeout
-	if msg.Method == "elicitation/create" {
-		timeout = elicitationCallTimeout
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), reverseTimeout(msg.Method))
 	defer cancel()
 
 	result, err := c.route(ctx, msg)
