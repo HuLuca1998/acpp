@@ -18,6 +18,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(server: server, app: self)
         installSignalHandlers()
 
+        // 通知：这里只接线，**不请求授权**——启动就弹系统授权框是最招人烦的
+        // 做法，而且用户还没见过这个 app 会通知什么。授权由设置页里的开关
+        // 发起，那时他正好在决定这件事。
+        Notifier.shared.start()
+        Notifier.shared.onActivate = { [weak self] in self?.showMainWindow() }
+        Notifier.shared.onAction = { [weak self] payload in
+            self?.windowController.deliverNotificationAction(payload)
+        }
+
         // 开机最小化：只驻留菜单栏，窗口不弹、Dock 不占。服务照常起——
         // 用户从菜单栏打开时窗口里应该已经是可用的界面，而不是现加载。
         if LaunchPreferences.startMinimized {

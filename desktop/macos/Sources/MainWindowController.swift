@@ -62,6 +62,22 @@ final class MainWindowController: NSObject, NSWindowDelegate, WKNavigationDelega
         return false
     }
 
+    /// 把通知上的操作交回前端。裁决与回答都走前端已有的 API 客户端，壳不在
+    /// Swift 里再实现一遍认证与请求——那会变成第二份要同步维护的契约。
+    ///
+    /// 页面还没加载好就丢掉：那种情况下用户点的是通知本体，窗口已经被带到
+    /// 前台，他在界面上照样能处理，比让壳去猜要可靠。
+    func deliverNotificationAction(_ payload: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let js = "window.dispatchEvent(new CustomEvent('acpp:notification-action',"
+            + " { detail: \(json) }))"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView.evaluateJavaScript(js)
+        }
+    }
+
     // MARK: - 内容
 
     func loadApp() {
