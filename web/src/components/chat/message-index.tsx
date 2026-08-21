@@ -32,8 +32,11 @@ const MAX_JUMP_PAGES = 40
 const MAX_JUMP_MISSES = 3
 
 /**
- * 静息时露出的刻度数。长会话有几十上百轮，全排出来是一条从头到尾的栅栏，
- * 又吵又没法读——安静时只留当前读到的这一段，手伸过去才展开全部。
+ * 索引条上同时露出的刻度数。
+ *
+ * 刻意**不**给全部提问各来一格：长会话有几十上百轮，排出来是一条从头到尾
+ * 的栅栏，还得自带滚动条——索引成了第二个需要导航的东西。只显示当前读到
+ * 的这一段，随阅读位置滑动；更远的地方滚过去就到了，索引跟着走。
  */
 const WINDOW_SIZE = 9
 
@@ -56,8 +59,6 @@ export function MessageIndex({
   // 鼠标正指着的那一格（索引下标）。梯队以它为中心，不是以阅读位置为
   // 中心——手在哪儿，放大镜就在哪儿。
   const [hovered, setHovered] = useState<number | null>(null)
-  // 鼠标进到索引条这一列：展开全部刻度。移开收回当前这一段。
-  const [expanded, setExpanded] = useState(false)
   // 刚点过的那一格。跳转落点会按原语的 peek 露出上一条的一角，只看可见
   // 集合会把高亮判给上一轮——用户刚点的那条当然该亮，直到他自己滚开。
   const [pinned, setPinned] = useState<number | null>(null)
@@ -114,12 +115,12 @@ export function MessageIndex({
   const activeId = pinned ?? scrolledId
 
   /**
-   * 静息时露出的那一段：以当前读到的位置为中心，两端不足就往回贴边。
+   * 露出的那一段：以当前读到的位置为中心，两端不足就往回贴边。
    * 还不知道读到哪儿（刚打开、可见集合没算出来）就露最新的一段——打开
    * 会话本来就落在底部。
    */
   const slice = useMemo(() => {
-    if (expanded || items.length <= WINDOW_SIZE) {
+    if (items.length <= WINDOW_SIZE) {
       return { start: 0, shown: items }
     }
     const center = items.findIndex((item) => item.messageId === activeId)
@@ -127,7 +128,7 @@ export function MessageIndex({
     const max = items.length - WINDOW_SIZE
     const start = center < 0 ? max : Math.min(Math.max(center - half, 0), max)
     return { start, shown: items.slice(start, start + WINDOW_SIZE) }
-  }, [expanded, items, activeId])
+  }, [items, activeId])
 
   // 用户一碰滚轮或键盘就把高亮交还给自动判定。
   useEffect(() => {
@@ -191,14 +192,8 @@ export function MessageIndex({
       aria-label={t("chat.outline.title")}
     >
       <div
-        className={cn(
-          "pointer-events-auto flex max-h-full scrollbar-thin flex-col items-start overflow-y-auto py-2 pl-3"
-        )}
-        onMouseEnter={() => setExpanded(true)}
-        onMouseLeave={() => {
-          setExpanded(false)
-          setHovered(null)
-        }}
+        className="pointer-events-auto flex flex-col items-start py-2 pl-3"
+        onMouseLeave={() => setHovered(null)}
       >
         {slice.shown.map((item, i) => (
           <IndexTick
