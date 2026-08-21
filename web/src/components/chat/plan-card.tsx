@@ -7,12 +7,25 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   ChevronRightIcon,
   CircleCheckIcon,
+  CircleDotDashedIcon,
   CircleIcon,
   ListTodoIcon,
 } from "lucide-react"
 
-/** 计划条目列表：实时卡与历史快照卡共用同一份渲染。 */
-function PlanEntryList({ entries }: { entries: PlanEntry[] }) {
+/**
+ * 计划条目列表：实时卡与历史快照卡共用同一份渲染。
+ *
+ * live 区分「此刻真在跑」和「已经定格的历史」：agent 常把最后一项做完就
+ * 结束轮次、不再发收尾的 plan 更新，那条 in_progress 会永久留在快照里。
+ * 历史里再转圈就是假的——同样的状态改画静态图标。
+ */
+function PlanEntryList({
+  entries,
+  live,
+}: {
+  entries: PlanEntry[]
+  live?: boolean
+}) {
   return (
     <ul className="flex flex-col gap-1.5">
       {entries.map((entry, i) => (
@@ -23,7 +36,11 @@ function PlanEntryList({ entries }: { entries: PlanEntry[] }) {
           {entry.status === "completed" ? (
             <CircleCheckIcon className="mt-0.5 size-4 shrink-0 text-success" />
           ) : entry.status === "in_progress" ? (
-            <Spinner className="mt-0.5 size-4 shrink-0" />
+            live ? (
+              <Spinner className="mt-0.5 size-4 shrink-0" />
+            ) : (
+              <CircleDotDashedIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            )
           ) : (
             <CircleIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
           )}
@@ -60,7 +77,7 @@ export function PlanCard({ entries }: { entries: PlanEntry[] }) {
           {done} / {entries.length}
         </span>
       </div>
-      <PlanEntryList entries={entries} />
+      <PlanEntryList entries={entries} live />
     </div>
   )
 }
