@@ -3,17 +3,11 @@ import { useTranslation } from "react-i18next"
 
 import { useTheme } from "@/components/shell/theme-provider"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Hint } from "@/components/hint"
-import { Button } from "@/components/ui/button"
-import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import {
   PALETTES,
   PALETTE_SWATCHES,
@@ -21,13 +15,7 @@ import {
   savePalette,
   type Palette,
 } from "@/lib/palette"
-import {
-  CheckIcon,
-  MonitorIcon,
-  MoonIcon,
-  SunIcon,
-  SwatchBookIcon,
-} from "lucide-react"
+import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react"
 
 const THEME_OPTIONS = [
   { value: "light", icon: SunIcon },
@@ -50,10 +38,11 @@ function PaletteSwatch({ palette }: { palette: Palette }) {
 }
 
 /**
- * 外观切换：明暗模式 + 完整主题方案，即时生效并持久化。
- * iconOnly 是侧栏底部一行装四个入口的紧凑形态（菜单内容不变）。
+ * 外观选项（明暗模式 + 主题方案），即时生效并持久化。
+ * 只导出菜单**内容**，不带触发器——唯一的入口是用户菜单的子菜单
+ * （shell/nav-user.tsx），壳长在那边。
  */
-export function AppearanceSwitcher({ iconOnly }: { iconOnly?: boolean }) {
+export function AppearanceMenuItems() {
   const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const [palette, setPalette] = useState<Palette>(() => loadPalette())
@@ -63,59 +52,29 @@ export function AppearanceSwitcher({ iconOnly }: { iconOnly?: boolean }) {
     setPalette(next)
   }
 
-  const menu = (
-    <DropdownMenu>
-      {iconOnly ? (
-        <Hint label={t("appearance.label")}>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
-                aria-label={t("appearance.label")}
-              />
-            }
-          >
-            <SwatchBookIcon className="size-4" />
-          </DropdownMenuTrigger>
-        </Hint>
-      ) : (
-        <DropdownMenuTrigger render={<SidebarMenuButton />}>
-          <SwatchBookIcon />
-          <span>{t("appearance.label")}</span>
-        </DropdownMenuTrigger>
-      )}
-        <DropdownMenuContent side="right" align="end" className="w-44">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t("appearance.theme")}</DropdownMenuLabel>
-            {THEME_OPTIONS.map(({ value, icon: Icon }) => (
-              <DropdownMenuItem key={value} onClick={() => setTheme(value)}>
-                <Icon />
-                <span className="flex-1">{t(`appearance.${value}`)}</span>
-                {theme === value ? <CheckIcon /> : null}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t("appearance.palette")}</DropdownMenuLabel>
-            {PALETTES.map((option) => (
-              <DropdownMenuItem
-                key={option}
-                onClick={() => pickPalette(option)}
-              >
-                <PaletteSwatch palette={option} />
-                <span className="flex-1">
-                  {t(`appearance.palettes.${option}`)}
-                </span>
-                {palette === option ? <CheckIcon /> : null}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-    </DropdownMenu>
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>{t("appearance.theme")}</DropdownMenuLabel>
+        {THEME_OPTIONS.map(({ value, icon: Icon }) => (
+          <DropdownMenuItem key={value} onClick={() => setTheme(value)}>
+            <Icon />
+            <span className="flex-1">{t(`appearance.${value}`)}</span>
+            {theme === value ? <CheckIcon /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuGroup>
+      <DropdownMenuSeparator />
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>{t("appearance.palette")}</DropdownMenuLabel>
+        {PALETTES.map((option) => (
+          <DropdownMenuItem key={option} onClick={() => pickPalette(option)}>
+            <PaletteSwatch palette={option} />
+            <span className="flex-1">{t(`appearance.palettes.${option}`)}</span>
+            {palette === option ? <CheckIcon /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuGroup>
+    </>
   )
-
-  return iconOnly ? menu : <SidebarMenuItem>{menu}</SidebarMenuItem>
 }

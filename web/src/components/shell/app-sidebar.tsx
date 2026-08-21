@@ -2,10 +2,8 @@ import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router"
 
-import { AppearanceSwitcher } from "@/components/shell/appearance-switcher"
-import { BackendStatus } from "@/components/shell/backend-status"
+import { NavUser } from "@/components/shell/nav-user"
 import { NoticeCenter } from "@/components/shell/notice-center"
-import { LanguageSwitcher } from "@/components/shell/language-switcher"
 import { NavMain } from "@/components/shell/nav-main"
 import { AgentIcon } from "@/components/agent-icon"
 import { NavProjects } from "@/components/shell/nav-projects"
@@ -19,8 +17,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Hint } from "@/components/hint"
-import { Button } from "@/components/ui/button"
 import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize } from "@/lib/format"
@@ -30,10 +26,7 @@ import {
   DatabaseIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
-  PlugZapIcon,
   ScrollTextIcon,
-  UserRoundIcon,
-  Settings2Icon,
   PuzzleIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -103,22 +96,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         },
       ]
 
-  // 底部一行的图标入口：设置/连接是 owner 的（adr-007），外观/语言人人有。
-  const footerLinks = isOwner
-    ? [
-        {
-          title: t("nav.settings"),
-          url: "/settings",
-          icon: <Settings2Icon className="size-4" />,
-        },
-        {
-          title: t("nav.connections"),
-          url: "/connections",
-          icon: <PlugZapIcon className="size-4" />,
-        },
-      ]
-    : []
-
   // 品牌图标标出会话属于哪个 agent，一眼可辨。
   const recentItems = recent.map((session) => ({
     name: session.title || `${t("common.unnamed")} #${session.id}`,
@@ -155,34 +132,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ) : null}
       </SidebarContent>
       <SidebarFooter>
-        {/* 底部从上到下：通知中心（要人动手处理的东西，占大头）→ 身份 +
-            四个图标入口挤成一行（原本四行菜单，压缩出来的空间全让给通知）
-            → 连接状态。 */}
+        {/* 底部从上到下：通知中心（要人动手处理的东西，占大头）→ 一行
+            用户条目——设置/连接/外观/语言与后端状态全部收进它的菜单
+            （shadcn NavUser 模式），空间尽数让给通知。 */}
         <NoticeCenter />
-        <div className="flex items-center justify-between gap-1 px-2">
-          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <UserRoundIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{whoami}</span>
-          </div>
-          <div className="flex shrink-0 items-center">
-            {footerLinks.map((link) => (
-              <Hint key={link.url} label={link.title}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 text-muted-foreground hover:text-foreground"
-                  aria-label={link.title}
-                  render={<Link to={link.url} />}
-                >
-                  {link.icon}
-                </Button>
-              </Hint>
-            ))}
-            <AppearanceSwitcher iconOnly />
-            <LanguageSwitcher iconOnly />
-          </div>
-        </div>
-        <BackendStatus />
+        <NavUser whoami={whoami} isOwner={isOwner} />
       </SidebarFooter>
     </Sidebar>
   )

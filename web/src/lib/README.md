@@ -49,7 +49,7 @@
 | identity-context.ts  | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话                                                                  | `useDraftSession`                              |
 | use-mobile.ts        | 移动端断点判断（shadcn 生成）                                                                                   | `useIsMobile`                                  |
-| use-version-watch.ts | 版本哨兵：后端换版本就报出新版本号，侧栏状态条就地给刷新入口（局域网访客不会自己刷新）                         | `useVersionWatch`                              |
+| use-version-watch.ts | 版本哨兵：后端换版本就报出新版本号，用户菜单（nav-user）据此给出刷新入口（局域网访客不会自己刷新）                         | `useVersionWatch`                              |
 | use-server-events.ts | 全局事件流 /api/events 的单一连接（模块级）+ 订阅 hook；含断线退避重连                                          | `useServerEvents`                              |
 | use-notifications.ts | 通知：判断该不该打扰（偏好 + 用户在不在看这一页），落进通知中心并分派提示（桌面壳系统通知 / 浏览器标题闪烁 + 声音）；含系统通知回调的裁决处理 | `useNotifications`                             |
 | use-notices.ts       | 订阅通知中心存量（useSyncExternalStore 接 lib/notify/store.ts）                                                | `useNotices`                                   |
