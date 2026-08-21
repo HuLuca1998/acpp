@@ -87,27 +87,30 @@ func TestBuildPromptBlocksResourceLink(t *testing.T) {
 	}
 }
 
-// 数据库用法约定只跟着 @ 引用走：有引用时插在引用之后、正文之前；
-// 没引用时一个字都不加（会话开场不主动提数据库）。
-func TestAppendDBReferencesGuidance(t *testing.T) {
+// @ 数据库引用只以 resource 块进 prompt（正文之前），**不允许**出现裸
+// text 块——重建会把所有 text 块拼成用户正文，注入的说明会显示成用户
+// 自己说的话（历史教训见 rebuild.go 的 legacyDBGuidance）。
+func TestAppendDBReferences(t *testing.T) {
 	base := []acp.ContentBlock{acp.TextBlock("这两张表什么关系？")}
 
-	t.Run("有引用时给约定", func(t *testing.T) {
+	t.Run("引用是 resource 块且正文原样殿后", func(t *testing.T) {
 		blocks, payload := AppendDBReferences(base, nil, []DBReference{
-			{URI: "mysql://pp-game/local/users", Text: "CREATE TABLE users ..."},
+			{URI: "mysql://pp-game/local/users", Text: "用户引用了数据源……"},
 		}, true)
 
-		if len(blocks) != 3 {
-			t.Fatalf("blocks = %d 个，期望 3（引用 + 约定 + 正文）", len(blocks))
+		if len(blocks) != 2 {
+			t.Fatalf("blocks = %d 个，期望 2（引用 + 正文）", len(blocks))
 		}
 		if blocks[0].Type != "resource" {
 			t.Errorf("第一块应是引用内容，实际 %+v", blocks[0])
 		}
-		if blocks[1].Type != "text" || blocks[1].Text != dbReferenceGuidance {
-			t.Errorf("第二块应是用法约定，实际 %+v", blocks[1])
+		if blocks[1].Type != "text" || blocks[1].Text != "这两张表什么关系？" {
+			t.Errorf("正文必须原样留在最后，实际 %+v", blocks[1])
 		}
-		if blocks[2].Text != "这两张表什么关系？" {
-			t.Errorf("正文必须留在最后，实际 %+v", blocks[2])
+		for _, b := range blocks[:1] {
+			if b.Type == "text" {
+				t.Errorf("引用不许产生裸 text 块，实际 %+v", b)
+			}
 		}
 		if uris, _ := payload["datasources"].([]string); len(uris) != 1 {
 			t.Errorf("datasources = %v，期望记下被引用的 URI", payload["datasources"])

@@ -10,6 +10,14 @@ import (
 	"acpp/server/internal/transcript"
 )
 
+// legacyDBGuidance 是 2026-08 之前随 @ 数据库引用一起下发的用法约定原文。
+// 当时它是 prompt 里的一个裸 text 块，重建时被当成用户正文拼进了气泡（bug）；
+// 现在引用只走 resource 块，但旧转录里这段文案已经落盘，重建时按原文精确
+// 跳过，历史会话的气泡才干净。**一个字都不要改**——它匹配的是既有转录。
+const legacyDBGuidance = "以上是用户引用的数据库内容。" +
+	"接着往下查就用 acpp-db 的 db_* 工具：写 SQL 前先用 db_schema 看表结构，不要凭表名猜字段；" +
+	"要改数据前先确认环境——`local` 和 `pre` 只差两个字母，跑错了不可撤销。"
+
 // wireMsg 是转录里一行 JSON-RPC 消息的最小解码形态。
 type wireMsg struct {
 	ID     json.RawMessage `json:"id,omitempty"`
@@ -113,6 +121,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		var images []map[string]any
 		var files []string
 		var linked []string
+		var datasources []string
 		for _, block := range prompt {
 			switch block.Type {
 			case "image":
@@ -121,7 +130,16 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 					"data": block.Data, "mimeType": block.MimeType,
 				})
 			case "resource":
-				if block.Resource != nil {
+				if block.Resource == nil {
+					continue
+				}
+				// mysql:// 是 @ 数据库引用（datasource 包 expandRef 的
+				// URI 形状），与文件芯片分开落——键名对齐发送时临时消息
+				// 的 payload（AppendDBReferences），芯片才不会在重建后
+				// 从数据库图标变成文件图标。
+				if strings.HasPrefix(block.Resource.URI, "mysql://") {
+					datasources = append(datasources, block.Resource.URI)
+				} else {
 					files = append(files, block.Resource.URI)
 				}
 			case "resource_link":
@@ -129,11 +147,17 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 				files = append(files, block.URI)
 				linked = append(linked, block.URI)
 			default:
+				// 旧转录随 @ 数据库引用注入过一段裸 text 的用法约定，
+				// 不是用户说的话，拼进正文就成了「用户气泡里冒出系统
+				// 文案」——按原文精确跳过（新引用已不再产生 text 块）。
+				if block.Text == legacyDBGuidance {
+					continue
+				}
 				text = append(text, block.Text...)
 			}
 		}
 		content := trimmed(text)
-		if content == "" && len(images) == 0 && len(files) == 0 {
+		if content == "" && len(images) == 0 && len(files) == 0 && len(datasources) == 0 {
 			return
 		}
 		payload := model.JSONMap{}
@@ -145,6 +169,9 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		}
 		if len(linked) > 0 {
 			payload["linkedFiles"] = linked
+		}
+		if len(datasources) > 0 {
+			payload["datasources"] = datasources
 		}
 		if len(payload) == 0 {
 			payload = nil

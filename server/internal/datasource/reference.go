@@ -9,27 +9,24 @@ import (
 	"acpp/server/internal/service"
 )
 
-// @ 数据库引用：用户在输入框里挑一个数据源/库/表，发送时把它的现状嵌进
-// prompt——与 @ 文件引用同一个动作，只是内容从磁盘换成了库。
+// @ 数据库引用：用户在输入框里挑一个数据源/库/表，发送时随 prompt 告知
+// AI「这轮针对这个库，用 acpp-db 的工具去查它」——与 @ 文件引用同一个动作。
 //
-// 为什么值得嵌而不是让 AI 自己去查：一次引用省掉一到两轮工具调用，
-// 更要紧的是它**指定了范围**。「帮我看下这个表」比「你自己找找」少一半
-// 误会，尤其是有多个环境的时候。
+// 引用的价值是**指定范围**，不是搬运数据：早先这里会现查库把表清单/表结构
+// 嵌进 prompt，几千 token 的常驻负担换来的信息 AI 自己一次 db_tables/db_schema
+// 就能拿到（用户拍板：引用只给指路的告知，结构让 AI 用工具现查）。
 //
 // 引用串两级——一条连接固定对应一个库，中间没有「选库」这一层：
 //
-//	pp-game/dev         数据源（它那个库的表清单）
-//	pp-game/dev/users   指定表（列、索引、建表语句）
+//	pp-game/dev         数据源（它绑定的那个库）
+//	pp-game/dev/users   指定表
 
-// refMaxTables 是库级引用最多列出的表数。库大起来表能上千，
-// 全列进去就把上下文吃光了——超出部分只报数量，AI 要细节自己调工具。
-const refMaxTables = 200
-
-// Reference 把引用串展开成可嵌进 prompt 的文本。
+// Reference 把引用串展开成可嵌进 prompt 的告知文本。
 //
 // cwd 决定可见哪些数据源——与 MCP 工具面同一个过滤入口，引用不是绕过
-// 项目边界的后门。展开失败（数据源不存在、连不上、表没了）直接报错：
-// 发出去一个空引用比报错更糟，用户会以为 AI 看到了其实没看到的东西。
+// 项目边界的后门。数据源不存在直接报错：发出去一个空引用比报错更糟，
+// 用户会以为 AI 看到了其实没看到的东西。这里不连库——引用不该因为库
+// 一时连不上而发不出消息，连不连得上等 AI 真正调工具时再暴露。
 func (s *Service) Reference(ctx context.Context, cwd string, refs []string) ([]service.DBReference, error) {
 	if len(refs) == 0 {
 		return nil, nil
@@ -41,7 +38,7 @@ func (s *Service) Reference(ctx context.Context, cwd string, refs []string) ([]s
 
 	out := make([]service.DBReference, 0, len(refs))
 	for _, raw := range refs {
-		ref, err := expandRef(ctx, sources, raw)
+		ref, err := expandRef(sources, raw)
 		if err != nil {
 			return nil, err
 		}
@@ -50,7 +47,7 @@ func (s *Service) Reference(ctx context.Context, cwd string, refs []string) ([]s
 	return out, nil
 }
 
-func expandRef(ctx context.Context, sources []model.DataSource, raw string) (*service.DBReference, error) {
+func expandRef(sources []model.DataSource, raw string) (*service.DBReference, error) {
 	src, table, err := splitRef(sources, raw)
 	if err != nil {
 		return nil, err
@@ -62,8 +59,8 @@ func expandRef(ctx context.Context, sources []model.DataSource, raw string) (*se
 	}
 
 	// 语气很要紧：引用表达的是「接下来的问题针对这个库，你去查它」，
-	// 不是「这是一份数据快照」。只给结构不点破的话，模型常拿着结构就
-	// 开始推测数据，答出一堆看着合理的数字——用户要的是真去查。
+	// 不是「这是一份数据快照」。不点破的话，模型常凭表名开始推测数据，
+	// 答出一堆看着合理的数字——用户要的是真去查。
 	var b strings.Builder
 	b.WriteString("# 本轮指定的数据库\n\n")
 	fmt.Fprintf(&b, "用户引用了数据源 **%s**（%s:%d", src.Ref, src.Host, src.Port)
@@ -75,24 +72,10 @@ func expandRef(ctx context.Context, sources []model.DataSource, raw string) (*se
 		fmt.Fprintf(&b, "的 `%s` 表", table)
 	}
 	b.WriteString("。这条连接只对应这一个库。\n\n")
-	fmt.Fprintf(&b, "**接下来凡是与数据有关的问题，都用 acpp-db 的 db_* 工具实际查询它**"+
-		"（`source` 参数填 `%s`），不要凭下面的结构推测数据、也不要问用户该连哪个库——"+
-		"他已经指定了。下面的结构信息是给你省掉一次 db_schema，不是数据本身。\n\n",
-		src.Ref)
-
-	if table != "" {
-		detail, err := Describe(ctx, src, "", table)
-		if err != nil {
-			return nil, err
-		}
-		b.WriteString(renderSchema(src, detail))
-	} else {
-		tables, err := Tables(ctx, src, "")
-		if err != nil {
-			return nil, err
-		}
-		b.WriteString(renderRefTables(src, src.Database, tables))
-	}
+	fmt.Fprintf(&b, "接下来凡是与数据有关的问题，都用 acpp-db 的 db_* 工具实际查询它"+
+		"（`source` 参数填 `%s`）：先用 db_tables / db_schema 看表清单与表结构再写 SQL，"+
+		"不要凭表名猜字段；要改数据前先确认环境——环境名往往只差一两个字母，跑错了不可撤销。"+
+		"不要凭空推测数据，也不要问用户该连哪个库——他已经指定了。\n", src.Ref)
 
 	return &service.DBReference{URI: uri, Text: b.String()}, nil
 }
@@ -139,33 +122,4 @@ func splitRef(sources []model.DataSource, raw string) (*model.DataSource, string
 		table = rest[0]
 	}
 	return src, table, nil
-}
-
-// renderRefTables 是库级引用的正文：表清单 + 用法提示。
-func renderRefTables(src *model.DataSource, database string, tables []Table) string {
-	var b strings.Builder
-	if len(tables) == 0 {
-		fmt.Fprintf(&b, "%s 的 %s 库里没有表。\n", src.Ref, database)
-		return b.String()
-	}
-
-	shown := tables
-	if len(shown) > refMaxTables {
-		shown = shown[:refMaxTables]
-	}
-	fmt.Fprintf(&b, "%s 的 %s 库共 %d 张表", src.Ref, database, len(tables))
-	if len(shown) < len(tables) {
-		fmt.Fprintf(&b, "（只列前 %d 张）", len(shown))
-	}
-	b.WriteString("：\n")
-
-	rows := [][]string{{"表", "类型", "行数(估算)", "注释"}}
-	for _, t := range shown {
-		rows = append(rows, []string{
-			t.Name, shortTableType(t.Type), fmt.Sprint(t.Rows), dash(t.Comment),
-		})
-	}
-	b.WriteString(table(rows))
-	b.WriteString("\n要看某张表的字段用 db_schema，要数据用 db_query——写 SQL 前先看结构，别凭表名猜字段。\n")
-	return b.String()
 }

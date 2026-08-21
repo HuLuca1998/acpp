@@ -28,6 +28,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   ChevronRightIcon,
+  DatabaseIcon,
   FileIcon,
   LinkIcon,
   ShieldCheckIcon,
@@ -195,12 +196,14 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   if (message.role === "user") {
-    // 附件（图片 / @ 引用文件）由发送入参或转录重建带回 payload。
-    // linkedFiles 是大文件的按需引用子集（未内嵌，agent 自行读取）。
+    // 附件（图片 / @ 引用文件 / @ 引用数据库）由发送入参或转录重建带回
+    // payload。linkedFiles 是大文件的按需引用子集（未内嵌，agent 自行读取）；
+    // datasources 是 mysql:// 形状的数据库引用 URI。
     const payload = message.payload as {
       images?: { data: string; mimeType: string }[]
       files?: string[]
       linkedFiles?: string[]
+      datasources?: string[]
     } | null
     const linked = new Set(payload?.linkedFiles ?? [])
     return (
@@ -230,6 +233,22 @@ export const ChatMessage = memo(function ChatMessage({
                       alt=""
                       className="max-h-40 max-w-60 rounded-lg border border-border object-contain"
                     />
+                  ))}
+                </div>
+              ) : null}
+              {payload?.datasources?.length ? (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {payload.datasources.map((uri) => (
+                    <span
+                      key={uri}
+                      title={uri}
+                      className="flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs text-muted-foreground"
+                    >
+                      <DatabaseIcon className="size-3" />
+                      <span className="max-w-40 truncate font-mono">
+                        {uri.replace(/^mysql:\/\//, "")}
+                      </span>
+                    </span>
                   ))}
                 </div>
               ) : null}

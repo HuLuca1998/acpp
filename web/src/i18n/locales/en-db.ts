@@ -21,7 +21,7 @@ export const enDb = {
   uriButton: "URI",
   refTitle: "Reference a database",
   refHint:
-    "Pick a source, database or table — its current shape (table list or schema) is sent along with your message.",
+    "Pick a source, database or table — the AI is told to target it for this turn and query it with the database tools.",
   refPick: "Reference",
   refNeedsCwd:
     "Pick a working directory first — sources are filtered by its project",

@@ -21,7 +21,7 @@ export const zhDb = {
   uriButton: "URI",
   refTitle: "引用数据库",
   refHint:
-    "选一个数据源、库或表交给 AI——发送时把它的现状（表清单或表结构）一并带上。",
+    "选一个数据源、库或表交给 AI——它会明确本轮针对这个库，用数据库工具实际查询。",
   refPick: "引用",
   refNeedsCwd: "先选择工作目录——数据源按它所属的项目筛选",
   defaultSource: "默认数据源",

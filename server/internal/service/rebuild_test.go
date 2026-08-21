@@ -32,6 +32,37 @@ func resultFrame(id int) string {
 	return fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":{"stopReason":"end_turn"}}`, id)
 }
 
+// @ 数据库引用的 prompt：resource 块（mysql://）落进 datasources payload
+// 而不是 files，正文只含用户自己打的字；旧转录里随引用注入的用法约定
+// text 块（legacyDBGuidance）不是用户说的话，必须跳过。
+func TestRebuildMessagesDBReference(t *testing.T) {
+	prompt := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":{"sessionId":"s","prompt":[`+
+		`{"type":"resource","resource":{"uri":"mysql://onepay/Prod/onepay","text":"# 本轮指定的数据库……"}},`+
+		`{"type":"text","text":%q},`+
+		`{"type":"text","text":"订单 CLN123 查一下"}]}}`, legacyDBGuidance)
+	entries := []transcript.Entry{
+		wire(t, "send", prompt),
+		wire(t, "recv", chunkFrame("查到了。")),
+		wire(t, "recv", resultFrame(1)),
+	}
+
+	got := RebuildMessages(1, entries)
+	if len(got) != 2 {
+		t.Fatalf("got %d messages, want 2: %+v", len(got), got)
+	}
+	user := got[0]
+	if user.Content != "订单 CLN123 查一下" {
+		t.Errorf("用户正文 = %q，注入的约定/引用不许混进气泡", user.Content)
+	}
+	ds, _ := user.Payload["datasources"].([]string)
+	if len(ds) != 1 || ds[0] != "mysql://onepay/Prod/onepay" {
+		t.Errorf("datasources = %v，期望数据库引用单独落键", user.Payload["datasources"])
+	}
+	if _, ok := user.Payload["files"]; ok {
+		t.Errorf("files = %v，数据库引用不该被当成文件附件", user.Payload["files"])
+	}
+}
+
 // steering（插话注入当前轮）的用户消息必须重建成一条 user 消息，且落在
 // 时间线上自己的位置：插话之前的正文归前一条，之后的另起一条——插话是
 // 货真价实的打断。落到轮首（agent 全部内容之前）是错的。
