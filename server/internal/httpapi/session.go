@@ -64,7 +64,7 @@ func (h sessionHandler) get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 归属先行：不属于当前身份的会话当作不存在（adr-007）。
-	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+	if _, err := h.sessions.Guard(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -100,7 +100,7 @@ func (h sessionHandler) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+	if _, err := h.sessions.Guard(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -126,7 +126,7 @@ func (h sessionHandler) listMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+	if _, err := h.sessions.Guard(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -163,7 +163,7 @@ func (h sessionHandler) outline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+	if _, err := h.sessions.Guard(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -189,7 +189,7 @@ func (h sessionHandler) toolOutput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+	if _, err := h.sessions.Guard(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -210,7 +210,7 @@ func (h sessionHandler) transcript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.sessions.Get(r.Context(), scopeOf(r), id); err != nil {
+	if _, err := h.sessions.Guard(r.Context(), scopeOf(r), id); err != nil {
 		writeError(w, err)
 		return
 	}

@@ -175,11 +175,13 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		if err != nil {
 			return "", err
 		}
-		session, err := svcs.Sessions.Get(r.Context(), scopeOf(r), id)
+		// 轻量闸：只查归属与目录三列。这条闭包被文件树、预览、git 十条
+		// 端点、终端、数据源逐条走过，构造完整视图纯属白做（见 service.Guard）。
+		ref, err := svcs.Sessions.Guard(r.Context(), scopeOf(r), id)
 		if err != nil {
 			return "", err
 		}
-		return session.Cwd, nil
+		return ref.Cwd, nil
 	}
 	// 草稿态：会话还没建，目录由请求直接给。看文件、看 git 状态本来就
 	// 只需要一个目录——不该等到「发出第一条消息」之后才允许（adr-002）。

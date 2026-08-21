@@ -17,7 +17,7 @@ type chatHandler struct {
 // guard 是对话面的归属闸：会话不属于当前身份就当作不存在（adr-007）。
 // 每个入口都要过一次——ChatService 内部按 id 直取，没有第二道闸。
 func (h chatHandler) guard(r *http.Request, id uint) error {
-	_, err := h.sessions.Get(r.Context(), scopeOf(r), id)
+	_, err := h.sessions.Guard(r.Context(), scopeOf(r), id)
 	return err
 }
 
