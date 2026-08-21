@@ -251,40 +251,49 @@ export const SubagentsPanel = memo(function SubagentsPanel() {
     [chat.liveTools]
   )
 
-  if (!entries.length) {
-    return (
-      <PanelEmptyState
-        title={t("workspace.subagents.emptyTitle")}
-        description={t("workspace.subagents.emptyHint")}
-      />
-    )
-  }
+  const sessionId = chat.session?.id ?? null
+  const cwd = chat.session?.cwd
 
-  return (
-    <ScrollArea className="h-full">
-      {/* 手风琴：明细一次只摊开一条，长输出不会把整个列表顶走。 */}
-      <Accordion
-        multiple={false}
-        value={openIds}
-        onValueChange={setOpenIds}
-        className="py-1"
-      >
-        {GROUPS.map(({ state, tone, collapsible }) => (
-          <Group
-            key={state}
-            state={state}
-            tone={tone}
-            collapsible={collapsible}
-            openIds={openIds}
-            sessionId={chat.session?.id ?? null}
-            entries={entries.filter((e) => e.state === state)}
-            locations={locations}
-            cwd={chat.session?.cwd}
-          />
-        ))}
-      </Accordion>
-    </ScrollArea>
-  )
+  // 整棵树按**真实输入**记忆，而不是跟着聊天状态走。
+  //
+  // 本面板消费的是聊天上下文，而它每 80ms 就换一次引用（正文分片合帧）
+  // ——子代理清单在两次工具事件之间根本没变，却要陪着重建一遍，哪怕此刻
+  // 面板正藏在别的 tab 后面。返回同一个元素，React 直接跳过整棵子树。
+  return useMemo(() => {
+    if (!entries.length) {
+      return (
+        <PanelEmptyState
+          title={t("workspace.subagents.emptyTitle")}
+          description={t("workspace.subagents.emptyHint")}
+        />
+      )
+    }
+    return (
+      <ScrollArea className="h-full">
+        {/* 手风琴：明细一次只摊开一条，长输出不会把整个列表顶走。 */}
+        <Accordion
+          multiple={false}
+          value={openIds}
+          onValueChange={setOpenIds}
+          className="py-1"
+        >
+          {GROUPS.map(({ state, tone, collapsible }) => (
+            <Group
+              key={state}
+              state={state}
+              tone={tone}
+              collapsible={collapsible}
+              openIds={openIds}
+              sessionId={sessionId}
+              entries={entries.filter((e) => e.state === state)}
+              locations={locations}
+              cwd={cwd}
+            />
+          ))}
+        </Accordion>
+      </ScrollArea>
+    )
+  }, [entries, locations, openIds, sessionId, cwd, t])
 })
 
 export const SubagentsPanelIcon = BotIcon

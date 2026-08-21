@@ -38,6 +38,15 @@ import {
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 
+/** 一次预览请求的结果，key 是它对应的目标（见下面的 requestKey）。 */
+type PreviewResult = {
+  key: string
+  file?: WorkspaceFile
+  diff?: GitDiffView
+  table?: TableView
+  error?: string
+}
+
 /** 预览渲染的行数上限：更大的文件截断展示，虚拟滚动是 M4 的事。 */
 const MAX_RENDER_LINES = 5000
 
@@ -61,26 +70,17 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   const sha = target?.sha
   // 跟随定位的行号：只在 file 模式有意义。
   const targetLine = mode === "file" ? target?.line : undefined
-  const [file, setFile] = useState<WorkspaceFile | null>(null)
-  const [table, setTable] = useState<TableView | null>(null)
-  const [diff, setDiff] = useState<GitDiffView | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // 一次预览请求的落地结果，**带着它对应的目标**。
+  //
+  // 不拆成 file/diff/table/loading/error 五个 state，是为了不在 effect 里
+  // 先同步清一遍：那样每换一个文件就白多一次渲染（React 会先用清空后的
+  // 状态渲一帧），大文件与大表格上看得出来。目标由 requestKey 表达，
+  // 它一变，上一份结果自动失效，不必谁去清。
+  const [loaded, setLoaded] = useState<PreviewResult | null>(null)
   // markdown 默认看渲染后的样子——打开一个 README 是为了读它，不是读它的
   // 语法；要看源码点一下切过去。
   const [raw, setRaw] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
-
-  // 跟随模式：agent 每触碰一个新文件（locations），查看器自动切过去。
-  // 只在会话页有聊天上下文时提供；默认关闭——自动抢焦点必须是用户主动选的。
-  const chatPanel = useContext(ChatPanelContext)
-  const [follow, setFollow] = useState(false)
-  const head =
-    follow && chatPanel?.chat.busy ? chatPanel.chat.touched[0] : undefined
-  useEffect(() => {
-    if (!head) return
-    ws.openPreview(head.path, head.line)
-  }, [head, ws])
 
   // 图片/音视频/PDF 走浏览器原生渲染，不拉正文——把一个 mp4 读成字符串
   // 只会得到一堆乱码和一次白拉的流量。
@@ -91,16 +91,22 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   const showTable = rich && isTableFile(path)
   const showHtml = rich && isHtmlFile(path)
 
-  // 依赖收窄到字段级：跟随时同一文件只变行号，不该整个重拉一遍内容。
+  // 这次要看的东西的身份。跟随定位时同一文件只变行号，key 不变，不重拉。
+  const requestKey = `${mode}|${sha ?? ""}|${showTable ? "table" : ""}|${path ?? ""}`
+  const current = loaded?.key === requestKey ? loaded : null
+  const file = current?.file ?? null
+  const diff = current?.diff ?? null
+  const table = current?.table ?? null
+  const error = current?.error ?? null
+  // 媒体与 html 渲染形态不拉正文，也就无所谓「加载中」。
+  const needsFetch = Boolean(path && ws.sessionId && !media && !showHtml)
+  const loading = needsFetch && current === null
+
   useEffect(() => {
     // 这几种都不需要正文：媒体与 html 渲染形态由浏览器按 URL 自己取。
     if (!path || !ws.sessionId || media || showHtml) return
     let stale = false
-    setLoading(true)
-    setError(null)
-    setFile(null)
-    setDiff(null)
-    setTable(null)
+    const key = requestKey
 
     const request = showTable
       ? ws.scope
@@ -120,21 +126,30 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
 
     request
       .then((result) => {
-        if (stale) return
-        if ("table" in result) setTable(result.table)
-        else if ("diff" in result) setDiff(result.diff)
-        else setFile(result.file)
+        if (!stale) setLoaded({ key, ...result })
       })
       .catch((err) => {
-        if (!stale) setError(err instanceof Error ? err.message : String(err))
-      })
-      .finally(() => {
-        if (!stale) setLoading(false)
+        if (!stale) {
+          setLoaded({
+            key,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
       })
     return () => {
       stale = true
     }
-  }, [path, mode, sha, media, showHtml, showTable, ws.sessionId, ws.scope])
+  }, [
+    path,
+    mode,
+    sha,
+    media,
+    showHtml,
+    showTable,
+    requestKey,
+    ws.sessionId,
+    ws.scope,
+  ])
 
   // 定位到行：行高固定 leading-5（20px），content-visibility 的估算尺寸
   // 与之一致，按行数换算滚动位置即可，顶部留三行上下文。
@@ -182,35 +197,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         >
           {path}
         </span>
-        {chatPanel ? (
-          <Hint
-            label={t(
-              follow
-                ? "workspace.preview.followOff"
-                : "workspace.preview.followOn"
-            )}
-            desc={t("workspace.preview.followDesc")}
-          >
-            <button
-              type="button"
-              aria-pressed={follow}
-              aria-label={t(
-                follow
-                  ? "workspace.preview.followOff"
-                  : "workspace.preview.followOn"
-              )}
-              className={cn(
-                "flex size-6 shrink-0 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted active:scale-[0.97]",
-                follow
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => setFollow((prev) => !prev)}
-            >
-              <LocateFixedIcon className="size-3.5" />
-            </button>
-          </Hint>
-        ) : null}
+        <FollowToggle />
         {hasRichView(path) && hasSourceView(path) && mode !== "diff" ? (
           <Hint
             label={t(
@@ -381,3 +368,52 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     </div>
   )
 })
+
+/**
+ * 跟随视图开关：agent 每触碰一个新文件（ACP locations），查看器自动切过去。
+ * 默认关闭——自动抢焦点必须是用户主动选的。
+ *
+ * 单独成组件而不是写在面板里，是为了**把聊天上下文的订阅关在这一小块**。
+ * 面板本体一旦消费 ChatPanelContext，正文分片每 80ms 换一次状态就会把整个
+ * 查看器（可能正渲染着几千行代码或一张大表）跟着重渲一遍——哪怕这个面板
+ * 此刻藏在别的 tab 后面。这里只渲染一个 24px 的按钮，重渲多少次都无所谓。
+ */
+function FollowToggle() {
+  const { t } = useTranslation()
+  const ws = useWorkspace()
+  const chatPanel = useContext(ChatPanelContext)
+  const [follow, setFollow] = useState(false)
+  const head =
+    follow && chatPanel?.chat.busy ? chatPanel.chat.touched[0] : undefined
+  useEffect(() => {
+    if (!head) return
+    ws.openPreview(head.path, head.line)
+  }, [head, ws])
+
+  if (!chatPanel) return null
+  return (
+    <Hint
+      label={t(
+        follow ? "workspace.preview.followOff" : "workspace.preview.followOn"
+      )}
+      desc={t("workspace.preview.followDesc")}
+    >
+      <button
+        type="button"
+        aria-pressed={follow}
+        aria-label={t(
+          follow ? "workspace.preview.followOff" : "workspace.preview.followOn"
+        )}
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded-md transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted active:scale-[0.97]",
+          follow
+            ? "text-primary"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+        onClick={() => setFollow((prev) => !prev)}
+      >
+        <LocateFixedIcon className="size-3.5" />
+      </button>
+    </Hint>
+  )
+}
