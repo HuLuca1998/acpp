@@ -70,28 +70,45 @@ func (s *Store) Append(key, dir string, msg json.RawMessage) {
 
 // Read 读出一条会话的全部转录。文件不存在返回空列表——新会话就是这样。
 func (s *Store) Read(key string) ([]Entry, error) {
+	var entries []Entry
+	err := s.ReadLines(key, func(line []byte) bool {
+		var e Entry
+		if json.Unmarshal(line, &e) != nil {
+			// 半行（比如进程被杀时写了一半）跳过，不让整个文件不可读。
+			return true
+		}
+		entries = append(entries, e)
+		return true
+	})
+	return entries, err
+}
+
+// ReadLines 逐行交出转录的原始字节，不构造中间切片。fn 返回 false 即停。
+//
+// 给「读完要立刻解析成别的形状」的调用方用（消息重建就是）：走 Read 的话
+// 同一行 JSON 要解两遍——一遍解成 Entry（把 msg 原样抄出来），一遍再把
+// msg 解成实际结构。几十 MB 的转录上，这一遍白解就是上百毫秒。
+//
+// 传给 fn 的切片来自扫描器的内部缓冲，**下一行到来即失效**；要留着就自己拷贝。
+func (s *Store) ReadLines(key string, fn func(line []byte) bool) error {
 	f, err := os.Open(s.Path(key))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil
 		}
-		return nil, err
+		return err
 	}
 	defer f.Close()
 
-	var entries []Entry
 	scanner := bufio.NewScanner(f)
 	// 单行可能带很大的 rawOutput，与 conn 的读缓冲同级。
 	scanner.Buffer(make([]byte, 0, 64<<10), 16<<20)
 	for scanner.Scan() {
-		var e Entry
-		if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
-			// 半行（比如进程被杀时写了一半）跳过，不让整个文件不可读。
-			continue
+		if !fn(scanner.Bytes()) {
+			return nil
 		}
-		entries = append(entries, e)
 	}
-	return entries, scanner.Err()
+	return scanner.Err()
 }
 
 // Close 关闭该会话的文件句柄；会话进程回收时调用。

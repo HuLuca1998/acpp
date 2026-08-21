@@ -1,8 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -535,4 +538,79 @@ func TestRebuildMessagesPermissionCodexShape(t *testing.T) {
 	if perm.Payload["choice"] != "Allow Once" || perm.Payload["toolKind"] != "execute" {
 		t.Errorf("payload = %+v", perm.Payload)
 	}
+}
+
+// 契约：读路径的「一遍解到位」与公开的 RebuildMessages（先解 Entry 再解
+// msg）必须给出**完全一样**的消息列表。两条路径分开之后，这是唯一能挡住
+// 它们悄悄走偏的东西。
+func TestReadWireEntriesMatchesRebuildMessages(t *testing.T) {
+	dir := t.TempDir()
+	store, err := transcript.NewStore(dir)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(store.CloseAll)
+
+	// 造一段有代表性的转录：建会话、一轮问答、一次工具调用、一次结束。
+	lines := []struct {
+		dir string
+		msg string
+	}{
+		{"send", `{"id":1,"method":"session/new","params":{}}`},
+		{"recv", `{"id":1,"result":{"sessionId":"s-1"}}`},
+		{"send", `{"id":2,"method":"session/prompt","params":{"prompt":[{"type":"text","text":"你好"}]}}`},
+		{"recv", `{"method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"在"}}}}`},
+		{"recv", `{"method":"session/update","params":{"update":{"sessionUpdate":"tool_call","toolCallId":"t1","title":"读文件","kind":"read","status":"pending"}}}`},
+		{"recv", `{"method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"completed","rawOutput":"内容"}}}`},
+		{"recv", `{"method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"读完了。"}}}}`},
+		{"recv", `{"id":2,"result":{"stopReason":"end_turn"}}`},
+	}
+	for _, l := range lines {
+		store.Append("1", l.dir, json.RawMessage(l.msg))
+	}
+	store.CloseAll()
+	// 末尾补一段半行：进程被杀时写了一半是真实局面，两条路径都该跳过它。
+	f, err := os.OpenFile(filepath.Join(dir, "1.jsonl"), os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatalf("open transcript: %v", err)
+	}
+	if _, err := f.WriteString(`{"ts":"2026-01`); err != nil {
+		t.Fatalf("write partial line: %v", err)
+	}
+	f.Close()
+
+	entries, err := store.Read("1")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	viaEntries := RebuildMessages(1, entries)
+
+	svc := NewChatService(nil, nil, nil, store, nil)
+	wire, err := svc.readWireEntries(1)
+	if err != nil {
+		t.Fatalf("readWireEntries: %v", err)
+	}
+	viaLines := rebuildEntries(1, wire)
+
+	if len(viaEntries) == 0 {
+		t.Fatal("重建出 0 条消息，测试数据本身有问题")
+	}
+	if diff := cmpMessages(viaEntries, viaLines); diff != "" {
+		t.Fatalf("两条读路径结果不一致：%s", diff)
+	}
+}
+
+// cmpMessages 逐条比对，返回第一处差异的说明（空串表示一致）。
+func cmpMessages(a, b []model.Message) string {
+	if len(a) != len(b) {
+		return fmt.Sprintf("条数 %d vs %d", len(a), len(b))
+	}
+	for i := range a {
+		x, _ := json.Marshal(a[i])
+		y, _ := json.Marshal(b[i])
+		if !bytes.Equal(x, y) {
+			return fmt.Sprintf("第 %d 条:\n  %s\n  %s", i, x, y)
+		}
+	}
+	return ""
 }
