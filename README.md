@@ -157,6 +157,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查与版本 |
+| GET | `/api/events` | **全局 SSE 流**（与会话无关）：连上先收 `{kind:"hello", version}`，之后只有心跳。页面靠它感知后端换版本——见下方「更新后怎么让所有人刷新」 |
 | GET | `/api/auth/me` | 当前身份（owner / 租户 / 被停用 / 匿名）。未认证也返回 200，前端据此渲染邀请页 |
 | POST | `/api/auth/redeem` | 用邀请链接里的 token 换 HttpOnly cookie（`{token}`） |
 | POST | `/api/auth/logout` | 清凭证 |
@@ -235,6 +236,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | DELETE | `/api/tools/calls` | 清空调用记录 |
 
 SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`session_title`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图（含 `prompt` 内容能力：`{image, audio, embeddedContext}`，来自 initialize 的 `promptCapabilities`，claude/codex 由 adapter 按实测兜底，generic 按声明——前端据此门控图片按钮，后端在发送前把越界内容块收敛：resource 降级为 text、图片直接报错）；`usage` 是上下文用量 `{used, size}`（claude 会间歇附带累计费用 `cost:{amount,currency}`，状态栏顺带显示，codex 无此字段则不出现）；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`session_title` 在首轮结束后标题被模型重写时发一次（带新标题）。`tool_call` 另带一组子代理字段：`isSubagent`（这次调用派出了子代理）、`subagentOf`（这条是某个子代理干的，值为它所挂的启动调用 id）、codex 专用的 `subagentThreadId` / `subagentPath`；还带 `locations`（ACP 的 follow-along 位置 `[{path, line?}]`），前端用它做「正在触碰」指示（消息流小字 + 文件树呼吸点 + 查看器跟随模式 + 子代理面板当前文件）。**这组指示只在 claude 会话里出现**——2026-08 实测 claude 的 read/edit 工具带 locations、codex 一条都不发，没有位置信息时界面静默降级（不显示，不报错）。
+
+**更新后怎么让所有人刷新**：`/api/events` 是一条与会话无关的全局 SSE 流，每个页面（不只是会话页）都挂着它，连上先收到 `{kind:"hello", version}`。owner 点「一键更新」会替换 .app 并重启后端，**进程一换，所有人的这条流必断**——断开本身就是信号：浏览器自动重连（服务端用 `retry` 指令把间隔调到 1.5 秒），重连拿到的版本和手里那份对不上，页面就弹出常驻的刷新提示。局域网访客因此在后端起来后一两秒内就知道该刷新了，而不是等轮询——轮询的发现延迟下限就是轮询间隔，要做到秒级得让每个页面每秒打一次 health。只提示不强制刷新：会话状态在后端、刷新即恢复，唯独输入框里没发出去的草稿找不回来，什么时候刷由用户定。这条流平时只有心跳，不承载业务事件。
 
 ## 数据模型
 

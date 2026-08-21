@@ -55,6 +55,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		})
 	})
 
+	// 全局事件流：页面挂着它感知后端换版本，断开重连本身就是信号（见 events.go）。
+	api.HandleFunc("GET /api/events", serverEvents)
+
 	// 身份：邀请兑换、身份自查、退出（adr-007）。这三条是公开路径，
 	// 未认证也能访问——否则前端连「我需要邀请链接」都问不出来。
 	auth := authHandler{tenants: svcs.Tenants}

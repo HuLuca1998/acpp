@@ -322,6 +322,9 @@ function pageQuery(
 export const api = {
   health: () => request<{ status: string; version: string }>("/health"),
 
+  /** 全局事件流（与会话无关）：连上先收 hello，之后只有心跳。 */
+  serverEventsUrl: () => `${BASE}/events`,
+
   agents: {
     list: () => request<Paged<Agent>>("/agents"),
     get: (id: number) => request<Agent>(`/agents/${id}`),
