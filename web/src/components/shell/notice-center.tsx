@@ -264,7 +264,11 @@ function NoticeCard({ notice }: { notice: Notice }) {
     >
       {/* 整卡即动作：update 刷新页面，会话通知跳那条会话。
           内容盖在点击面上但不吃指针，角上的 × 再浮回来。 */}
-      <NoticeAction notice={notice} className="absolute inset-0 rounded-xl" />
+      <NoticeAction
+        notice={notice}
+        className="absolute inset-0 rounded-xl"
+        onAct={leave}
+      />
       <div className="pointer-events-none relative">
         <NoticeRow notice={notice} />
       </div>
@@ -293,15 +297,20 @@ function NoticeCard({ notice }: { notice: Notice }) {
  * 一张卡（或一行）的点击动作，做成拉伸元素盖满容器。
  * update 是刷新（不需要任何上下文的动作）；会话通知是去那条会话——
  * 决策真要拿主意本来就得看上下文，跳过去反而比就地摆按钮快。
+ *
+ * 点过即办过：动作执行完这条就从列表撤走（onAct）。通知中心留的是
+ * 「我不在时发生了什么」，人已经点进去看了的事再挂着就是残影——真还悬着
+ * 的决策，会话页里的卡片才是事实源。update 例外，刷新会把一切重来。
  */
 function NoticeAction({
   notice,
   className,
-  onNavigate,
+  onAct,
 }: {
   notice: Notice
   className: string
-  onNavigate?: () => void
+  /** 动作执行后的收尾：撤走这条，展开态还要顺手收起浮层。 */
+  onAct?: () => void
 }) {
   const { t } = useTranslation()
   if (notice.kind === "update") {
@@ -320,7 +329,7 @@ function NoticeAction({
       to={`/sessions/${notice.sessionId}`}
       aria-label={t(TITLE_KEYS[notice.kind])}
       className={className}
-      onClick={onNavigate}
+      onClick={onAct}
     />
   )
 }
@@ -350,7 +359,10 @@ function NoticeItem({
       <NoticeAction
         notice={notice}
         className="absolute inset-0 rounded-lg"
-        onNavigate={onNavigate}
+        onAct={() => {
+          onNavigate()
+          leave()
+        }}
       />
       <div className="pointer-events-none relative min-w-0 flex-1">
         <NoticeRow notice={notice} showSession={showSession} />
