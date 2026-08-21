@@ -32,12 +32,53 @@ export function sortEntries(
 }
 
 const CODE_EXT = new Set([
-  "ts", "tsx", "js", "jsx", "mjs", "go", "py", "rs", "rb", "sh", "zsh",
-  "c", "h", "cc", "cpp", "java", "swift", "kt", "sql", "json", "yaml",
-  "yml", "toml", "xml", "html", "css",
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "go",
+  "py",
+  "rs",
+  "rb",
+  "sh",
+  "zsh",
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "java",
+  "swift",
+  "kt",
+  "sql",
+  "json",
+  "yaml",
+  "yml",
+  "toml",
+  "xml",
+  "html",
+  "css",
 ])
-const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "icns", "ico"])
-const ARCHIVE_EXT = new Set(["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "dmg"])
+const IMAGE_EXT = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "webp",
+  "icns",
+  "ico",
+])
+const ARCHIVE_EXT = new Set([
+  "zip",
+  "tar",
+  "gz",
+  "tgz",
+  "bz2",
+  "xz",
+  "7z",
+  "dmg",
+])
 const TEXT_EXT = new Set(["md", "txt", "log", "rst"])
 const KEY_EXT = new Set(["pem", "key", "ppk", "pub"])
 
@@ -54,16 +95,36 @@ export function fileIconOf(name: string): LucideIcon {
   return FileIcon
 }
 
+/**
+ * 格式化器缓存（键是 语言 + 同不同年）。这个函数是按**条目**调用的，
+ * 一个大目录就是几百次；Intl 的构造比复用一个实例贵几十倍，不该让
+ * 「打开目录选择器」的代价随文件数线性涨。
+ */
+const mtimeFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function mtimeFormatter(
+  locale: string,
+  sameYear: boolean
+): Intl.DateTimeFormat {
+  const key = `${locale}|${sameYear}`
+  let formatter = mtimeFormatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, {
+      year: sameYear ? undefined : "numeric",
+      month: "short",
+      day: "numeric",
+      hour: sameYear ? "2-digit" : undefined,
+      minute: sameYear ? "2-digit" : undefined,
+    })
+    mtimeFormatters.set(key, formatter)
+  }
+  return formatter
+}
+
 /** 访达式紧凑修改时间：同年省年份，跨年才带。 */
 export function formatMtime(iso: string | undefined, locale: string): string {
   if (!iso) return "—"
   const d = new Date(iso)
   const sameYear = d.getFullYear() === new Date().getFullYear()
-  return d.toLocaleString(locale, {
-    year: sameYear ? undefined : "numeric",
-    month: "short",
-    day: "numeric",
-    hour: sameYear ? "2-digit" : undefined,
-    minute: sameYear ? "2-digit" : undefined,
-  })
+  return mtimeFormatter(locale, sameYear).format(d)
 }
