@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo, useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -33,8 +33,7 @@ export const ChatPanel = memo(function ChatPanel() {
     isNew,
     chat,
     newSession,
-    draft,
-    setDraft,
+    draftStore,
     images,
     files,
     dbRefs,
@@ -54,6 +53,10 @@ export const ChatPanel = memo(function ChatPanel() {
     addImages,
     draftCwd,
   } = useChatPanel()
+
+  // 草稿从 store 订阅：打字只重渲本面板，页面层与其余面板保持安静。
+  const draft = useSyncExternalStore(draftStore.subscribe, draftStore.get)
+  const setDraft = draftStore.set
 
   // 本地斜杠命令的结果（目前只有 /db）：浮在输入框上方，不进对话流。
   // null 表示没在看。
