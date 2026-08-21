@@ -20,7 +20,7 @@ export interface NotifyPrefs {
  * 默认全开。宁可一开始吵一点让用户去关，也别让人以为「通知没做」——
  * 默认静默的功能等于不存在。
  */
-export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
+const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
   decisions: true,
   results: true,
   errors: true,

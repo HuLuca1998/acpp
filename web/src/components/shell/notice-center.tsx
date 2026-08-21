@@ -137,11 +137,28 @@ export function NoticeCenter() {
           </Badge>
         </PopoverTrigger>
 
-        <div className={cn("flex flex-col gap-1.5", folded > 0 && "pb-3")}>
-          {visible.map((notice, i) => (
-            <NoticeCard key={notice.id} notice={notice} last={i === visible.length - 1} folded={folded}>
-            </NoticeCard>
+        <div
+          className={cn("relative flex flex-col gap-1.5", folded > 0 && "pb-3")}
+        >
+          {visible.map((notice) => (
+            <NoticeCard key={notice.id} notice={notice} />
           ))}
+          {/* 显示不下的折在最后一张卡后面：两层错位的边缘，照 iOS 通知
+              中心的堆叠示意，只表厚度不载信息。挂在容器而不是卡内——卡有
+              view-transition-name（自成层叠上下文），负 z 的垫层放卡里会
+              浮到卡背景之上、把边框印进卡面。 */}
+          {folded > 0 ? (
+            <div
+              aria-hidden
+              className="absolute inset-x-3 bottom-1.5 -z-10 h-6 rounded-xl border bg-card"
+            />
+          ) : null}
+          {folded > 1 ? (
+            <div
+              aria-hidden
+              className="absolute inset-x-5 bottom-0 -z-20 h-6 rounded-xl border bg-card/60"
+            />
+          ) : null}
         </div>
       </div>
 
@@ -224,17 +241,7 @@ export function NoticeCenter() {
  * 离场向右滑出 + 缩小 + 淡出——通知从内容区来、往屏幕边缘去的方向感，
  * 播完 LEAVE_MS 才真正从存量删除。reduced-motion 下只留透明度。
  */
-function NoticeCard({
-  notice,
-  last,
-  folded,
-  children,
-}: {
-  notice: Notice
-  last: boolean
-  folded: number
-  children?: React.ReactNode
-}) {
+function NoticeCard({ notice }: { notice: Notice }) {
   const { t } = useTranslation()
   const { leaving, leave } = useLeave(notice.id)
 
@@ -255,30 +262,12 @@ function NoticeCard({
       // 关一条后下一条补位）时，位置变化由浏览器补成平滑位移。
       style={{ viewTransitionName: `notice-${notice.id}` }}
     >
-      {/* 显示不下的折在最后一张卡后面：两层错位的边缘，照 iOS
-          通知中心的堆叠示意，只表厚度不载信息。 */}
-      {last && folded > 0 ? (
-        <>
-          <div
-            aria-hidden
-            className="absolute inset-x-2 -bottom-1.5 -z-10 h-6 rounded-xl border bg-card"
-          />
-          {folded > 1 ? (
-            <div
-              aria-hidden
-              className="absolute inset-x-4 -bottom-3 -z-20 h-6 rounded-xl border bg-card/60"
-            />
-          ) : null}
-        </>
-      ) : null}
-
       {/* 整卡即动作：update 刷新页面，会话通知跳那条会话。
           内容盖在点击面上但不吃指针，角上的 × 再浮回来。 */}
       <NoticeAction notice={notice} className="absolute inset-0 rounded-xl" />
       <div className="pointer-events-none relative">
         <NoticeRow notice={notice} />
       </div>
-      {children}
 
       {/* 单条关闭：hover 这张卡才现的浮角圆钮，关的就是这一条——
           macOS 通知横幅的同款。可以藏，因为它不是唯一入口：展开

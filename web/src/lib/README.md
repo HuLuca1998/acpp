@@ -31,7 +31,7 @@
 | session-activity.ts | 会话活跃态的进程内广播：会话页把「正在跑一轮」告诉侧边栏，免去为一个状态点轮询 | `markSessionActive`、`subscribeSessionActivity`、`getActiveSessions` |
 | session-groups.ts | 会话按工作目录分组（adr-007）：cwd 分桶、组内取最新、最多 5 组 × 5 条 | `groupSessionsByCwd`、`SessionGroup`、`MAX_GROUPS`                   |
 | desktop.ts        | 桌面壳（macOS app）的原生通道：环境判定、启动偏好、系统通知（授权/发送/撤回），走 WKWebView 注入的消息口而非 HTTP | `isDesktop`、`desktopLaunch`、`desktopNotify`、`NotifyStatus`、`NOTIFICATION_ACTION_EVENT` |
-| notify/prefs.ts   | 通知偏好读写（localStorage）：这台设备上的这个人想不想被打扰，不跨设备同步 | `loadNotifyPrefs`、`saveNotifyPrefs`、`NotifyPrefs`、`DEFAULT_NOTIFY_PREFS` |
+| notify/prefs.ts   | 通知偏好读写（localStorage）：这台设备上的这个人想不想被打扰，不跨设备同步 | `loadNotifyPrefs`、`saveNotifyPrefs`、`NotifyPrefs` |
 | notify/in-page.ts | 页内通知形式（浏览器唯一可用的手段）：标题闪烁、Web Audio 合成提示音、「用户在不在看」判定 | `flashTitle`、`stopFlashTitle`、`playChime`、`isUserWatching` |
 | notify/store.ts   | 通知中心的存量（模块级广播，内存态不落盘）：同 id 覆盖、按优先级排序（update 最高）、上限裁剪 | `pushNotice`、`dismissNotice`、`clearNotices`、`Notice`、`NoticeKind` |
 | subagents.ts      | 子代理清单提取：两端形状（claude 的 Agent 调用 / codex 的独立 thread）归一成条目 | `collectSubagents`、`isSubagentWork`、`subagentLocations`、`SubagentEntry` |
