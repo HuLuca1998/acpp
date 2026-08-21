@@ -1,12 +1,8 @@
-import {
-  memo,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react"
+import { memo, useCallback, useContext, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
+
+import { useVisibleLoad } from "@/hooks/use-panel-visible"
 import {
   ChevronRightIcon,
   FileIcon,
@@ -65,7 +61,9 @@ function rootLabel(path: string): string {
  * 文件树面板：首屏一次拉两层（后端 depth=2），更深展开时按目录懒加载。
  * 懒加载的子目录内容放 childrenByPath，不回写树结构，保持更新扁平。
  */
-export const FileTreePanel = memo(function FileTreePanel() {
+export const FileTreePanel = memo(function FileTreePanel(
+  props: IDockviewPanelProps
+) {
   const { t } = useTranslation()
   const ws = useWorkspace()
   const [entries, setEntries] = useState<TreeEntry[] | null>(null)
@@ -122,12 +120,9 @@ export const FileTreePanel = memo(function FileTreePanel() {
       })
   }, [ws.ready, ws.sessionId, ws.scope])
 
-  useEffect(() => {
-    load()
-  }, [load])
-
   // turn 结束后的工作区广播：树跟着 git 数据一起重拉。
-  useEffect(() => ws.onWorkspaceRefresh(load), [ws, load])
+  // 藏在 tab 后面时不白拉，切回来再补。
+  useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
 
   const toggleDir = useCallback(
     (entry: TreeEntry) => {

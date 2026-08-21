@@ -1,6 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
 import { toast } from "sonner"
+
+import { useVisibleLoad } from "@/hooks/use-panel-visible"
 
 import {
   ChangeStat,
@@ -48,7 +51,9 @@ import {
  * 点文件不在本面板里展开，而是送进文件查看器（preview）以 diff 模式打开：
  * 一个窄面板里既列清单又铺全文，两件事都做不好。
  */
-export const ChangesPanel = memo(function ChangesPanel() {
+export const ChangesPanel = memo(function ChangesPanel(
+  props: IDockviewPanelProps
+) {
   const { t } = useTranslation()
   const ws = useWorkspace()
   const selection = useGitSelection()
@@ -104,10 +109,8 @@ export const ChangesPanel = memo(function ChangesPanel() {
       })
   }, [ws, comparing, base, head, selection.sha])
 
-  useEffect(() => {
-    load()
-    return ws.onWorkspaceRefresh(load)
-  }, [load, ws])
+  // 藏在 tab 后面时不响应刷新广播，切回来再补一次。
+  useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
 
   // 工作区模式下用共享的 gitStore，避免同一份数据两处拉。
   const list = comparing || selection.sha ? files : (git.data?.files ?? null)
