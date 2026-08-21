@@ -34,18 +34,63 @@ export type {
  * 初次进入拉取的消息条数：一屏出头即可——打开只看最新，
  * 更早的滚动到顶时才自动补，加载与渲染成本都摊到需要时。
  */
-const MESSAGE_PAGE = 60
+const MESSAGE_PAGE = 30
+
+/** 文本分片的合帧窗口：流式期间肉眼看不出 80ms 与逐包上屏的差别，
+ *  渲染次数却从每包一次降到每秒十来次。 */
+const CHUNK_FLUSH_MS = 80
 
 export function useChat(sessionId: number) {
   const [state, setState] = useState<ChatState>(INITIAL_CHAT_STATE)
   // 去重游标：SSE 断线重连会重放本轮事件，靠 seq 跳过已处理的。
   const lastSeq = useRef(0)
 
-  const applyEvent = useCallback((ev: StreamEvent) => {
-    if (ev.seq <= lastSeq.current) return
-    lastSeq.current = ev.seq
-    setState((prev) => reduceChatEvent(prev, ev))
+  // 正文/思考分片的合帧缓冲：一轮能来几千条 chunk，每条都 setState 会让
+  // 整棵聊天子树以网络到包的频率重渲染。攒住纯文本分片、按窗口合并上屏；
+  // 其余事件（工具调用、权限、turn_done）到达时先冲掉缓冲再应用，
+  // 事件之间的相对顺序不变。
+  const chunkBuf = useRef({ text: "", thought: "" })
+  const chunkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushChunks = useCallback(() => {
+    if (chunkTimer.current) {
+      clearTimeout(chunkTimer.current)
+      chunkTimer.current = null
+    }
+    const { text, thought } = chunkBuf.current
+    if (!text && !thought) return
+    chunkBuf.current = { text: "", thought: "" }
+    // 走 reducer 而不是直接拼字符串：轮窗口外的残余分片该不该丢，
+    // 判断逻辑只在 reducer 里有一份（seq 去重已在入口做过，传 0 即可）。
+    setState((prev) => {
+      let next = prev
+      if (text) {
+        next = reduceChatEvent(next, { kind: "message_chunk", text, seq: 0 })
+      }
+      if (thought) {
+        next = reduceChatEvent(next, { kind: "thought_chunk", text: thought, seq: 0 })
+      }
+      return next
+    })
   }, [])
+
+  const applyEvent = useCallback(
+    (ev: StreamEvent) => {
+      if (ev.seq <= lastSeq.current) return
+      lastSeq.current = ev.seq
+      if (ev.kind === "message_chunk" || ev.kind === "thought_chunk") {
+        const key = ev.kind === "message_chunk" ? "text" : "thought"
+        chunkBuf.current[key] += ev.text ?? ""
+        if (!chunkTimer.current) {
+          chunkTimer.current = setTimeout(flushChunks, CHUNK_FLUSH_MS)
+        }
+        return
+      }
+      flushChunks()
+      setState((prev) => reduceChatEvent(prev, ev))
+    },
+    [flushChunks]
+  )
 
   // 打开会话 + 拉历史。sessionId 为 0 表示草稿态（会话还没创建），
   // 不打开、不订阅，只把 loading 清掉让页面直接可用。
