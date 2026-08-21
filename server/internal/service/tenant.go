@@ -82,17 +82,37 @@ func (s *TenantService) List(ctx context.Context, page, pageSize int, orderBy st
 		return nil, 0, fmt.Errorf("list tenants: %w", err)
 	}
 
-	views := make([]TenantView, 0, len(tenants))
+	// 会话数一次 GROUP BY 拿全，不是每个访客查一遍——逐行查在页面上看不
+	// 出区别，但它是那种「访客一多就慢一截」的写法，没有留着的理由。
+	ids := make([]uint, 0, len(tenants))
 	for i := range tenants {
-		var count int64
-		if err := s.db.WithContext(ctx).Model(&model.Session{}).
-			Where("tenant_id = ?", tenants[i].ID).Count(&count).Error; err != nil {
+		ids = append(ids, tenants[i].ID)
+	}
+	counts := make(map[uint]int64, len(ids))
+	if len(ids) > 0 {
+		var rows []struct {
+			TenantID uint
+			Count    int64
+		}
+		err := s.db.WithContext(ctx).Model(&model.Session{}).
+			Select("tenant_id, count(*) as count").
+			Where("tenant_id IN ?", ids).
+			Group("tenant_id").
+			Scan(&rows).Error
+		if err != nil {
 			return nil, 0, fmt.Errorf("count tenant sessions: %w", err)
 		}
+		for _, r := range rows {
+			counts[r.TenantID] = r.Count
+		}
+	}
+
+	views := make([]TenantView, 0, len(tenants))
+	for i := range tenants {
 		views = append(views, TenantView{
 			Tenant:       tenants[i],
 			InviteToken:  tenants[i].Token,
-			SessionCount: count,
+			SessionCount: counts[tenants[i].ID],
 		})
 	}
 	return views, total, nil

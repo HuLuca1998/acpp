@@ -51,33 +51,53 @@ func (s *ChatService) rebuildAll(sessionID uint) ([]model.Message, error) {
 		s.rebuildMu.Unlock()
 		return msgs, nil
 	}
+	// 已经有人在重建同一条会话：等它，别再解析一遍同样的转录。
+	if call, ok := s.rebuilding[sessionID]; ok {
+		s.rebuildMu.Unlock()
+		<-call.done
+		return call.msgs, call.err
+	}
+	call := &rebuildCall{done: make(chan struct{})}
+	s.rebuilding[sessionID] = call
 	s.rebuildMu.Unlock()
 
 	entries, err := s.transcripts.Read(sessionKey(sessionID))
-	if err != nil {
-		return nil, fmt.Errorf("read transcript: %w", err)
+	if err == nil {
+		call.msgs = RebuildMessages(sessionID, entries)
+	} else {
+		call.err = fmt.Errorf("read transcript: %w", err)
 	}
-	msgs := RebuildMessages(sessionID, entries)
 
 	s.rebuildMu.Lock()
-	s.rebuilds[sessionID] = &rebuildCacheEntry{
-		size:    info.Size(),
-		modTime: info.ModTime(),
-		msgs:    msgs,
-		lastUse: time.Now(),
-	}
-	if len(s.rebuilds) > maxRebuildCache {
-		var oldest uint
-		var oldestUse time.Time
-		for id, e := range s.rebuilds {
-			if oldest == 0 || e.lastUse.Before(oldestUse) {
-				oldest, oldestUse = id, e.lastUse
-			}
+	delete(s.rebuilding, sessionID)
+	if call.err == nil {
+		s.rebuilds[sessionID] = &rebuildCacheEntry{
+			size:    info.Size(),
+			modTime: info.ModTime(),
+			msgs:    call.msgs,
+			lastUse: time.Now(),
 		}
-		delete(s.rebuilds, oldest)
+		if len(s.rebuilds) > maxRebuildCache {
+			var oldest uint
+			var oldestUse time.Time
+			for id, e := range s.rebuilds {
+				if oldest == 0 || e.lastUse.Before(oldestUse) {
+					oldest, oldestUse = id, e.lastUse
+				}
+			}
+			delete(s.rebuilds, oldest)
+		}
 	}
 	s.rebuildMu.Unlock()
-	return msgs, nil
+	close(call.done)
+	return call.msgs, call.err
+}
+
+// rebuildCall 是一次正在跑的重建，供并发的后来者搭车。
+type rebuildCall struct {
+	done chan struct{}
+	msgs []model.Message
+	err  error
 }
 
 // Messages 从转录重建消息并按尾部分页：limit<=0 表示全量；

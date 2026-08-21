@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -45,6 +46,19 @@ func (s *SkillUsageService) Observe(ev acp.Event) {
 	if ev.Kind != acp.EventToolCall || ev.ToolCallID == "" {
 		return
 	}
+	// 去重先行。一次工具调用会来一串同 id 的 tool_call_update，而识别要
+	// 解析 rawInput/rawOutput——后者是一次 bash 或文件读的原始输出，几 MB
+	// 是常态。已经计过的 id 连解析都不该做。
+	//
+	// 语义与「先识别后去重」完全一致：那条路径上算出来的名字本来也只是
+	// 被丢掉，区别只在白花了多少 CPU。
+	s.mu.Lock()
+	_, counted := s.seen[ev.ToolCallID]
+	s.mu.Unlock()
+	if counted {
+		return
+	}
+
 	name := skillNameFromToolCall(s.srcDir, ev)
 	if name == "" {
 		return
@@ -113,7 +127,10 @@ func (s *SkillUsageService) CountsByName(ctx context.Context) (map[string]int64,
 //     带 plugin 前缀 acpp:，去前缀归一到目录名；
 //   - codex：read 工具读 <srcDir>/<name>/SKILL.md，从路径取目录名。
 func skillNameFromToolCall(srcDir string, ev acp.Event) string {
-	if len(ev.RawInput) > 0 {
+	// 两处 json.Unmarshal 之前先做一次字节扫描。解 JSON 是要走完整份
+	// 文档的，而这里的载荷可能是一整个文件的内容（Write 类工具的 rawInput）
+	// 或一次命令的全部输出（rawOutput）——键都不在里面就没必要解。
+	if hasJSONKey(ev.RawInput, "skill") {
 		var ri struct {
 			Skill string `json:"skill"`
 		}
@@ -121,7 +138,7 @@ func skillNameFromToolCall(srcDir string, ev acp.Event) string {
 			return stripPluginPrefix(ri.Skill)
 		}
 	}
-	if len(ev.RawOutput) > 0 {
+	if hasJSONKey(ev.RawOutput, "commandName") {
 		var ro struct {
 			Response struct {
 				CommandName string `json:"commandName"`
@@ -144,6 +161,12 @@ func skillNameFromToolCall(srcDir string, ev acp.Event) string {
 		}
 	}
 	return ""
+}
+
+// hasJSONKey 粗判一份 JSON 里出没出现过某个键名。宁可误报（值里正好有
+// 这个字符串）——误报只是照常走一次解析，漏报才会丢掉统计。
+func hasJSONKey(raw json.RawMessage, key string) bool {
+	return len(raw) > 0 && bytes.Contains(raw, []byte(`"`+key+`"`))
 }
 
 // stripPluginPrefix 去掉 "acpp:" 这类 plugin 前缀，归一到技能目录名。

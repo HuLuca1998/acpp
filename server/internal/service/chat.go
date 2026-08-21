@@ -57,6 +57,10 @@ type ChatService struct {
 	// 重建可能耗几百毫秒，不该拿着 broker 那把锁干这个。
 	rebuildMu sync.Mutex
 	rebuilds  map[uint]*rebuildCacheEntry
+	// rebuilding 是正在跑的重建，按会话去重。轮末前端会同时拉消息列表与
+	// 提问索引，两条路径都要全量重建——转录刚变过，两边都是缓存未命中，
+	// 于是同一份 35MB 转录被解析两遍。后来者等前一次的结果即可。
+	rebuilding map[uint]*rebuildCall
 
 	// digesting 标记哪些会话正在后台补提问摘要（见 outline.go）。索引会被
 	// 反复请求，没有它每次请求都会起一批算同样东西的任务。
@@ -123,6 +127,7 @@ func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager,
 		tails:       make(map[uint]string),
 		usage:       make(map[uint]*UsageSnapshot),
 		rebuilds:    make(map[uint]*rebuildCacheEntry),
+		rebuilding:  make(map[uint]*rebuildCall),
 		digesting:   make(map[uint]bool),
 	}
 }
