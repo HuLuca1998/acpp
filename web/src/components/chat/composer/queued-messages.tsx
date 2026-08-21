@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { QueuedMessage } from "@/hooks/use-chat"
@@ -13,7 +14,7 @@ import {
  * 一轮进行中用户插话的排队条：浮在输入卡上方。发出前有两个出口——
  * 「调整方向」立即插进正在跑的轮（steering），「撤回」回填输入框。
  */
-export function QueuedMessages({
+export const QueuedMessages = memo(function QueuedMessages({
   items,
   onSteer,
   onRecall,
@@ -79,4 +80,4 @@ export function QueuedMessages({
       ))}
     </div>
   )
-}
+})

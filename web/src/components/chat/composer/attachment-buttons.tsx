@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Hint } from "@/components/hint"
@@ -16,7 +17,7 @@ import { AtSignIcon, DatabaseIcon, FileIcon, FileUpIcon } from "lucide-react"
 const buttonClass =
   "flex size-7 items-center justify-center rounded-full text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
 
-export function AttachmentButton({
+export const AttachmentButton = memo(function AttachmentButton({
   label,
   desc,
   onClick,
@@ -40,7 +41,7 @@ export function AttachmentButton({
       </button>
     </Hint>
   )
-}
+})
 
 /**
  * @ 引用菜单：工作区文件、数据库、上传本机文件。
@@ -48,7 +49,7 @@ export function AttachmentButton({
  * 收在同一个入口下是因为它们是同一个动作——「把这个交给 AI 看」，
  * 只是内容一个来自工作区、一个来自库、一个来自你自己的机器。
  */
-export function ReferenceMenu({
+export const ReferenceMenu = memo(function ReferenceMenu({
   onPickFile,
   onPickDatabase,
   onUpload,
@@ -93,4 +94,4 @@ export function ReferenceMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
+})

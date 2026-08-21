@@ -227,21 +227,40 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
     [selected, selectedAgent, creating, cwd, worktree, draftPatch, navigate]
   )
 
-  return {
-    agents,
-    groups,
-    choiceKey,
-    setChoiceKey: selectChoice,
-    selected,
-    selectedAgent,
-    cwd,
-    worktree,
-    setWorktree,
-    setCwd,
-    creating,
-    error,
-    draftSettings,
-    applyDraftPatch,
-    start,
-  }
+  // 返回值引用只在状态真变时更换（与 useChat 同理）：草稿页每次重渲染都会
+  // 重跑这里，展开成新对象会让下游一切 memo 形同虚设。
+  return useMemo(
+    () => ({
+      agents,
+      groups,
+      choiceKey,
+      setChoiceKey: selectChoice,
+      selected,
+      selectedAgent,
+      cwd,
+      worktree,
+      setWorktree,
+      setCwd,
+      creating,
+      error,
+      draftSettings,
+      applyDraftPatch,
+      start,
+    }),
+    [
+      agents,
+      groups,
+      choiceKey,
+      selectChoice,
+      selected,
+      selectedAgent,
+      cwd,
+      worktree,
+      creating,
+      error,
+      draftSettings,
+      applyDraftPatch,
+      start,
+    ]
+  )
 }

@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
 import type {
@@ -28,7 +29,7 @@ import {
  * 只认后端的统一 Settings 视图，不出现任何 runtime 特有的字面量；
  * 空数组 / 不支持的维度直接不渲染对应控件。
  */
-export function SettingsSelectors({
+export const SettingsSelectors = memo(function SettingsSelectors({
   settings,
   disabled,
   busy = false,
@@ -141,7 +142,7 @@ export function SettingsSelectors({
       ) : null}
     </>
   )
-}
+})
 
 /** 说明气泡的第二段：基础说明，加一行轮进行中的生效时机（有才显示）。 */
 function HintDesc({ desc, note }: { desc: string; note?: string }) {

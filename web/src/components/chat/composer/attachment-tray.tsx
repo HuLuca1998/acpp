@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Hint } from "@/components/hint"
@@ -20,7 +21,7 @@ import { DatabaseIcon, FileIcon, XIcon } from "lucide-react"
  * 用 AttachmentGroup 而不是 flex-wrap：附件多了横向滚动，不会一行行把
  * 输入框往上顶。
  */
-export function AttachmentTray({
+export const AttachmentTray = memo(function AttachmentTray({
   images,
   files,
   dbRefs,
@@ -87,7 +88,7 @@ export function AttachmentTray({
       ))}
     </AttachmentGroup>
   )
-}
+})
 
 /**
  * 一条 @ 引用（文件或数据库）。

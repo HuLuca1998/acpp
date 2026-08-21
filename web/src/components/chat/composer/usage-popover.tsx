@@ -5,7 +5,11 @@ import type { SessionUsageTotals } from "@/lib/chat/usage"
 import type { ContextUsage } from "@/hooks/use-chat"
 import type { TurnUsage } from "@/types/acp"
 import { cn } from "@/lib/utils"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import {
   Tooltip,
@@ -18,7 +22,8 @@ import {
  * 逼近上限转危险色——那时用户真该考虑开新会话或压缩上下文了。
  */
 function usageTone(percent: number): { stroke: string; fill: string } {
-  if (percent >= 85) return { stroke: "stroke-destructive", fill: "bg-destructive" }
+  if (percent >= 85)
+    return { stroke: "stroke-destructive", fill: "bg-destructive" }
   if (percent >= 60) return { stroke: "stroke-warning", fill: "bg-warning" }
   return { stroke: "stroke-primary", fill: "bg-primary" }
 }
@@ -156,7 +161,9 @@ export function UsagePopover({
             count: totals.turns,
           })
         : t("chat.usage.open"),
-    usage?.cost ? moneyOf(usage.cost.amount, usage.cost.currency, i18n.language) : null,
+    usage?.cost
+      ? moneyOf(usage.cost.amount, usage.cost.currency, i18n.language)
+      : null,
   ]
     .filter(Boolean)
     .join(" · ")
@@ -187,18 +194,18 @@ export function UsagePopover({
       <PopoverContent align="end" side="top" className="w-72 p-3">
         <div className="flex flex-col gap-3">
           {usage ? (
-          <section className="flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="text-xs font-medium">
-                {t("chat.usage.context")}
-              </span>
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {formatTokens(usage.used)} / {formatTokens(usage.size)} ·{" "}
-                {Math.round(percent)}%
-              </span>
-            </div>
-            <ContextBar percent={percent} />
-          </section>
+            <section className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-xs font-medium">
+                  {t("chat.usage.context")}
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {formatTokens(usage.used)} / {formatTokens(usage.size)} ·{" "}
+                  {Math.round(percent)}%
+                </span>
+              </div>
+              <ContextBar percent={percent} />
+            </section>
           ) : null}
 
           {lastUsage ? (
@@ -236,10 +243,7 @@ export function UsagePopover({
                 <div className="text-xs font-medium">
                   {t("chat.usage.session", { count: totals.turns })}
                 </div>
-                <Row
-                  label={t("chat.usage.input")}
-                  value={totals.inputTokens}
-                />
+                <Row label={t("chat.usage.input")} value={totals.inputTokens} />
                 <Row
                   label={t("chat.usage.output")}
                   value={totals.outputTokens}
@@ -263,7 +267,11 @@ export function UsagePopover({
               <section className="flex flex-col gap-1">
                 <Row
                   label={t("chat.usage.cost")}
-                  value={moneyOf(usage.cost.amount, usage.cost.currency, i18n.language)}
+                  value={moneyOf(
+                    usage.cost.amount,
+                    usage.cost.currency,
+                    i18n.language
+                  )}
                   strong
                 />
                 <p className="text-[11px] leading-snug text-muted-foreground/80">

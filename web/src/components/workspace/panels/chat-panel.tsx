@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useSyncExternalStore } from "react"
+import { memo, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -54,9 +54,6 @@ export const ChatPanel = memo(function ChatPanel() {
     draftCwd,
   } = useChatPanel()
 
-  // 草稿从 store 订阅：打字只重渲本面板，页面层与其余面板保持安静。
-  const draft = useSyncExternalStore(draftStore.subscribe, draftStore.get)
-  const setDraft = draftStore.set
 
   // 本地斜杠命令的结果（目前只有 /db）：浮在输入框上方，不进对话流。
   // null 表示没在看。
@@ -69,11 +66,13 @@ export const ChatPanel = memo(function ChatPanel() {
   const localReady = sessionId > 0 || Boolean(isNew && draftCwd)
 
   // 本地命令自己消化掉，不发给 agent；其余照常提交。
+  // 草稿从 store 现取而不是订阅：本面板不该跟着每个按键重渲——订阅收在
+  // 输入卡里（见 Composer 的 draft 入参）。
   function handleSubmit() {
-    const local = parseLocalCommand(draft)
+    const local = parseLocalCommand(draftStore.get())
     if (local && localReady) {
       setLocalCommand(local.args)
-      setDraft("")
+      draftStore.set("")
       return
     }
     submit()
@@ -185,8 +184,7 @@ export const ChatPanel = memo(function ChatPanel() {
       </div>
 
       <Composer
-        value={draft}
-        onChange={setDraft}
+        draft={draftStore}
         onSubmit={handleSubmit}
         onCancel={isNew ? undefined : () => void chat.cancel()}
         busy={chat.busy}
