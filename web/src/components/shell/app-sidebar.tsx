@@ -20,7 +20,7 @@ import {
 import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize } from "@/lib/format"
-import { groupSessionsByCwd, type SessionGroup } from "@/lib/session-groups"
+import { groupSessionsByCwd } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   DatabaseIcon,
@@ -48,18 +48,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       ? capitalize(identity.tenantName)
       : ""
   const [recent, setRecent] = React.useState<Session[]>([])
-  const [groups, setGroups] = React.useState<SessionGroup[]>([])
 
   // 随路由变化刷新：新建/删除会话后列表立即跟上，不留已删会话的死链接。
+  //
+  // 但绝大多数导航并不改变这份列表（点开一条已有会话最典型），所以拉回来
+  // 先比一遍——没变就留住原引用，整棵侧栏子树不重渲染。侧栏跟着每次导航
+  // 抖一下，恰好发生在用户切会话、页面本来就最忙的那一刻。
   React.useEffect(() => {
     let cancelled = false
     api.sessions
       .list({ pageSize: RECENT_LIMIT })
       .then((sessions) => {
         if (cancelled) return
-        setRecent(sessions.items)
-        // 按 cwd 分组，不依赖项目扫描——会话自带的目录永远对得上。
-        setGroups(groupSessionsByCwd(sessions.items))
+        setRecent((prev) =>
+          sameRecentList(prev, sessions.items) ? prev : sessions.items
+        )
       })
       .catch(() => {
         // 侧边栏的最近列表拉不到就空着，不打断主流程。
@@ -69,39 +72,54 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }, [pathname])
 
+  // 按 cwd 分组，不依赖项目扫描——会话自带的目录永远对得上。
+  const groups = React.useMemo(() => groupSessionsByCwd(recent), [recent])
+
   // 租户只留会话与项目：技能、设置、连接都是 owner 的东西，后端也已按
   // owner-only 拦截，导航里直接不出现（adr-007）。
-  const navMain = isOwner
-    ? [
-        { title: t("nav.overview"), url: "/", icon: <LayoutDashboardIcon /> },
-        { title: t("nav.skills"), url: "/skills", icon: <PuzzleIcon /> },
-        {
-          title: t("nav.sessions"),
-          url: "/sessions",
-          icon: <MessagesSquareIcon />,
-        },
-        {
-          title: t("nav.databases"),
-          url: "/databases",
-          icon: <DatabaseIcon />,
-        },
-        { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
-        { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
-      ]
-    : [
-        {
-          title: t("nav.sessions"),
-          url: "/sessions",
-          icon: <MessagesSquareIcon />,
-        },
-      ]
+  const navMain = React.useMemo(
+    () =>
+      isOwner
+        ? [
+            {
+              title: t("nav.overview"),
+              url: "/",
+              icon: <LayoutDashboardIcon />,
+            },
+            { title: t("nav.skills"), url: "/skills", icon: <PuzzleIcon /> },
+            {
+              title: t("nav.sessions"),
+              url: "/sessions",
+              icon: <MessagesSquareIcon />,
+            },
+            {
+              title: t("nav.databases"),
+              url: "/databases",
+              icon: <DatabaseIcon />,
+            },
+            { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
+            { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
+          ]
+        : [
+            {
+              title: t("nav.sessions"),
+              url: "/sessions",
+              icon: <MessagesSquareIcon />,
+            },
+          ],
+    [isOwner, t]
+  )
 
   // 品牌图标标出会话属于哪个 agent，一眼可辨。
-  const recentItems = recent.map((session) => ({
-    name: session.title || `${t("common.unnamed")} #${session.id}`,
-    url: `/sessions/${session.id}`,
-    icon: <AgentIcon flavor={session.agentFlavor} className="size-4" />,
-  }))
+  const recentItems = React.useMemo(
+    () =>
+      recent.map((session) => ({
+        name: session.title || `${t("common.unnamed")} #${session.id}`,
+        url: `/sessions/${session.id}`,
+        icon: <AgentIcon flavor={session.agentFlavor} className="size-4" />,
+      })),
+    [recent, t]
+  )
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -140,4 +158,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarFooter>
     </Sidebar>
   )
+}
+
+/**
+ * 两次拉取的最近会话列表是不是同一份。只比侧栏真正显示的字段——
+ * 用量、设置这些每轮都在变的字段与侧栏无关，跟着它们重渲染纯属白费。
+ */
+function sameRecentList(a: Session[], b: Session[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((s, i) => {
+    const t = b[i]
+    return (
+      s.id === t.id &&
+      s.title === t.title &&
+      s.cwd === t.cwd &&
+      s.agentFlavor === t.agentFlavor &&
+      s.updatedAt === t.updatedAt
+    )
+  })
 }

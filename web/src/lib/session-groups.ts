@@ -6,8 +6,6 @@ export interface SessionGroup {
   cwd: string
   /** 侧边栏显示的短名（同名目录会自动带上一层父目录区分）。 */
   label: string
-  /** 组内最新会话的分支，没有就不显示。 */
-  branch?: string
   sessions: Session[]
 }
 
@@ -49,7 +47,6 @@ export function groupSessionsByCwd(
     groups.push({
       cwd,
       label: "",
-      branch: sorted.find((s) => s.gitBranch)?.gitBranch,
       sessions: sorted.slice(0, perGroup),
     })
   }
