@@ -176,7 +176,7 @@ func AppendDBReferences(blocks []acp.ContentBlock, payload model.JSONMap,
 
 // resourceLinkThreshold：超过它的 @ 文件不再全文内嵌（一次性吃掉几万
 // token，agent 未必需要全文），改发 resource_link 让它按需自行读取
-//（2026-08 实测两端都正确消化）。
+// （2026-08 实测两端都正确消化）。
 const resourceLinkThreshold = 32 * 1024
 
 // BuildPromptBlocks 把发送入参翻译成 prompt 内容块，并给临时消息组展示
@@ -307,16 +307,6 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 		// 只有 end_turn 是正常说完；其余四种都意味着回答可能是残缺的。
 		updates["state"] = model.SessionError
 	}
-	// 消息数在写路径上重建一次并缓存——列表读取绝不做全量重建。
-	if all, err := s.rebuildAll(sessionID); err == nil {
-		updates["message_count"] = len(all)
-		// 标题升级借这次重建的结果，不再单独读一遍转录。异步是因为它要
-		// 等外部模型，而这一轮的收尾不该被它拖住。
-		go s.refineTitle(sessionID, br, all)
-		// 对话索引的提问摘要同理：趁热把刚发的这句长提问算出来，下次打开
-		// 会话左侧的索引直接就是精简过的文案（见 outline.go）。
-		go s.digestTurnPrompt(sessionID, all)
-	}
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", sessionID).Updates(updates).Error; err != nil {
 		slog.Error("save stop reason", "session", sessionID, "err", err)
 	}
@@ -325,10 +315,30 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 	// 原轮先收尾时引导轮还在跑，此刻发 turn_done 会让前端误判「没有轮
 	// 在跑」，把排队的插话 flush 进正在跑的轮、被二次 Interject 链式排队
 	// （claude 消化不了第二层排队，消息就悬空无回复）。谁最后收尾谁发。
-	if s.manager.TurnActive(sessionKey(sessionID)) {
-		return
+	if !s.manager.TurnActive(sessionKey(sessionID)) {
+		br.EndTurn()
 	}
-	br.EndTurn()
+
+	// 收尾之后才重建。turn_done 是界面从「正在跑」切回「可以说话」的信号，
+	// 不该排在一次全量转录重建后面——长会话的转录几十 MB，那是实打实的
+	// 几百毫秒，用户盯着一个已经说完话的界面等它变回可用。
+	//
+	// 重建本身照跑：消息数缓存、标题升级、提问摘要都要它。前端收到
+	// turn_done 后会来拉消息列表，那条路径与这里共用同一次重建
+	// （rebuildAll 按会话合流），不会变成两遍。
+	go func() {
+		all, err := s.rebuildAll(sessionID)
+		if err != nil {
+			return
+		}
+		if err := s.db.Model(&model.Session{}).Where("id = ?", sessionID).
+			Update("message_count", len(all)).Error; err != nil {
+			slog.Warn("save message count", "session", sessionID, "err", err)
+		}
+		// 标题升级与提问摘要都要等外部小模型，各自内部已有节流与去重。
+		s.refineTitle(sessionID, br, all)
+		s.digestTurnPrompt(sessionID, all)
+	}()
 }
 
 // ActiveTurnCount 数正在跑的轮——自更新前的「有人在干活」检查用。

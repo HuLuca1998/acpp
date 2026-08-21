@@ -168,7 +168,7 @@ func TestRebuildMessagesConnRestartBoundary(t *testing.T) {
 		{model.RoleAgent, "第一答。"},
 		{model.RoleUser, "第二问"},
 		{model.RoleAgent, "答到一半——"}, // 僵尸轮的内容保留,按 cancelled 收尾
-		{model.RoleUser, "第二问"},       // 用户重发是真实动作,照实产出
+		{model.RoleUser, "第二问"},     // 用户重发是真实动作,照实产出
 		{model.RoleAgent, "这次答完了。"},
 	}
 	if len(got) != len(want) {
