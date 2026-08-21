@@ -139,6 +139,38 @@ func (s *SessionService) fillTenantNames(ctx context.Context, views []SessionVie
 	}
 }
 
+// SessionRef 是归属校验后的会话最小事实：它是谁、活儿在哪个目录干、归谁。
+type SessionRef struct {
+	ID       uint
+	Cwd      string
+	TenantID uint
+}
+
+// Guard 只做归属校验并取回工作目录，**不构造视图**。
+//
+// 它是工作区数据面与对话面的入口闸，被每一条面板请求走一遍：文件树、
+// 预览、git 的十条端点、终端、日志尾随（每 2 秒一次）、消息列表、索引……
+// 走完整的 Get 意味着每次都白做三件事——Preload agent 多查一次表、
+// toView 里 gitBranch 读两次磁盘、租户会话再查一次 tenants。闸只需要
+// 知道「这条会话归不归你、目录在哪」，那就只查这三列。
+//
+// 语义与 Get 一致：不属于当前身份的会话当作不存在（理由见 Get）。
+func (s *SessionService) Guard(ctx context.Context, scope Scope, id uint) (SessionRef, error) {
+	var ref SessionRef
+	res := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{})).
+		Select("id", "cwd", "tenant_id").
+		Where("id = ?", id).
+		Limit(1).
+		Scan(&ref)
+	if res.Error != nil {
+		return SessionRef{}, fmt.Errorf("get session %d: %w", id, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return SessionRef{}, fmt.Errorf("session %d: %w", id, ErrNotFound)
+	}
+	return ref, nil
+}
+
 // Get 按 scope 取会话：不属于当前身份的会话一律当作**不存在**（404 而不是
 // 403）——403 会把「这条会话确实存在」这个事实泄露出去，凭 id 逐个试就能
 // 数出别人有多少会话。
