@@ -101,7 +101,7 @@ func RebuildMessages(sessionID uint, entries []transcript.Entry) []model.Message
 		}
 		decoded = append(decoded, wireEntry{TS: e.TS, Dir: e.Dir, Msg: msg})
 	}
-	return rebuildEntries(sessionID, decoded)
+	return rebuildEntries(sessionID, decoded, true)
 }
 
 // wireEntry 是转录一行的解码结果。与 transcript.Entry 的区别只在 Msg 已经
@@ -118,6 +118,11 @@ const (
 	retryDir    = "local"
 	retryMethod = "_acpp/retry"
 )
+
+// stopInterrupted 是我们自己的停止原因（ACP 的 StopReason 里没有对应值）：
+// 轮次一个结论都没等到，转录就断了（进程被杀、机器崩溃）。挂在本轮最后
+// 一段正文上，界面据此说明这条回答没说完。
+const stopInterrupted = "interrupted"
 
 // dropRetried 剔掉被重试作废的行。
 //
@@ -166,7 +171,11 @@ func dropRetried(entries []wireEntry) []wireEntry {
 }
 
 // rebuildEntries 是重建的本体，输入是已解码的行。
-func rebuildEntries(sessionID uint, entries []wireEntry) []model.Message {
+//
+// sealed 表示「转录到此为止不会再长了」——没有轮次正在跑。为真时，末尾那个
+// 等不到响应的轮次会被兜底收尾（进程被杀、机器崩溃都会留下这种半截轮）；
+// 为假时留给实时流去接，否则同一段内容会在历史与流式区各显示一份。
+func rebuildEntries(sessionID uint, entries []wireEntry, sealed bool) []model.Message {
 	entries = dropRetried(entries)
 	var out []model.Message
 	nextID := uint(1)
@@ -358,7 +367,9 @@ func rebuildEntries(sessionID uint, entries []wireEntry) []model.Message {
 		turn = nil
 	}
 
+	var lastTS time.Time
 	for _, entry := range entries {
+		lastTS = entry.TS
 		msg := entry.Msg
 
 		switch {
@@ -513,6 +524,13 @@ func rebuildEntries(sessionID uint, entries []wireEntry) []model.Message {
 				turn = &rebuildTurn{tools: map[string]*rebuildTool{}}
 			}
 		}
+	}
+
+	// 转录就断在这儿了：agent 进程被杀、机器崩了、prompt 的响应永远不会来。
+	// 已经流出的内容不能因为「没等到响应」整段丢掉——那正是「看着 AI 说了
+	// 一半、刷新之后一个字都不剩」的成因。按无结论收尾，内容留在历史里。
+	if sealed && turn != nil {
+		flush(lastTS, stopInterrupted, nil)
 	}
 
 	return out

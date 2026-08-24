@@ -63,7 +63,10 @@ func (s *ChatService) rebuildAll(sessionID uint) ([]model.Message, error) {
 
 	entries, err := s.readWireEntries(sessionID)
 	if err == nil {
-		call.msgs = rebuildEntries(sessionID, entries)
+		// 有轮次正在跑时不给末尾那轮兜底收尾：那段内容此刻正由实时流推着，
+		// 两边都画一份就重复了。
+		sealed := s.manager == nil || !s.manager.TurnActive(sessionKey(sessionID))
+		call.msgs = rebuildEntries(sessionID, entries, sealed)
 	} else {
 		call.err = fmt.Errorf("read transcript: %w", err)
 	}

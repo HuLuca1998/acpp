@@ -426,6 +426,7 @@ export default {
       skipped: "已跳过",
     },
     stopReason: {
+      interrupted: "回答没说完就中断了（agent 连接断开），内容可能不完整",
       max_tokens: "回答因触达 token 上限被截断",
       max_turn_requests: "回答因触达单轮请求次数上限被截断",
       refusal: "agent 拒绝继续",

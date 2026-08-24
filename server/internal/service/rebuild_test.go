@@ -590,7 +590,7 @@ func TestReadWireEntriesMatchesRebuildMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readWireEntries: %v", err)
 	}
-	viaLines := rebuildEntries(1, wire)
+	viaLines := rebuildEntries(1, wire, true)
 
 	if len(viaEntries) == 0 {
 		t.Fatal("重建出 0 条消息，测试数据本身有问题")
@@ -676,5 +676,47 @@ func TestRebuildMessagesKeepsTurnWhenMarkDangles(t *testing.T) {
 	got := RebuildMessages(1, entries)
 	if len(got) != 2 {
 		t.Fatalf("重建出 %d 条，期望原样保留 2 条: %+v", len(got), got)
+	}
+}
+
+// 转录断在半截（agent 进程被杀、机器崩了）：已经流出的内容必须留在历史里，
+// 并标出这一轮没说完——否则用户看着 AI 写了一半，刷新之后一个字都不剩。
+func TestRebuildMessagesSealsInterruptedTurn(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "写 30 首唐诗")),
+		wire(t, "recv", chunkFrame("1. 《静夜思》—— 李白\n2. 《望庐山瀑布》—— 李白")),
+		// 没有 prompt 响应：进程死在这里。
+	}
+
+	got := RebuildMessages(1, entries)
+	if len(got) != 2 {
+		t.Fatalf("重建出 %d 条，期望用户提问 + 半截回答都在: %+v", len(got), got)
+	}
+	if got[1].Role != model.RoleAgent || got[1].Content == "" {
+		t.Fatalf("第二条该是 agent 的半截正文，实际 %+v", got[1])
+	}
+	if got[1].Payload["stopReason"] != stopInterrupted {
+		t.Errorf("stopReason = %v，期望 %q——界面靠它说明回答不完整",
+			got[1].Payload["stopReason"], stopInterrupted)
+	}
+}
+
+// 轮次还在跑的时候不兜底：那段内容此刻正由实时流推着，
+// 历史再落一份就会在界面上重复。
+func TestRebuildEntriesKeepsLiveTurnUnsealed(t *testing.T) {
+	entries := []wireEntry{
+		{TS: time.Now(), Dir: "send", Msg: wireMsg{
+			ID: json.RawMessage("1"), Method: "session/prompt",
+			Params: json.RawMessage(`{"sessionId":"s","prompt":[{"type":"text","text":"写 30 首唐诗"}]}`),
+		}},
+		{TS: time.Now(), Dir: "recv", Msg: wireMsg{
+			Method: "session/update",
+			Params: json.RawMessage(`{"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"1. 《静夜思》"}}}`),
+		}},
+	}
+
+	got := rebuildEntries(1, entries, false)
+	if len(got) != 1 || got[0].Role != model.RoleUser {
+		t.Fatalf("重建出 %+v，期望只有用户提问（回答留给实时流）", got)
 	}
 }

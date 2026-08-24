@@ -35,6 +35,7 @@ import {
   LinkIcon,
   RotateCcwIcon,
   ShieldCheckIcon,
+  TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react"
 
@@ -389,11 +390,27 @@ export const ChatMessage = memo(function ChatMessage({
     )
   }
 
-  const turnUsage = (message.payload as { turnUsage?: TurnUsage } | null)
-    ?.turnUsage
+  const payload = message.payload as {
+    turnUsage?: TurnUsage
+    stopReason?: string
+  } | null
+  const turnUsage = payload?.turnUsage
+  // 这一轮没有正常收尾（被中断、触达上限、被拒），回答多半是残缺的——
+  // 历史里必须就地说明，否则用户只会看到一段莫名其妙停住的文字。
+  const stopReason = payload?.stopReason
   return (
     <div className="group/msg" title={timestamp}>
       <MarkdownContent>{message.content}</MarkdownContent>
+      {stopReason ? (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-warning">
+          <TriangleAlertIcon className="size-3.5 shrink-0" />
+          <span>
+            {t(`chat.stopReason.${stopReason}` as never, {
+              defaultValue: stopReason,
+            })}
+          </span>
+        </div>
+      ) : null}
       {/* 操作行占位固定高度，浮现时不推挤下方内容。 */}
       <div className="mt-1 flex h-6 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
         <CopyButton text={message.content} />

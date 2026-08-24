@@ -448,6 +448,7 @@ export default {
       skipped: "Skipped",
     },
     stopReason: {
+      interrupted: "Response was cut off (agent disconnected) and may be incomplete",
       max_tokens: "Answer was truncated by the token limit",
       max_turn_requests: "Answer was truncated by the per-turn request limit",
       refusal: "The agent refused to continue",
