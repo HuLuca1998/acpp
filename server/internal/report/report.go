@@ -39,10 +39,25 @@ type Calls interface {
 	Record(ctx context.Context, rec model.MCPCall)
 }
 
+// Notifier 是「报告已经打开了」这件事的广播口。
+//
+// 为什么要后端主动推，而不是让前端从 tool_call 事件里认：ACP 的
+// rawInput 是**流式累积**的（实测：先到半个参数对象，补完之后末帧又变回
+// null），前端要从这种流里稳定捞出 path 很脆，而两条 runtime 的分片行为
+// 还不一定一样。后端在这里是确定地知道 sessionID 与路径的，推一条事件
+// 比让前端猜可靠得多。
+//
+// 可为 nil（不广播，工具照常返回成功——报告文件已经写好了，界面没弹出来
+// 也不该让这次调用变成失败）。
+type Notifier interface {
+	ReportOpened(sessionID uint, path, title string)
+}
+
 // Service 是报告能力的业务面。
 type Service struct {
 	sessions Sessions
 	calls    Calls
+	notifier Notifier
 	// mcpBase 是 agent 回连的 MCP 端点前缀
 	// （http://127.0.0.1:<port>/api/mcp/report/）。
 	mcpBase string
@@ -50,6 +65,12 @@ type Service struct {
 
 func NewService(sessions Sessions, addr string) *Service {
 	return &Service{sessions: sessions, mcpBase: mcpBaseURL(addr)}
+}
+
+// WithNotifier 挂上广播口。装配期调用一次，之后只读。
+func (s *Service) WithNotifier(n Notifier) *Service {
+	s.notifier = n
+	return s
 }
 
 // WithCalls 挂上调用观测。分开一个 setter 而不是塞进 NewService：

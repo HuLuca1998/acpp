@@ -66,6 +66,10 @@ export interface ChatState {
   /** 正在流式到达的思考过程。 */
   streamingThought: string
   liveTools: LiveToolCall[]
+  /** agent 最近一次摊开给用户看的报告（report_open 事件）。
+   *  带 seq 是为了「只打开一次」：状态会随本轮其它事件反复重渲染，
+   *  没有它每次重渲染都会把面板又弹一遍。 */
+  reportOpen?: { path: string; title: string; seq: number }
   /** 一轮正在跑。 */
   busy: boolean
   connected: boolean
@@ -202,6 +206,17 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         liveTools: mergeTool(prev.liveTools, ev),
         touched: mergeTouched(prev.touched, ev.locations),
       }
+
+    case "report_open": {
+      // agent 写完报告并调了 report_open。路径由后端算好（确定在会话
+      // 工作目录内），这里只负责把它交给工作区。
+      const path = ev.text ?? ""
+      if (!path) return prev
+      return {
+        ...prev,
+        reportOpen: { path, title: ev.title ?? "", seq: ev.seq },
+      }
+    }
 
     case "session_title":
       // 标题不是聊天内容，它落在会话记录上（后端已落库）。这里显式接住

@@ -120,7 +120,9 @@ func run() error {
 	// 报告工具面：agent 写完一份 HTML 报告后调 report_open 把它摊开给用户。
 	// 它不存任何东西（报告是磁盘上的文件，事实源是转录里的 tool_call），
 	// 所以不需要 db，只要能由 token 反查会话。
-	reportService := report.NewService(sessionService, cfg.Addr).WithCalls(mcpCalls)
+	reportService := report.NewService(sessionService, cfg.Addr).
+		WithCalls(mcpCalls).
+		WithNotifier(chatService)
 	chatService.AddMounter(reportService)
 
 	// 会话标题：两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到

@@ -424,6 +424,7 @@ export type StreamEventKind =
   | "session_title"
   | "task_update"
   | "retry"
+  | "report_open"
   | "error"
 
 export interface StreamEvent {

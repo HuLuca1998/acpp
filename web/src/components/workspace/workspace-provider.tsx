@@ -301,6 +301,27 @@ export function WorkspaceAutoRefresh({
   return null
 }
 
+/**
+ * 把 agent 摊开的报告接到工作区：收到 report_open 就在预览面板打开它。
+ *
+ * 只认 seq 递增的那一次。状态会随本轮其它事件反复重渲染，没有这道门
+ * 每次重渲染都会把面板重新弹一遍，用户滚到一半的报告会被拽回顶部。
+ */
+export function WorkspaceReportOpener({
+  report,
+}: {
+  report?: { path: string; title: string; seq: number }
+}) {
+  const ws = useWorkspace()
+  const seen = useRef(0)
+  useEffect(() => {
+    if (!report?.path || report.seq <= seen.current) return
+    seen.current = report.seq
+    ws.openPreview(report.path)
+  }, [report, ws])
+  return null
+}
+
 /** 草稿态作用域：同一套方法，目录走 `?cwd=`（见 lib/api 的 workspaceScopeApi）。 */
 function draftWorkspaceScope(cwd: string): WorkspaceScopeApi {
   return workspaceScopeApi("/sessions", cwd)

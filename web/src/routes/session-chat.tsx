@@ -20,6 +20,7 @@ import { WorkspaceDock } from "@/components/workspace/workspace-dock"
 import {
   WorkspaceAutoRefresh,
   WorkspaceProvider,
+  WorkspaceReportOpener,
   WorkspaceAskSink,
   WorkspaceReferenceSink,
 } from "@/components/workspace/workspace-provider"
@@ -281,6 +282,7 @@ export function SessionChat() {
       </ChatPanelContext.Provider>
       {/* 刷新 git/文件树：轮末一次，轮内每干完一件事也跟一次——agent 在
           一轮里切分支、改文件，界面不该等到收工才说实话。 */}
+      <WorkspaceReportOpener report={chat.reportOpen} />
       <WorkspaceAutoRefresh
         busy={chat.busy}
         toolsDone={

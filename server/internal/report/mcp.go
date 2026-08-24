@@ -59,7 +59,11 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 				return nil, err
 			}
 			sessionID, cwd = id, dir
-			return s.tools(dir), nil
+			return s.tools(dir, func(rel, title string) {
+				if s.notifier != nil {
+					s.notifier.ReportOpened(id, rel, title)
+				}
+			}), nil
 		},
 		OnCall: func(ctx context.Context, rec mcp.Call) {
 			s.record(ctx, rec, sessionID, cwd, model.MCPSourceAgent)
@@ -71,7 +75,7 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 // InspectTools 列出工具声明，供工具台展示。走的是与 agent 完全相同的那条
 // tools，页面上看到的就是模型此刻看到的那一份。
 func (s *Service) InspectTools(cwd string) []mcp.Declaration {
-	return mcp.Declare(s.tools(cwd))
+	return mcp.Declare(s.tools(cwd, nil))
 }
 
 // InspectMCP 以工作目录（而非会话 token）为上下文处理一条 JSON-RPC 消息，
@@ -80,7 +84,9 @@ func (s *Service) InspectMCP(ctx context.Context, cwd string, raw []byte) (any, 
 	srv := mcp.Server{
 		Name: mcpServerName,
 		Resolve: func(ctx context.Context, _ string) ([]mcp.Tool, error) {
-			return s.tools(cwd), nil
+			// 工具台的试运行不广播：它是 owner 在管理面里手动发的请求，
+			// 不该弹开某条会话的面板。
+			return s.tools(cwd, nil), nil
 		},
 		OnCall: func(ctx context.Context, rec mcp.Call) {
 			s.record(ctx, rec, 0, cwd, model.MCPSourceManual)
@@ -95,7 +101,7 @@ type openArgs struct {
 	Title string `json:"title"`
 }
 
-func (s *Service) tools(cwd string) []mcp.Tool {
+func (s *Service) tools(cwd string, onOpen func(rel, title string)) []mcp.Tool {
 	return []mcp.Tool{{
 		Name:        toolOpen,
 		Description: openDescription,
@@ -134,6 +140,9 @@ func (s *Service) tools(cwd string) []mcp.Tool {
 			title := strings.TrimSpace(in.Title)
 			if title == "" {
 				title = filepath.Base(rel)
+			}
+			if onOpen != nil {
+				onOpen(rel, title)
 			}
 			return fmt.Sprintf(
 				"已在用户的工作区打开报告《%s》（%s）。用户现在正看着它，"+

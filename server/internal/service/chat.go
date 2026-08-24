@@ -140,6 +140,20 @@ func (s *ChatService) SetDataSources(d DataSources) {
 	s.mounters = append(s.mounters, d)
 }
 
+// ReportOpened 广播「一份报告已经打开」，实现 report.Notifier。
+//
+// 走 SSE 而不是让前端从 tool_call 里认：ACP 的 rawInput 是流式累积的，
+// 末帧还会变回 null，前端从那种流里捞路径既脆又和 runtime 实现绑死。
+// 这里是确定地知道会话与路径的地方。
+//
+// 复用 Text/Title 两个既有字段（路径 / 标题），不给 Event 加新字段——
+// 事件外壳是全端共享的，为一个 kind 加专属字段，别的 kind 也得跟着背。
+func (s *ChatService) ReportOpened(sessionID uint, path, title string) {
+	s.brokerFor(sessionID).Publish(StreamEvent{
+		Kind: "report_open", Text: path, Title: title,
+	})
+}
+
 // Mounter 是「能给会话挂一个 MCP 工具面」的能力。
 //
 // 返回值对应 acp.OpenOptions 的 MCPServers 与 MetaExtra，哪个有值取决于
