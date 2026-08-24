@@ -569,6 +569,14 @@ func (s *ChatService) Retry(ctx context.Context, sessionID uint) (*RetryResult, 
 		}
 	}
 
+	// 连接必须在写标记之前确认可用。标记一落盘，被重试那轮的内容就从历史里
+	// 消失了；此时若 runTurn 因为「session not open」跑不起来（agent 进程死过
+	// 一轮就是这个状态），用户会眼看着整段对话变空、新内容又一个字都没有。
+	// Open 是幂等的，已经开着直接返回。
+	if _, err := s.Open(ctx, sessionID); err != nil {
+		return nil, fmt.Errorf("open session for retry: %w", err)
+	}
+
 	// 标记写在重发之前：中途出任何岔子，宁可留下「这一轮作废了」也不要留下
 	// 两条一模一样的用户消息。
 	s.markRetried(sessionID, last.ts)
