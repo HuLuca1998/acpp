@@ -33,6 +33,8 @@ export const ChatHistory = memo(function ChatHistory({
   userName,
   hasEarlier,
   loadEarlier,
+  retryableId,
+  onRetry,
 }: {
   blocks: Block[]
   /** 哪些块是「一轮的开头」——头像只戳在那儿。 */
@@ -44,6 +46,9 @@ export const ChatHistory = memo(function ChatHistory({
   hasEarlier: boolean
   /** 拉一页更早的消息；返回这一轮有没有拿到新内容。 */
   loadEarlier: () => Promise<boolean>
+  /** 出错后可重跑的那条用户消息（末条），没有就是没得重试。 */
+  retryableId?: number
+  onRetry?: () => Promise<void> | void
 }) {
   return (
     <>
@@ -62,7 +67,13 @@ export const ChatHistory = memo(function ChatHistory({
           // 打断贴底跟随，与 autoScroll 的跟随体验相互矛盾。
           return (
             <MessageScrollerItem key={key} messageId={key}>
-              <ChatMessage message={block.message} userName={userName} />
+              <ChatMessage
+                message={block.message}
+                userName={userName}
+                onRetry={
+                  block.message.id === retryableId ? onRetry : undefined
+                }
+              />
             </MessageScrollerItem>
           )
         }

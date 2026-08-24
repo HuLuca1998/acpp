@@ -37,6 +37,8 @@ import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 export interface ChatStreamSource extends ChatState {
   /** 拉一页更早的消息；返回有没有拿到新内容（哨兵的泵取循环靠它停下）。 */
   loadEarlier: () => Promise<boolean>
+  /** 重跑最后一条用户消息（出错后的补救入口）。 */
+  retry: () => Promise<void> | void
   resolvePermission: (
     id: string,
     optionId: string,
@@ -65,6 +67,18 @@ export const ChatStream = memo(function ChatStream({
   const { t } = useTranslation()
   const flavor = chat.session?.agentFlavor
   const userName = chat.session?.tenantName
+
+  // 出错的那条消息给个重试入口：错误多半来自服务端过载这类与内容无关的
+  // 意外，让用户把同一段话手打第二遍是没道理的。轮次在跑时不给——那还
+  // 没到「失败」。
+  const failed = !chat.busy && (chat.error !== null || chat.session?.state === "error")
+  const retryableId = useMemo(() => {
+    if (!failed) return undefined
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === "user") return chat.messages[i].id
+    }
+    return undefined
+  }, [failed, chat.messages])
 
   // 打开落底稳定器。消息条挂着 content-visibility:auto，屏外内容按
   // 估算高度占位，滚动原语一次性 scrollTop=scrollHeight 会停在半路
@@ -186,6 +200,8 @@ export const ChatStream = memo(function ChatStream({
               userName={userName}
               hasEarlier={chat.hasEarlier}
               loadEarlier={chat.loadEarlier}
+              retryableId={retryableId}
+              onRetry={chat.retry}
             />
 
             {/* 任务计划：随 plan 事件实时更新；轮结束后由重建的 plan

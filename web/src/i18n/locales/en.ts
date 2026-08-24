@@ -318,6 +318,8 @@ export default {
     touchedHint: "Open in the file viewer",
     copy: "Copy",
     copied: "Copied",
+    retryTurn: "Retry",
+    retryTurnHint: "Rerun this message; the failed turn is discarded, no need to resend",
     plan: "Plan",
     outline: {
       title: "Prompt index",

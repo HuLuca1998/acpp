@@ -423,6 +423,7 @@ export type StreamEventKind =
   | "turn_done"
   | "session_title"
   | "task_update"
+  | "retry"
   | "error"
 
 export interface StreamEvent {
@@ -442,6 +443,8 @@ export interface StreamEvent {
   locations?: ToolLocation[]
   /** 这次工具调用启动了一个子代理（claude 的 Agent/Task、codex 的 subAgentActivity）。 */
   isSubagent?: boolean
+  /** retry 事件专用：真表示 agent 侧上下文也退回去了，假表示只是原地重发。 */
+  rewound?: boolean
   /** 这条是某个子代理干的，值为它所挂的启动调用 id。 */
   subagentOf?: string
   /** codex 专用：子代理独立 thread 的 id 与 agent 路径。 */

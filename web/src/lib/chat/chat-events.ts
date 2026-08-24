@@ -302,6 +302,32 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         plan: null,
       }
 
+    case "retry": {
+      // 被重试的那一轮就地作废：末条用户消息之后的内容全部撤掉，用户气泡
+      // 留着——重试的意义就是不必把同一句话再发一遍。后端同时往转录里写
+      // 了标记，刷新后重建出的历史与这里一致。
+      let lastUser = -1
+      for (let i = prev.messages.length - 1; i >= 0; i--) {
+        if (prev.messages[i].role === "user") {
+          lastUser = i
+          break
+        }
+      }
+      return {
+        ...prev,
+        busy: true,
+        error: null,
+        stopReason: null,
+        streamingText: "",
+        streamingThought: "",
+        liveTools: [],
+        touched: [],
+        plan: null,
+        messages:
+          lastUser >= 0 ? prev.messages.slice(0, lastUser + 1) : prev.messages,
+      }
+    }
+
     case "error":
       return { ...prev, busy: false, error: ev.error ?? "unknown error" }
 

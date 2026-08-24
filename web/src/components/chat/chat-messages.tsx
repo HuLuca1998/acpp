@@ -6,6 +6,7 @@ import type { LiveToolCall } from "@/hooks/use-chat"
 import { cn } from "@/lib/utils"
 import { formatClockTime, formatDateTime, formatTokens } from "@/lib/format"
 import { CopyButton } from "@/components/chat/copy-button"
+import { Hint } from "@/components/hint"
 import { ElicitationAnsweredCard } from "@/components/chat/cards/elicitation-card"
 import { MarkdownContent } from "@/components/chat/markdown"
 import { PlanHistoryCard } from "@/components/chat/plan-card"
@@ -16,6 +17,7 @@ import {
   type ToolCallPayload,
 } from "@/components/chat/tool-call"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import {
@@ -31,6 +33,7 @@ import {
   DatabaseIcon,
   FileIcon,
   LinkIcon,
+  RotateCcwIcon,
   ShieldCheckIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -226,6 +229,30 @@ export const ActivityMessage = memo(function ActivityMessage({
   )
 })
 
+/**
+ * 重跑这条消息的按钮，落在用户气泡左侧。
+ *
+ * 只在出错后出现，所以**不藏进 hover**——它是这条错误消息唯一的出路，
+ * 藏起来等于让用户把同一段话手打第二遍（规范 §5.5：承载功能的行内操作常显）。
+ */
+function RetryButton({ onRetry }: { onRetry: () => Promise<void> | void }) {
+  const { t } = useTranslation()
+  return (
+    <Hint label={t("chat.retryTurn")} desc={t("chat.retryTurnHint")}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t("chat.retryTurn")}
+        className="size-6 text-muted-foreground hover:text-foreground"
+        onClick={() => void onRetry()}
+      >
+        <RotateCcwIcon className="size-3.5" />
+      </Button>
+    </Hint>
+  )
+}
+
 /** 正文消息：用户消息用主色气泡靠右并带头像，agent 输出渲染 markdown
  *  （头像与左侧对齐槽由外层 AgentRow 给，因为工具卡、计划卡要缩进同样多）。
  *  memo 是必须的——流式期间每个 chunk 都触发页面重渲染，
@@ -233,10 +260,13 @@ export const ActivityMessage = memo(function ActivityMessage({
 export const ChatMessage = memo(function ChatMessage({
   message,
   userName,
+  onRetry,
 }: {
   message: Message
   /** 会话创建者的名字，人这侧的头像用它取首字母。 */
   userName?: string
+  /** 有值表示这条消息可以重跑（出错后的补救入口），按钮落在气泡左侧。 */
+  onRetry?: () => Promise<void> | void
 }) {
   const { t, i18n } = useTranslation()
   const timestamp = formatDateTime(message.createdAt, i18n.language)
@@ -272,9 +302,10 @@ export const ChatMessage = memo(function ChatMessage({
         </MessageAvatar>
         <MessageContent>
           <div
-            className="group/msg flex items-center justify-end"
+            className="group/msg flex items-center justify-end gap-1"
             title={timestamp}
           >
+            {onRetry ? <RetryButton onRetry={onRetry} /> : null}
             {/* 80% 行宽上限放在这层（参照全宽消息行）；Bubble 自带的
                 max-w-[80%] 参照的是本列（内容宽），会把短消息也挤折行。 */}
             <div className="flex max-w-[80%] min-w-0 flex-col items-end gap-1.5">

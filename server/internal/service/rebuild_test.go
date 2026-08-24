@@ -614,3 +614,67 @@ func cmpMessages(a, b []model.Message) string {
 	}
 	return ""
 }
+
+// 被重试作废的那一轮不该再出现在历史里——包括它自己那条用户消息，
+// 否则界面上会看到同一句话发了两遍（正是重试要解决的问题）。
+func TestRebuildMessagesDropsRetriedTurn(t *testing.T) {
+	base := time.Now()
+	at := func(offset time.Duration, dir, msg string) transcript.Entry {
+		e := wire(t, dir, msg)
+		e.TS = base.Add(offset)
+		return e
+	}
+	retryMark := func(from time.Time) string {
+		ts, err := json.Marshal(from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf(`{"method":%q,"params":{"fromTS":%s}}`, retryMethod, ts)
+	}
+
+	failedAt := base.Add(2 * time.Second)
+	entries := []transcript.Entry{
+		at(0, "send", promptFrame(1, "第一句")),
+		at(time.Second, "recv", chunkFrame("回答一")),
+		at(time.Second, "recv", resultFrame(1)),
+		// 这一轮报错作废：prompt 与它的残留内容都要被抹掉。
+		at(2*time.Second, "send", promptFrame(2, "第二句")),
+		at(3*time.Second, "recv", chunkFrame("API Error: 529 Overloaded")),
+		at(4*time.Second, retryDir, retryMark(failedAt)),
+		// 重试后重新发出的同一句话，这条才是历史里该留下的。
+		at(5*time.Second, "send", promptFrame(3, "第二句")),
+		at(6*time.Second, "recv", chunkFrame("回答二")),
+		at(6*time.Second, "recv", resultFrame(3)),
+	}
+
+	got := RebuildMessages(1, entries)
+	var texts []string
+	for _, m := range got {
+		texts = append(texts, m.Content)
+	}
+	want := []string{"第一句", "回答一", "第二句", "回答二"}
+	if len(texts) != len(want) {
+		t.Fatalf("重建出 %d 条 %v，期望 %v", len(texts), texts, want)
+	}
+	for i := range want {
+		if texts[i] != want[i] {
+			t.Fatalf("重建结果 %v，期望 %v", texts, want)
+		}
+	}
+}
+
+// 标记指向的 prompt 找不到时（转录被截断过、时间戳对不上），只丢标记行本身：
+// 宁可多显示一轮，也不能凭猜把好内容抹掉。
+func TestRebuildMessagesKeepsTurnWhenMarkDangles(t *testing.T) {
+	entries := []transcript.Entry{
+		wire(t, "send", promptFrame(1, "第一句")),
+		wire(t, "recv", chunkFrame("回答一")),
+		wire(t, "recv", resultFrame(1)),
+		wire(t, retryDir, `{"method":"`+retryMethod+`","params":{"fromTS":"2000-01-01T00:00:00Z"}}`),
+	}
+
+	got := RebuildMessages(1, entries)
+	if len(got) != 2 {
+		t.Fatalf("重建出 %d 条，期望原样保留 2 条: %+v", len(got), got)
+	}
+}

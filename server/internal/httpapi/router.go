@@ -314,11 +314,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("DELETE /api/sessions/{id}/terminals/{tid}", terminals.remove)
 	api.HandleFunc("GET /api/sessions/{id}/terminals/{tid}/ws", terminals.attach)
 
-	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止。
+	// 对话：open 建连、send 发一轮、events 流式收、cancel 中止、retry 重跑末条。
 	api.HandleFunc("POST /api/sessions/{id}/open", chat.open)
 	api.HandleFunc("POST /api/sessions/{id}/send", chat.send)
 	api.HandleFunc("GET /api/sessions/{id}/events", chat.events)
 	api.HandleFunc("POST /api/sessions/{id}/cancel", chat.cancel)
+	api.HandleFunc("POST /api/sessions/{id}/retry", chat.retry)
 	api.HandleFunc("GET /api/sessions/{id}/subagents/{threadId}/output", chat.subagentOutput)
 	// 会话级统一设置：模型/思考深度/权限档/plan/fast，逐项可选。
 	api.HandleFunc("PUT /api/sessions/{id}/settings", chat.settings)

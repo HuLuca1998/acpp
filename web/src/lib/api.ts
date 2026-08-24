@@ -507,6 +507,15 @@ export const api = {
       }),
     cancel: (id: number) =>
       request<null>(`/sessions/${id}/cancel`, { method: "POST" }),
+    /**
+     * 重跑最后一条用户消息。不需要把原文再发一遍，界面上也不会多出一条
+     * 重复气泡；claude 会话还会把 agent 侧上下文退回那条消息之前，
+     * 响应的 rewound 说明这次是否做到了。
+     */
+    retry: (id: number) =>
+      request<{ rewound: boolean }>(`/sessions/${id}/retry`, {
+        method: "POST",
+      }),
     /** 应用统一设置变更（模型/思考深度/权限档/plan/fast，逐项可选）。 */
     applySettings: (id: number, patch: SettingsPatch) =>
       request<SessionSettings>(`/sessions/${id}/settings`, {

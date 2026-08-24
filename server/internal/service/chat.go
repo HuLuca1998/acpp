@@ -72,6 +72,33 @@ type ChatService struct {
 	digesting map[uint]bool
 }
 
+// mergeRewindMeta 把回退用的 _meta 并进已有的注入 meta。
+//
+// 两边都可能写 claudeCode.options（技能隔离往那里塞 settingSources/plugins），
+// 浅覆盖会把对方整块顶掉，所以按层递归合并，同名叶子以回退侧为准。
+func mergeRewindMeta(base, extra map[string]any) map[string]any {
+	if len(base) == 0 {
+		return extra
+	}
+	out := make(map[string]any, len(base)+len(extra))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range extra {
+		nested, ok := v.(map[string]any)
+		if !ok {
+			out[k] = v
+			continue
+		}
+		if cur, ok := out[k].(map[string]any); ok {
+			out[k] = mergeRewindMeta(cur, nested)
+			continue
+		}
+		out[k] = nested
+	}
+	return out
+}
+
 // UsageSnapshot 是一条会话最近的上下文水位与费用。
 type UsageSnapshot struct {
 	Used int64          `json:"used"`
@@ -221,13 +248,21 @@ func (s *ChatService) Peek(ctx context.Context, sessionID uint) (*SessionView, e
 // Open 为一条已存在的数据库会话拉起 agent 并完成 ACP 握手。
 // 会话已经开着时直接返回，重复调用是安全的。
 func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, error) {
+	return s.openWith(ctx, sessionID, nil)
+}
+
+// openWith 是 Open 的本体。rewind 非空时把它并进 session/new 的 _meta，
+// 用来开一条「上下文截断到某条消息」的会话（见 Retry）：那种情况必须走
+// session/new（截断参数只在建会话时读），所以不能复用已开着的连接、也不
+// 能走 session/load 恢复。
+func (s *ChatService) openWith(ctx context.Context, sessionID uint, rewind map[string]any) (*SessionView, error) {
 	view, err := s.sessions.Get(ctx, OwnerScope(), sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	key := sessionKey(sessionID)
-	if _, ok := s.manager.Get(key); ok {
+	if _, ok := s.manager.Get(key); ok && rewind == nil {
 		cat := s.catalogFor(ctx, sessionID)
 		if settings, err := s.manager.Settings(key); err == nil {
 			cat.filterSettings(&settings)
@@ -265,6 +300,13 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 	}
 
 	br := s.brokerFor(sessionID)
+	// 回退开会话：截断参数在 _meta 里，只有 session/new 会读，所以这条路
+	// 不能带 ResumeACPSessionID（那会走 session/load，原样恢复全部上下文）。
+	resumeID := view.ACPSessionID
+	if rewind != nil {
+		resumeID = ""
+		metaExtra = mergeRewindMeta(metaExtra, rewind)
+	}
 	sess, err := s.manager.Open(ctx, acp.OpenOptions{
 		Key:     key,
 		Runtime: acp.RuntimeFor(agent.Command, agent.Args, agent.Env),
@@ -273,7 +315,7 @@ func (s *ChatService) Open(ctx context.Context, sessionID uint) (*SessionView, e
 		// 全量线级消息进转录，这是对话内容唯一的持久化。
 		WireTap: func(dir string, msg json.RawMessage) { s.transcripts.Append(key, dir, msg) },
 		// 进程重启后优先恢复 agent 侧的同一条会话，保住上下文。
-		ResumeACPSessionID: view.ACPSessionID,
+		ResumeACPSessionID: resumeID,
 		MCPServers:         mcpServers,
 		MetaExtra:          metaExtra,
 	})

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,9 @@ import (
 	"acpp/server/internal/model"
 	"acpp/server/internal/stream"
 )
+
+// 本文件是「发起并跑完一轮」的全部环节：发送（Send）、执行（runTurn）、
+// 轮末的标题升级，以及重跑最后一条消息（Retry）。
 
 // DeriveTitle 从首条消息取首行并截短，作为会话的自动标题。
 func DeriveTitle(text string) string {
@@ -513,4 +517,136 @@ func firstExchange(all []model.Message) (user, agent string) {
 		}
 	}
 	return user, agent
+}
+
+// RetryResult 说明这次重试实际做到了哪一步，给界面区分措辞用。
+type RetryResult struct {
+	// Rewound 为真表示 agent 侧的上下文真的退回去了；为假是降级重发
+	// （codex 一律如此，claude 在拿不到截断点时也会落到这里）。
+	Rewound bool `json:"rewound"`
+}
+
+// Retry 重跑最后一条用户消息。
+//
+// 与「把原文再发一遍」的区别有两处：界面上不会多出第二条一样的用户气泡
+// （转录里写一条重试标记，重建时把作废的那一轮连同它的 prompt 一起抹掉），
+// 以及在 claude 会话上会把 agent 侧的上下文一并退回被重试消息之前——这样
+// 重跑的起点与第一次完全一致，而不是「带着上次失败的痕迹再来一遍」。
+//
+// 上下文回退是 claude 专属（协议层没有这个能力，见 acp/claude_rewind.go）。
+// codex 拿不到，退化为在原上下文里重发，Rewound 报 false。
+func (s *ChatService) Retry(ctx context.Context, sessionID uint) (*RetryResult, error) {
+	view, err := s.sessions.Get(ctx, OwnerScope(), sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	last, err := s.lastPrompt(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 先把上下文退回去，再重发——顺序反了的话新一轮会带着旧上下文跑。
+	result := &RetryResult{}
+	if last.cutMessageID != "" && view.ACPSessionID != "" {
+		uuid, uerr := acp.ClaudeMessageUUID(view.ACPSessionID, last.cutMessageID)
+		switch {
+		case uerr != nil:
+			// 拿不到截断点不是故障：codex 会话本来就没有这张对照表。
+			slog.Debug("retry: 不做上下文回退", "session", sessionID, "err", uerr)
+		default:
+			if err := s.rewind(ctx, sessionID, view.ACPSessionID, uuid); err != nil {
+				return nil, err
+			}
+			result.Rewound = true
+		}
+	}
+
+	// 标记写在重发之前：中途出任何岔子，宁可留下「这一轮作废了」也不要留下
+	// 两条一模一样的用户消息。
+	s.markRetried(sessionID, last.ts)
+
+	br := s.brokerFor(sessionID)
+	// 让界面把作废那一轮的内容就地清掉，用户气泡留着不动。
+	br.Publish(StreamEvent{Kind: "retry", Rewound: result.Rewound})
+	br.StartTurn()
+	go s.runTurn(sessionID, br, last.blocks)
+
+	return result, nil
+}
+
+// promptRecord 是转录里最后一条 prompt 的全部信息。
+type promptRecord struct {
+	// ts 是那条 prompt 进转录的时刻，重试标记凭它指认要作废的那一轮。
+	ts time.Time
+	// blocks 是原样的内容块（含图片与 @ 引用），重发不需要用户再输一遍。
+	blocks []acp.ContentBlock
+	// cutMessageID 是这条 prompt **之前**最后一条 agent 正文的 messageId，
+	// 也就是上下文该退回到的位置。会话第一条消息没有它，那种情况不回退
+	// （从零开始本来就没有要丢的上下文）。
+	cutMessageID string
+}
+
+// lastPrompt 从转录里翻出最后一条用户提问。
+func (s *ChatService) lastPrompt(sessionID uint) (*promptRecord, error) {
+	entries, err := s.readWireEntries(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("read transcript: %w", err)
+	}
+	entries = dropRetried(entries) // 已经作废的轮次不该被重试第二次
+
+	var rec *promptRecord
+	var pendingMessageID string
+	for _, e := range entries {
+		switch {
+		case e.Dir == "send" && e.Msg.Method == "session/prompt":
+			var p acp.PromptParams
+			if json.Unmarshal(e.Msg.Params, &p) != nil {
+				continue
+			}
+			rec = &promptRecord{ts: e.TS, blocks: p.Prompt, cutMessageID: pendingMessageID}
+		case e.Dir == "recv" && e.Msg.Method == "session/update":
+			var n acp.SessionNotification
+			if json.Unmarshal(e.Msg.Params, &n) != nil {
+				continue
+			}
+			if n.Update.SessionUpdate == acp.UpdateAgentMessageChunk {
+				if id := n.Update.MessageID; id != "" {
+					pendingMessageID = id
+				}
+			}
+		}
+	}
+	if rec == nil || len(rec.blocks) == 0 {
+		return nil, fmt.Errorf("%w: 这条会话还没有可重试的消息", ErrInvalid)
+	}
+	return rec, nil
+}
+
+// rewind 重开一条上下文截断到 messageUUID 的 agent 会话。
+func (s *ChatService) rewind(ctx context.Context, sessionID uint, acpSessionID, messageUUID string) error {
+	// 截断参数只在建会话时读，所以必须先送走现在这条连接。
+	if err := s.manager.Close(sessionKey(sessionID)); err != nil {
+		slog.Warn("retry: 关闭旧会话失败", "session", sessionID, "err", err)
+	}
+	if _, err := s.openWith(ctx, sessionID, acp.RewindMetaExtra(acpSessionID, messageUUID)); err != nil {
+		return fmt.Errorf("rewind session: %w", err)
+	}
+	slog.Info("会话上下文已回退", "session", sessionID, "cut", messageUUID)
+	return nil
+}
+
+// markRetried 往转录里写一条重试标记。它不是 ACP 消息，dir 用 local 与线级
+// 消息区分；重建时据此把 fromTS 那条 prompt 起、到标记为止的内容整段丢掉。
+func (s *ChatService) markRetried(sessionID uint, from time.Time) {
+	msg, err := json.Marshal(map[string]any{
+		"method": retryMethod,
+		"params": map[string]any{"fromTS": from},
+	})
+	if err != nil {
+		slog.Warn("retry: 组装标记失败", "session", sessionID, "err", err)
+		return
+	}
+	// 重建缓存按转录文件的 size+mtime 认指纹，多了这一行自然失效。
+	s.transcripts.Append(sessionKey(sessionID), retryDir, msg)
 }

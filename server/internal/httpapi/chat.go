@@ -67,6 +67,28 @@ func (h chatHandler) send(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusAccepted, msg)
 }
 
+// retry 重跑最后一条用户消息：不需要用户把原文再发一遍，界面上也不会多出
+// 一条重复的用户气泡。claude 会话还会把 agent 侧上下文退回那条消息之前，
+// 响应里的 rewound 说明这次是否做到了。
+func (h chatHandler) retry(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.guard(r, id); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	result, err := h.chat.Retry(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusAccepted, result)
+}
+
 // subagentOutput 读一个 codex 子代理的最终产出（claude 的产出随工具调用
 // 一起下发，不走这里）。开一条一次性会话把子 thread 的转录 load 出来，慢，
 // 所以是界面展开那一条时才拉的懒加载。

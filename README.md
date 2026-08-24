@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -223,6 +223,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/system/data-dir` | 迁移数据目录（`{dataDir}` 绝对路径）：`VACUUM INTO` 在线快照 + 转录拷贝 + 写 `~/.acpp/config.json`，旧数据保留，重启后生效 |
 | PUT | `/api/system/workspace-dir` | 改工作区根（`{workspaceDir}`）：agent 干活的地方与访客 root 的父目录，立刻生效 |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
+| POST | `/api/sessions/{id}/retry` | 重跑最后一条用户消息：不必重发原文，界面上不留重复气泡；claude 会话还会把 agent 侧上下文退回那条消息之前（响应 `{rewound}` 说明是否做到，codex 一律 false），见 [docs/adr-014](docs/adr-014-消息重试与上下文回退.md) |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用。**turn 进行中也能改**：界面在轮里只放开权限档与思考深度（前者是就地管住 agent 的唯一手段，后者给下一轮预约），模型/plan/fast 锁到轮末。生效时机两端不同——权限档 claude 立刻对本轮生效、codex 要等下一轮（档位是轮开始时的快照），思考深度两端一律下一轮；控件的悬停说明照实写明 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消）。卡片挂起最长 **30 分钟**（等真人点选的反向调用统一这个时限，含交互式提问；机器应答的 fs 读写仍是 1 分钟），超时按 cancelled 回给 agent，那一步工具调用随即失败 |
 | GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?…}`；密码永不下发，响应只给 `hasPassword` 标志位） |
@@ -242,7 +243,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/tools/calls/stats` | 按工具聚合的调用统计（次数、失败数、平均耗时、最近使用） |
 | DELETE | `/api/tools/calls` | 清空调用记录 |
 
-SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`session_title`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图（含 `prompt` 内容能力：`{image, audio, embeddedContext}`，来自 initialize 的 `promptCapabilities`，claude/codex 由 adapter 按实测兜底，generic 按声明——前端据此门控图片按钮，后端在发送前把越界内容块收敛：resource 降级为 text、图片直接报错）；`usage` 是上下文用量 `{used, size}`（claude 会间歇附带累计费用 `cost:{amount,currency}`，状态栏顺带显示，codex 无此字段则不出现）；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`session_title` 在标题被升级时发一次（带新标题）：来源要么是 agent 自己推的 AI 标题（claude 的 `session_info_update`），要么是首轮末的 ollama 概括。`tool_call` 另带一组子代理字段：`isSubagent`（这次调用派出了子代理）、`subagentOf`（这条是某个子代理干的，值为它所挂的启动调用 id）、codex 专用的 `subagentThreadId` / `subagentPath`；还带 `locations`（ACP 的 follow-along 位置 `[{path, line?}]`），前端用它做「正在触碰」指示（消息流小字 + 文件树呼吸点 + 查看器跟随模式 + 子代理面板当前文件）。**这组指示只在 claude 会话里出现**——2026-08 实测 claude 的 read/edit 工具带 locations、codex 一条都不发，没有位置信息时界面静默降级（不显示，不报错）。
+SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`tool_call`、`permission`、`permission_done`、`plan`、`settings`、`usage`、`commands`、`elicitation`、`elicitation_done`、`turn_end`、`session_title`、`retry`、`turn_done`、`error`。每条带单调递增的 `seq`，断线重连时用它去重。`settings` 在 agent 自行切档/改配置时带全量统一视图（含 `prompt` 内容能力：`{image, audio, embeddedContext}`，来自 initialize 的 `promptCapabilities`，claude/codex 由 adapter 按实测兜底，generic 按声明——前端据此门控图片按钮，后端在发送前把越界内容块收敛：resource 降级为 text、图片直接报错）；`usage` 是上下文用量 `{used, size}`（claude 会间歇附带累计费用 `cost:{amount,currency}`，状态栏顺带显示，codex 无此字段则不出现）；`turn_end` 附带本轮 token 计量（两端交集字段）；`permission` 表示 agent 阻塞等用户裁决（带选项列表），裁决走上表的 permission 端点。`retry` 表示最后一条用户消息正在重跑，界面据此撤掉那条消息之后的内容（`rewound` 说明 agent 侧上下文是否也退回去了，见 [docs/adr-014](docs/adr-014-消息重试与上下文回退.md)）。`session_title` 在标题被升级时发一次（带新标题）：来源要么是 agent 自己推的 AI 标题（claude 的 `session_info_update`），要么是首轮末的 ollama 概括。`tool_call` 另带一组子代理字段：`isSubagent`（这次调用派出了子代理）、`subagentOf`（这条是某个子代理干的，值为它所挂的启动调用 id）、codex 专用的 `subagentThreadId` / `subagentPath`；还带 `locations`（ACP 的 follow-along 位置 `[{path, line?}]`），前端用它做「正在触碰」指示（消息流小字 + 文件树呼吸点 + 查看器跟随模式 + 子代理面板当前文件）。**这组指示只在 claude 会话里出现**——2026-08 实测 claude 的 read/edit 工具带 locations、codex 一条都不发，没有位置信息时界面静默降级（不显示，不报错）。
 
 **更新后怎么让所有人刷新**：`/api/events` 是一条与会话无关的全局 SSE 流，每个页面（不只是会话页）都挂着它，连上先收到 `{kind:"hello", version}`。owner 点「一键更新」会替换 .app 并重启后端，**进程一换，所有人的这条流必断**——断开本身就是信号：浏览器自动重连（服务端用 `retry` 指令把间隔调到 1.5 秒），重连拿到的版本和手里那份对不上，页面就弹出常驻的刷新提示。局域网访客因此在后端起来后一两秒内就知道该刷新了，而不是等轮询——轮询的发现延迟下限就是轮询间隔，要做到秒级得让每个页面每秒打一次 health。只提示不强制刷新：会话状态在后端、刷新即恢复，唯独输入框里没发出去的草稿找不回来，什么时候刷由用户定。
 

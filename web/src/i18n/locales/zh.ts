@@ -301,6 +301,8 @@ export default {
     touchedHint: "在查看器中打开",
     copy: "复制",
     copied: "已复制",
+    retryTurn: "重试",
+    retryTurnHint: "重跑这条消息；出错的那一轮会被撤掉，不用再发一遍",
     plan: "任务计划",
     outline: {
       title: "提问索引",

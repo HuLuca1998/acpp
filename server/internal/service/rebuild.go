@@ -112,8 +112,62 @@ type wireEntry struct {
 	Msg wireMsg
 }
 
+// 重试标记：不是 ACP 消息，是我们自己写进转录的一行，用来把被重试作废的
+// 那一轮从历史里抹掉（见 ChatService.Retry）。dir 用 "local" 与线级消息区分。
+const (
+	retryDir    = "local"
+	retryMethod = "_acpp/retry"
+)
+
+// dropRetried 剔掉被重试作废的行。
+//
+// 标记里记的是被作废那条 prompt 的**时间戳**而不是行号：转录读取会跳过写了
+// 一半的行（进程被杀），行号与切片下标对不上，时间戳则是行自带的。
+func dropRetried(entries []wireEntry) []wireEntry {
+	var marks []int
+	for i, e := range entries {
+		if e.Dir == retryDir && e.Msg.Method == retryMethod {
+			marks = append(marks, i)
+		}
+	}
+	if len(marks) == 0 {
+		return entries
+	}
+
+	drop := make([]bool, len(entries))
+	for _, i := range marks {
+		drop[i] = true // 标记行自己不参与重建
+		var p struct {
+			FromTS time.Time `json:"fromTS"`
+		}
+		if json.Unmarshal(entries[i].Msg.Params, &p) != nil || p.FromTS.IsZero() {
+			continue
+		}
+		// 往回找那条被作废的 prompt，从它开始整段丢到标记为止。找不到就
+		// 只丢标记行——宁可多显示一轮，也不能凭猜把好内容抹掉。
+		for j := i - 1; j >= 0; j-- {
+			if entries[j].Dir == "send" && entries[j].Msg.Method == "session/prompt" &&
+				entries[j].TS.Equal(p.FromTS) {
+				for k := j; k < i; k++ {
+					drop[k] = true
+				}
+				break
+			}
+		}
+	}
+
+	kept := make([]wireEntry, 0, len(entries))
+	for i, e := range entries {
+		if !drop[i] {
+			kept = append(kept, e)
+		}
+	}
+	return kept
+}
+
 // rebuildEntries 是重建的本体，输入是已解码的行。
 func rebuildEntries(sessionID uint, entries []wireEntry) []model.Message {
+	entries = dropRetried(entries)
 	var out []model.Message
 	nextID := uint(1)
 	emit := func(m model.Message, ts time.Time) {

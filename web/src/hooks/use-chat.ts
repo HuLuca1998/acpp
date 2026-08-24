@@ -375,6 +375,19 @@ export function useChat(sessionId: number) {
     }
   }, [sessionId])
 
+  /**
+   * 重跑最后一条用户消息。作废那一轮的清理由服务端广播的 retry 事件完成
+   * （reducer 会撤掉末条用户消息之后的内容），这里只负责把请求发出去。
+   */
+  const retry = useCallback(async () => {
+    cancelling.current = false
+    try {
+      await api.sessions.retry(sessionId)
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: (err as Error).message }))
+    }
+  }, [sessionId])
+
   const applySettings = useCallback(
     async (patch: SettingsPatch) => {
       try {
@@ -466,6 +479,7 @@ export function useChat(sessionId: number) {
       enqueue,
       removeQueued,
       cancel,
+      retry,
       applySettings,
       resolvePermission,
       resolveElicitation,
@@ -477,6 +491,7 @@ export function useChat(sessionId: number) {
       enqueue,
       removeQueued,
       cancel,
+      retry,
       applySettings,
       resolvePermission,
       resolveElicitation,

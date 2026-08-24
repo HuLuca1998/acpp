@@ -50,6 +50,9 @@ type Event struct {
 	PlanReview   *acp.PlanReview        `json:"planReview,omitempty"`
 	StopReason   string                 `json:"stopReason,omitempty"`
 	Error        string                 `json:"error,omitempty"`
+	// Rewound 跟在 retry 事件上：真表示 agent 侧的上下文也退回去了，
+	// 假表示只是原地重发（codex 没有回退能力）。
+	Rewound bool `json:"rewound,omitempty"`
 
 	// Message 在一条消息落库后带上完整记录，前端用它替换流式占位。
 	Message *model.Message `json:"message,omitempty"`

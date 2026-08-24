@@ -407,6 +407,10 @@ type SessionUpdate struct {
 	// codex 一条都不发——依赖它的界面功能对 codex 必须优雅降级。
 	Locations json.RawMessage `json:"locations,omitempty"`
 
+	// MessageID 只有 claude 带，值是 Anthropic API 的 message id。上下文
+	// 回退要靠它定位截断点（见 claude_rewind.go）。
+	MessageID string `json:"messageId,omitempty"`
+
 	// plan
 	Entries json.RawMessage `json:"entries,omitempty"`
 
