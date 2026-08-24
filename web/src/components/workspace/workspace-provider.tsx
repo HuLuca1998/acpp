@@ -151,11 +151,13 @@ export function WorkspaceProvider({
         ensureOpen("preview")
         listenersRef.current.forEach((l) => l())
       },
-      copyLanLink: (path) => {
+      copyLanLink: (paths) => {
         // lanBase 由后端算（它才知道监听地址与局域网 IP）；拿不到就退回
         // 当前 origin——用户本来就是从某个地址访问过来的，至少不是死链。
         const base = lanBaseRef.current || window.location.origin
-        void copyText(base + activeScope.previewUrl(sessionId, path))
+        void copyText(
+          paths.map((p) => base + activeScope.previewUrl(sessionId, p)).join("\n")
+        )
         // 复制本身是静默的（见 lib/clipboard），没有反馈用户不知道成没成。
         // 更要紧的是「这条链接发得出去吗」：没开局域网监听时给的是
         // 127.0.0.1，转发给同事必然打不开——与其让人白试一次，不如当场说清。

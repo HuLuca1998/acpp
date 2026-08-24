@@ -19,6 +19,7 @@ import {
 } from "@/lib/git-status"
 import { cn } from "@/lib/utils"
 import { copyText } from "@/lib/clipboard"
+import { useTreeSelection } from "@/components/workspace/panels/use-tree-selection"
 import type { TreeEntry } from "@/types/acp"
 import { useIdentity } from "@/hooks/identity-context"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
@@ -97,6 +98,29 @@ export const FileTreePanel = memo(function FileTreePanel(
   // 懒加载失败的目录：没有它，失败等于「children 永远是 undefined」，
   // 那个位置的 spinner 就会一直转下去，看着像卡死而不是出错。
   const [failed, setFailed] = useState<Set<string>>(new Set())
+
+  const sel = useTreeSelection()
+  // 屏幕上看得见的文件路径，按渲染顺序排。Shift 范围选按这个序列取区间
+  // ——用户框的是「看到的那一段」，不是字母序也不是树的深度序。
+  // 目录不进这个序列：多选只选文件（见 use-tree-selection 的说明）。
+  const visibleFiles = useMemo(() => {
+    const out: string[] = []
+    const walk = (list: TreeEntry[]) => {
+      for (const e of list) {
+        if (e.kind !== "dir") {
+          out.push(e.path)
+          continue
+        }
+        if (!expanded.has(e.path)) continue
+        // 与 TreeNode 里的 children 解析保持同一套判断，否则序列和画面会错位。
+        const kids =
+          e.children ?? (e.listed ? NO_CHILDREN : childrenByPath.get(e.path))
+        if (kids) walk(kids)
+      }
+    }
+    walk(entries ?? [])
+    return out
+  }, [entries, expanded, childrenByPath])
 
   const load = useCallback(() => {
     if (!ws.ready) return
@@ -234,6 +258,11 @@ export const FileTreePanel = memo(function FileTreePanel(
               onAddReference={ws.addReference}
               onDownload={ws.downloadFile}
               onCopyLanLink={ws.copyLanLink}
+              selected={sel.selected}
+              onToggleSelect={sel.toggle}
+              onRangeSelect={(path) => sel.selectRange(visibleFiles, path)}
+              onSelectOnly={sel.selectOnly}
+              targetsFor={sel.targetsFor}
               changes={changes}
               touched={touched}
             />
@@ -263,6 +292,11 @@ const TreeNode = memo(function TreeNode({
   onAddReference,
   onDownload,
   onCopyLanLink,
+  selected,
+  onToggleSelect,
+  onRangeSelect,
+  onSelectOnly,
+  targetsFor,
   changes,
   touched,
 }: {
@@ -275,7 +309,14 @@ const TreeNode = memo(function TreeNode({
   onOpenFile: (path: string) => void
   onAddReference: (path: string) => void
   onDownload: (path: string, archive?: boolean) => void
-  onCopyLanLink: (path: string) => void
+  onCopyLanLink: (paths: string[]) => void
+  /** 当前多选集合（只含文件）。 */
+  selected: ReadonlySet<string>
+  onToggleSelect: (path: string) => void
+  onRangeSelect: (path: string) => void
+  onSelectOnly: (path: string) => void
+  /** 这次批量动作作用在哪些路径上：点在选中项上给整个选择，否则只给这一项。 */
+  targetsFor: (path: string) => string[]
   /** 绝对路径 → git 状态，用来给条目着色。 */
   changes: Map<string, FileChangeKind>
   /** agent 本轮触碰过的绝对路径：条目尾部亮呼吸点，轮结束即灭。 */
@@ -288,6 +329,7 @@ const TreeNode = memo(function TreeNode({
     ? dirChangeKind(entry.path, changes)
     : changes.get(entry.path)
   const isOpen = isDir && expanded.has(entry.path)
+  const isSelected = !isDir && selected.has(entry.path)
   // `listed` = 后端已经列过这个目录：此时没有 children 就是**空目录**，
   // 不是「还没加载」。少了这一层判断，首屏展开的空目录会挂着一个永远
   // 转不完的 spinner（后端对空目录回的是 children: null）。
@@ -299,6 +341,11 @@ const TreeNode = memo(function TreeNode({
     ? [...touched].some((p) => p.startsWith(`${entry.path}/`))
     : touched.has(entry.path)
 
+  // 批量动作的作用域：右键点在选中项上给整个选择，点在选中之外只给这一项。
+  const targets = isDir ? [entry.path] : targetsFor(entry.path)
+  const count = targets.length
+  const many = count > 1
+
   return (
     <>
       <ContextMenu>
@@ -307,9 +354,30 @@ const TreeNode = memo(function TreeNode({
             <button
               type="button"
               title={entry.path}
-              className="flex h-6 w-full items-center gap-1 rounded-md px-1.5 text-xs text-foreground/90 transition-colors duration-150 ease-snappy hover:bg-muted"
+              className={cn(
+                "flex h-6 w-full items-center gap-1 rounded-md px-1.5 text-xs text-foreground/90 transition-colors duration-150 ease-snappy hover:bg-muted",
+                isSelected && "bg-accent text-accent-foreground"
+              )}
               style={{ paddingLeft: `${depth * 14 + 6}px` }}
-              onClick={() => (isDir ? onToggle(entry) : onOpenFile(entry.path))}
+              onClick={(e: React.MouseEvent) => {
+                if (isDir) {
+                  onToggle(entry)
+                  return
+                }
+                // 修饰键走多选，且**不打开**文件——挑选的过程中不该
+                // 一路把查看器里的内容换来换去。
+                if (e.metaKey || e.ctrlKey) {
+                  onToggleSelect(entry.path)
+                  return
+                }
+                if (e.shiftKey) {
+                  onRangeSelect(entry.path)
+                  return
+                }
+                // 普通点击与改动前完全一致：清空选择、打开文件。
+                onSelectOnly(entry.path)
+                onOpenFile(entry.path)
+              }}
             />
           }
         >
@@ -339,8 +407,14 @@ const TreeNode = memo(function TreeNode({
           ) : null}
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => onAddReference(entry.path)}>
-            {t("workspace.refMenu.addReference")}
+          <ContextMenuItem
+            onClick={() => {
+              for (const p of targets) onAddReference(p)
+            }}
+          >
+            {many
+              ? t("workspace.refMenu.addReferenceMany", { count })
+              : t("workspace.refMenu.addReference")}
           </ContextMenuItem>
           {isDir ? (
             <ContextMenuItem onClick={() => onDownload(entry.path, true)}>
@@ -354,15 +428,17 @@ const TreeNode = memo(function TreeNode({
               <ContextMenuItem onClick={() => onDownload(entry.path)}>
                 {t("workspace.refMenu.download")}
               </ContextMenuItem>
-              <ContextMenuItem onClick={() => onCopyLanLink(entry.path)}>
-                {t("workspace.refMenu.copyLanLink")}
+              <ContextMenuItem onClick={() => onCopyLanLink(targets)}>
+                {many
+                  ? t("workspace.refMenu.copyLanLinkMany", { count })
+                  : t("workspace.refMenu.copyLanLink")}
               </ContextMenuItem>
             </>
           )}
-          <ContextMenuItem
-            onClick={() => void copyText(entry.path)}
-          >
-            {t("workspace.refMenu.copyPath")}
+          <ContextMenuItem onClick={() => void copyText(targets.join("\n"))}>
+            {many
+              ? t("workspace.refMenu.copyPathMany", { count })
+              : t("workspace.refMenu.copyPath")}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -385,6 +461,11 @@ const TreeNode = memo(function TreeNode({
               failed={failed}
               onToggle={onToggle}
               onOpenFile={onOpenFile}
+              selected={selected}
+              onToggleSelect={onToggleSelect}
+              onRangeSelect={onRangeSelect}
+              onSelectOnly={onSelectOnly}
+              targetsFor={targetsFor}
               onAddReference={onAddReference}
               onDownload={onDownload}
           onCopyLanLink={onCopyLanLink}

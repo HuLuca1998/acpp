@@ -78,13 +78,13 @@ export interface WorkspaceValue {
   /** 下载工作区里的文件；archive=true 时把目录打包成 zip。 */
   downloadFile: (path: string, archive?: boolean) => void
   /**
-   * 复制这个文件的局域网链接到剪贴板。
+   * 复制这些文件的局域网链接到剪贴板（多条时一行一条）。
    *
    * 给的是 inline 预览地址而不是下载地址——转发这条链接是为了让对方
    * **看一眼**，不是让他存一份。前缀用后端算出的局域网 IP（浏览器地址栏
    * 里可能是 localhost，那种链接发出去没用）。
    */
-  copyLanLink: (path: string) => void
+  copyLanLink: (paths: string[]) => void
   /** 把文件/文件夹加进 composer 的 @ 引用（由页面层注册实现）。 */
   addReference: (path: string) => void
   /** 页面层注册 addReference 的落点；卸载时传 null。 */
