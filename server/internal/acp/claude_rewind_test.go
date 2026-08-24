@@ -47,6 +47,21 @@ func TestClaudeMessageUUID(t *testing.T) {
 		}
 	})
 
+	t.Run("API 错误消息不能当截断点", func(t *testing.T) {
+		// 529 这类报错也会作为 assistant 条目落进转录，id 是适配器自造的
+		// uuid 而不是 msg_xxx。拿它去截断，claude 会拒掉整条 session/new
+		// （会话 105 实测），所以这里就要挡下来、让调用方降级重发。
+		const sid = "00af3912-a565-4df2-9348-02daae8473e6"
+		claudeHome(t, sid,
+			`{"type":"user","uuid":"74f85635-0000-0000-0000-000000000001","message":{"role":"user","content":"同步代码"}}`,
+			`{"type":"assistant","uuid":"d6f62bd6-0000-0000-0000-000000000002","isApiErrorMessage":true,"message":{"id":"cf05995c-709f-4df2-99f9-8b2ac25cbf0c","content":[{"type":"text","text":"API Error: 529 Overloaded."}]}}`,
+		)
+		_, err := ClaudeMessageUUID(sid, "cf05995c-709f-4df2-99f9-8b2ac25cbf0c")
+		if !errors.Is(err, ErrRewindUnavailable) {
+			t.Errorf("err = %v，期望 ErrRewindUnavailable（那一轮本来也没产出，降级重发即可）", err)
+		}
+	})
+
 	t.Run("转录里没有那条消息", func(t *testing.T) {
 		_, err := ClaudeMessageUUID(sid, "msg_不存在")
 		if !errors.Is(err, ErrRewindUnavailable) {

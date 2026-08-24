@@ -555,10 +555,17 @@ func (s *ChatService) Retry(ctx context.Context, sessionID uint) (*RetryResult, 
 			// 拿不到截断点不是故障：codex 会话本来就没有这张对照表。
 			slog.Debug("retry: 不做上下文回退", "session", sessionID, "err", uerr)
 		default:
+			// 回退失败同样只是降级，不能让整个重试失败——重试是用户在出错
+			// 之后唯一的出路，它自己再报一次错就没有出路了。注意 rewind 会
+			// 先关掉现有连接，所以失败后必须正常打开一次，否则连接也丢了。
 			if err := s.rewind(ctx, sessionID, view.ACPSessionID, uuid); err != nil {
-				return nil, err
+				slog.Warn("retry: 回退失败，降级为原地重发", "session", sessionID, "err", err)
+				if _, oerr := s.Open(ctx, sessionID); oerr != nil {
+					return nil, fmt.Errorf("reopen after failed rewind: %w", oerr)
+				}
+			} else {
+				result.Rewound = true
 			}
-			result.Rewound = true
 		}
 	}
 

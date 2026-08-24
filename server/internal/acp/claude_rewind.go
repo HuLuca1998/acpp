@@ -61,17 +61,26 @@ func ClaudeMessageUUID(sessionID, apiMessageID string) (string, error) {
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for sc.Scan() {
 		var rec struct {
-			UUID    string `json:"uuid"`
-			Message struct {
+			UUID       string `json:"uuid"`
+			IsAPIError bool   `json:"isApiErrorMessage"`
+			Message    struct {
 				ID string `json:"id"`
 			} `json:"message"`
 		}
 		if err := json.Unmarshal(sc.Bytes(), &rec); err != nil {
 			continue // 转录里混着 queue-operation 之类的非消息行，跳过即可
 		}
-		if rec.Message.ID == apiMessageID && rec.UUID != "" {
-			return rec.UUID, nil
+		if rec.Message.ID != apiMessageID || rec.UUID == "" {
+			continue
 		}
+		// API 报错（529 之类）也会作为 assistant 条目落进转录，id 是适配器
+		// 自造的 uuid 而不是 msg_xxx。拿它当截断点 claude 会直接拒绝整条
+		// session/new——那种轮次本来也没产出，没有上下文要丢，降级重发即可。
+		if rec.IsAPIError {
+			return "", fmt.Errorf("%w: %s 是一条 API 错误消息，不能当截断点",
+				ErrRewindUnavailable, apiMessageID)
+		}
+		return rec.UUID, nil
 	}
 	return "", fmt.Errorf("%w: 转录里没有 %s", ErrRewindUnavailable, apiMessageID)
 }
