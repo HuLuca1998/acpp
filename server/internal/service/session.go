@@ -241,7 +241,15 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 		TenantID: scope.TenantID,
 		Title:    in.Title,
 		Cwd:      cwd,
-		State:    model.SessionActive,
+		// 刚建出来的会话一轮都没跑过，是 idle 不是 active。
+		// active 的语义是「有一轮正在跑」，只由 chat_turn 在发起时置上、
+		// 轮末归回（那边的注释写着「只在这里出现」）——这里写 active 与它
+		// 直接矛盾，代价是前端把 UI 卡死：bootstrap 读到 active 就把 busy
+		// 置 true，而一条从没跑过的会话不会有任何轮末事件来复位它，发送
+		// 按钮于是永远停在「中止」，这条会话再也发不出消息。
+		// 平时踩不到是因为从界面新建后一般紧接着就发第一句，那一轮把状态
+		// 带正了；只要建完不发就切走、或用 API 建会话，必中。
+		State: model.SessionIdle,
 	}
 	if err := s.db.WithContext(ctx).Create(&session).Error; err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
