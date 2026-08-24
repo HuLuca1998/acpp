@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import type { Message, PlanEntry, TurnUsage } from "@/types/acp"
 import type { LiveToolCall } from "@/hooks/use-chat"
 import { cn } from "@/lib/utils"
-import { formatDateTime, formatTokens } from "@/lib/format"
+import { formatClockTime, formatDateTime, formatTokens } from "@/lib/format"
 import { CopyButton } from "@/components/chat/copy-button"
 import { ElicitationAnsweredCard } from "@/components/chat/cards/elicitation-card"
 import { MarkdownContent } from "@/components/chat/markdown"
@@ -240,6 +240,7 @@ export const ChatMessage = memo(function ChatMessage({
 }) {
   const { t, i18n } = useTranslation()
   const timestamp = formatDateTime(message.createdAt, i18n.language)
+  const clock = formatClockTime(message.createdAt, i18n.language)
 
   if (message.kind === "elicitation") {
     return <ElicitationAnsweredCard message={message} />
@@ -271,16 +272,21 @@ export const ChatMessage = memo(function ChatMessage({
         </MessageAvatar>
         <MessageContent>
           <div
-            className="group/msg flex items-center justify-end gap-1.5"
+            className="group/msg flex items-center justify-end"
             title={timestamp}
           >
-            <CopyButton
-              text={message.content}
-              className="opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-visible:opacity-100"
-            />
             {/* 80% 行宽上限放在这层（参照全宽消息行）；Bubble 自带的
                 max-w-[80%] 参照的是本列（内容宽），会把短消息也挤折行。 */}
             <div className="flex max-w-[80%] min-w-0 flex-col items-end gap-1.5">
+              {/* 发送时刻常驻显示在气泡上方——回看长会话时「这句是什么时候
+                  说的」是基本信息，藏进 hover 等于没有。只给时分，完整日期
+                  留在外层 title 里。 */}
+              <time
+                dateTime={message.createdAt}
+                className="px-1 text-[11px] leading-none text-muted-foreground/60 tabular-nums"
+              >
+                {clock}
+              </time>
               {payload?.images?.length ? (
                 <div className="flex flex-wrap justify-end gap-1.5">
                   {payload.images.map((img, index) => (
@@ -340,6 +346,11 @@ export const ChatMessage = memo(function ChatMessage({
                   </BubbleContent>
                 </Bubble>
               ) : null}
+              {/* 操作行浮现式，与 agent 侧一致；高度固定占位，浮现时不推挤
+                  下方内容。时刻不在这里——那条常驻在气泡上方。 */}
+              <div className="flex h-6 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 focus-within:opacity-100">
+                <CopyButton text={message.content} />
+              </div>
             </div>
           </div>
         </MessageContent>

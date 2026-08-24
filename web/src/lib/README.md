@@ -20,7 +20,7 @@
 | chat/draft-store.ts | 输入框草稿的 ref 化 store（打字不重渲页面树，由输入卡自己订阅）    | `createDraftStore`、`DraftStore`                                     |
 | chat/first-send.ts | 草稿页 → 会话页的首发交棒：乐观用户消息、派发状态与失败通知          | `stashFirstSend`、`claimFirstSend`、`optimisticUserMessage`、`isOptimisticMessage` |
 | local-commands.ts | 本地斜杠命令（前端自己执行、不发给 agent）的解析与补全清单合并        | `parseLocalCommand`、`withLocalCommands`、`LOCAL_COMMANDS`          |
-| format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatTokens`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
+| format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatClockTime`、`formatTokens`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
 | git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | mcp-tool.ts       | MCP 工具的读法：破坏性判定、JSON-RPC 请求拼装、响应拆解（协议错误与工具错误分开）；工具台与调用记录共用 | `isDestructive`、`toolFullName`、`buildToolCall`、`buildRequest`、`initialArgs`、`coerceArgs`、`isRequired`、`readResponse`、`prettyJSON`、`parseJSON` |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |

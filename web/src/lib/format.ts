@@ -19,6 +19,7 @@ const UNITS: { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
  */
 const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>()
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>()
+const clockFormatters = new Map<string, Intl.DateTimeFormat>()
 
 function relativeFormatter(locale: string): Intl.RelativeTimeFormat {
   let formatter = relativeFormatters.get(locale)
@@ -56,6 +57,16 @@ export function formatRelativeTime(iso: string, locale: string): string {
 /** 完整本地时间，用在 title 悬停提示或详情处。 */
 export function formatDateTime(iso: string, locale: string): string {
   return dateTimeFormatter(locale).format(new Date(iso))
+}
+
+/** 只有时分（"14:24"），给消息气泡这种一眼扫过去的位置；完整日期留在 title。 */
+export function formatClockTime(iso: string, locale: string): string {
+  let formatter = clockFormatters.get(locale)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { timeStyle: "short" })
+    clockFormatters.set(locale, formatter)
+  }
+  return formatter.format(new Date(iso))
 }
 
 /**
