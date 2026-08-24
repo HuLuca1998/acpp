@@ -112,7 +112,7 @@ func resolveIdentity(r *http.Request, tenants *service.TenantService) identity {
 }
 
 // isPublicPath 列出不需要身份的路径。
-// `/api/mcp/` 是 agent 子进程回连的工具端点（数据库工具面），自带每会话
+// `/api/mcp/` 是 agent 子进程回连的工具端点（数据库工具面、报告工具面），自带每会话
 // 专属 token 鉴权且发不出 cookie——要求 cookie 会直接把它打死。
 func isPublicPath(path string) bool {
 	return path == "/api/health" ||

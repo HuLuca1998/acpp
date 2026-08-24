@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strconv"
 	"sync"
 	"time"
@@ -33,6 +34,11 @@ type ChatService struct {
 	// 只允许单向，而它反过来要用 SessionService 解析 token。
 	// 可为 nil（没有数据库能力，会话照常可用）。
 	sources DataSources
+
+	// mounters 是所有要给会话挂 MCP 工具面的能力（数据源、报告……）。
+	// 单独列一份而不是只认 sources：工具面不止一种，而它们要挂进的是
+	// **同一个** _meta，谁覆盖谁都是 bug（见 mergeClaudeMounts）。
+	mounters []Mounter
 
 	// titler 生成会话标题；nil 或未启用时退回首句派生。
 	titler Titler
@@ -128,7 +134,106 @@ type DBReference struct {
 }
 
 // SetDataSources 装上数据源能力面。装配期调用一次，之后只读。
-func (s *ChatService) SetDataSources(d DataSources) { s.sources = d }
+// 数据源同时也是一个挂载源，顺手登记，免得装配层还要记着调两次。
+func (s *ChatService) SetDataSources(d DataSources) {
+	s.sources = d
+	s.mounters = append(s.mounters, d)
+}
+
+// Mounter 是「能给会话挂一个 MCP 工具面」的能力。
+//
+// 返回值对应 acp.OpenOptions 的 MCPServers 与 MetaExtra，哪个有值取决于
+// runtime 方言：codex 走 session/new 的 mcpServers，claude 走
+// `_meta.claudeCode.options`。实现者按 flavor 二选一，另一个返回 nil。
+type Mounter interface {
+	MountsFor(ctx context.Context, sessionID uint, cwd, flavor string) ([]any, map[string]any, error)
+}
+
+// AddMounter 追加一个工具面。装配期调用，之后只读。
+// 数据源不用再调这个——SetDataSources 已经把它登记过了。
+func (s *ChatService) AddMounter(m Mounter) {
+	if m != nil {
+		s.mounters = append(s.mounters, m)
+	}
+}
+
+// collectMounts 把所有工具面的挂载结果合成一份。
+//
+// 单个工具面算不出来**不算失败**：没有数据库工具的会话照样是一条正常
+// 会话，没有报告工具也一样。所以这里逐个跳过出错的，而不是一错就全部
+// 放弃——一个能力面的故障不该把别的能力面一起带走。
+func (s *ChatService) collectMounts(ctx context.Context, sessionID uint, cwd, flavor string) ([]any, map[string]any) {
+	var servers []any
+	var meta map[string]any
+	for _, m := range s.mounters {
+		if m == nil {
+			continue
+		}
+		srv, mx, err := m.MountsFor(ctx, sessionID, cwd, flavor)
+		if err != nil {
+			slog.Warn("mount session mcp", "session", sessionID, "err", err)
+			continue
+		}
+		servers = append(servers, srv...)
+		meta = mergeClaudeMounts(meta, mx)
+	}
+	return servers, meta
+}
+
+// mergeClaudeMounts 合并 claude 侧的 _meta 挂载片段。
+//
+// claude 的形状是嵌套 map：`claudeCode.options.{mcpServers, allowedTools}`。
+// 每个工具面都往这里塞自己那份，**直接覆盖会让后来的顶掉前面的**——数据库
+// 工具面和报告工具面只能活一个，而且症状是「模型看不见某组工具」这种很难
+// 追的静默失败。
+//
+// 只按这一个已知形状逐层合并，不做通用深合并：形状是我们自己定的，写死
+// 比递归好读，也不会在遇到意外结构时悄悄合出个四不像。
+func mergeClaudeMounts(dst, src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return dst
+	}
+	// 第一份直接接管：每个工具面返回的都是现构造的 map，没有别人再持有它。
+	if dst == nil {
+		return src
+	}
+
+	dstOpts, ok1 := claudeOptions(dst)
+	srcOpts, ok2 := claudeOptions(src)
+	if !ok1 || !ok2 {
+		// 形状不认识时保守处理：只补 dst 没有的顶层键，绝不覆盖。
+		for k, v := range src {
+			if _, exists := dst[k]; !exists {
+				dst[k] = v
+			}
+		}
+		return dst
+	}
+
+	if sm, ok := srcOpts["mcpServers"].(map[string]any); ok && len(sm) > 0 {
+		dm, _ := dstOpts["mcpServers"].(map[string]any)
+		if dm == nil {
+			dm = map[string]any{}
+			dstOpts["mcpServers"] = dm
+		}
+		maps.Copy(dm, sm)
+	}
+	if st, ok := srcOpts["allowedTools"].([]string); ok && len(st) > 0 {
+		dt, _ := dstOpts["allowedTools"].([]string)
+		dstOpts["allowedTools"] = append(dt, st...)
+	}
+	return dst
+}
+
+// claudeOptions 取出 `claudeCode.options` 那一层，形状对不上就报 false。
+func claudeOptions(meta map[string]any) (map[string]any, bool) {
+	cc, ok := meta["claudeCode"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	opts, ok := cc["options"].(map[string]any)
+	return opts, ok
+}
 
 // Titler 是会话标题生成能力的注入口（实现在 internal/titler）。可为 nil：
 // 没装或没启用时会话沿用首句派生的标题，功能不受影响。
@@ -287,16 +392,12 @@ func (s *ChatService) openWith(ctx context.Context, sessionID uint, rewind map[s
 	// 照样是一条正常会话。
 	var mcpServers []any
 	var metaExtra map[string]any
-	if s.sources != nil {
+	if len(s.mounters) > 0 {
 		flavor := agent.Flavor
 		if flavor == "" {
 			flavor = string(acp.FlavorOf(agent.Name, agent.Command))
 		}
-		mcpServers, metaExtra, err = s.sources.MountsFor(ctx, sessionID, cwd, flavor)
-		if err != nil {
-			slog.Warn("mount session mcp", "session", sessionID, "err", err)
-			mcpServers, metaExtra = nil, nil
-		}
+		mcpServers, metaExtra = s.collectMounts(ctx, sessionID, cwd, flavor)
 	}
 
 	br := s.brokerFor(sessionID)

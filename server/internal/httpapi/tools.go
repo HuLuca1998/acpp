@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"acpp/server/internal/mcp"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
+	"acpp/server/internal/report"
 	"acpp/server/internal/service"
 )
 
@@ -20,6 +22,11 @@ import (
 // 只是上下文来源不同：agent 拿会话 token，工具台直接给工作目录。分成
 // 两个前缀是为了鉴权干净——回连端点必须公开（子进程发不出 cookie），
 // 管理面则是 owner 专属，混在一个前缀下迟早出事。
+//
+// 报告工具面的回连端点也落在本文件（见文件末 reportHandler）：按惯例它
+// 该跟着业务 handler 走，但 httpapi 的直接源文件数已经顶在硬线（20，见
+// 根 AGENTS.md §1.3），新开一个文件就会破线，而硬线的优先级高于这条惯例。
+// 这个包该按主题分包了，那是另一件事，不在本次改动里做。
 type toolsHandler struct {
 	sources *datasource.Service
 	calls   *mcpcall.Service
@@ -144,4 +151,43 @@ func (h toolsHandler) callClear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, nil)
+}
+
+// reportHandler 是报告工具面的 agent 回连端点（/api/mcp/report/{token}）。
+// 形状与数据库那条一致：POST 走 JSON-RPC，DELETE 是 session 终止通知，
+// 其余方法一律不受理（我们没有 server 主动通知要发，不实现 GET 事件流）。
+type reportHandler struct {
+	reports *report.Service
+}
+
+func (h reportHandler) mcp(w http.ResponseWriter, r *http.Request) {
+	if h.reports == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodPost:
+	case http.MethodDelete:
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	resp, hasResp := h.reports.HandleMCP(r.Context(), r.PathValue("token"), raw)
+	if !hasResp {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		// 连接已断，只能放弃响应。
+		return
+	}
 }

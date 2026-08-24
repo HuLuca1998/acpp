@@ -12,6 +12,7 @@ import (
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
+	"acpp/server/internal/report"
 	"acpp/server/internal/service"
 	"acpp/server/internal/stream"
 	"acpp/server/internal/system"
@@ -34,6 +35,7 @@ type Services struct {
 	Tenants     *service.TenantService
 	Projects    *project.Service
 	DataSources *datasource.Service
+	Reports     *report.Service
 	// MCPCalls 是 MCP 工具调用的观测记录，工具台读它。
 	MCPCalls *mcpcall.Service
 	// Notices 是全局通知广播口，全局事件流从这里取本人名下的通知。
@@ -293,6 +295,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/workspace/datasources/{dsid}/tables", draftDatasources.sessionTables)
 	// agent 回连的数据库工具端点（token 是每条会话专属凭证）。
 	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)
+	reports := reportHandler{reports: svcs.Reports}
+	api.HandleFunc("/api/mcp/report/{token}", reports.mcp)
 
 	// 工具台（页面 /tools）：看工具面、人工试运行、发自定义 JSON-RPC、
 	// 回看调用记录。owner 专属，与上面那条公开的回连端点刻意分前缀。
