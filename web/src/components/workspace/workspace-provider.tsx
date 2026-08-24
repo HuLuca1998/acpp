@@ -4,6 +4,9 @@ import type { DockviewApi } from "dockview-react"
 import * as React from "react"
 
 import { api, workspaceScopeApi, type WorkspaceScopeApi } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
+import { toast } from "sonner"
+import i18n from "@/i18n"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import {
   useWorkspace,
@@ -53,6 +56,27 @@ export function WorkspaceProvider({
   // dockview 首次 ready 时发生一次——摘掉就再也接不回来了。
   const attachApi = React.useCallback((next: DockviewApi | null) => {
     apiRef.current = next
+  }, [])
+  // 局域网地址前缀：只在挂载时取一次，存 ref 不进 state——provider 的 value
+  // 靠 useMemo 只依赖 sessionId 保持引用稳定，多一个 state 依赖就会让所有
+  // 面板跟着重渲染，而这只是个复制链接时才用得上的字符串。
+  const lanBaseRef = useRef("")
+  const lanShareableRef = useRef(false)
+  useEffect(() => {
+    let cancelled = false
+    void api.system.get().then(
+      (info) => {
+        if (cancelled) return
+        lanBaseRef.current = info.lanBase ?? ""
+        lanShareableRef.current = info.lanShareable ?? false
+      },
+      () => {
+        // 取不到就退回 window.location.origin，不为一个辅助动作打扰用户。
+      }
+    )
+    return () => {
+      cancelled = true
+    }
   }, [])
   const previewRef = useRef<PreviewTarget | null>(null)
   const listenersRef = useRef(new Set<() => void>())
@@ -126,6 +150,20 @@ export function WorkspaceProvider({
         previewRef.current = { path, mode: "diff", sha }
         ensureOpen("preview")
         listenersRef.current.forEach((l) => l())
+      },
+      copyLanLink: (path) => {
+        // lanBase 由后端算（它才知道监听地址与局域网 IP）；拿不到就退回
+        // 当前 origin——用户本来就是从某个地址访问过来的，至少不是死链。
+        const base = lanBaseRef.current || window.location.origin
+        void copyText(base + activeScope.previewUrl(sessionId, path))
+        // 复制本身是静默的（见 lib/clipboard），没有反馈用户不知道成没成。
+        // 更要紧的是「这条链接发得出去吗」：没开局域网监听时给的是
+        // 127.0.0.1，转发给同事必然打不开——与其让人白试一次，不如当场说清。
+        toast.success(
+          lanShareableRef.current
+            ? i18n.t("workspace.refMenu.lanLinkCopied")
+            : i18n.t("workspace.refMenu.lanLinkCopiedLocalOnly")
+        )
       },
       downloadFile: (path, archive) => {
         // 造一个一次性链接点掉：download 属性让浏览器走「另存为」而不是

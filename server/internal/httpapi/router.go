@@ -47,7 +47,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	agents := agentHandler{agents: svcs.Agents, chat: svcs.Chat}
 	sessions := sessionHandler{sessions: svcs.Sessions, chat: svcs.Chat}
 	chat := chatHandler{chat: svcs.Chat, sessions: svcs.Sessions}
-	system := systemHandler{system: svcs.System, update: svcs.Update, titler: svcs.Titler, busyTurns: svcs.Chat.ActiveTurnCount}
+	system := systemHandler{system: svcs.System, addr: cfg.Addr, update: svcs.Update, titler: svcs.Titler, busyTurns: svcs.Chat.ActiveTurnCount}
 	skills := skillHandler{skills: svcs.Skills, usage: svcs.SkillUsage}
 
 	api := http.NewServeMux()

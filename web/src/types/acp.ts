@@ -20,6 +20,12 @@ export interface SystemInfo {
   pendingDir?: string
   /** 工作区根：新会话工作目录的默认落点，也是访客各自 root 的父目录。 */
   workspaceDir: string
+  /** 局域网里访问本服务的地址前缀（`http://<ip>:<端口>`），后端拼好。
+   *  用来把相对路径拼成可以转发给同事的完整链接。 */
+  lanBase?: string
+  /** 这条地址当下能不能真发出去：只监听回环时给的是 127.0.0.1，
+   *  那条链接只有本机点得开。 */
+  lanShareable?: boolean
   /** 工作区根的默认值（~/acpp）。 */
   defaultWorkspaceDir: string
 }

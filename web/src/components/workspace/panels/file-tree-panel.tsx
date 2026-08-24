@@ -18,6 +18,7 @@ import {
   type FileChangeKind,
 } from "@/lib/git-status"
 import { cn } from "@/lib/utils"
+import { copyText } from "@/lib/clipboard"
 import type { TreeEntry } from "@/types/acp"
 import { useIdentity } from "@/hooks/identity-context"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
@@ -232,6 +233,7 @@ export const FileTreePanel = memo(function FileTreePanel(
               onOpenFile={ws.openPreview}
               onAddReference={ws.addReference}
               onDownload={ws.downloadFile}
+              onCopyLanLink={ws.copyLanLink}
               changes={changes}
               touched={touched}
             />
@@ -260,6 +262,7 @@ const TreeNode = memo(function TreeNode({
   onOpenFile,
   onAddReference,
   onDownload,
+  onCopyLanLink,
   changes,
   touched,
 }: {
@@ -272,6 +275,7 @@ const TreeNode = memo(function TreeNode({
   onOpenFile: (path: string) => void
   onAddReference: (path: string) => void
   onDownload: (path: string, archive?: boolean) => void
+  onCopyLanLink: (path: string) => void
   /** 绝对路径 → git 状态，用来给条目着色。 */
   changes: Map<string, FileChangeKind>
   /** agent 本轮触碰过的绝对路径：条目尾部亮呼吸点，轮结束即灭。 */
@@ -350,10 +354,13 @@ const TreeNode = memo(function TreeNode({
               <ContextMenuItem onClick={() => onDownload(entry.path)}>
                 {t("workspace.refMenu.download")}
               </ContextMenuItem>
+              <ContextMenuItem onClick={() => onCopyLanLink(entry.path)}>
+                {t("workspace.refMenu.copyLanLink")}
+              </ContextMenuItem>
             </>
           )}
           <ContextMenuItem
-            onClick={() => void navigator.clipboard.writeText(entry.path)}
+            onClick={() => void copyText(entry.path)}
           >
             {t("workspace.refMenu.copyPath")}
           </ContextMenuItem>
@@ -380,6 +387,7 @@ const TreeNode = memo(function TreeNode({
               onOpenFile={onOpenFile}
               onAddReference={onAddReference}
               onDownload={onDownload}
+          onCopyLanLink={onCopyLanLink}
               changes={changes}
               touched={touched}
             />

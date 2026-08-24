@@ -91,6 +91,9 @@ export const zhWorkspace = {
     downloadZip: "打包下载（zip）",
     download: "下载文件",
     copyPath: "复制路径",
+    copyLanLink: "复制局域网链接",
+    lanLinkCopied: "已复制局域网链接",
+    lanLinkCopiedLocalOnly: "已复制链接，但当前只监听本机——这条链接只有这台电脑打得开",
   },
   git: {
     askDir: "让 AI 分析这个目录的改动",

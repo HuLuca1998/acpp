@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 
 	"acpp/server/internal/config"
@@ -12,6 +13,9 @@ import (
 
 type systemHandler struct {
 	system *system.Service
+	// addr 是本服务的监听地址，用来拼局域网可访问的地址前缀
+	// （与 tenantHandler 拼邀请链接是同一件事，见 withLanBase）。
+	addr   string
 	update *system.Updater
 	// titler 是会话标题生成服务，设置页改配置后原地热更（不用重启）。
 	titler *titler.Service
@@ -52,7 +56,39 @@ func (h systemHandler) updateApply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h systemHandler) get(w http.ResponseWriter, _ *http.Request) {
-	writeData(w, http.StatusOK, h.system.Info())
+	writeData(w, http.StatusOK, h.withLanBase(h.system.Info()))
+}
+
+// systemInfoView 在系统信息上补一条局域网地址前缀。
+//
+// 单独包一层而不是塞进 system.SystemInfo：IP 与端口是 http 层才知道的事，
+// 业务层不该为了拼一条 URL 反过来认识监听地址。tenantHandler 拼邀请链接
+// 用的是同一套做法。
+type systemInfoView struct {
+	system.SystemInfo
+	// LanBase 是局域网里访问本服务的地址前缀（`http://<ip>:<端口>`）。
+	// 界面用它把相对路径拼成可以转发给同事的完整链接。
+	LanBase string `json:"lanBase"`
+	// LanShareable 如实说明这条地址当下能不能真发出去：只监听回环时
+	// 给的是 127.0.0.1，那条链接只有本机点得开，界面据此提示用户。
+	LanShareable bool `json:"lanShareable"`
+}
+
+func (h systemHandler) withLanBase(info system.SystemInfo) systemInfoView {
+	host, port, err := net.SplitHostPort(h.addr)
+	if err != nil || port == "" {
+		port = "48080"
+	}
+	shareable := listensBeyondLoopback(host)
+	target := lanIP()
+	if !shareable {
+		target = "127.0.0.1"
+	}
+	return systemInfoView{
+		SystemInfo:   info,
+		LanBase:      fmt.Sprintf("http://%s:%s", target, port),
+		LanShareable: shareable,
+	}
 }
 
 func (h systemHandler) env(w http.ResponseWriter, r *http.Request) {

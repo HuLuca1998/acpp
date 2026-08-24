@@ -95,6 +95,9 @@ export const enWorkspace = {
     downloadZip: "Download as zip",
     download: "Download file",
     copyPath: "Copy path",
+    copyLanLink: "Copy LAN link",
+    lanLinkCopied: "LAN link copied",
+    lanLinkCopiedLocalOnly: "Link copied, but the server only listens on loopback — it only opens on this machine",
   },
   git: {
     askDir: "Ask AI to analyze changes in this folder",

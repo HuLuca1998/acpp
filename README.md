@@ -219,7 +219,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/sessions/{id}/send` | 发一轮（`{content, images?, files?}`：图片 base64、@ 引用文件路径由后端读内容嵌入），立即返回；**turn 进行中再发会插进当前轮**（claude 排队为独立一轮，codex steering 注入当前轮） |
 | GET | `/api/sessions/{id}/events` | **SSE 事件流** |
 | GET | `/api/sessions/{id}/transcript` | 线级转录 JSONL 原样下发（`http.ServeFile`，支持 Range 字节续读——工作区 logs 面板靠它轮询增量实时跟随） |
-| GET | `/api/system` | 系统配置：当前/默认数据目录，`pendingDir` 表示已迁移待重启 |
+| GET | `/api/system` | 系统配置：当前/默认数据目录，`pendingDir` 表示已迁移待重启。响应另带 `lanBase`（局域网可访问的地址前缀 `http://<ip>:<端口>`，界面用它把相对路径拼成可转发的完整链接）与 `lanShareable`（这条地址当下能不能真发出去：只监听回环时给 127.0.0.1） |
 | PUT | `/api/system/data-dir` | 迁移数据目录（`{dataDir}` 绝对路径）：`VACUUM INTO` 在线快照 + 转录拷贝 + 写 `~/.acpp/config.json`，旧数据保留，重启后生效 |
 | PUT | `/api/system/workspace-dir` | 改工作区根（`{workspaceDir}`）：agent 干活的地方与访客 root 的父目录，立刻生效 |
 | POST | `/api/sessions/{id}/cancel` | 中止当前轮 |
