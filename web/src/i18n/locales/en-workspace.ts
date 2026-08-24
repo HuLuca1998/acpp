@@ -34,6 +34,7 @@ export const enWorkspace = {
     unavailable: "This agent does not expose it.",
   },
   closePanel: "Close panel",
+  closeAllPanels: "Close all panels",
   menu: {
     label: "Manage windows",
     labelDesc: "Toggle panels, switch layouts, open a terminal",

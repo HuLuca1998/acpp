@@ -32,6 +32,7 @@ export const zhWorkspace = {
     emptyHint: "发出第一条消息后，这里实时显示 JSON-RPC 原始收发帧。",
   },
   closePanel: "关闭面板",
+  closeAllPanels: "关闭全部面板",
   menu: {
     label: "窗口管理",
     labelDesc: "开关面板、切换布局、新建终端",

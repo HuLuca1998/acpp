@@ -11,7 +11,7 @@ import {
   type SerializedDockview,
 } from "dockview-react"
 import "dockview/dist/styles/dockview.css"
-import { XIcon } from "lucide-react"
+import { SquareXIcon, XIcon } from "lucide-react"
 
 import { Hint } from "@/components/hint"
 import { ChatPanel } from "@/components/workspace/panels/chat-panel"
@@ -140,11 +140,46 @@ function CommitsTabDot() {
   )
 }
 
-/** 组头右侧动作：只在对话所在组渲染 ⋯ 窗口管理菜单。 */
+/**
+ * 组头右侧动作：对话组给 ⋯ 窗口管理菜单，工具组给「全部关闭」。
+ *
+ * 工具组常常攒到四五个 tab（文件树 / 分支 / 变更 / 详情 / 日志），换个
+ * 任务想清空得逐个点 ×。只在 ≥2 个面板时给这个按钮——只剩一个时它自己
+ * 的 × 就够用了，再多一个按钮反而是噪音。
+ */
 function HeaderActions(props: IDockviewHeaderActionsProps) {
   const hasChat = props.panels.some((p) => p.id === "chat")
-  if (!hasChat) return null
-  return <WorkspaceMenuSlot />
+  if (hasChat) return <WorkspaceMenuSlot />
+  if (props.panels.length < 2) return null
+  return <CloseAllSlot ids={props.panels.map((p) => p.id)} />
+}
+
+/** 一键清空这一组。 */
+function CloseAllSlot({ ids }: { ids: string[] }) {
+  const { t } = useTranslation()
+  const ws = useWorkspace()
+  return (
+    <div className="flex h-full items-center pr-1.5">
+      <Hint label={t("workspace.closeAllPanels")} align="end">
+        <button
+          type="button"
+          aria-label={t("workspace.closeAllPanels")}
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          onClick={() => {
+            // 逐个走命令总线，不用 group.api.close()：终端面板要顺带杀
+            // pty（见 tab 上那颗 × 的注释），绕过去会留下孤儿进程。
+            // chat 不可关，真混进来也过滤掉。
+            for (const id of ids) {
+              if (id === "chat") continue
+              ws.closePanel(id)
+            }
+          }}
+        >
+          <SquareXIcon className="size-4" />
+        </button>
+      </Hint>
+    </div>
+  )
 }
 
 function WorkspaceMenuSlot() {
