@@ -71,7 +71,16 @@ export const ChatStream = memo(function ChatStream({
   // 出错的那条消息给个重试入口：错误多半来自服务端过载这类与内容无关的
   // 意外，让用户把同一段话手打第二遍是没道理的。轮次在跑时不给——那还
   // 没到「失败」。
-  const failed = !chat.busy && (chat.error !== null || chat.session?.state === "error")
+  //
+  // 判定不能只看 session.state：打开会话会把它拨回 idle（Open 的常规动作），
+  // 出错的痕迹留在 stopReason 上——正常收尾是 end_turn，其余（错误原因、
+  // cancelled、max_tokens）都意味着这一轮没给出完整回答，都值得给重试。
+  const lastStop = chat.stopReason ?? chat.session?.stopReason ?? ""
+  const failed =
+    !chat.busy &&
+    (chat.error !== null ||
+      chat.session?.state === "error" ||
+      (lastStop !== "" && lastStop !== "end_turn"))
   const retryableId = useMemo(() => {
     if (!failed) return undefined
     for (let i = chat.messages.length - 1; i >= 0; i--) {
