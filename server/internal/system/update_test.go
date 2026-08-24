@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"testing"
 
@@ -152,5 +153,46 @@ func TestUpdater_Info_CollectsPendingNotes(t *testing.T) {
 	}
 	if slices.Contains(got, "0.0.1") || slices.Contains(got, "99.0.9") {
 		t.Errorf("Pending 混进了旧版本或草稿：%v", got)
+	}
+}
+
+// 壳进程定位必须验明正身：拿错 pid 就是给无关进程发 TERM。
+// server 孤儿化时 getppid() 返回 1，那正是 launchd。
+func TestShellProcessIDRejectsBogusPIDs(t *testing.T) {
+	// 这个 bundle 不存在，任何 pid 都不该被认成它的壳。
+	const bundle = "/Applications/DefinitelyNotACPP.app"
+
+	t.Run("环境变量指向 launchd 也不认", func(t *testing.T) {
+		t.Setenv(shellPIDEnv, "1")
+		if pid := shellProcessID(bundle); pid != 0 {
+			t.Errorf("pid = %d，期望 0——1 号进程是 launchd，绝不能给它发信号", pid)
+		}
+	})
+
+	t.Run("环境变量是垃圾值时退让到后续定位", func(t *testing.T) {
+		t.Setenv(shellPIDEnv, "not-a-number")
+		if pid := shellProcessID(bundle); pid != 0 {
+			t.Errorf("pid = %d，期望 0（这个 bundle 根本没有壳在跑）", pid)
+		}
+	})
+
+	t.Run("pid 小于等于 1 一律拒绝", func(t *testing.T) {
+		for _, pid := range []int{0, 1, -1} {
+			if isShellProcess(pid, "/bin/sh") {
+				t.Errorf("pid %d 不该被当作壳进程", pid)
+			}
+		}
+	})
+}
+
+// 反过来：进程确实在跑、可执行路径也对得上时要认出来。
+// 用当前测试进程自己当样本，不依赖任何外部状态。
+func TestIsShellProcessAcceptsSelf(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skipf("拿不到当前可执行路径: %v", err)
+	}
+	if !isShellProcess(os.Getpid(), exe) {
+		t.Errorf("自己的 pid + 可执行路径都对，却没被认出来")
 	}
 }

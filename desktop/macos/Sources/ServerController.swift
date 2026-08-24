@@ -88,6 +88,9 @@ final class ServerController {
         // GUI 启动的 app 只有系统级 PATH，server 靠 PATH 拉起 claude/codex 等
         // agent 子进程——必须注入登录 shell 的 PATH，否则核心功能直接瘫痪。
         env["PATH"] = Self.loginShellPATH
+        // 自更新要给壳发 TERM 才能走正常退出（回收 server 与 agent 子进程）。
+        // server 不能靠 getppid() 找我们——它一旦孤儿化，那个值就是 1。
+        env["ACPP_SHELL_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         p.environment = env
 
         if let log = openLog() {

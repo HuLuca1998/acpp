@@ -35,11 +35,11 @@ type UpdateInfo struct {
 	// 上限 maxPendingNotes 条，更早的由 PendingMore 计数带出。
 	Pending     []ReleaseNote `json:"pending,omitempty"`
 	PendingMore int           `json:"pendingMore,omitempty"`
-	PublishedAt string `json:"publishedAt,omitempty"`
-	ReleaseURL  string `json:"releaseUrl,omitempty"`
-	AssetName   string `json:"assetName,omitempty"`
-	CheckedAt   string `json:"checkedAt,omitempty"`
-	CheckError  string `json:"checkError,omitempty"`
+	PublishedAt string        `json:"publishedAt,omitempty"`
+	ReleaseURL  string        `json:"releaseUrl,omitempty"`
+	AssetName   string        `json:"assetName,omitempty"`
+	CheckedAt   string        `json:"checkedAt,omitempty"`
+	CheckError  string        `json:"checkError,omitempty"`
 	// CanApply 表示当前进程跑在 .app bundle 里，支持一键更新重启；
 	// 开发态（go run / make serve）只能看不能装。
 	CanApply bool `json:"canApply"`
@@ -275,7 +275,14 @@ func (s *Updater) Apply(ctx context.Context) (string, error) {
 	//    agent 子进程，耗时轻松超过固定 sleep；旧实例还活着时 open 只会
 	//    「激活」它而不启动新进程，结果就是只更新不重启。上限 60 秒，
 	//    超时 SIGKILL 兜底（孤儿端口下次启动由壳的清理逻辑接管）。
-	shellPID := os.Getppid()
+	shellPID := shellProcessID(bundle)
+	if shellPID <= 0 {
+		// 找不到壳就绝不乱发信号：早先这里直接用 getppid()，server 一旦
+		// 孤儿化（父进程死过一轮，ppid 变成 1）就成了对 launchd 发 TERM，
+		// 杀不动也等不到它退出，界面只能空转满 60 秒。宁可让用户手动重启。
+		slog.Warn("apply update: 找不到壳进程，跳过自动重启", "bundle", bundle)
+		return "更新已安装，但没找到应用进程——请手动退出并重新打开 ACPP", nil
+	}
 	script := fmt.Sprintf(
 		"sleep 1; kill -TERM %[1]d 2>/dev/null; "+
 			"i=0; while kill -0 %[1]d 2>/dev/null; do "+
@@ -290,6 +297,51 @@ func (s *Updater) Apply(ctx context.Context) (string, error) {
 		return "更新已安装，但自动重启失败——请手动退出并重新打开 ACPP", nil
 	}
 	return fmt.Sprintf("已更新到 %s，应用即将自动重启", info.LatestVersion), nil
+}
+
+// shellPIDEnv 是壳启动 acp-server 时注入的自身 PID。
+const shellPIDEnv = "ACPP_SHELL_PID"
+
+// shellProcessID 找出这个 bundle 的壳进程 pid，找不到返回 0。
+//
+// 三重定位，逐级退让：壳注入的环境变量 → 父进程 → 按可执行文件路径全表扫。
+// 每一级都要验明正身（那个 pid 的可执行文件确实是本 bundle 里的壳），因为
+// 拿错 pid 的后果是给无关进程发 TERM——server 孤儿化时 getppid() 会返回 1，
+// 那就是在杀 launchd。
+func shellProcessID(bundle string) int {
+	exe := filepath.Join(bundle, "Contents", "MacOS",
+		strings.TrimSuffix(filepath.Base(bundle), ".app"))
+
+	if pid, err := strconv.Atoi(os.Getenv(shellPIDEnv)); err == nil && isShellProcess(pid, exe) {
+		return pid
+	}
+	if pid := os.Getppid(); isShellProcess(pid, exe) {
+		return pid
+	}
+	// 兜底：孤儿化之后父进程已经不是壳了，只能按可执行路径认。
+	out, err := exec.Command("/bin/ps", "-axo", "pid=,comm=").Output()
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.SplitN(strings.TrimSpace(line), " ", 2)
+		if len(fields) != 2 || strings.TrimSpace(fields[1]) != exe {
+			continue
+		}
+		if pid, err := strconv.Atoi(fields[0]); err == nil && pid > 1 {
+			return pid
+		}
+	}
+	return 0
+}
+
+// isShellProcess 校验 pid 确实是 exe 这个可执行文件跑起来的进程。
+func isShellProcess(pid int, exe string) bool {
+	if pid <= 1 {
+		return false
+	}
+	out, err := exec.Command("/bin/ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+	return err == nil && strings.TrimSpace(string(out)) == exe
 }
 
 // versionLess 报告 a < b（点分数字段逐段比较，段数不齐补零；
