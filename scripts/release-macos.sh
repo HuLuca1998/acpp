@@ -6,6 +6,7 @@
 #       就 +1（0.5.3 → 0.5.4），patch 已满 9 则进 minor（0.5.9 → 0.6.0），
 #       minor 也满 9 则进 major（0.9.9 → 1.0.0）。跳版本需显式给版本号。
 #       notes 缺省用上个 tag 以来的 git log 生成。
+#       发布成功后自动清掉 build/release（产物已在 GitHub Release 上）。
 # 前置：gh CLI 已登录、仓库有 GitHub remote、工作区干净（未提交改动拒绝发布）。
 # 重跑须知：同一版本号重复执行会因 tag 已存在而失败——这是防重复发布的保护。
 set -euo pipefail
@@ -67,6 +68,12 @@ git push origin HEAD "$TAG"
 
 echo "==> 创建 GitHub Release"
 gh release create "$TAG" "$ZIP" --title "ACPP $VERSION" --notes-file "$NOTES_FILE"
+
+# 产物已经躺在 Release 里了，本地这份没有留存价值——不清的话每发一版就攒
+# 一个 8M 的 zip 加一个 21M 的 .app。只在发布成功后清：中途失败时留着现场
+# 更值钱（set -e 会在失败处直接退出，走不到这里）。
+echo "==> 清理本地发布产物"
+rm -rf "$RELEASE_OUT"
 
 echo
 echo "发布完成：$TAG（asset: $(basename "$ZIP")）"
