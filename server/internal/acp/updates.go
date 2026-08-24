@@ -92,8 +92,13 @@ func (h *sessionHandler) OnUpdate(n SessionNotification) {
 		h.session.emit(Event{Kind: EventCommands, Commands: u.AvailableCommands})
 
 	case UpdateSessionInfo:
-		// claude 带自动标题（与本项目「首条消息简写」策略重复）、codex 带
-		// threadStatus，都无用途，明确丢弃。
+		// 标题两端都送、质量差一截：claude 是 AI 概括（2026-08 实测 52 个
+		// 会话里 45 个），codex 一律把首条消息原文抄回来。所以只负责透传，
+		// 「这标题配不配得上覆盖现有的」由上层判断。threadStatus 等其余
+		// 字段无用途，明确丢弃。
+		if u.Title != "" {
+			h.session.emit(Event{Kind: EventSessionTitle, Title: u.Title})
+		}
 
 	default:
 		slog.Debug("acp: unhandled session update", "kind", u.SessionUpdate)

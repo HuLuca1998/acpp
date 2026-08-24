@@ -50,6 +50,10 @@ type ChatService struct {
 	// usage 是每会话最近一次上报的用量快照（内存态）。usage_update 一轮
 	// 能来几十次，逐条写库既无意义又吵——收在这里，轮末落一次。
 	usage map[uint]*UsageSnapshot
+	// derivedTitles 记着本进程刚给哪些会话写下了「首句派生标题」及其值。
+	// agent 推来的自动标题只允许覆盖这个值（见 adoptAgentTitle）——手改的
+	// 名字、已被 titler 升级过的标题都不在覆盖范围内。首轮升级后即删。
+	derivedTitles map[uint]string
 
 	// rebuilds 是转录重建结果的缓存（见 chat_messages.go）。打开会话、
 	// 轮末刷新、「加载更早」都会重复请求同一份重建，长会话的转录几 MB
@@ -118,17 +122,18 @@ func (s *ChatService) SetNotifyHub(h *stream.Hub) { s.notices = h }
 
 func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
 	return &ChatService{
-		db:          db,
-		sessions:    sessions,
-		manager:     manager,
-		transcripts: transcripts,
-		skillUsage:  skillUsage,
-		brokers:     make(map[uint]*stream.Broker),
-		tails:       make(map[uint]string),
-		usage:       make(map[uint]*UsageSnapshot),
-		rebuilds:    make(map[uint]*rebuildCacheEntry),
-		rebuilding:  make(map[uint]*rebuildCall),
-		digesting:   make(map[uint]bool),
+		db:            db,
+		sessions:      sessions,
+		manager:       manager,
+		transcripts:   transcripts,
+		skillUsage:    skillUsage,
+		brokers:       make(map[uint]*stream.Broker),
+		tails:         make(map[uint]string),
+		usage:         make(map[uint]*UsageSnapshot),
+		derivedTitles: make(map[uint]string),
+		rebuilds:      make(map[uint]*rebuildCacheEntry),
+		rebuilding:    make(map[uint]*rebuildCall),
+		digesting:     make(map[uint]bool),
 	}
 }
 

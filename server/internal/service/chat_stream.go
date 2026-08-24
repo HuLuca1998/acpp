@@ -87,6 +87,11 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		commands := s.catalogFor(context.Background(), sessionID).filterCommands(ev.Commands)
 		br.Publish(StreamEvent{Kind: "commands", Commands: commands})
 
+	case acp.EventSessionTitle:
+		// agent 自己算的会话标题。够格就落库并推给侧边栏，不够格（codex 只
+		// 抄首条消息原文）静默丢弃，留给 titler 兜底。
+		s.adoptAgentTitle(sessionID, br, ev.Title)
+
 	case acp.EventElicitation:
 		br.Publish(StreamEvent{
 			Kind:          "elicitation",

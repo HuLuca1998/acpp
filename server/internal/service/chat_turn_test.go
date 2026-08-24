@@ -7,7 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+
 	"acpp/server/internal/acp"
+	"acpp/server/internal/model"
+	"acpp/server/internal/stream"
 )
 
 // 内容块按 agent 声明的能力收敛：不支持内嵌上下文时 resource 降级为
@@ -121,6 +126,128 @@ func TestAppendDBReferences(t *testing.T) {
 		blocks, payload := AppendDBReferences(base, nil, nil, true)
 		if len(blocks) != 1 || payload != nil {
 			t.Fatalf("blocks = %+v payload = %v，期望原样返回", blocks, payload)
+		}
+	})
+}
+
+// agentTitleFixture 建一条「标题还是首句派生值」的会话现场——
+// 这正是 agent 推标题时的真实状态。
+func agentTitleFixture(t *testing.T, title string) (*ChatService, uint, *stream.Broker) {
+	t.Helper()
+	gdb, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "titles.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	agent := model.Agent{Name: "claude", Command: "claude-agent-acp"}
+	if err := gdb.Create(&agent).Error; err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	session := model.Session{AgentID: agent.ID, Title: title, State: "active"}
+	if err := gdb.Create(&session).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	svc := NewChatService(gdb, NewSessionService(gdb), nil, nil, nil)
+	return svc, session.ID, stream.NewBroker()
+}
+
+// titleOf 读会话在库里的现值。
+func titleOf(t *testing.T, s *ChatService, sessionID uint) string {
+	t.Helper()
+	var got string
+	if err := s.db.Model(&model.Session{}).Where("id = ?", sessionID).
+		Pluck("title", &got).Error; err != nil {
+		t.Fatalf("read title: %v", err)
+	}
+	return got
+}
+
+// agent 推来的标题要不要收，取决于它比首句派生值多带了信息。
+//
+// 这是两端行为差异的收口处：claude 推 AI 概括（收），codex 把首条消息原文
+// 抄回来（不收，留给 titler 兜底）。
+func TestAdoptAgentTitle(t *testing.T) {
+	const prompt = "https://github.com/BDBGAME2024/pp-game/tree/live  有更新，将我本地的代码更新到和远端一致"
+	derived := DeriveTitle(prompt) // "https://github.…"
+
+	t.Run("claude 的 AI 概括落库并广播", func(t *testing.T) {
+		svc, id, br := agentTitleFixture(t, derived)
+		svc.rememberDerivedTitle(id, derived)
+		events, unsub := br.Subscribe()
+		defer unsub()
+
+		svc.adoptAgentTitle(id, br, "更新本地代码与远端保持一致")
+
+		if got := titleOf(t, svc, id); got != "更新本地代码与远端保持一致" {
+			t.Errorf("库里标题 = %q，期望换成 agent 推来的概括", got)
+		}
+		select {
+		case ev := <-events:
+			if ev.Kind != "session_title" || ev.Title != "更新本地代码与远端保持一致" {
+				t.Errorf("事件 = %+v，期望 session_title 带新标题", ev)
+			}
+		default:
+			t.Error("没广播 session_title，侧边栏不会刷新")
+		}
+		// 记账已用掉：后面几轮不该再尝试覆盖。
+		if svc.takeDerivedTitle(id) != "" {
+			t.Error("采用后派生记录应清掉")
+		}
+	})
+
+	t.Run("codex 抄回原文时不收，留给 titler", func(t *testing.T) {
+		svc, id, br := agentTitleFixture(t, derived)
+		svc.rememberDerivedTitle(id, derived)
+
+		svc.adoptAgentTitle(id, br, prompt)
+
+		if got := titleOf(t, svc, id); got != derived {
+			t.Errorf("库里标题 = %q，期望仍是首句派生值", got)
+		}
+		// 派生记录必须还在，否则本轮末 titler 升级完标题也发不出通知。
+		if svc.takeDerivedTitle(id) != derived {
+			t.Error("拒收后派生记录应保留")
+		}
+	})
+
+	t.Run("没有派生记录时一概不动", func(t *testing.T) {
+		// 进程重启后的旧会话：无从判断当前标题是派生值还是人手改的，
+		// 宁可不换。
+		svc, id, br := agentTitleFixture(t, "我自己起的名字")
+
+		svc.adoptAgentTitle(id, br, "AI 起的名字")
+
+		if got := titleOf(t, svc, id); got != "我自己起的名字" {
+			t.Errorf("库里标题 = %q，期望不动", got)
+		}
+	})
+
+	t.Run("用户中途改了名就不覆盖", func(t *testing.T) {
+		svc, id, br := agentTitleFixture(t, derived)
+		svc.rememberDerivedTitle(id, derived)
+		// agent 推标题与用户改名同期发生：改名先落库。
+		if err := svc.db.Model(&model.Session{}).Where("id = ?", id).
+			Update("title", "我自己起的名字").Error; err != nil {
+			t.Fatalf("rename: %v", err)
+		}
+
+		svc.adoptAgentTitle(id, br, "AI 起的名字")
+
+		if got := titleOf(t, svc, id); got != "我自己起的名字" {
+			t.Errorf("库里标题 = %q，期望保住用户改的名", got)
+		}
+	})
+
+	t.Run("空标题直接忽略", func(t *testing.T) {
+		svc, id, br := agentTitleFixture(t, derived)
+		svc.rememberDerivedTitle(id, derived)
+
+		svc.adoptAgentTitle(id, br, "   ")
+
+		if got := titleOf(t, svc, id); got != derived {
+			t.Errorf("库里标题 = %q，期望不动", got)
 		}
 	})
 }

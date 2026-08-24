@@ -20,6 +20,10 @@ const (
 	EventUsage EventKind = "usage"
 	// EventCommands 是可用斜杠命令清单（全量替换）。
 	EventCommands EventKind = "commands"
+	// EventSessionTitle 是 agent 自己给会话起的标题（session_info_update）。
+	// 两端质量不同：claude 送真·AI 概括，codex 只把首条消息原文抄一遍，
+	// 甄别与取舍归上层（见 service.adoptAgentTitle）。
+	EventSessionTitle EventKind = "session_title"
 	// EventElicitation 表示 agent 在等用户作答；Done 在作答/超时后发出，
 	// 界面收到后应收起提问卡片。
 	EventElicitation     EventKind = "elicitation"

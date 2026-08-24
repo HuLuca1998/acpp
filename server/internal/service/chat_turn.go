@@ -85,6 +85,10 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 			if err := s.db.WithContext(ctx).Model(&model.Session{}).
 				Where("id = ?", sessionID).Update("title", title).Error; err != nil {
 				slog.Warn("auto title", "session", sessionID, "err", err)
+			} else {
+				// 记下派生值：本轮内 agent 若推来更好的标题，凭它确认「要盖
+				// 的正是这个占位标题」（见 adoptAgentTitle）。
+				s.rememberDerivedTitle(sessionID, title)
 			}
 		}
 	}
@@ -378,6 +382,61 @@ func (s *ChatService) ResolveElicitation(sessionID uint, elicitationID, action s
 		return translateNoSession(sessionID, err)
 	}
 	return nil
+}
+
+// rememberDerivedTitle 记下刚写进库的首句派生标题。
+func (s *ChatService) rememberDerivedTitle(sessionID uint, title string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.derivedTitles[sessionID] = title
+}
+
+// takeDerivedTitle 取出并清掉派生标题的记录——标题只在首轮定一次，
+// 取走即用完，留着只会让后面几轮反复尝试覆盖。
+func (s *ChatService) takeDerivedTitle(sessionID uint) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	title := s.derivedTitles[sessionID]
+	delete(s.derivedTitles, sessionID)
+	return title
+}
+
+// adoptAgentTitle 收下 agent 自己推来的标题（session_info_update）。
+//
+// 要甄别，因为两端质量差一截：claude 推的是 AI 概括，白拿；codex 只把首条
+// 消息原文抄回来，派生一遍就等于现有的首句标题——那不是升级，放它过去，
+// 留给 titler 兜底（refineTitle）。
+//
+// 覆盖范围严格限定在「本进程刚写下的那个首句派生标题」：手改的名字、已被
+// titler 升级过的标题、重启后无从判断来源的旧会话，一概不动。
+func (s *ChatService) adoptAgentTitle(sessionID uint, br *stream.Broker, title string) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return
+	}
+	derived := s.takeDerivedTitle(sessionID)
+	if derived == "" {
+		return
+	}
+	// codex 那种「原文抄回来」：派生值与占位标题一致，等于没带新信息。
+	// 放回记录，让本轮末的 titler 仍能按老路子升级。
+	if DeriveTitle(title) == derived {
+		s.rememberDerivedTitle(sessionID, derived)
+		return
+	}
+
+	// 条件更新：这期间用户可能已经手动改了名，别把人家的标题盖掉。
+	res := s.db.Model(&model.Session{}).
+		Where("id = ? AND title = ?", sessionID, derived).Update("title", title)
+	if res.Error != nil {
+		slog.Warn("adopt agent title: 落库失败", "session", sessionID, "err", res.Error)
+		return
+	}
+	if res.RowsAffected == 0 {
+		return
+	}
+	br.Publish(StreamEvent{Kind: "session_title", Title: title})
+	slog.Info("会话标题取自 agent", "session", sessionID, "title", title)
 }
 
 // refineTitle 把首句派生的标题换成外部模型给的概括。

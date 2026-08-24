@@ -1,8 +1,9 @@
 // Package titler 用外部小模型给会话生成标题。
 //
-// 存在的理由是两端 agent 都给不了：claude 与 codex 的自动标题都长在各自
-// CLI/TUI 层，ACP 走的是 SDK 与 app-server 通道，只能拿到「首条消息原文」
-// 级别的兜底值（详见 README）。所以标题由本项目自己算。
+// 存在的理由是 agent 给的标题只有一半能用：claude 在首轮末通过
+// session_info_update 推真·AI 概括（那条直接采用，见 service.adoptAgentTitle），
+// 而 codex 只把首条消息原文抄回来——2026-08 实测 5 个 codex 会话全是原文。
+// 拒收那种之后总得有人算标题，就是这里。
 //
 // 目前只对接 ollama：本机跑一个小模型做这种一句话总结，延迟在秒内、
 // 不吃 agent 的订阅额度、也不污染会话上下文。
