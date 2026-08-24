@@ -177,8 +177,13 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
      * 文件下载地址。返回 URL 而不是发请求：交给浏览器自己下，才能有
      * 原生的下载进度与「另存为」；同源请求 cookie 自动带上，鉴权照旧。
      */
-    downloadUrl: (id: number, path: string, archive = false) =>
-      `${BASE}${at(id, `/fs/download?path=${encodeURIComponent(path)}${archive ? "&archive=1" : ""}`)}`,
+    downloadUrl: (id: number, paths: string | string[], archive = false) => {
+      // 多个 path 参数并列（?path=a&path=b），后端打成一个 zip——浏览器
+      // 一次只认一个下载，多选批量必须走打包这条路。
+      const list = Array.isArray(paths) ? paths : [paths]
+      const qs = list.map((p) => `path=${encodeURIComponent(p)}`).join("&")
+      return `${BASE}${at(id, `/fs/download?${qs}${archive ? "&archive=1" : ""}`)}`
+    },
     /** csv/tsv/xlsx 解析成表格（多页工作簿一次给全）。 */
     workspaceTable: (id: number, path: string) =>
       request<TableView>(at(id, `/fs/table?path=${encodeURIComponent(path)}`)),

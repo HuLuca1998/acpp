@@ -167,13 +167,17 @@ export function WorkspaceProvider({
             : i18n.t("workspace.refMenu.lanLinkCopiedLocalOnly")
         )
       },
-      downloadFile: (path, archive) => {
+      downloadFile: (paths, archive) => {
+        const list = Array.isArray(paths) ? paths : [paths]
+        const path = list[0] ?? ""
         // 造一个一次性链接点掉：download 属性让浏览器走「另存为」而不是
         // 在标签页里打开，后端的 Content-Disposition 决定最终文件名。
         const link = document.createElement("a")
-        link.href = activeScope.downloadUrl(sessionId, path, archive)
+        link.href = activeScope.downloadUrl(sessionId, list, archive)
+        // 多选打包时包名由后端定（files.zip），这里只管单个的情形——
+        // download 属性给错名字会让浏览器把 zip 存成一个没后缀的文件。
         const base = path.split("/").pop() ?? "download"
-        link.download = archive ? `${base}.zip` : base
+        if (list.length === 1) link.download = archive ? `${base}.zip` : base
         document.body.appendChild(link)
         link.click()
         link.remove()

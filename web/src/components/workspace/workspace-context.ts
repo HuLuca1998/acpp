@@ -75,8 +75,11 @@ export interface WorkspaceValue {
   openPreview: (path: string, line?: number) => void
   /** 在查看器里以 diff 模式打开：sha 为空看工作区改动，否则看那条提交。 */
   openDiff: (path: string, sha?: string) => void
-  /** 下载工作区里的文件；archive=true 时把目录打包成 zip。 */
-  downloadFile: (path: string, archive?: boolean) => void
+  /**
+   * 下载工作区里的条目；archive=true 时打包成 zip。
+   * 传多个路径时**必须** archive——浏览器一次只认一个下载。
+   */
+  downloadFile: (paths: string | string[], archive?: boolean) => void
   /**
    * 复制这些文件的局域网链接到剪贴板（多条时一行一条）。
    *

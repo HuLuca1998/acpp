@@ -299,34 +299,76 @@ func DirReferenceListing(path string) string {
 // 备份整个磁盘——超了就明确失败，好过让人等一个永远下不完的文件。
 const zipMaxBytes int64 = 512 << 20 // 512 MiB
 
-// WorkspaceZip 把一个目录流式打包成 zip 写进 w。
+// WorkspaceZip 把一批工作区条目流式打包成 zip 写进 w。
+//
+// 单个目录时以该目录名作顶层前缀（解压出来就是那个目录，与只支持单目录
+// 的时候行为一致）；其余情况一律按**相对工作目录的路径**入包——多选出来
+// 的文件很可能同名（docs/a.md 与 src/a.md），拍平成 base name 会互相覆盖，
+// 而下载包里少了一个文件是不会有人察觉的那种错。
 //
 // 跳过的东西与文件树看到的一致（固定黑名单 + 隐藏项）：界面上没显示的
 // 东西不该悄悄出现在下载包里，`.git` 与依赖目录更是没人想要。符号链接
 // 一律跳过，避免打包时绕进循环。
-func WorkspaceZip(cwd, path string, w io.Writer) (string, error) {
-	target, err := workspacePath(cwd, path)
-	if err != nil {
-		return "", err
+//
+// 总量上限对整批生效，不是每条一份——否则选一百个大目录照样能撑爆。
+func WorkspaceZip(cwd string, paths []string, w io.Writer) error {
+	if len(paths) == 0 {
+		return fmt.Errorf("%w: no path given", ErrInvalid)
 	}
-	info, err := os.Stat(target)
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrInvalid, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%w: %s is not a directory", ErrInvalid, path)
-	}
-
-	name := filepath.Base(target)
 	zw := zip.NewWriter(w)
 	var total int64
 
-	err = filepath.WalkDir(target, func(p string, d fs.DirEntry, err error) error {
+	singleDir := false
+	if len(paths) == 1 {
+		if target, err := workspacePath(cwd, paths[0]); err == nil {
+			if info, err := os.Stat(target); err == nil && info.IsDir() {
+				singleDir = true
+			}
+		}
+	}
+
+	for _, path := range paths {
+		target, err := workspacePath(cwd, path)
+		if err != nil {
+			return err
+		}
+		info, err := os.Stat(target)
+		if err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalid, err)
+		}
+
+		// zip 内的落点：单目录保持「目录名/…」，多条目用相对工作目录的
+		// 完整路径保住结构与唯一性。
+		prefix := filepath.Base(target)
+		if !singleDir {
+			rel, err := filepath.Rel(cwd, target)
+			if err != nil || strings.HasPrefix(rel, "..") {
+				return fmt.Errorf("%w: %s", ErrInvalid, path)
+			}
+			prefix = rel
+		}
+
+		if info.IsDir() {
+			if err := zipAddDir(zw, target, prefix, &total); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := zipAddFile(zw, target, filepath.ToSlash(prefix), info, &total); err != nil {
+			return err
+		}
+	}
+	return zw.Close()
+}
+
+// zipAddDir 把一个目录递归写进包，落在 prefix 之下。
+func zipAddDir(zw *zip.Writer, root, prefix string, total *int64) error {
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// 读不了的单个条目跳过：一个权限不足的文件不该让整包失败。
 			return nil //nolint:nilerr // 有意吞掉单条目错误
 		}
-		if p == target {
+		if p == root {
 			return nil
 		}
 		base := d.Name()
@@ -342,36 +384,35 @@ func WorkspaceZip(cwd, path string, w io.Writer) (string, error) {
 		if !d.Type().IsRegular() {
 			return nil // 符号链接与设备文件不打包
 		}
-
 		info, err := d.Info()
 		if err != nil {
 			return nil //nolint:nilerr // 同上：单条目失败不牵连整包
 		}
-		total += info.Size()
-		if total > zipMaxBytes {
-			return fmt.Errorf("%w: directory exceeds %d MiB", ErrInvalid, zipMaxBytes>>20)
-		}
-
-		rel, err := filepath.Rel(target, p)
+		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return nil //nolint:nilerr
 		}
-		entry, err := zw.Create(filepath.ToSlash(filepath.Join(name, rel)))
-		if err != nil {
-			return err
-		}
-		file, err := os.Open(p)
-		if err != nil {
-			return nil //nolint:nilerr
-		}
-		defer file.Close()
-		_, err = io.Copy(entry, file)
-		return err
+		return zipAddFile(zw, p, filepath.ToSlash(filepath.Join(prefix, rel)), info, total)
 	})
-	if err != nil {
-		return "", err
+}
+
+// zipAddFile 把一个普通文件写进包。name 是它在包内的路径。
+func zipAddFile(zw *zip.Writer, path, name string, info os.FileInfo, total *int64) error {
+	*total += info.Size()
+	if *total > zipMaxBytes {
+		return fmt.Errorf("%w: selection exceeds %d MiB", ErrInvalid, zipMaxBytes>>20)
 	}
-	return name, zw.Close()
+	entry, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil //nolint:nilerr // 单条目打不开不牵连整包
+	}
+	defer file.Close()
+	_, err = io.Copy(entry, file)
+	return err
 }
 
 // ——— 表格文件预览 ———

@@ -94,6 +94,7 @@ export const enWorkspace = {
     openPreview: "Preview",
     downloadZip: "Download as zip",
     download: "Download file",
+    downloadMany: "Download {{count}} files (zip)",
     copyPath: "Copy path",
     copyLanLink: "Copy LAN link",
     addReferenceMany: "Add {{count}} files to references",

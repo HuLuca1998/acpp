@@ -146,15 +146,24 @@ func (h workspaceHandler) download(w http.ResponseWriter, r *http.Request) {
 	}
 	path := r.URL.Query().Get("path")
 
-	// 目录打包：边写边发，大目录不占内存。头必须在写第一个字节前发完。
+	// 打包下载：边写边发，大目录不占内存。头必须在写第一个字节前发完。
+	// path 可以给多个（?path=a&path=b），文件树多选批量下载走这条。
 	if r.URL.Query().Get("archive") == "1" {
-		name := filepath.Base(filepath.Clean(path))
-		if name == "." || name == string(filepath.Separator) {
-			name = "workspace"
+		paths := r.URL.Query()["path"]
+		// 包名在写第一个字节之前就得定下来（Content-Disposition 要先发），
+		// 所以从参数算，而不是等打包函数回报。
+		name := "files"
+		if len(paths) == 1 {
+			base := filepath.Base(filepath.Clean(paths[0]))
+			if base != "." && base != string(filepath.Separator) {
+				name = base
+			} else {
+				name = "workspace"
+			}
 		}
 		w.Header().Set("Content-Type", "application/zip")
 		setAttachment(w, name+".zip")
-		if _, err := service.WorkspaceZip(cwd, path, w); err != nil {
+		if err := service.WorkspaceZip(cwd, paths, w); err != nil {
 			// 已经开始写 body 的话改不了状态码了——错误只能落日志，
 			// 客户端会看到一个不完整的 zip。头还没发时正常报错。
 			writeError(w, err)

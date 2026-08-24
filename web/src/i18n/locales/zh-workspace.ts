@@ -90,6 +90,7 @@ export const zhWorkspace = {
     openPreview: "预览",
     downloadZip: "打包下载（zip）",
     download: "下载文件",
+    downloadMany: "打包下载 {{count}} 个文件（zip）",
     copyPath: "复制路径",
     copyLanLink: "复制局域网链接",
     addReferenceMany: "添加 {{count}} 个文件到引用",

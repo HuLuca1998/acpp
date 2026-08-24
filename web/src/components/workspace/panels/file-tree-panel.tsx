@@ -308,7 +308,7 @@ const TreeNode = memo(function TreeNode({
   onToggle: (entry: TreeEntry) => void
   onOpenFile: (path: string) => void
   onAddReference: (path: string) => void
-  onDownload: (path: string, archive?: boolean) => void
+  onDownload: (paths: string | string[], archive?: boolean) => void
   onCopyLanLink: (paths: string[]) => void
   /** 当前多选集合（只含文件）。 */
   selected: ReadonlySet<string>
@@ -425,8 +425,12 @@ const TreeNode = memo(function TreeNode({
               <ContextMenuItem onClick={() => onOpenFile(entry.path)}>
                 {t("workspace.refMenu.openPreview")}
               </ContextMenuItem>
-              <ContextMenuItem onClick={() => onDownload(entry.path)}>
-                {t("workspace.refMenu.download")}
+              <ContextMenuItem
+                onClick={() => onDownload(targets, many)}
+              >
+                {many
+                  ? t("workspace.refMenu.downloadMany", { count })
+                  : t("workspace.refMenu.download")}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onCopyLanLink(targets)}>
                 {many
