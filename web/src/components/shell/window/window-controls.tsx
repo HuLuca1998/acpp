@@ -1,19 +1,22 @@
 import { useTranslation } from "react-i18next"
 
 import { Hint } from "@/components/hint"
-import { NotifyMenu } from "@/components/shell/notify-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import type { useSidebarFrame } from "@/hooks/use-sidebar-frame"
-import { cn } from "@/lib/utils"
 
 /**
- * 窗口左上角那一组控件：折叠、通知，以及页面自己挂上来的按钮。
+ * 窗口左上角那一条：身份（桌面壳是系统红绿灯，浏览器是应用图标与名称）
+ * 加上折叠钮。**只有窗口级的东西住在这里**——通知、面板操作那些跟着当前内容
+ * 走的，归内容区顶栏右端的动作组（title-bar.tsx）。
  *
- * **整个界面只有这一份**，位置用 fixed 直接算：展开时停在侧栏那条的右端，
- * 折叠后侧栏不在了，落回窗口左上角（桌面壳里紧挨系统红绿灯）。不做成两份再靠
- * CSS 对齐——两个容器的内外边距基准不同，同一个位置会差出几像素，一眼看得见
- * （规范 §5.6）。位移跟着侧栏动画同步过渡，不是瞬移。
+ * **整条只有一份，fixed 钉在窗口坐标上，与侧栏折不折叠无关**。它是窗口的
+ * chrome，不是侧栏的内容——跟着侧栏走的话，折叠那一下按钮就会横穿半个窗口，
+ * 而折叠恰恰是最高频的操作，位置必须是肌肉记忆。也别拆成两份再靠 CSS 对齐：
+ * 两个容器的内外边距基准不同，同一个位置差出几像素，一眼看得见（规范 §5.6）。
+ *
+ * `no-drag-region` 不能省：整条浮在拖动区上方，而拖动区是窗口级的矩形，
+ * 会吞掉落在范围内的点击——漏标的表现是按钮看得见、点不动。
  */
 export function WindowControls({
   frame,
@@ -27,16 +30,18 @@ export function WindowControls({
   const collapsed = state === "collapsed"
 
   return (
-    <div
-      className={cn(
-        "fixed top-2 z-50 flex items-center gap-0.5",
-        "transition-[left] duration-200 ease-linear",
-        collapsed
-          ? "left-(--titlebar-lights)"
-          : // 侧栏右沿减去控件组自身宽度：inset 变体的容器有 8px 内边距，一并扣掉。
-            "left-[calc(var(--sidebar-width)-var(--titlebar-controls)-8px)]"
-      )}
-    >
+    <div className="no-drag-region fixed top-0 left-0 z-50 flex h-(--titlebar-height) w-(--titlebar-inset) items-center gap-0.5 ps-(--titlebar-lights) pe-2">
+      {/* 桌面壳里这块被系统红绿灯占着（靠 --titlebar-lights 让位），应用名
+          不再重复出现；浏览器里那儿空着，正好放图标与名称。 */}
+      <div className="me-1 flex items-center gap-1.5 in-data-[shell=desktop]:hidden">
+        {/* 与右边的按钮同为 24px：一条 40px 的横栏上，各个视觉块等高才立得住。
+            图标是带底色的实心方块，比同尺寸的线性图标重，到此为止。 */}
+        <img src="/app-icon.svg" alt="" className="size-6 shrink-0" />
+        <span className="text-sm font-semibold tracking-tight">
+          {t("common.appName")}
+        </span>
+      </div>
+
       <Hint
         label={t("nav.toggleSidebar")}
         shortcut={<Kbd>⌘B</Kbd>}
@@ -52,7 +57,6 @@ export function WindowControls({
           onClick={frame.lockPeek}
         />
       </Hint>
-      <NotifyMenu />
       {children}
     </div>
   )

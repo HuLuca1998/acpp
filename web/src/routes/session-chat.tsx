@@ -276,7 +276,9 @@ export function SessionChat() {
             两层各占 100%，scrollHeight 天然是自身高度的两倍。外层若允许滚动，
             页面底下就会多出一屏空白还能往下滚——工作区是固定视口的布局，
             滚动归各面板自己管。 */}
-        <div className="min-h-0 flex-1 overflow-hidden p-1.5">
+        {/* 顶部不留内边距：工作区页没有自己的标题栏，dockview 的标签栏就是
+            窗口第一行，得贴着上沿才能兼任拖动区（规范 §5.6）。 */}
+        <div className="min-h-0 flex-1 overflow-hidden px-1.5 pb-1.5">
           <WorkspaceDock />
         </div>
       </ChatPanelContext.Provider>

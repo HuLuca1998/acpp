@@ -14,26 +14,13 @@ import { cn } from "@/lib/utils"
  */
 export function TitleBar({
   title,
-  workspace = false,
   children,
 }: {
   title: string
-  /** 会话工作区：整块空间归 dockview，这一条把位置让出去（见下）。 */
-  workspace?: boolean
   children?: React.ReactNode
 }) {
   const { state } = useSidebar()
   const collapsed = state === "collapsed"
-
-  // 工作区页的第一行是 dockview 自己的标签栏，再叠一条标题栏纯属重复，
-  // 拖动区也由那条标签栏兼任（见 index.css 的 dockview 块）。唯一的例外
-  // 是折叠态：红绿灯浮到内容区左上角，总得有条空白接住它。
-  if (workspace && !collapsed) return null
-  if (workspace) {
-    return (
-      <div className="drag-region h-(--titlebar-height) shrink-0" aria-hidden />
-    )
-  }
 
   return (
     <header

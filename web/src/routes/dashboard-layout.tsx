@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from "react-router"
 
 import { AppSidebar } from "@/components/shell/app-sidebar"
 import { IdentityGate } from "@/components/shell/identity-gate"
+import { NotifyMenu } from "@/components/shell/notify-menu"
 import { TitleBar } from "@/components/shell/window/title-bar"
 import { WindowControls } from "@/components/shell/window/window-controls"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -38,8 +39,6 @@ export function DashboardLayout() {
   const { t } = useTranslation()
   const { pathname } = useLocation()
 
-  // 会话详情/草稿页（不含列表页）：整块内容区归 dockview。
-  const isWorkspace = /^\/sessions\/[^/]+$/.test(pathname)
   const matched = TITLE_KEYS.find(([prefix]) => pathname.startsWith(prefix))
   const title =
     pathname === "/"
@@ -51,7 +50,7 @@ export function DashboardLayout() {
   return (
     <IdentityGate>
       <OwnerOnlyRedirect>
-        <Shell title={title} workspace={isWorkspace} />
+        <Shell title={title} />
       </OwnerOnlyRedirect>
     </IdentityGate>
   )
@@ -70,7 +69,7 @@ function OwnerOnlyRedirect({ children }: { children: React.ReactNode }) {
   return children
 }
 
-function Shell({ title, workspace }: { title: string; workspace: boolean }) {
+function Shell({ title }: { title: string }) {
   // 通知挂在 shell 上而不是某个页面：agent 停下来等决策时，用户很可能正停
   // 在别的会话或列表页，哪一页都得知道。（版本更新的提示长在侧栏底部的
   // 状态条里，见 components/shell/backend-status.tsx。）
@@ -88,7 +87,9 @@ function Shell({ title, workspace }: { title: string; workspace: boolean }) {
       {/* 顶部那 8px 收掉：内容区的顶栏要和侧栏的让位条贴着窗口上沿连成一线，
           圆角因此只留下面两角（规范 §5.6）。 */}
       <SidebarInset className="overflow-hidden md:peer-data-[variant=inset]:mt-0! md:peer-data-[variant=inset]:rounded-t-none">
-        <TitleBar title={title} workspace={workspace} />
+        <TitleBar title={title}>
+          <NotifyMenu />
+        </TitleBar>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="@container/main flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
             <Outlet />

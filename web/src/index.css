@@ -149,16 +149,15 @@
   --warning: oklch(0.666 0.132 75);
   --radius: 0.875rem;
 
-  /* 无边框窗口的三个尺寸（规范 §5.6）。
-     --titlebar-lights：折叠态下窗口控件组的左起点，桌面壳里要躲开系统红绿灯
-       （壳侧 trafficLightPosition 从 x=14 起三颗到 66px，两处必须一起改）；
-       浏览器没有红绿灯，贴边即可。
-     --titlebar-controls：控件组自身宽度（折叠钮 + 通知）。
-     --titlebar-inset：折叠态下内容区顶栏要让开的总宽度。 */
+  /* 无边框窗口的尺寸（规范 §5.6）。窗口条是一整条 fixed 元素，钉在左上角，
+     与侧栏折不折叠无关。
+     --titlebar-lights：条内左侧的预留。桌面壳里让开系统红绿灯（壳侧
+       trafficLightPosition 从 x=14 起三颗到 66px，两处必须一起改）；浏览器
+       没有红绿灯，那儿改放应用图标与名称，所以只需贴边的一点内边距。
+     --titlebar-inset：整条的宽度，内容区顶栏据此让位。 */
   --titlebar-height: 40px;
   --titlebar-lights: 8px;
-  --titlebar-controls: 54px;
-  --titlebar-inset: calc(var(--titlebar-lights) + var(--titlebar-controls) + 8px);
+  --titlebar-inset: 124px;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.627 0.194 149.214);
@@ -206,9 +205,11 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* 桌面壳（无边框窗口）专属：红绿灯占掉左上角，控件组整体右移躲开它。 */
+/* 桌面壳（无边框窗口）专属：红绿灯占掉左上角，窗口条内的控件右移躲开它；
+   应用名不重复出现（Dock 与菜单栏已经在说了），整条因此比浏览器里窄。 */
 [data-shell="desktop"] {
   --titlebar-lights: 74px;
+  --titlebar-inset: 106px;
 }
 
 /* 拖侧栏宽度时整页统一光标：指针早已被把手捕获，划过任何元素都不该变形。 */
@@ -224,6 +225,13 @@ body[data-resizing] {
 }
 [data-shell="desktop"] .drag-region
   :where(button, a, input, select, textarea, [role="button"], [role="tab"], [role="menuitem"]) {
+  -webkit-app-region: no-drag;
+}
+
+/* 浮在拖动区**上方**的控件必须自己声明——macOS 的拖动区是窗口级的矩形，
+   会吞掉落在范围内的点击，而上面那条后代选择器够不着 fixed / portal 元素。
+   漏标的表现是「按钮看得见、点不动，一拖窗口就跟着走」。 */
+[data-shell="desktop"] .no-drag-region {
   -webkit-app-region: no-drag;
 }
 
@@ -790,7 +798,17 @@ body[data-resizing] {
    也削成一排图标，谁也认不出哪个是哪个（更别提拖动它们）。 */
 .dockview-theme-acpp .dv-tabs-and-actions-container {
   container-type: inline-size;
-  border-bottom: 1px solid var(--border);
+  /* 分隔线用底色的极淡版而不是 --border：标签栏是窗口的第一行，一条实线
+     会把它读成「卡片的头部」，而它应该像窗口本身的一部分。 */
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
+}
+
+/* 贴着工作区上沿的那一组：去掉上边框与上圆角，与窗口顶部连成一片，
+   不要出现一道横贯的边界（会话页没有标题栏，那道线格外扎眼）。 */
+.dockview-theme-acpp .dv-view-container > .dv-view:first-child .dv-groupview {
+  border-top-color: transparent;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /* 工作区页没有自己的标题栏（整块空间归 dockview），标签栏因此是窗口的第一行，

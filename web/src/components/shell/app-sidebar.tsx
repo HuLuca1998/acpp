@@ -144,20 +144,9 @@ export function AppSidebar({
       onMouseLeave={frame.closePeek}
       {...props}
     >
-      {/* 顶部这条：左端标出「这是什么应用」，右端留给窗口控件组（那一组是
-          fixed 的，见 window/window-controls.tsx），整条同时是窗口拖动区。
-          桌面壳里左端被系统红绿灯占着，品牌只在浏览器里出现。 */}
-      <div className="drag-region flex h-(--titlebar-height) shrink-0 items-center gap-2 px-2">
-        <div className="flex items-center gap-2 in-data-[shell=desktop]:hidden">
-          {/* 与这条右端的折叠/通知钮同为 24px：一条 40px 的横栏上，两端的
-              视觉块等高才立得住。图标是带底色的实心方块，比同尺寸的线性
-              图标重，所以不再往上加——占行高 60% 已经够显眼了。 */}
-          <img src="/app-icon.svg" alt="" className="size-6 shrink-0" />
-          <span className="text-sm font-semibold tracking-tight">
-            {t("common.appName")}
-          </span>
-        </div>
-      </div>
+      {/* 顶部这条只做一件事：给窗口条让位（那一条是 fixed 的，见
+          window/window-controls.tsx），顺带当窗口的拖动区。 */}
+      <div className="drag-region h-(--titlebar-height) shrink-0" />
       <SidebarContent>
         <NavMain items={navMain} />
         {/* 有项目就按项目分组（最多 5 组 × 5 条），否则平铺最近会话——
