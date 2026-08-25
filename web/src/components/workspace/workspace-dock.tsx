@@ -113,7 +113,7 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
           <button
             type="button"
             aria-label={t("workspace.closePanel")}
-            className="acpp-tab-label -mr-0.5 flex size-4 items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+            className="acpp-tab-close acpp-tab-label -mr-0.5 flex size-4 items-center justify-center rounded-sm text-muted-foreground/60 hover:bg-muted hover:text-foreground"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation()
@@ -161,8 +161,31 @@ function CommitsTabDot() {
 function HeaderActions(props: IDockviewHeaderActionsProps) {
   const hasChat = props.panels.some((p) => p.id === "chat")
   if (hasChat) return <WorkspaceMenuSlot />
-  if (props.panels.length < 2) return null
+  // 只有一个面板时那一格是标题而不是页签（见 index.css），关闭钮跟着挪到
+  // 这一行的右端——标题里塞一颗 × 会让它重新长得像页签。
+  if (props.panels.length === 1) return <ClosePanelSlot id={props.panels[0].id} />
   return <CloseAllSlot ids={props.panels.map((p) => p.id)} />
+}
+
+/** 单面板时右端那颗关闭钮。 */
+function ClosePanelSlot({ id }: { id: string }) {
+  const { t } = useTranslation()
+  const ws = useWorkspace()
+  return (
+    <div className="flex h-full items-center pr-1.5">
+      <Hint label={t("workspace.closePanel")} align="end">
+        <button
+          type="button"
+          aria-label={t("workspace.closePanel")}
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          // 走命令总线：终端面板要顺带杀 pty，绕过去会留下孤儿进程。
+          onClick={() => ws.closePanel(id)}
+        >
+          <XIcon className="size-3.5" />
+        </button>
+      </Hint>
+    </div>
+  )
 }
 
 /** 一键清空这一组。 */

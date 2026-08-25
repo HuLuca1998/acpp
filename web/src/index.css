@@ -794,6 +794,11 @@ body[data-resizing] {
 .dockview-theme-acpp .dv-tab:only-child {
   background-color: transparent !important;
 }
+/* 单面板时关闭钮由标签栏右端接手（见 workspace-dock.tsx 的 HeaderActions），
+   标题里那一颗收起——留着会让这一格重新长得像页签。 */
+.dockview-theme-acpp .dv-tab:only-child .acpp-tab-close {
+  display: none;
+}
 .dockview-theme-acpp .dv-tab:only-child [data-panel-kind] {
   padding-inline: --spacing(1);
   font-size: 13px;
