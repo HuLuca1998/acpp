@@ -148,6 +148,17 @@
   --success: oklch(0.6 0.15 150);
   --warning: oklch(0.666 0.132 75);
   --radius: 0.875rem;
+
+  /* 无边框窗口的三个尺寸（规范 §5.6）。
+     --titlebar-lights：折叠态下窗口控件组的左起点，桌面壳里要躲开系统红绿灯
+       （壳侧 trafficLightPosition 从 x=14 起三颗到 66px，两处必须一起改）；
+       浏览器没有红绿灯，贴边即可。
+     --titlebar-controls：控件组自身宽度（折叠钮 + 通知）。
+     --titlebar-inset：折叠态下内容区顶栏要让开的总宽度。 */
+  --titlebar-height: 40px;
+  --titlebar-lights: 8px;
+  --titlebar-controls: 54px;
+  --titlebar-inset: calc(var(--titlebar-lights) + var(--titlebar-controls) + 8px);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.627 0.194 149.214);
@@ -193,6 +204,27 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* 桌面壳（无边框窗口）专属：红绿灯占掉左上角，控件组整体右移躲开它。 */
+[data-shell="desktop"] {
+  --titlebar-lights: 74px;
+}
+
+/* 拖侧栏宽度时整页统一光标：指针早已被把手捕获，划过任何元素都不该变形。 */
+body[data-resizing] {
+  cursor: col-resize;
+}
+
+/* 可拖动窗口的区域。窗口顶部必须处处可拖，否则会留下拖不动的死区
+   （规范 §5.6）；区域内的可点元素自动排除，不必逐个标注。
+   浏览器里 app-region 无意义，所以整条规则限定在桌面壳内。 */
+[data-shell="desktop"] .drag-region {
+  -webkit-app-region: drag;
+}
+[data-shell="desktop"] .drag-region
+  :where(button, a, input, select, textarea, [role="button"], [role="tab"], [role="menuitem"]) {
+  -webkit-app-region: no-drag;
 }
 
 @layer base {
@@ -759,6 +791,18 @@
 .dockview-theme-acpp .dv-tabs-and-actions-container {
   container-type: inline-size;
   border-bottom: 1px solid var(--border);
+}
+
+/* 工作区页没有自己的标题栏（整块空间归 dockview），标签栏因此是窗口的第一行，
+   得兼任拖动区——否则那一整条就是拖不动的死区（规范 §5.6）。标签、动作按钮
+   与拖拽重排面板的手势自己排除在外。 */
+[data-shell="desktop"] .dockview-theme-acpp .dv-tabs-and-actions-container {
+  -webkit-app-region: drag;
+}
+[data-shell="desktop"]
+  .dockview-theme-acpp
+  :where(.dv-tab, .dv-void-container, .dv-right-actions-container, button) {
+  -webkit-app-region: no-drag;
 }
 @container (max-width: 180px) {
   .acpp-tab-label {

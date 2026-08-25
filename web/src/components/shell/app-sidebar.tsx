@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useTranslation } from "react-i18next"
-import { Link, useLocation } from "react-router"
+import { useLocation } from "react-router"
 
 import { NavUser } from "@/components/shell/nav-user"
 import { NoticeCenter } from "@/components/shell/notice-center"
@@ -8,18 +8,18 @@ import { NavMain } from "@/components/shell/nav-main"
 import { AgentIcon } from "@/components/agent-icon"
 import { NavProjects } from "@/components/shell/nav-projects"
 import { NavRecent } from "@/components/shell/nav-recent"
+import { SidebarResizer } from "@/components/shell/window/sidebar-resizer"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
+import type { useSidebarFrame } from "@/hooks/use-sidebar-frame"
 import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { groupSessionsByCwd } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
@@ -35,8 +35,14 @@ import {
 // 挑出「最近用过的 5 个项目」。
 const RECENT_LIMIT = 50
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  frame,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  frame: ReturnType<typeof useSidebarFrame>
+}) {
   const { t } = useTranslation()
+  const { state } = useSidebar()
   const { pathname } = useLocation()
   const { identity } = useIdentity()
   const isOwner = identity?.owner ?? false
@@ -121,24 +127,37 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [recent, t]
   )
 
+  // 折叠后侧栏是悬停浮出的临时浮层：盖在内容上，不把内容挤开（规范 §5.6）。
+  // 宽度那时也没有留存的意义，把手不渲染。
+  const collapsed = state === "collapsed"
+
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="h-auto data-[slot=sidebar-menu-button]:p-1.5!"
-              render={<Link to="/" />}
-            >
-              {/* 品牌徽标：app 图标（public/app-icon.svg，与桌面版图标同源）。 */}
-              <img src="/app-icon.svg" alt="" className="size-7 shrink-0" />
-              <span className="text-base font-semibold tracking-tight">
-                {t("common.appName")}
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
+    <Sidebar
+      collapsible="offcanvas"
+      // 顶部不留内边距：侧栏那条让位要贴着窗口上沿，才能和内容区的顶栏连成
+      // 一条线，也才能接住系统红绿灯（规范 §5.6）。
+      className={cn(
+        "pt-0!",
+        collapsed && frame.peek && "left-0! z-50 shadow-2xl transition-[left]"
+      )}
+      onMouseEnter={collapsed ? frame.openPeek : undefined}
+      onMouseLeave={frame.closePeek}
+      {...props}
+    >
+      {/* 顶部这条：左端标出「这是什么应用」，右端留给窗口控件组（那一组是
+          fixed 的，见 window/window-controls.tsx），整条同时是窗口拖动区。
+          桌面壳里左端被系统红绿灯占着，品牌只在浏览器里出现。 */}
+      <div className="drag-region flex h-(--titlebar-height) shrink-0 items-center gap-2 px-2">
+        <div className="flex items-center gap-2 in-data-[shell=desktop]:hidden">
+          {/* 与这条右端的折叠/通知钮同为 24px：一条 40px 的横栏上，两端的
+              视觉块等高才立得住。图标是带底色的实心方块，比同尺寸的线性
+              图标重，所以不再往上加——占行高 60% 已经够显眼了。 */}
+          <img src="/app-icon.svg" alt="" className="size-6 shrink-0" />
+          <span className="text-sm font-semibold tracking-tight">
+            {t("common.appName")}
+          </span>
+        </div>
+      </div>
       <SidebarContent>
         <NavMain items={navMain} />
         {/* 有项目就按项目分组（最多 5 组 × 5 条），否则平铺最近会话——
@@ -156,6 +175,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NoticeCenter />
         <NavUser whoami={whoami} isOwner={isOwner} />
       </SidebarFooter>
+      {!collapsed && (
+        <SidebarResizer
+          onPointerDown={frame.startResize}
+          onDoubleClick={frame.resetWidth}
+        />
+      )}
     </Sidebar>
   )
 }

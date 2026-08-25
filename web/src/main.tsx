@@ -10,9 +10,14 @@ import { IdentityProvider } from "@/components/shell/identity-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { applyPalette, loadPalette } from "@/lib/palette"
+import { isDesktop } from "@/lib/desktop"
 
 // 首帧渲染前应用主题方案，避免默认配色一闪而过。
 applyPalette(loadPalette())
+
+// 桌面壳的窗口没有系统标题栏：界面要给红绿灯让位、要自己标出拖动区。
+// 浏览器（含局域网访客）里这些全不成立，靠这个标记整体关掉（规范 §5.6）。
+if (isDesktop()) document.documentElement.dataset.shell = "desktop"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

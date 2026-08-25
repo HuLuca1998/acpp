@@ -3,10 +3,12 @@ import { Navigate, Outlet, useLocation } from "react-router"
 
 import { AppSidebar } from "@/components/shell/app-sidebar"
 import { IdentityGate } from "@/components/shell/identity-gate"
-import { SiteHeader } from "@/components/shell/site-header"
+import { TitleBar } from "@/components/shell/window/title-bar"
+import { WindowControls } from "@/components/shell/window/window-controls"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useIsOwner } from "@/hooks/identity-context"
 import { useNotifications } from "@/hooks/use-notifications"
+import { useSidebarFrame } from "@/hooks/use-sidebar-frame"
 
 /**
  * 只有 owner 能进的页面（adr-007）。租户手敲 URL 也进不去——后端对应的
@@ -36,6 +38,8 @@ export function DashboardLayout() {
   const { t } = useTranslation()
   const { pathname } = useLocation()
 
+  // 会话详情/草稿页（不含列表页）：整块内容区归 dockview。
+  const isWorkspace = /^\/sessions\/[^/]+$/.test(pathname)
   const matched = TITLE_KEYS.find(([prefix]) => pathname.startsWith(prefix))
   const title =
     pathname === "/"
@@ -47,7 +51,7 @@ export function DashboardLayout() {
   return (
     <IdentityGate>
       <OwnerOnlyRedirect>
-        <Shell title={title} />
+        <Shell title={title} workspace={isWorkspace} />
       </OwnerOnlyRedirect>
     </IdentityGate>
   )
@@ -66,33 +70,34 @@ function OwnerOnlyRedirect({ children }: { children: React.ReactNode }) {
   return children
 }
 
-function Shell({ title }: { title: string }) {
+function Shell({ title, workspace }: { title: string; workspace: boolean }) {
   // 通知挂在 shell 上而不是某个页面：agent 停下来等决策时，用户很可能正停
   // 在别的会话或列表页，哪一页都得知道。（版本更新的提示长在侧栏底部的
   // 状态条里，见 components/shell/backend-status.tsx。）
   useNotifications()
+  const frame = useSidebarFrame()
 
   return (
     <SidebarProvider
       // 锁定整个 shell 到视口高度，滚动交给内容区自己处理，
       // 这样聊天页的输入框才能始终固定在底部。
       className="h-svh"
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
+      style={{ "--sidebar-width": `${frame.width}px` } as React.CSSProperties}
     >
-      <AppSidebar variant="inset" />
-      <SidebarInset className="overflow-hidden">
-        <SiteHeader title={title} />
+      <AppSidebar variant="inset" frame={frame} />
+      {/* 顶部那 8px 收掉：内容区的顶栏要和侧栏的让位条贴着窗口上沿连成一线，
+          圆角因此只留下面两角（规范 §5.6）。 */}
+      <SidebarInset className="overflow-hidden md:peer-data-[variant=inset]:mt-0! md:peer-data-[variant=inset]:rounded-t-none">
+        <TitleBar title={title} workspace={workspace} />
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="@container/main flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
             <Outlet />
           </div>
         </div>
       </SidebarInset>
+      {/* 全局唯一的一组窗口控件，fixed 钉在窗口左上角——展开、折叠、浮出
+          三态下它都不动（规范 §5.6）。放在 provider 内是因为要读侧栏状态。 */}
+      <WindowControls frame={frame} />
     </SidebarProvider>
   )
 }

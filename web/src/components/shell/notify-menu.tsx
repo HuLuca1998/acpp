@@ -27,10 +27,10 @@ const SWITCHES = [
 ] as const
 
 /**
- * 顶栏的通知开关。
+ * 通知开关，住在窗口左上角的控件组里（shell/window/window-controls.tsx）。
  *
  * 为什么不放进设置页：设置页是 owner 专属（adr-007），而局域网访客同样会
- * 被通知打扰，得有地方关。顶栏是两种身份都够得着的唯一位置。
+ * 被通知打扰，得有地方关。窗口控件组是两种身份都够得着、且每一页都在的位置。
  * 设置页里那张卡管的是另一件事——macOS 的系统授权，那本来就只有壳里有。
  */
 export function NotifyMenu() {
@@ -55,7 +55,7 @@ export function NotifyMenu() {
             <Button
               variant="ghost"
               size="icon"
-              className="size-8"
+              className="size-6"
               aria-label={t("notify.prefs.title")}
             />
           }

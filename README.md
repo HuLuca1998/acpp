@@ -107,6 +107,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 
 输入框支持：**粘贴/上传图片**、**@ 引用文件**（后端读内容嵌入 prompt；超过 32KB 的大文件改发 resource_link 由 agent 按需读取——芯片以链条图标标注；文件树右键与预览面板也可添加引用，**文件夹引用嵌入两层目录清单**而非全文）、**`/` 斜杠命令补全**（清单来自 agent），以及 **turn 进行中直接插话**（不用等上一轮结束）。
 
+改壳或改窗口相关的界面时用 `make dev-app`：另起一份**预览壳**加载开发前端（45173），**不启动 acp-server、不占 48090、不放菜单栏图标**，因此和你正装着的 ACPP.app 可以同时开着对比。它靠改名换 userData 与正式版隔离（打包产物里的 `package.json name` 和开发态相同，不改就会被当成第二个实例挤掉），菜单里另有「开发」项可刷新与开控制台。
+
 单进程部署（后端托管前端产物）：`make serve`；macOS 桌面版打包：`make app`（见下节）。
 
 ## macOS 桌面版
@@ -114,6 +116,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 `make app` 一键打包出 `build/app/ACPP.app`：Electron 菜单栏壳 + 捆绑 acp-server + 前端产物，图标全部由脚本程序化绘制（仓库不存二进制），ad-hoc 签名本机直接用。行为决策见 [docs/adr-004](docs/adr-004-macos-桌面壳.md)，壳选型见 [docs/adr-015](docs/adr-015-桌面壳换-electron.md)。
 
 壳原本是 Swift/AppKit + WKWebView（21MB），2026-08 换成 Electron（约 300MB）：WKWebView 在 macOS 拖窗口 live resize 下卡顿严重，且**空白页照样卡**——与前端代码无关，壳侧四种规避策略全部无效，只能换引擎。**改窗口参数前先读 adr-015**：`backgroundColor` 在那里是性能开关不是外观选项，删掉它卡顿立刻回来。
+
+**窗口没有系统标题栏**（`titleBarStyle: "hiddenInset"`）：红绿灯仍是原生的，浮在界面左上角，拖动、边缘缩放、双击顶部最大化、全屏与窗口吸附全部由系统提供——前端只负责标出拖动区并给红绿灯让位（做法与硬规则见 [web/AGENTS.md §5.6](web/AGENTS.md)）。没有走 `frame: false` 自绘三颗按钮：视觉上没有区别，却要把上面这些系统行为逐个手写补回来。窗口顶部那 40px 因此**处处可拖**：侧栏让位条、内容区顶栏、右侧面板的 tab 行三段拼满，任何一段缺席都会留下拖不动的死区。
 
 行为约定：
 
@@ -126,7 +130,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 - **局域网共享默认关**（工作区终端是任意命令执行面，见 §安全姿态）。菜单栏开启后服务监听 `0.0.0.0`，「复制局域网链接」得到 `http://<局域网IP>:48090/`，发给局域网内其他设备即可在浏览器使用完整 web 端。切换开关会重启后台服务（agent 上下文在 runtime 侧持久化，续聊自动恢复）。
 - 服务日志：`~/Library/Logs/ACPP/server.log`。agent 子进程的 PATH 取自登录 shell——GUI app 默认拿不到 Homebrew 路径，壳启动时注入，否则拉不起 `codex-acp` / `claude-agent-acp`。
 
-打包脚本 [scripts/build-macos-app.sh](scripts/build-macos-app.sh)（`--skip-web` 复用已有前端产物提速，`APP_VERSION` 覆盖版本号，版本与发布仓库经 ldflags 注入后端）；壳源码在 [desktop/macos/](desktop/macos/)。
+打包脚本 [scripts/build-macos-app.sh](scripts/build-macos-app.sh)（`--skip-web` 复用已有前端产物提速，`APP_VERSION` 覆盖版本号，版本与发布仓库经 ldflags 注入后端）；壳源码在 [desktop/electron/](desktop/electron/)。
 
 **版本发布与更新**：`make release VERSION=0.2.0`（[scripts/release-macos.sh](scripts/release-macos.sh)）构建 → zip → git tag → GitHub Release（notes 缺省取上个 tag 以来的提交标题）。App 内 **设置 → 关于与更新** 后台每日自动检查 Releases，显示新版本描述，桌面版可一键「更新并重启」（下载 zip → 原地替换 .app → 壳正常退出回收子进程 → 自动拉起新版）；开发态只提示不安装。
 
