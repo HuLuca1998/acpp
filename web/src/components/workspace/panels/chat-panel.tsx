@@ -113,6 +113,27 @@ export const ChatPanel = memo(function ChatPanel() {
         <div className="w-full">
         {!isNew ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {chat.session ? (
+              <>
+                {/* 用图标而不是名字：抬头行里会话标题才是主角，agent 是它的
+                    出处，一个可辨识的徽标就够了。 */}
+                <Hint label={chat.session.agentName} align="start">
+                  <span
+                    role="img"
+                    aria-label={chat.session.agentName}
+                    className="flex shrink-0 items-center"
+                  >
+                    <AgentIcon
+                      flavor={chat.session.agentFlavor}
+                      className="size-3.5"
+                    />
+                  </span>
+                </Hint>
+                <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
+                  {chat.session.title}
+                </h2>
+              </>
+            ) : null}
             <Hint
               label={
                 chat.connected ? t("chat.connected") : t("chat.disconnected")
@@ -134,27 +155,6 @@ export const ChatPanel = memo(function ChatPanel() {
                 )}
               />
             </Hint>
-            {chat.session ? (
-              <>
-                <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
-                  {chat.session.title}
-                </h2>
-                {/* 用图标而不是名字：抬头行里会话标题才是主角，agent 是它的
-                    出处，一个可辨识的徽标就够了。 */}
-                <Hint label={chat.session.agentName} align="start">
-                  <span
-                    role="img"
-                    aria-label={chat.session.agentName}
-                    className="flex shrink-0 items-center"
-                  >
-                    <AgentIcon
-                      flavor={chat.session.agentFlavor}
-                      className="size-3.5"
-                    />
-                  </span>
-                </Hint>
-              </>
-            ) : null}
             <div className="ms-auto shrink-0">
               <WorkspaceMenu
                 onResetLayout={() => {
