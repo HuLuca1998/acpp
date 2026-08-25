@@ -19,7 +19,8 @@ acpp/
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
-│   └── macos/                  # Sources/ Swift/AppKit 壳源码；IconGen/ 图标绘制脚本；Info.plist.in
+│   ├── electron/               # main/ 主进程（窗口·服务托管·菜单栏·通知·bridge）；preload/ 页面通道；Info.extend.plist
+│   └── icons/                  # icongen.swift 程序化绘制 App 图标与菜单栏模板图
 ├── web/                        # 前端
 │   ├── AGENTS.md               # 前端规范 + 设计规范
 │   ├── src/
@@ -110,15 +111,17 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 
 ## macOS 桌面版
 
-`make app` 一键打包出 `build/app/ACPP.app`：Swift/AppKit 菜单栏壳 + 捆绑 acp-server + 前端产物，图标全部由脚本程序化绘制（仓库不存二进制），ad-hoc 签名本机直接用。选型与行为决策见 [docs/adr-004](docs/adr-004-macos-桌面壳.md)。
+`make app` 一键打包出 `build/app/ACPP.app`：Electron 菜单栏壳 + 捆绑 acp-server + 前端产物，图标全部由脚本程序化绘制（仓库不存二进制），ad-hoc 签名本机直接用。行为决策见 [docs/adr-004](docs/adr-004-macos-桌面壳.md)，壳选型见 [docs/adr-015](docs/adr-015-桌面壳换-electron.md)。
+
+壳原本是 Swift/AppKit + WKWebView（21MB），2026-08 换成 Electron（约 300MB）：WKWebView 在 macOS 拖窗口 live resize 下卡顿严重，且**空白页照样卡**——与前端代码无关，壳侧四种规避策略全部无效，只能换引擎。**改窗口参数前先读 adr-015**：`backgroundColor` 在那里是性能开关不是外观选项，删掉它卡顿立刻回来。
 
 行为约定：
 
-- **关闭 ≠ 退出**：关闭按钮 / Cmd+W / Cmd+Q / Dock 退出都只是隐藏窗口，服务常驻菜单栏；**真退出只有菜单栏图标右键 → 「退出 ACPP」**（系统注销/关机也会放行，并回收全部子进程）。
+- **关闭 ≠ 退出**：关闭按钮 / Cmd+W / Cmd+Q / Dock 退出都只是隐藏窗口，服务常驻菜单栏；**真退出只有菜单栏图标右键 → 「退出 ACPP」**（收到 SIGTERM 也走真退出，自更新靠这条回收全部子进程）。注意换 Electron 后的一处退让：Swift 版能读 Quit AppleEvent 的 `why?` 参数放行系统注销/关机，Electron 没有等价 API，**注销时系统会提示「应用阻止了注销」，需要确认一下**（adr-015 已记，是权衡后接受的代价）。
 - **菜单栏图标**：左键切换主窗口显隐；右键菜单：打开主窗口 / 在浏览器中打开 / 允许局域网访问 / 复制局域网链接 / 开机启动 / 开机最小化 / 重启服务 / 打开服务日志 / 退出。
-- **开机启动**走 `SMAppService`（系统设置 › 通用 › 登录项里能看到并关掉，我们只是同一个开关的另一个入口）；未签名或不在「应用程序」下时系统会拒绝注册，此时弹窗说明原因。
-- **系统通知**（决策 / 问答 / 答完了 / 出错了）：授权**不在启动时索要**，由设置页 › 系统 › 通知里的开关发起——启动就弹授权框最招人烦，而且用户还没见过这个 app 会通知什么。两个实测坑（macOS 26）：**app 必须待在「应用程序」目录**，放在别处 `requestAuthorization` 会直接返回 `Code=1` 且**连系统弹窗都不出现**，状态停在 notDetermined，看着像什么都没发生；**一旦被拒就再也弹不出来**，只能拉起系统设置（`x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=<bundleID>`）让用户自己开。设置页两种情况都会如实说明并给出对应按钮。ad-hoc 签名够用，不需要开发者证书。决策通知上带的按钮就是 agent 当场给的选项（按下即裁决，最多 4 个）——因为选项是动态的，category 只能一条通知现注册一个；问答不带按钮，它是结构化多题（选择 + 自由输入），塞不进一条通知，点开会话回答。
-- **开机最小化**：勾上后开机只驻留菜单栏，不弹窗口也不占 Dock（运行时切 `.accessory`，不用 LSUIElement）。只管开机那一下——用户从菜单栏打开窗口后就切回正常 app，Dock 图标与主菜单一并回来（WKWebView 的复制粘贴依赖主菜单的 Edit 项）。
+- **开机启动**走 Electron 的 `setLoginItemSettings`（系统设置 › 通用 › 登录项里能看到并关掉，我们只是同一个开关的另一个入口）；未签名或不在「应用程序」下时系统会拒绝注册。Electron 的这个 API 不报错，壳改成**设完回读比对**，对不上就把原因回给设置页。
+- **系统通知**（决策 / 问答 / 答完了 / 出错了）：授权**不在启动时索要**，由设置页 › 系统 › 通知里的开关发起——启动就弹授权框最招人烦，而且用户还没见过这个 app 会通知什么。两个实测坑（macOS 26）：**app 必须待在「应用程序」目录**，放在别处 `requestAuthorization` 会直接返回 `Code=1` 且**连系统弹窗都不出现**，状态停在 notDetermined，看着像什么都没发生；**一旦被拒就再也弹不出来**，只能拉起系统设置（`x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=<bundleID>`）让用户自己开。设置页两种情况都会如实说明并给出对应按钮。ad-hoc 签名够用，不需要开发者证书。决策通知上带的按钮就是 agent 当场给的选项（按下即裁决，最多 4 个）；问答不带按钮，它是结构化多题（选择 + 自由输入），塞不进一条通知，点开会话回答。换 Electron 后两处如实降级（adr-015）：**查不到真实授权状态**（没有 `getNotificationSettings` 的等价物），壳按「发过没有、成功没有」推断，「请求授权」就是发一条示例通知去触发系统弹框；**没有 threadIdentifier**，同一会话的通知不再堆叠成组。
+- **开机最小化**：勾上后开机只驻留菜单栏，不弹窗口也不占 Dock（运行时 `app.dock.hide()`，不用 LSUIElement）。只管开机那一下——用户从菜单栏打开窗口后就切回正常 app，Dock 图标与主菜单一并回来（复制粘贴依赖主菜单的 Edit 项，没有它 Cmd+C/V 全失效）。
 - **端口固定 `48090`**，与开发态 48080 隔离——`make dev` 与桌面版互不误杀，可同时运行；数据共用 `~/.acpp`，桌面版和 dev 看到同样的会话。
 - **局域网共享默认关**（工作区终端是任意命令执行面，见 §安全姿态）。菜单栏开启后服务监听 `0.0.0.0`，「复制局域网链接」得到 `http://<局域网IP>:48090/`，发给局域网内其他设备即可在浏览器使用完整 web 端。切换开关会重启后台服务（agent 上下文在 runtime 侧持久化，续聊自动恢复）。
 - 服务日志：`~/Library/Logs/ACPP/server.log`。agent 子进程的 PATH 取自登录 shell——GUI app 默认拿不到 Homebrew 路径，壳启动时注入，否则拉不起 `codex-acp` / `claude-agent-acp`。

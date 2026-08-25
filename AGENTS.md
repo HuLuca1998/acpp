@@ -32,7 +32,7 @@ acpp/
 ├── docs/              # 决策记录（ADR）与专题文档（§3.1）
 ├── scripts/           # 开发辅助脚本：dev.sh、check-structure.sh 等（§3.2）
 ├── build/             # 编译产物（build/web + build/server + build/app），不入库
-├── desktop/           # macOS 桌面壳（Swift/AppKit 菜单栏应用，选型见 docs/adr-004），打包走 scripts/build-macos-app.sh
+├── desktop/           # macOS 桌面壳（electron/ Electron 主进程与 preload；icons/ 图标绘制脚本），选型见 docs/adr-015，打包走 scripts/build-macos-app.sh
 ├── web/               # 前端（Vite + React 19 + TS），规范见 web/AGENTS.md
 └── server/            # 后端（Go），规范见 server/AGENTS.md
 ```
