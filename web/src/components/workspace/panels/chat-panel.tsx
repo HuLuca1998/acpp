@@ -16,6 +16,7 @@ import { WorktreeToggle } from "@/components/chat/composer/worktree-toggle"
 import { DraftControls } from "@/components/chat/composer/draft-controls"
 import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
+import { AgentIcon } from "@/components/agent-icon"
 import { Hint } from "@/components/hint"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useChatPanel } from "@/components/workspace/chat-panel-context"
@@ -138,7 +139,20 @@ export const ChatPanel = memo(function ChatPanel() {
                 <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
                   {chat.session.title}
                 </h2>
-                <span className="shrink-0">{chat.session.agentName}</span>
+                {/* 用图标而不是名字：抬头行里会话标题才是主角，agent 是它的
+                    出处，一个可辨识的徽标就够了。 */}
+                <Hint label={chat.session.agentName} align="start">
+                  <span
+                    role="img"
+                    aria-label={chat.session.agentName}
+                    className="flex shrink-0 items-center"
+                  >
+                    <AgentIcon
+                      flavor={chat.session.agentFlavor}
+                      className="size-3.5"
+                    />
+                  </span>
+                </Hint>
               </>
             ) : null}
             <div className="ms-auto shrink-0">
