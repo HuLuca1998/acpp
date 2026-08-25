@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from "react"
+import { memo, useCallback, useContext, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import {
   DockviewReact,
@@ -15,6 +15,7 @@ import { SquareXIcon, XIcon } from "lucide-react"
 
 import { Hint } from "@/components/hint"
 import { ChatPanel } from "@/components/workspace/panels/chat-panel"
+import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import { BranchesPanel } from "@/components/workspace/panels/branches-panel"
 import { ChangesPanel } from "@/components/workspace/panels/changes-panel"
@@ -76,10 +77,18 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
   const kind = panelKindOf(id)
   const Icon = PANEL_ICONS[kind] ?? PANEL_ICONS.files
   const num = (props.params as { num?: number })?.num
+  // 对话面板顶在左上角，它这条标签栏就是窗口的第一行——所以它显示的是
+  // 「这条会话叫什么」，而不是一个永远写着「对话」的通用标签。工作区页
+  // 没有别的地方交代当前在看哪条会话了（规范 §5.6）。
+  // 直接读 context 而不是 useChatPanel()：后者在缺 provider 时抛错，而标签
+  // 组件由 dockview 渲染，不值得为一个标题冒这个险。
+  const sessionTitle = useContext(ChatPanelContext)?.chat.session?.title
   const label =
-    kind === "terminal" && num
-      ? `${t("workspace.panels.terminal")} ${num}`
-      : t(`workspace.panels.${kind}` as never)
+    kind === "chat" && sessionTitle
+      ? sessionTitle
+      : kind === "terminal" && num
+        ? `${t("workspace.panels.terminal")} ${num}`
+        : t(`workspace.panels.${kind}` as never)
   return (
     <div
       className="flex h-full items-center gap-1.5 px-2 text-xs"
@@ -233,11 +242,41 @@ function lockChatGroup(api: DockviewApi) {
 }
 
 /**
+ * 给每个分组的标签栏空白处装一个「移动」把手。
+ *
+ * 标签栏是工作区页的窗口第一行，整条得是窗口拖动区，否则那儿拖不动窗口
+ * （规范 §5.6）；而 dockview 原本正是用这块空白发起「拖走整组」——两件事
+ * 撞在一起，表现为拖面板结果整个窗口跟着走。
+ *
+ * 把手是这块空白的子元素，单独排除出拖动区（no-drag-region），指针事件照常
+ * 冒泡给 dockview 的分组拖拽。于是两种拖动各走各的：拖把手移动面板，拖旁边
+ * 的空白移动窗口。锁住的分组（对话）本来就不许拖走，不给把手。
+ */
+function attachMoveHandles(api: DockviewApi, label: string) {
+  for (const group of api.groups) {
+    const slot = group.element.querySelector<HTMLElement>(".dv-void-container")
+    if (!slot) continue
+    const existing = slot.querySelector(".acpp-move-handle")
+    if (group.locked) {
+      existing?.remove()
+      continue
+    }
+    if (existing) continue
+    const handle = document.createElement("div")
+    handle.className = "acpp-move-handle no-drag-region"
+    handle.title = label
+    slot.appendChild(handle)
+  }
+}
+
+/**
  * 工作区 docking 容器。memo 隔离：聊天流的高频重渲染到此为止，
  * dockview 自身与其余面板不被牵连。
  */
 export const WorkspaceDock = memo(function WorkspaceDock() {
   const ws = useWorkspace()
+  const { t } = useTranslation()
+  const moveLabel = t("workspace.movePanel")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 只在真正卸载时摘句柄。依赖必须是稳定的 attachApi 而不是整个 ws：
@@ -260,6 +299,7 @@ export const WorkspaceDock = memo(function WorkspaceDock() {
 
       if (!tryRestoreLayout(api)) buildDefaultLayout(api)
       lockChatGroup(api)
+      attachMoveHandles(api, moveLabel)
 
       // 对话面板不可拖出：在 dragstart 阶段取消原生拖拽。
       api.onWillDragPanel((e) => {
@@ -271,6 +311,8 @@ export const WorkspaceDock = memo(function WorkspaceDock() {
       // 布局持久化：防抖落盘；顺手补挂对话组保护（fromJSON/移动后组会换实例）。
       api.onDidLayoutChange(() => {
         lockChatGroup(api)
+        // 新分组是布局变化后才出现的，把手要跟着补挂。
+        attachMoveHandles(api, moveLabel)
         if (saveTimer.current) clearTimeout(saveTimer.current)
         saveTimer.current = setTimeout(() => {
           try {
@@ -281,7 +323,7 @@ export const WorkspaceDock = memo(function WorkspaceDock() {
         }, 500)
       })
     },
-    [ws]
+    [ws, moveLabel]
   )
 
   return (

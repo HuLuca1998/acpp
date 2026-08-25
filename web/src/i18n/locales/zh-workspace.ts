@@ -1,6 +1,7 @@
 // 会话工作区各面板的文案。独立成文件是因为主语言文件已到行数硬线
 // ——按域拆分，不是按语言再切一刀。
 export const zhWorkspace = {
+  movePanel: "拖动移动面板",
   panels: {
     chat: "对话",
     files: "文件树",

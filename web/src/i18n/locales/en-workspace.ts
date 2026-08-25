@@ -1,6 +1,7 @@
 // Workspace dock panels and their copy. Split out because the main locale file
 // hit the line ceiling — divided by domain, not by another language cut.
 export const enWorkspace = {
+  movePanel: "Drag to move panel",
   logs: {
     emptyTitle: "No transcript yet",
     emptyHint:

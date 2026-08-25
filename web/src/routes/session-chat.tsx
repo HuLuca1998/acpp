@@ -6,6 +6,7 @@ import { useChat } from "@/hooks/use-chat"
 import { useDraftSession } from "@/hooks/use-draft-session"
 import { createDraftStore } from "@/lib/chat/draft-store"
 import { useIdentity } from "@/hooks/identity-context"
+import { usePageTitle } from "@/hooks/page-title-context"
 import type { ImageAttachment } from "@/types/acp"
 import { fileToImageAttachment } from "@/lib/files"
 import { api } from "@/lib/api"
@@ -49,6 +50,8 @@ export function SessionChat() {
   const sessionId = isNew ? 0 : Number(params.id)
 
   const chat = useChat(sessionId)
+  // 顶栏显示这条会话叫什么，而不是干巴巴的「会话」。
+  usePageTitle(chat.session?.title)
   const newSession = useDraftSession(isNew, t("sessions.form.defaultModel"))
   // 草稿住在 ref 化的 store 里而不是页面 state：打字不该重渲整棵工作区树
   //（见 lib/chat/draft-store.ts 的注释）。

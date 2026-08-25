@@ -137,7 +137,8 @@ export function AppSidebar({
       // 顶部不留内边距：侧栏那条让位要贴着窗口上沿，才能和内容区的顶栏连成
       // 一条线，也才能接住系统红绿灯（规范 §5.6）。
       className={cn(
-        "pt-0!",
+        // 不留内边距：侧栏整块贴着窗口边，与内容区靠底色区分而不是留白。
+        "p-0!",
         collapsed && frame.peek && "left-0! z-50 shadow-2xl transition-[left]"
       )}
       onMouseEnter={collapsed ? frame.openPeek : undefined}

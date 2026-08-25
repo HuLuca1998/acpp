@@ -157,7 +157,7 @@
      --titlebar-inset：整条的宽度，内容区顶栏据此让位。 */
   --titlebar-height: 40px;
   --titlebar-lights: 8px;
-  --titlebar-inset: 124px;
+  --titlebar-inset: 150px;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.627 0.194 149.214);
@@ -209,7 +209,7 @@
    应用名不重复出现（Dock 与菜单栏已经在说了），整条因此比浏览器里窄。 */
 [data-shell="desktop"] {
   --titlebar-lights: 74px;
-  --titlebar-inset: 106px;
+  --titlebar-inset: 132px;
 }
 
 /* 拖侧栏宽度时整页统一光标：指针早已被把手捕获，划过任何元素都不该变形。 */
@@ -786,6 +786,49 @@ body[data-resizing] {
   z-index: 20;
 }
 
+/* 标签栏空白处的「移动分组」把手（DOM 由 workspace-dock.tsx 注入）。
+   平时不现身，悬停标签栏才浮出来——它是提示，不是装饰。 */
+.dockview-theme-acpp .dv-void-container {
+  position: relative;
+}
+.acpp-move-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 4px;
+  translate: -50% -50%;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 150ms var(--ease-snappy);
+}
+.dockview-theme-acpp .dv-tabs-and-actions-container:hover .acpp-move-handle {
+  opacity: 0.3;
+}
+.acpp-move-handle:hover {
+  opacity: 0.65;
+}
+.acpp-move-handle:active {
+  cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .acpp-move-handle {
+    transition: none;
+  }
+}
+
+/* 侧栏折叠后，工作区最左上那一组的标签栏就顶在窗口角上，得给红绿灯与
+   窗口控件让位——否则标签直接被压在它们下面（规范 §5.6）。 */
+[data-sidebar-collapsed="true"]
+  .dockview-theme-acpp
+  .dv-view-container
+  > .dv-view:first-child
+  .dv-tabs-and-actions-container {
+  padding-left: var(--titlebar-inset);
+}
+
 /* 组容器：卡片质感（细描边 + 圆角裁切），gap 露出的缝隙是页面底色。 */
 .dockview-theme-acpp .dv-groupview {
   border: 1px solid var(--border);
@@ -817,9 +860,11 @@ body[data-resizing] {
 [data-shell="desktop"] .dockview-theme-acpp .dv-tabs-and-actions-container {
   -webkit-app-region: drag;
 }
+/* 标签本身要能点、能拖着重排；右侧动作按钮要能按。空白区**不**排除——它是
+   窗口拖动区，分组的移动改走那颗把手（见 workspace-dock.tsx 的注释）。 */
 [data-shell="desktop"]
   .dockview-theme-acpp
-  :where(.dv-tab, .dv-void-container, .dv-right-actions-container, button) {
+  :where(.dv-tab, .dv-right-actions-container, button) {
   -webkit-app-region: no-drag;
 }
 @container (max-width: 180px) {
