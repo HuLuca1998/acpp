@@ -789,8 +789,10 @@ body[data-resizing] {
 /* 组里只有一个面板时，那一格不是「页签」而是这块面板的标题——页签的底色与
    圆角是用来区分「并列的哪几个」的，只有一个时它只会凭空多出一层框。
    多面板时照旧画页签。判断交给 :only-child，不给某个面板开特例。 */
+/* !important 不是偷懒：dockview 自带的页签规则特异性比这里高，且它的样式表
+   在本文件之后加载，不提权盖不住（实测计算值仍是 --muted）。 */
 .dockview-theme-acpp .dv-tab:only-child {
-  background: transparent;
+  background-color: transparent !important;
 }
 .dockview-theme-acpp .dv-tab:only-child [data-panel-kind] {
   padding-inline: --spacing(1);
