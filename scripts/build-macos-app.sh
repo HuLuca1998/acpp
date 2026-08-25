@@ -98,6 +98,12 @@ echo "==> 签名（ad-hoc，本机分发够用；过公证需要开发者证书�
 codesign --force --sign - "$BUNDLE/Contents/MacOS/acp-server"
 codesign --force --deep --sign - "$BUNDLE"
 
+# 中间产物没有留存价值——图标、acp-server、packager 的输出每次都全量重生成，
+# 而 packager 那份是 .app 的完整副本，不清的话每打一次包就白占几十 M。
+# 只在成功后清：中途失败时现场更值钱（set -e 会在失败处直接退出，走不到这里）。
+echo "==> 清理中间产物"
+rm -rf "$STAGE"
+
 echo
 echo "完成：$BUNDLE（$(du -sh "$BUNDLE" | cut -f1 | tr -d ' ')）"
 echo "运行：open \"$BUNDLE\""
