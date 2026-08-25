@@ -12,6 +12,7 @@ import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
 import { DesktopLaunchCard } from "@/components/settings/desktop-launch"
 import { NotificationsCard } from "@/components/settings/notifications"
+import { NotifyPrefsCard } from "@/components/settings/notify-prefs"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
 import { TitleModelCard } from "@/components/settings/title-model"
@@ -43,6 +44,7 @@ import {
   FolderOpenIcon,
   InfoIcon,
   SettingsIcon,
+  BellIcon,
 } from "lucide-react"
 
 /**
@@ -53,6 +55,7 @@ import {
 const SECTIONS = [
   { key: "system", icon: <SettingsIcon className="size-4" /> },
   { key: "env", icon: <ActivityIcon className="size-4" /> },
+  { key: "notify", icon: <BellIcon className="size-4" /> },
   { key: "claude", icon: <AgentIcon flavor="claude" className="size-4" /> },
   { key: "codex", icon: <AgentIcon flavor="codex" className="size-4" /> },
   { key: "ollama", icon: <OllamaIcon className="size-4" /> },
@@ -136,6 +139,14 @@ export function Settings() {
         ))}
       </nav>
 
+      {/* 通知分区：什么事值得打断人（偏好），以及 macOS 那边给没给权限。 */}
+      {section === "notify" ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <NotifyPrefsCard />
+          <NotificationsCard />
+        </div>
+      ) : null}
+
       {/* 环境分区：依赖体检 + 连接测试。 */}
       {section === "env" ? (
         <div className="flex min-w-0 flex-1 flex-col">
@@ -173,7 +184,6 @@ export function Settings() {
               <WorkspaceDirCard info={info} onChange={setInfo} />
               {/* 这两块只在 macOS 壳里渲染，浏览器里整块不出现。 */}
               <DesktopLaunchCard />
-              <NotificationsCard />
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">

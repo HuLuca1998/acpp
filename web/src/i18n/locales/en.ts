@@ -601,6 +601,7 @@ export default {
       preview: "Result: ",
     },
     menu: {
+      notify: "Notifications",
       system: "System",
       env: "Environment",
       claude: "Claude",

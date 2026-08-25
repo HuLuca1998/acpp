@@ -1,18 +1,8 @@
 import { useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
-import { Link } from "react-router"
-import {
-  BellIcon,
-  CircleCheckIcon,
-  MessageCircleQuestionMarkIcon,
-  OctagonXIcon,
-  RefreshCwIcon,
-  ShieldQuestionMarkIcon,
-  XIcon,
-} from "lucide-react"
+import { BellIcon, XIcon } from "lucide-react"
 
-import { formatRelativeTime } from "@/lib/format"
-import { clearNotices, dismissNotice, type Notice } from "@/lib/notify/store"
+import { type Notice } from "@/lib/notify/store"
 import { cn } from "@/lib/utils"
 import { useNotices } from "@/hooks/use-notices"
 import { Badge } from "@/components/ui/badge"
@@ -22,50 +12,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
-
-/**
- * 每类通知的图标与色调。照 iOS 横幅的图形语言：图标装进一块色底小方块
- * （相当于 app 图标的位置），颜色只落在这一块上，卡片本身永远是中性纸面色。
- */
-const STYLES = {
-  permission: { Icon: ShieldQuestionMarkIcon, tone: "text-warning", tile: "bg-warning/15" },
-  elicitation: { Icon: MessageCircleQuestionMarkIcon, tone: "text-warning", tile: "bg-warning/15" },
-  turn_end: { Icon: CircleCheckIcon, tone: "text-success", tile: "bg-success/15" },
-  error: { Icon: OctagonXIcon, tone: "text-destructive", tile: "bg-destructive/15" },
-  update: { Icon: RefreshCwIcon, tone: "text-warning", tile: "bg-warning/15" },
-  // 撤回信号不会进列表，列在这里只是让类型收口。
-  permission_done: { Icon: CircleCheckIcon, tone: "text-muted-foreground", tile: "bg-muted" },
-  elicitation_done: { Icon: CircleCheckIcon, tone: "text-muted-foreground", tile: "bg-muted" },
-} as const
-
-const TITLE_KEYS = {
-  permission: "notify.permission",
-  elicitation: "notify.elicitation",
-  turn_end: "notify.turnEnd",
-  error: "notify.error",
-  update: "backend.updateAvailable",
-  permission_done: "notify.turnEnd",
-  elicitation_done: "notify.turnEnd",
-} as const
-
-/** 离场动画时长。再长就变成「删不掉」的错觉（规范上限 300ms）。 */
-const LEAVE_MS = 240
-
-/**
- * 关闭一条通知的两步走：先播离场动画，播完才真正从存量里删。
- * React 卸载是瞬时的，不给这一拍，卡片就是「啪」地消失——出现有动画、
- * 消失没有，像话说一半。
- */
-function useLeave(id: string) {
-  const [leaving, setLeaving] = useState(false)
-  const leave = () => {
-    if (leaving) return
-    setLeaving(true)
-    setTimeout(() => dismissNotice(id), LEAVE_MS)
-  }
-  return { leaving, leave }
-}
+import {
+  NoticeAction,
+  NoticeList,
+  NoticeRow,
+} from "@/components/shell/notice-list"
+import { useNoticeLeave } from "@/hooks/use-notice-leave"
 
 /**
  * 折叠态平行显示的条数：跟着视口高度走——侧栏底部的空间是从导航嘴里抢的，
@@ -182,53 +134,7 @@ export function NoticeCenter() {
       </div>
 
       <PopoverContent side="right" align="end" className="w-88 p-0">
-        <div className="flex items-center justify-between border-b px-3 py-2">
-          <span className="flex items-center gap-1.5 text-sm font-medium">
-            {t("notify.center.title")}
-            <Badge
-              variant="secondary"
-              className="h-4 min-w-4 px-1 text-[10px] tabular-nums"
-            >
-              {notices.length}
-            </Badge>
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={clearNotices}
-          >
-            {t("notify.center.clearAll")}
-          </Button>
-        </div>
-        <ScrollArea className="max-h-96">
-          <ul className="flex flex-col gap-1.5 p-2">
-            {groupNotices(notices).map((group) => (
-              <li key={group.key}>
-                {/* 组头只在多条时出现：单条自己会说明来自哪个会话。 */}
-                {group.items.length > 1 ? (
-                  <div className="flex items-baseline justify-between gap-2 px-2 pt-1 pb-0.5">
-                    <span className="truncate text-[11px] font-medium text-muted-foreground">
-                      {group.title}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
-                      {t("notify.center.groupCount", { count: group.items.length })}
-                    </span>
-                  </div>
-                ) : null}
-                {group.items.map((notice) => (
-                  <NoticeItem
-                    key={notice.id}
-                    notice={notice}
-                    // 组头已经报过会话名，组内不再逐条重复。
-                    showSession={group.items.length === 1}
-                    onNavigate={() => setOpen(false)}
-                  />
-                ))}
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
+        <NoticeList onNavigate={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
   )
@@ -243,7 +149,7 @@ export function NoticeCenter() {
  */
 function NoticeCard({ notice }: { notice: Notice }) {
   const { t } = useTranslation()
-  const { leaving, leave } = useLeave(notice.id)
+  const { leaving, leave } = useNoticeLeave(notice.id)
 
   return (
     <div
@@ -302,151 +208,3 @@ function NoticeCard({ notice }: { notice: Notice }) {
  * 「我不在时发生了什么」，人已经点进去看了的事再挂着就是残影——真还悬着
  * 的决策，会话页里的卡片才是事实源。update 例外，刷新会把一切重来。
  */
-function NoticeAction({
-  notice,
-  className,
-  onAct,
-}: {
-  notice: Notice
-  className: string
-  /** 动作执行后的收尾：撤走这条，展开态还要顺手收起浮层。 */
-  onAct?: () => void
-}) {
-  const { t } = useTranslation()
-  if (notice.kind === "update") {
-    return (
-      <button
-        type="button"
-        className={className}
-        aria-label={t("backend.reload")}
-        onClick={() => window.location.reload()}
-      />
-    )
-  }
-  if (!notice.sessionId) return null
-  return (
-    <Link
-      to={`/sessions/${notice.sessionId}`}
-      aria-label={t(TITLE_KEYS[notice.kind])}
-      className={className}
-      onClick={onAct}
-    />
-  )
-}
-
-/** 展开列表里的一条：整行执行动作，右侧常驻清除。 */
-function NoticeItem({
-  notice,
-  showSession,
-  onNavigate,
-}: {
-  notice: Notice
-  showSession?: boolean
-  onNavigate: () => void
-}) {
-  const { t } = useTranslation()
-  const { leaving, leave } = useLeave(notice.id)
-  return (
-    <div
-      className={cn(
-        "relative flex items-start gap-1 rounded-lg p-2 hover:bg-accent",
-        "transition-[transform,opacity,background-color] ease-snappy",
-        leaving
-          ? "translate-x-4 opacity-0 duration-240 motion-reduce:translate-x-0"
-          : "duration-280"
-      )}
-    >
-      <NoticeAction
-        notice={notice}
-        className="absolute inset-0 rounded-lg"
-        onAct={() => {
-          onNavigate()
-          leave()
-        }}
-      />
-      <div className="pointer-events-none relative min-w-0 flex-1">
-        <NoticeRow notice={notice} showSession={showSession} />
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="relative size-5 shrink-0 text-muted-foreground hover:text-foreground"
-        aria-label={t("notify.center.dismiss")}
-        onClick={leave}
-      >
-        <XIcon className="size-3" />
-      </Button>
-    </div>
-  )
-}
-
-interface NoticeGroup {
-  key: string
-  title: string
-  items: Notice[]
-}
-
-/**
- * 按来源分组——iOS 通知中心的同款组织：同一会话攒下的几条聚成一组
- * （组头报会话名与条数），而不是散在列表里逐条抢位置。
- *
- * 输入已按优先级排好序，按 key 首现的顺序建组即可：组的顺序天然等于
- * 「组内最高优先级」的顺序，组内也保持优先级序。update 不属于任何会话，
- * 自成一组，恰好因优先级最高而永远在最上面。
- */
-function groupNotices(notices: Notice[]): NoticeGroup[] {
-  const groups = new Map<string, NoticeGroup>()
-  for (const notice of notices) {
-    const key = notice.sessionId ? `session-${notice.sessionId}` : notice.kind
-    let group = groups.get(key)
-    if (!group) {
-      group = { key, title: notice.sessionTitle ?? "", items: [] }
-      groups.set(key, group)
-    }
-    group.items.push(notice)
-  }
-  return [...groups.values()]
-}
-
-/** 图标 + 标题 + 时间 + 一行摘要。 */
-function NoticeRow({
-  notice,
-  showSession = true,
-}: {
-  notice: Notice
-  /** 组头已报过会话名时传 false，免得每行再念一遍。 */
-  showSession?: boolean
-}) {
-  const { t, i18n } = useTranslation()
-  const { Icon, tone, tile } = STYLES[notice.kind]
-  const when = formatRelativeTime(new Date(notice.at).toISOString(), i18n.language)
-  const desc = [showSession ? notice.sessionTitle : "", notice.text]
-    .filter(Boolean)
-    .join(" · ")
-
-  return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <span
-        className={cn(
-          "flex size-8 shrink-0 items-center justify-center rounded-lg",
-          tile
-        )}
-      >
-        <Icon className={cn("size-4", tone)} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-xs font-medium">
-            {t(TITLE_KEYS[notice.kind])}
-          </span>
-          <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
-            {when}
-          </span>
-        </div>
-        {desc ? (
-          <p className="truncate text-xs text-muted-foreground">{desc}</p>
-        ) : null}
-      </div>
-    </div>
-  )
-}

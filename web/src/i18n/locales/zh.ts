@@ -569,6 +569,7 @@ export default {
       preview: "生成结果：",
     },
     menu: {
+      notify: "通知",
       system: "系统",
       env: "环境",
       claude: "Claude",

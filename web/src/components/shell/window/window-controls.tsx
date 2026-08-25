@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Hint } from "@/components/hint"
-import { NotifyMenu } from "@/components/shell/notify-menu"
+import { NoticeBell } from "@/components/shell/window/notice-bell"
 import { Kbd } from "@/components/ui/kbd"
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import type { useSidebarFrame } from "@/hooks/use-sidebar-frame"
@@ -10,8 +10,10 @@ import type { useSidebarFrame } from "@/hooks/use-sidebar-frame"
 /**
  * 窗口左上角那一条：身份（桌面壳是系统红绿灯，浏览器是应用图标与名称）
  * 加上折叠与通知。**这里住的是「哪一页都在」的东西**：跟着内容走的（面板操作
- * 之类）归内容区顶栏右端。通知曾放在那边，结果每条顶栏右端都挂一颗铃，
- * 而它其实和折叠一样从不随页面变化。
+ * 之类）归内容区顶栏右端。
+ *
+ * 通知铃在这儿还有一层理由：侧栏底部的通知中心跟着侧栏一起收，折叠之后就再也
+ * 看不见了，而通知恰恰是「有事等人处理」，不该随布局消失。
  *
  * **整条只有一份，fixed 钉在窗口坐标上，与侧栏折不折叠无关**。它是窗口的
  * chrome，不是侧栏的内容——跟着侧栏走的话，折叠那一下按钮就会横穿半个窗口，
@@ -66,7 +68,7 @@ export function WindowControls({
           onClick={frame.lockPeek}
         />
       </Hint>
-      <NotifyMenu />
+      <NoticeBell />
       {children}
     </div>
   )

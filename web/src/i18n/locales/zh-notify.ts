@@ -7,10 +7,12 @@ export const zhNotify = {
   center: {
     title: "通知中心",
     clearAll: "全部清除",
+    empty: "暂时没有需要处理的事",
     dismiss: "清除这条",
     groupCount: "{{count}} 个通知",
   },
   prefs: {
+    description: "会话有动静时在页面上提醒（标签页标题会闪烁）。",
     title: "通知",
     descDesktop: "会话有动静时发一条系统通知。",
     descBrowser: "会话有动静时在页面上提醒（标签页标题会闪烁）。",
