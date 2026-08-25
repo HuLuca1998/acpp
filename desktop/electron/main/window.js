@@ -28,6 +28,15 @@ export class MainWindow {
       title: "ACPP",
       backgroundColor: BACKGROUND,
       show: false,
+      // 无标题栏：那条系统标题栏整个消失，界面自己的顶栏顶到窗口最上沿，
+      // 红绿灯浮在它左端。**没用 frame:false**——hiddenInset 保留了系统的
+      // 拖动、边缘缩放、双击顶部最大化、全屏与窗口吸附，前端只要把顶栏空白
+      // 标成 `-webkit-app-region: drag`（见 web/src/index.css 的 .drag-region）。
+      // 自绘三颗按钮换不来任何视觉收益，却要把这些系统行为逐个补回来。
+      titleBarStyle: "hiddenInset",
+      // 与前端 --titlebar-height(40px) 对齐：y=14 让 12px 的按钮在这条里居中，
+      // x=14 使按钮占到 66px，前端据此左让 --titlebar-inset(76px)。改一处必须改另一处。
+      trafficLightPosition: { x: 14, y: 14 },
       webPreferences: {
         preload: path.join(here, "../preload/index.cjs"),
       },
@@ -118,8 +127,11 @@ export class MainWindow {
   }
 
   loadPage({ mark, markPulse, title, detail }) {
+    // 整页可拖：无标题栏窗口在前端加载完之前没有任何 drag 区域，不标这一下
+    // 启动那几秒窗口是钉死的。页里没有可点元素，全页 drag 不影响任何操作。
     const html = `<!doctype html><meta charset="utf-8"><style>
       html,body{height:100%;margin:0;background:${BACKGROUND};color:#D1FAE5;
+        -webkit-app-region:drag;
         font:15px -apple-system,'PingFang SC',sans-serif;
         display:flex;align-items:center;justify-content:center}
       .wrap{text-align:center;max-width:520px;padding:0 24px}

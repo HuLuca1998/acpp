@@ -32,6 +32,10 @@ preview: ## 一条命令起全栈供预览（后端后台常驻，前端前台�
 	scripts/dev.sh stop web
 	npm run dev --prefix web
 
+.PHONY: dev-app
+dev-app: ## 起预览壳看桌面版界面（加载 dev 前端，不碰已安装的 ACPP.app）
+	scripts/dev-app.sh
+
 .PHONY: dev-web
 dev-web: ## 前台启动前端开发服务器 (http://localhost:45173)
 	cd $(WEB_DIR) && npm run dev

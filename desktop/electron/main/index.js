@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import { BrowserWindow, app, clipboard, shell } from "electron"
 
 import { installBridge } from "./bridge.js"
@@ -21,9 +23,32 @@ import { TrayController } from "./tray.js"
 // 窗口遮挡计算在 resize 期间反复触发且跟着掉帧，必须在 ready 之前关掉（ADR-015）。
 app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion")
 
+/**
+ * 预览模式：只开窗口加载这个地址，**不启动 acp-server、不占 48090、不放菜单栏
+ * 图标**。用途是在不动用户已安装的 ACPP.app 的前提下看壳与界面的改动效果
+ * （`make dev-app`，指向 vite 的 45173 + 开发后端 48080）。
+ *
+ * 隔离靠两件事：这里根本不碰 48090，以及下面那段显式改名换目录。
+ */
+const DEV_URL = process.env.ACPP_DEV_URL || null
+
+/**
+ * 预览壳必须**显式**换掉身份，不能指望「未打包所以名字不同」——打包产物
+ * asar 里的 package.json name 仍然是 `acpp-shell`，`app.getName()` 因此与
+ * 开发态一模一样，userData 目录与 requestSingleInstanceLock 全都撞上：
+ * 正在运行的 ACPP.app 会把预览壳当成自己的第二个实例，后者启动即退出，
+ * 日志里连一行错都没有。改名必须赶在任何 getPath 之前。
+ */
+if (DEV_URL) {
+  app.setName("acpp-shell-dev")
+  app.setPath("userData", path.join(app.getPath("appData"), "acpp-shell-dev"))
+}
+
 class AppShell {
   constructor() {
-    this.server = new ServerController()
+    this.devPreview = Boolean(DEV_URL)
+    // 预览壳不管服务：那份后端是用户正在用的 app 的，碰它就是事故。
+    this.server = this.devPreview ? null : new ServerController()
     this.window = null
     this.tray = null
     /** 置真后才允许真正退出，且退出路径不可重入。 */
@@ -31,11 +56,24 @@ class AppShell {
   }
 
   async start() {
-    installMainMenu({ onCloseWindow: () => this.window?.hide() })
+    installMainMenu({
+      devPreview: this.devPreview,
+      onCloseWindow: () =>
+        this.devPreview ? this.requestRealQuit() : this.window?.hide(),
+    })
     installBridge()
     this.window = new MainWindow()
-    this.tray = new TrayController({ server: this.server, shell: this })
     this.installSignalHandlers()
+
+    if (this.devPreview) {
+      // 关窗 = 退出：没有菜单栏图标，窗口藏起来就再也召不回来了。
+      this.window.allowClose = true
+      this.window.loadApp(DEV_URL)
+      this.window.show()
+      return
+    }
+
+    this.tray = new TrayController({ server: this.server, shell: this })
 
     // 通知：这里只接线，**不请求授权**——启动就弹系统授权框是最招人烦的做法，
     // 而且用户还没见过这个 app 会通知什么。授权由设置页里的开关发起。
@@ -142,7 +180,7 @@ class AppShell {
     if (this.quitting) return
     this.quitting = true
     try {
-      await this.server.stop()
+      await this.server?.stop()
     } catch (err) {
       console.error("停止 acp-server 失败:", err)
     }
@@ -180,11 +218,14 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   // 关掉所有窗口不退出：服务常驻菜单栏，这正是产品约定。
-  app.on("window-all-closed", () => {})
+  // 预览壳没有常驻这回事，窗口关了就该收摊。
+  app.on("window-all-closed", () => {
+    if (shellApp.devPreview) shellApp.requestRealQuit()
+  })
 
   // 拦住一切非「真退出」路径的退出请求（Cmd+Q、Dock 退出）。
   app.on("before-quit", (event) => {
-    if (shellApp.quitting) return
+    if (shellApp.quitting || shellApp.devPreview) return
     event.preventDefault()
     shellApp.window?.hide()
   })
