@@ -75,8 +75,16 @@ export function EditableTitle({
           // 编辑时的按键不该冒泡给外层的快捷键与列表导航。
           e.stopPropagation()
         }}
-        // 在链接/按钮内部编辑时，点击不能穿到外层去触发导航。
-        onClick={(e) => e.stopPropagation()}
+        // 在链接内部编辑时，光点住冒泡是不够的：外层 <Link> 的导航靠它自己的
+        // onClick 调 preventDefault 来接管，把事件拦下来反而让那步没发生，
+        // 浏览器于是执行 <a> 的原生跳转——表现就是"在输入框里点一下整页刷新"。
+        // 所以这里必须**同时**挡掉默认行为。preventDefault 只作用于 click，
+        // 光标定位在 mousedown 阶段就完成了，不受影响。
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        // 双击不阻止默认行为——那是"选中一个词"，编辑时正需要它。
         onDoubleClick={(e) => e.stopPropagation()}
         className={cn(
           "min-w-0 flex-1 rounded-sm bg-transparent outline-none ring-1 ring-ring/50",
