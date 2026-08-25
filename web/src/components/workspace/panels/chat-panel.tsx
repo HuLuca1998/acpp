@@ -101,7 +101,7 @@ export const ChatPanel = memo(function ChatPanel() {
     (chat.plan?.length ?? 0) > 0
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-background">
+    <div className="relative flex h-full min-h-0 flex-col">
       {/* 顶部信息条：连接状态 + 会话信息，保持轻量；草稿态没有会话可显示。 */}
       <div className="mx-auto w-full max-w-3xl px-4 pt-3 lg:px-6">
         {!isNew ? (
@@ -127,13 +127,10 @@ export const ChatPanel = memo(function ChatPanel() {
                 )}
               />
             </Hint>
+            {/* 会话标题不在这儿重复——标签栏那一行已经在显示它了。
+                这条只留连接状态与是谁在干活。 */}
             {chat.session ? (
-              <>
-                <span className="shrink-0 font-medium text-foreground">
-                  {chat.session.title}
-                </span>
-                <span className="shrink-0">{chat.session.agentName}</span>
-              </>
+              <span className="shrink-0">{chat.session.agentName}</span>
             ) : null}
           </div>
         ) : null}

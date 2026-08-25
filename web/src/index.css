@@ -746,7 +746,7 @@ body[data-resizing] {
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
   --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
   --dv-tab-divider-color: transparent;
-  --dv-tab-border-radius: calc(var(--radius) - 4px);
+  --dv-tab-border-radius: calc(var(--radius) * 0.85);
   --dv-border-radius: var(--radius);
   --dv-tab-margin-block: 3px;
   --dv-tab-margin-inline: 3px;
