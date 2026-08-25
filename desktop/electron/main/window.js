@@ -56,7 +56,7 @@ export class MainWindow {
 
     // 站外 http(s) 链接同样交给浏览器，窗口里只住本机服务
     this.win.webContents.on("will-navigate", (e, url) => {
-      let host = ""
+      let host
       try {
         const parsed = new URL(url)
         if (!parsed.protocol.startsWith("http")) return

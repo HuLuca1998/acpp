@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  打包时并进 Info.plist 的补充键，由 @electron/packager 的 extend-info 参数带入。
+  CFBundleName / Identifier / Version / NSHighResolutionCapable 由 packager
+  自己写，这里只放它不管的那几个。
+  （注意 XML 注释里不能出现连续两个减号，写参数名时别带前缀。）
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- 壳加载 http://127.0.0.1 需要放行本机明文 HTTP -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHumanReadableCopyright</key>
+	<string>ACPP</string>
+</dict>
+</plist>

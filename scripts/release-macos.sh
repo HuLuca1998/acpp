@@ -70,7 +70,8 @@ echo "==> 创建 GitHub Release"
 gh release create "$TAG" "$ZIP" --title "ACPP $VERSION" --notes-file "$NOTES_FILE"
 
 # 产物已经躺在 Release 里了，本地这份没有留存价值——不清的话每发一版就攒
-# 一个 8M 的 zip 加一个 21M 的 .app。只在发布成功后清：中途失败时留着现场
+# 一个上百 M 的 zip 加一个 300M 的 .app（Electron 壳自带 Chromium，见
+# docs/adr-015）。只在发布成功后清：中途失败时留着现场
 # 更值钱（set -e 会在失败处直接退出，走不到这里）。
 echo "==> 清理本地发布产物"
 rm -rf "$RELEASE_OUT"

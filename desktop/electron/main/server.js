@@ -19,14 +19,14 @@ import { prefs } from "./prefs.js"
  * 桌面版固定端口。与开发态 48080 隔离：dev.sh 清理 48080 时不会误杀桌面版，
  * 桌面版清理 48090 时也不会碰开发进程（见 ADR-004）。
  *
- * `ACPP_SHELL_PORT` 只在**未打包**时生效，专治一个真实的坑：调壳代码时启动
- * 会先「清掉占 48090 的进程」，而那个进程正是用户装着的、可能正在用的
- * ACPP.app 的后端。调壳请用 `ACPP_SHELL_PORT=48091 npm start`，两边互不打扰。
+ * `ACPP_SHELL_PORT` 是排障/测试用的后门，专治一个真实的坑：启动会先「清掉占
+ * 48090 的进程」，而那个进程正是用户装着的、可能正在用的 ACPP.app 的后端。
+ * 想在不打扰它的前提下跑另一份壳（调代码、验打包产物），就
+ * `ACPP_SHELL_PORT=48091 open -a ...` 或 `npm start`。
+ *
+ * 正常启动不设它，仍是固定 48090——那是 dev.sh、README、adr-004 共同的约定。
  */
-export const PORT =
-  !app.isPackaged && process.env.ACPP_SHELL_PORT
-    ? Number(process.env.ACPP_SHELL_PORT)
-    : 48090
+export const PORT = Number(process.env.ACPP_SHELL_PORT) || 48090
 
 export const LOG_PATH = path.join(os.homedir(), "Library/Logs/ACPP/server.log")
 
@@ -268,7 +268,7 @@ function loginShellPATH() {
       stdio: ["ignore", "pipe", "ignore"],
     })
   } catch {
-    raw = ""
+    // 取不到就走下面的 fallback，raw 保持空字符串
   }
   if (!raw.includes("/")) {
     cachedPATH = fallback

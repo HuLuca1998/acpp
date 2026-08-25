@@ -2,14 +2,16 @@
 
 WEB_DIR := web
 SERVER_DIR := server
+SHELL_DIR := desktop/electron
 
 .PHONY: help
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: install
-install: ## 安装前后端依赖
+install: ## 安装前后端与桌面壳依赖
 	cd $(WEB_DIR) && npm install
+	cd $(SHELL_DIR) && npm install
 	cd $(SERVER_DIR) && go mod download
 
 .PHONY: dev
@@ -74,8 +76,9 @@ check-structure: ## 结构检查：行数/目录文件数硬线、禁止模式�
 	scripts/check-structure.sh
 
 .PHONY: lint
-lint: ## 前端 eslint + 后端 go vet
+lint: ## 前端 + 桌面壳 eslint + 后端 go vet
 	cd $(WEB_DIR) && npm run lint
+	cd $(SHELL_DIR) && npm run lint
 	cd $(SERVER_DIR) && go vet ./...
 
 .PHONY: test
