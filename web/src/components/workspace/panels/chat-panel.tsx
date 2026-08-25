@@ -19,7 +19,9 @@ import { SettingsSelectors } from "@/components/chat/composer/settings-selectors
 import { Hint } from "@/components/hint"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useChatPanel } from "@/components/workspace/chat-panel-context"
+import { resetLayout } from "@/components/workspace/layout-presets"
 import { useWorkspace } from "@/components/workspace/workspace-context"
+import { WorkspaceMenu } from "@/components/workspace/workspace-menu"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
 import { sumSessionUsage } from "@/lib/chat/usage"
 import { cn } from "@/lib/utils"
@@ -102,8 +104,12 @@ export const ChatPanel = memo(function ChatPanel() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {/* 顶部信息条：连接状态 + 会话信息，保持轻量；草稿态没有会话可显示。 */}
-      <div className="mx-auto w-full max-w-3xl px-4 pt-3 lg:px-6">
+      {/* 会话抬头：与消息共用同一条边界（居中、同宽），标题因此和正文左对齐，
+          读起来是「这篇对话的题目」而不是某个面板的页签。对话组的标签栏已经
+          整条隐去（见 index.css），所以这一条同时兼任窗口拖动区——外层铺满整
+          宽，里面的按钮由 .drag-region 规则自动排除。草稿态没有会话，不显示。 */}
+      <div className="drag-region shrink-0 px-3 pt-2">
+        <div className="w-full">
         {!isNew ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Hint
@@ -127,13 +133,25 @@ export const ChatPanel = memo(function ChatPanel() {
                 )}
               />
             </Hint>
-            {/* 会话标题不在这儿重复——标签栏那一行已经在显示它了。
-                这条只留连接状态与是谁在干活。 */}
             {chat.session ? (
-              <span className="shrink-0">{chat.session.agentName}</span>
+              <>
+                <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
+                  {chat.session.title}
+                </h2>
+                <span className="shrink-0">{chat.session.agentName}</span>
+              </>
             ) : null}
+            <div className="ms-auto shrink-0">
+              <WorkspaceMenu
+                onResetLayout={() => {
+                  const api = workspace.getApi()
+                  if (api) resetLayout(api)
+                }}
+              />
+            </div>
           </div>
         ) : null}
+        </div>
 
         {(() => {
           const errorText = chat.error ?? newSession.error

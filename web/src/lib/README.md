@@ -45,7 +45,6 @@
 | -------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | use-async-data.ts    | 「进页面拉一次」的加载样板：cancelled 守卫 + data/error；轮询和分页不适用                                       | `useAsyncData`                                 |
 | use-sidebar-frame.ts | 侧栏外框：可拖宽度（持久化）+ 折叠后的悬停浮出与防误触发上锁（规范 §5.6）                                        | `useSidebarFrame`                              |
-| page-title-context.ts | 页面把自己的标题报给外壳顶栏（路由表只知道「哪一类页」，报不出「哪一条会话」）        | `PageTitleContext`、`usePageTitle`             |
 | use-paged-data.ts | 分页列表的标准接线：page/pageSize 状态 + 拉取 + 就地增删改                | `usePagedData`                                                       |
 | use-active-sessions.ts | 订阅会话活跃态广播（侧边栏状态点呼吸用）                                    | `useActiveSessions`                            |
 | use-chat.ts          | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决                                               | `useChat`                                      |

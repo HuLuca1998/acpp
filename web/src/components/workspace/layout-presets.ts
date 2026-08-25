@@ -2,6 +2,16 @@ import type { AddPanelOptions, DockviewApi } from "dockview-react"
 
 import { panelKindOf } from "@/components/workspace/workspace-panels"
 
+/** 布局快照的存储键。dock 与「重置布局」菜单共用。 */
+export const LAYOUT_KEY = "acpp.workspace.layout.v1"
+
+/** 丢掉存档、退回默认布局。 */
+export function resetLayout(api: DockviewApi) {
+  localStorage.removeItem(LAYOUT_KEY)
+  api.clear()
+  applyLayoutPreset(api, "default")
+}
+
 /** 内置布局预设（adr-002 §2.4）：同一引擎的四种起点，应用后仍可自由拖调。 */
 export type LayoutPreset =
   "default" | "ide" | "review" | "git" | "terminalBench"

@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useEffect, useRef } from "react"
+import { memo, useCallback, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import {
   DockviewReact,
@@ -15,8 +15,10 @@ import { SquareXIcon, XIcon } from "lucide-react"
 
 import { Hint } from "@/components/hint"
 import { ChatPanel } from "@/components/workspace/panels/chat-panel"
-import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
-import { applyLayoutPreset } from "@/components/workspace/layout-presets"
+import {
+  applyLayoutPreset,
+  LAYOUT_KEY,
+} from "@/components/workspace/layout-presets"
 import { BranchesPanel } from "@/components/workspace/panels/branches-panel"
 import { ChangesPanel } from "@/components/workspace/panels/changes-panel"
 import { CommitDetailPanel } from "@/components/workspace/panels/commit-detail-panel"
@@ -30,14 +32,11 @@ import {
   useGitOverview,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
-import { WorkspaceMenu } from "@/components/workspace/workspace-menu"
 import {
   PANEL_ICONS,
   panelKindOf,
   type WorkspacePanelKind,
 } from "@/components/workspace/workspace-panels"
-
-const LAYOUT_KEY = "acpp.workspace.layout.v1"
 
 /** 皮肤只是壳：变量映射见 index.css 的 .dockview-theme-acpp 块。 */
 const ACPP_THEME: DockviewTheme = {
@@ -77,18 +76,10 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
   const kind = panelKindOf(id)
   const Icon = PANEL_ICONS[kind] ?? PANEL_ICONS.files
   const num = (props.params as { num?: number })?.num
-  // 对话面板顶在左上角，它这条标签栏就是窗口的第一行——所以它显示的是
-  // 「这条会话叫什么」，而不是一个永远写着「对话」的通用标签。工作区页
-  // 没有别的地方交代当前在看哪条会话了（规范 §5.6）。
-  // 直接读 context 而不是 useChatPanel()：后者在缺 provider 时抛错，而标签
-  // 组件由 dockview 渲染，不值得为一个标题冒这个险。
-  const sessionTitle = useContext(ChatPanelContext)?.chat.session?.title
   const label =
-    kind === "chat" && sessionTitle
-      ? sessionTitle
-      : kind === "terminal" && num
-        ? `${t("workspace.panels.terminal")} ${num}`
-        : t(`workspace.panels.${kind}` as never)
+    kind === "terminal" && num
+      ? `${t("workspace.panels.terminal")} ${num}`
+      : t(`workspace.panels.${kind}` as never)
   return (
     <div
       // 类型标记给 CSS 用：对话那一格不长成页签，只是这块面板的标题。
@@ -159,8 +150,10 @@ function CommitsTabDot() {
  * 的 × 就够用了，再多一个按钮反而是噪音。
  */
 function HeaderActions(props: IDockviewHeaderActionsProps) {
+  // 对话组的「⋯」搬到了面板内的会话抬头行（panels/chat-panel.tsx）——
+  // 那一行才是会话的，标签栏是面板的。
   const hasChat = props.panels.some((p) => p.id === "chat")
-  if (hasChat) return <WorkspaceMenuSlot />
+  if (hasChat) return null
   // 只有一个面板时那一格是标题而不是页签（见 index.css），关闭钮跟着挪到
   // 这一行的右端——标题里塞一颗 × 会让它重新长得像页签。
   if (props.panels.length === 1) return <ClosePanelSlot id={props.panels[0].id} />
@@ -216,23 +209,6 @@ function CloseAllSlot({ ids }: { ids: string[] }) {
   )
 }
 
-function WorkspaceMenuSlot() {
-  const ws = useWorkspace()
-  return (
-    <div className="flex h-full items-center pr-1.5">
-      <WorkspaceMenu
-        onResetLayout={() => {
-          localStorage.removeItem(LAYOUT_KEY)
-          const api = ws.getApi()
-          if (api) {
-            api.clear()
-            buildDefaultLayout(api)
-          }
-        }}
-      />
-    </div>
-  )
-}
 
 /** 初始默认布局：见 layout-presets 的 default 预设（对话 80% + 右栏 tab 组）。 */
 function buildDefaultLayout(api: DockviewApi) {
@@ -263,7 +239,11 @@ function tryRestoreLayout(api: DockviewApi): boolean {
 /** 对话组的保护：不许别的 tab 合进来（分裂到旁边仍允许）。 */
 function lockChatGroup(api: DockviewApi) {
   const chat = api.getPanel("chat")
-  if (chat) chat.group.locked = true
+  if (!chat) return
+  chat.group.locked = true
+  // 对话组不显示标签栏：会话的身份、动作都在面板内的抬头行上，标签栏只会
+  // 在正文上方多压一道横杠。标记给 CSS 用（见 index.css）。
+  chat.group.element.dataset.acppChat = "true"
 }
 
 /**

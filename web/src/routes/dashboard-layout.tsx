@@ -1,4 +1,3 @@
-import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Navigate, Outlet, useLocation } from "react-router"
 
@@ -9,7 +8,6 @@ import { WindowControls } from "@/components/shell/window/window-controls"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useIsOwner } from "@/hooks/identity-context"
 import { useNotifications } from "@/hooks/use-notifications"
-import { PageTitleContext } from "@/hooks/page-title-context"
 import { useSidebarFrame } from "@/hooks/use-sidebar-frame"
 
 /**
@@ -80,13 +78,7 @@ function Shell({ title, workspace }: { title: string; workspace: boolean }) {
   useNotifications()
   const frame = useSidebarFrame()
 
-  // 顶栏显示的是「当前在看什么」：会话页要的是会话标题，而路由表只知道
-  // 「这是会话页」。数据在页面手里，由它上报（hooks/page-title-context.ts）。
-  const [pageTitle, setPageTitle] = useState<string | null>(null)
-  const reportTitle = useCallback((next: string | null) => setPageTitle(next), [])
-
   return (
-    <PageTitleContext value={reportTitle}>
       <SidebarProvider
         // 锁定整个 shell 到视口高度，滚动交给内容区自己处理，
         // 这样聊天页的输入框才能始终固定在底部。
@@ -98,7 +90,7 @@ function Shell({ title, workspace }: { title: string; workspace: boolean }) {
             只靠两块底色的差（规范 §5.6）。原来的 inset 卡片把内容区做成
             「浮起的一张纸」，与桌面壳那种整窗一体的观感相冲。 */}
         <SidebarInset className="overflow-hidden md:peer-data-[variant=inset]:m-0! md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-none">
-          {workspace ? null : <TitleBar title={pageTitle ?? title} />}
+          {workspace ? null : <TitleBar title={title} />}
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="@container/main flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               <Outlet />
@@ -109,6 +101,5 @@ function Shell({ title, workspace }: { title: string; workspace: boolean }) {
             三态下它都不动（规范 §5.6）。放在 provider 内是因为要读侧栏状态。 */}
         <WindowControls frame={frame} />
       </SidebarProvider>
-    </PageTitleContext>
   )
 }
