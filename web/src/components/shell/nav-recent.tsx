@@ -3,6 +3,7 @@ import { Link } from "react-router"
 
 import { MoreHorizontalIcon } from "lucide-react"
 
+import { EditableTitle } from "@/components/editable-title"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -21,13 +22,17 @@ import {
 export function NavRecent({
   label,
   items,
+  onRename,
 }: {
   label: string
   items: {
+    id: number
     name: string
     url: string
     icon: React.ReactNode
   }[]
+  /** 双击条目改名。标题原本由后端自动简写，用户可以改成自己认得的说法。 */
+  onRename: (id: number, title: string) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -39,7 +44,15 @@ export function NavRecent({
           <SidebarMenuItem key={item.url}>
             <SidebarMenuButton render={<Link to={item.url} />}>
               {item.icon}
-              <span>{item.name}</span>
+              {/* 双击才进编辑：单击得留给「打开这条会话」。 */}
+              <EditableTitle
+                value={item.name}
+                title={t("nav.renameSession")}
+                activateOn="doubleClick"
+                onSubmit={(next) => onRename(item.id, next)}
+                className="truncate"
+                inputClassName="min-w-0 flex-1 text-sm"
+              />
             </SidebarMenuButton>
           </SidebarMenuItem>
         ))}

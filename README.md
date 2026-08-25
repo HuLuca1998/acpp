@@ -202,7 +202,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/skills/{name}/scripts/run` | 传参试运行脚本（`{path, args, opts, env}`）：以技能目录为 cwd、60s 超时、输出各 256KB 截断，返回退出码与 stdout/stderr |
 | GET/POST/DELETE | `/api/uploads` | 本机文件上传：列出传过的 / 上传（multipart `file`，单个 ≤32 MiB）/ 删除（`?hash=&name=`）。落点是各自身份的家目录（owner 是工作区根，访客是自己的 root）下的 `.acpp-uploads/<内容 hash 前 12 位>/<原名>`——**隔离由路径本身给**，不需要再加一层归属过滤；同内容不重复写盘 |
 | GET/POST | `/api/sessions` | 会话列表（`?agentId=&page=&pageSize=`，按更新时间倒序分页）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
-| GET/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
+| GET/PATCH/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 改标题（`{title}`，空白不受理——标题原本由后端从首条消息自动简写，这里让用户改成自己认得的说法） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早）。**正文优先**：工具调用的超大入出参截成预览下发（`rawInputTruncated` / `rawOutputTruncated` 标记），完整版展开时按需拉 |
 | GET | `/api/sessions/{id}/outline` | 提问索引：会话里全部用户提问的锚点与文案（`{items:[{messageId, text, createdAt, digested, reply}], pending}`，`reply` 是这一轮回答的开头，给索引气泡当第二行），供对话左侧的索引条跳转。不分页——服务端在已缓存的重建结果上遍历，覆盖整条会话而与界面加载到哪儿无关 |
 | GET | `/api/sessions/{id}/tool-calls/{toolCallId}/output` | 一次工具调用的完整入出参（`{rawInput, rawOutput}`），工具卡展开那一刻按需取 |

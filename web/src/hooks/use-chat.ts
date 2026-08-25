@@ -470,6 +470,23 @@ export function useChat(sessionId: number) {
     [sessionId]
   )
 
+  /**
+   * 改标题。标题原本由后端从首条消息自动简写，用户改成自己认得的说法后，
+   * 本地这份也要跟上——不然抬头行还显示旧名，直到下次重进会话。
+   */
+  const rename = useCallback(
+    async (title: string) => {
+      if (!sessionId) return
+      const updated = await api.sessions.rename(sessionId, title)
+      setState((prev) =>
+        prev.session
+          ? { ...prev, session: { ...prev.session, title: updated.title } }
+          : prev
+      )
+    },
+    [sessionId]
+  )
+
   // 返回值引用只在状态真变时更换：宿主页面每次重渲染（比如打字的每个
   // 按键）都会重跑这里，展开成新对象会让 memo 的 ChatStream 形同虚设。
   return useMemo(
@@ -484,6 +501,7 @@ export function useChat(sessionId: number) {
       resolvePermission,
       resolveElicitation,
       loadEarlier,
+      rename,
     }),
     [
       state,
@@ -496,6 +514,7 @@ export function useChat(sessionId: number) {
       resolvePermission,
       resolveElicitation,
       loadEarlier,
+      rename,
     ]
   )
 }

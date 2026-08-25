@@ -469,6 +469,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    /** 改标题。标题原本由后端从首条消息自动简写，这里让用户改成自己认得的说法。 */
+    rename: (id: number, title: string) =>
+      request<Session>(`/sessions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      }),
     remove: (id: number) =>
       request<null>(`/sessions/${id}`, { method: "DELETE" }),
     /**

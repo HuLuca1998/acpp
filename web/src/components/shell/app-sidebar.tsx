@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/sidebar"
 import type { useSidebarFrame } from "@/hooks/use-sidebar-frame"
 import { useIdentity } from "@/hooks/identity-context"
+import { toast } from "sonner"
+
 import { api } from "@/lib/api"
 import { capitalize } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -120,11 +122,28 @@ export function AppSidebar({
   const recentItems = React.useMemo(
     () =>
       recent.map((session) => ({
+        id: session.id,
         name: session.title || `${t("common.unnamed")} #${session.id}`,
         url: `/sessions/${session.id}`,
         icon: <AgentIcon flavor={session.agentFlavor} className="size-4" />,
       })),
     [recent, t]
+  )
+
+  // 改名后就地更新本地这份列表：等下次导航再刷新的话，改完那一下标题不动，
+  // 看着像没生效。
+  const renameSession = React.useCallback(
+    (id: number, title: string) => {
+      api.sessions
+        .rename(id, title)
+        .then((updated) =>
+          setRecent((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title: updated.title } : s))
+          )
+        )
+        .catch(() => toast.error(t("nav.renameFailed")))
+    },
+    [t]
   )
 
   // 折叠后侧栏是悬停浮出的临时浮层：盖在内容上，不把内容挤开（规范 §5.6）。
@@ -153,9 +172,17 @@ export function AppSidebar({
         {/* 有项目就按项目分组（最多 5 组 × 5 条），否则平铺最近会话——
             工作区里还没有仓库时分组只会多一层空壳。 */}
         {groups.length > 0 ? (
-          <NavProjects label={t("nav.recentSessions")} groups={groups} />
+          <NavProjects
+            label={t("nav.recentSessions")}
+            groups={groups}
+            onRename={renameSession}
+          />
         ) : recentItems.length > 0 ? (
-          <NavRecent label={t("nav.recentSessions")} items={recentItems} />
+          <NavRecent
+            label={t("nav.recentSessions")}
+            items={recentItems}
+            onRename={renameSession}
+          />
         ) : null}
       </SidebarContent>
       <SidebarFooter>

@@ -228,6 +228,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/sessions/overview", sessions.overview)
 	api.HandleFunc("POST /api/sessions", sessions.create)
 	api.HandleFunc("GET /api/sessions/{id}", sessions.get)
+	api.HandleFunc("PATCH /api/sessions/{id}", sessions.rename)
 	api.HandleFunc("DELETE /api/sessions/{id}", sessions.remove)
 	api.HandleFunc("GET /api/sessions/{id}/messages", sessions.listMessages)
 	api.HandleFunc("GET /api/sessions/{id}/outline", sessions.outline)

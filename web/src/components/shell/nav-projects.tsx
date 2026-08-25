@@ -18,6 +18,7 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { Hint } from "@/components/hint"
+import { EditableTitle } from "@/components/editable-title"
 import { StatusDot } from "@/components/status-dot"
 import { useActiveSessions } from "@/hooks/use-active-sessions"
 import { SESSION_STATE_TONE } from "@/lib/status-tone"
@@ -34,9 +35,12 @@ import { ChevronRightIcon, PlusIcon } from "lucide-react"
 export function NavProjects({
   label,
   groups,
+  onRename,
 }: {
   label: string
   groups: SessionGroup[]
+  /** 双击条目改名。标题原本由后端自动简写，用户可以改成自己认得的说法。 */
+  onRename: (id: number, title: string) => void
 }) {
   const running = useActiveSessions()
   const { t } = useTranslation()
@@ -108,10 +112,18 @@ export function NavProjects({
                               session.state === "active"
                             }
                           />
-                          <span className="truncate">
-                            {session.title ||
-                              `${t("common.unnamed")} #${session.id}`}
-                          </span>
+                          {/* 双击才进编辑：单击得留给「打开这条会话」。 */}
+                          <EditableTitle
+                            value={
+                              session.title ||
+                              `${t("common.unnamed")} #${session.id}`
+                            }
+                            title={t("nav.renameSession")}
+                            activateOn="doubleClick"
+                            onSubmit={(next) => onRename(session.id, next)}
+                            className="truncate"
+                            inputClassName="min-w-0 flex-1 text-sm"
+                          />
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                     ))}

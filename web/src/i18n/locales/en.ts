@@ -40,6 +40,8 @@ export default {
     newSession: "New Session",
     newSessionIn: "New session in this directory",
     toggleSidebar: "Collapse / expand sidebar",
+    renameSession: "Double-click to rename",
+    renameFailed: "Rename failed",
     resizeSidebar: "Drag to resize, double-click to reset",
     recentSessions: "Recent Sessions",
     viewAll: "View all",

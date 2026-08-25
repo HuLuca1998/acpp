@@ -93,6 +93,30 @@ func (h sessionHandler) create(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusCreated, session)
 }
 
+// rename 改会话标题。标题原本由后端从首条消息自动简写，这里让用户改成
+// 自己认得的说法；改完仍走同一个视图返回，前端直接替换本地那条记录。
+func (h sessionHandler) rename(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var in struct {
+		Title string `json:"title"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	session, err := h.sessions.Rename(r.Context(), scopeOf(r), id, in.Title)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, session)
+}
+
 func (h sessionHandler) remove(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {

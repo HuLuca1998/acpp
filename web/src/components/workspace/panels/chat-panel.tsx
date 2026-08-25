@@ -17,6 +17,7 @@ import { DraftControls } from "@/components/chat/composer/draft-controls"
 import { QueuedMessages } from "@/components/chat/composer/queued-messages"
 import { SettingsSelectors } from "@/components/chat/composer/settings-selectors"
 import { AgentIcon } from "@/components/agent-icon"
+import { EditableTitle } from "@/components/editable-title"
 import { Hint } from "@/components/hint"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useChatPanel } from "@/components/workspace/chat-panel-context"
@@ -129,9 +130,19 @@ export const ChatPanel = memo(function ChatPanel() {
                     />
                   </span>
                 </Hint>
-                <h2 className="min-w-0 truncate text-sm font-medium text-foreground">
-                  {chat.session.title}
-                </h2>
+                {/* 标题可就地改：后端从首条消息自动简写的名字未必是用户
+                    认得的说法。单击进入编辑——这一行没有别的点击语义。 */}
+                <EditableTitle
+                  value={chat.session.title}
+                  title={t("workspace.renameSession")}
+                  onSubmit={(next) => {
+                    chat.rename(next).catch(() => {
+                      toast.error(t("workspace.renameFailed"))
+                    })
+                  }}
+                  className="min-w-0 truncate text-sm font-medium text-foreground"
+                  inputClassName="min-w-0 flex-1 text-sm font-medium text-foreground"
+                />
               </>
             ) : null}
             <Hint

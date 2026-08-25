@@ -2,6 +2,8 @@
 // hit the line ceiling — divided by domain, not by another language cut.
 export const enWorkspace = {
   movePanel: "Drag to move panel",
+  renameSession: "Click to rename",
+  renameFailed: "Rename failed",
   logs: {
     emptyTitle: "No transcript yet",
     emptyHint:

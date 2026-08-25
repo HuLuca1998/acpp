@@ -298,6 +298,28 @@ func (s *SessionService) SessionByMCPToken(ctx context.Context, token string) (u
 	return session.ID, session.Cwd, nil
 }
 
+// Rename 改会话标题。空标题按「清掉自动标题」处理——后端不替用户编内容，
+// 但也不接受只有空白的标题，那等于什么都没写。
+//
+// 与 Get 一样按 scope 过滤：不属于当前身份的会话当作不存在（404 而不是 403），
+// 免得凭 id 逐个试就能数出别人有多少会话。
+func (s *SessionService) Rename(ctx context.Context, scope Scope, id uint, title string) (*SessionView, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil, fmt.Errorf("title: %w", ErrInvalid)
+	}
+	res := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{})).
+		Where("id = ?", id).
+		Update("title", title)
+	if res.Error != nil {
+		return nil, fmt.Errorf("rename session %d: %w", id, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return nil, fmt.Errorf("session %d: %w", id, ErrNotFound)
+	}
+	return s.Get(ctx, scope, id)
+}
+
 func (s *SessionService) Delete(ctx context.Context, scope Scope, id uint) error {
 	res := scope.FilterSessions(s.db.WithContext(ctx)).Delete(&model.Session{}, id)
 	if res.Error != nil {

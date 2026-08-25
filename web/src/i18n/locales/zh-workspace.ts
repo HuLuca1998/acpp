@@ -2,6 +2,8 @@
 // ——按域拆分，不是按语言再切一刀。
 export const zhWorkspace = {
   movePanel: "拖动移动面板",
+  renameSession: "点击可改名",
+  renameFailed: "改名失败",
   panels: {
     chat: "对话",
     files: "文件树",

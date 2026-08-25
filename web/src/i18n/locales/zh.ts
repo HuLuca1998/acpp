@@ -40,6 +40,8 @@ export default {
     newSession: "新建会话",
     newSessionIn: "在此目录开新会话",
     toggleSidebar: "收起 / 展开侧边栏",
+    renameSession: "双击可改名",
+    renameFailed: "改名失败",
     resizeSidebar: "拖动调整宽度，双击复位",
     recentSessions: "最近会话",
     viewAll: "查看全部",
