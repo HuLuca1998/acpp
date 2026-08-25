@@ -26,6 +26,24 @@ type XtermModule = {
 }
 
 /** 把语义 token 解析成 xterm 能吃的具体色值（oklch → rgb 由浏览器代劳）。 */
+/**
+ * xterm 的调色板。
+ *
+ * 它用 canvas 渲染，**不认 CSS 变量**——只能把 token 解析成实色喂进去，
+ * hex 是解析失败时的兜底。正因为是实色，明暗或配色方案换了之后必须重新
+ * 算一遍再塞回 `term.options.theme`，否则终端会一直停在创建那一刻的配色
+ * （切到浅色主题时整个终端还是黑的）。
+ */
+function terminalTheme() {
+  return {
+    background: resolveColor("--card", "#1e1e1e"), // check-ignore: xterm canvas 兜底色
+    foreground: resolveColor("--foreground", "#d4d4d4"), // check-ignore: xterm canvas 兜底色
+    cursor: resolveColor("--primary", "#7aa2f7"), // check-ignore: xterm canvas 兜底色
+    // 选区要半透明，token 是实色，只能用中性灰罩层。
+    selectionBackground: "rgba(128, 128, 128, 0.35)", // check-ignore: xterm 选区罩层
+  }
+}
+
 function resolveColor(varName: string, fallback: string): string {
   const probe = document.createElement("div")
   probe.style.color = `var(${varName})`
@@ -95,6 +113,23 @@ export const TerminalPanel = memo(function TerminalPanel(
       .catch(() => setStatus("exited"))
   }, [visible, termId, ws.sessionId, props.api])
 
+  // 明暗与配色方案换了，把调色板重算一遍塞回去。两者都落在根元素上：
+  // 明暗是 class（theme-provider），配色方案是 data-palette（lib/palette）。
+  // 不这么做终端会一直停在创建那一刻的配色——切浅色时它还是黑的。
+  useEffect(() => {
+    const root = document.documentElement
+    const apply = () => {
+      const term = termRef.current
+      if (term) term.options.theme = terminalTheme()
+    }
+    const observer = new MutationObserver(apply)
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "data-palette"],
+    })
+    return () => observer.disconnect()
+  }, [])
+
   // xterm 实例与 ws 连接的生命周期：termId 变化（重启）时整体重建。
   useEffect(() => {
     const host = hostRef.current
@@ -107,14 +142,7 @@ export const TerminalPanel = memo(function TerminalPanel(
       lineHeight: 1.25,
       cursorBlink: true,
       scrollback: 5000,
-      theme: {
-        // xterm 用 canvas 渲染，不认 CSS 变量；运行时解析 token，hex 只是解析失败的兜底。
-        background: resolveColor("--card", "#1e1e1e"), // check-ignore: xterm canvas 兜底色
-        foreground: resolveColor("--foreground", "#d4d4d4"), // check-ignore: xterm canvas 兜底色
-        cursor: resolveColor("--primary", "#7aa2f7"), // check-ignore: xterm canvas 兜底色
-        // 选区要半透明，token 是实色，只能用中性灰罩层。
-        selectionBackground: "rgba(128, 128, 128, 0.35)", // check-ignore: xterm 选区罩层
-      },
+      theme: terminalTheme(),
     })
     const fit = new xterm.FitAddon()
     term.loadAddon(fit)
