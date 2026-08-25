@@ -92,6 +92,8 @@ export const FileTreePanel = memo(function FileTreePanel(
   )
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // 根（工作目录）默认展开：收起它等于把整棵树折起来。
+  const [rootOpen, setRootOpen] = useState(true)
   const [childrenByPath, setChildrenByPath] = useState<
     Map<string, TreeEntry[]>
   >(new Map())
@@ -215,15 +217,44 @@ export const FileTreePanel = memo(function FileTreePanel(
     )
   }
 
+  const rootName = root.split("/").filter(Boolean).pop() ?? root
+
   return (
     <div className="flex h-full flex-col [contain:strict]">
-      <div className="flex h-8 shrink-0 items-center gap-1 px-2">
-        {/* 树根：路径长就从头部省略——尾巴（当前目录名）才是要认的那截。 */}
-        <Hint label={root || t("workspace.panels.files")} align="start">
-          <span className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground">
-            {rootLabel(displayPath(root, identity?.root))}
-          </span>
-        </Hint>
+      <div className="flex h-8 shrink-0 items-center gap-1 px-1.5">
+        {/* 工作目录本身就是树的第一层：可折叠、能右键，下面的条目缩进一级。
+            以前这儿只是一行路径文字，整棵树没有根，也就没地方对「整个工作
+            目录」下手（比如打包下载）。 */}
+        <ContextMenu>
+          <ContextMenuTrigger
+            render={
+              <button
+                type="button"
+                title={root}
+                aria-expanded={rootOpen}
+                onClick={() => setRootOpen((open) => !open)}
+                className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md px-1 text-left transition-colors duration-150 ease-snappy hover:bg-muted"
+              />
+            }
+          >
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ease-snappy",
+                rootOpen && "rotate-90"
+              )}
+            />
+            <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="shrink-0 text-xs font-medium">{rootName}</span>
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+              {rootLabel(displayPath(root, identity?.root))}
+            </span>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => ws.downloadFile(".", true)}>
+              {t("workspace.tree.downloadRoot")}
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
         <Hint
           label={t("workspace.tree.refresh")}
           desc={t("workspace.tree.refreshDesc")}
@@ -240,7 +271,7 @@ export const FileTreePanel = memo(function FileTreePanel(
         </Hint>
       </div>
       <ScrollArea className="min-h-0 flex-1 px-1 pb-2">
-        {entries.length === 0 ? (
+        {!rootOpen ? null : entries.length === 0 ? (
           <div className="px-2 py-4 text-xs text-muted-foreground">
             {t("workspace.tree.empty")}
           </div>
@@ -249,7 +280,7 @@ export const FileTreePanel = memo(function FileTreePanel(
             <TreeNode
               key={entry.path}
               entry={entry}
-              depth={0}
+              depth={1}
               expanded={expanded}
               childrenByPath={childrenByPath}
               failed={failed}

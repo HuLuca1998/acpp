@@ -59,6 +59,7 @@ export const zhWorkspace = {
     restart: "重新启动",
   },
   tree: {
+    downloadRoot: "下载整个工作目录（zip）",
     refresh: "刷新",
     touched: "agent 正在触碰",
     refreshDesc: "重新读一遍工作目录",

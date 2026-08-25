@@ -62,6 +62,7 @@ export const enWorkspace = {
     restart: "Restart",
   },
   tree: {
+    downloadRoot: "Download whole workspace (zip)",
     refresh: "Refresh",
     touched: "Agent is touching this",
     refreshDesc: "Read the working directory again",

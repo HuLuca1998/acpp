@@ -177,7 +177,11 @@ export function WorkspaceProvider({
         // 多选打包时包名由后端定（files.zip），这里只管单个的情形——
         // download 属性给错名字会让浏览器把 zip 存成一个没后缀的文件。
         const base = path.split("/").pop() ?? "download"
-        if (list.length === 1) link.download = archive ? `${base}.zip` : base
+        // "." 是工作目录本身，包名由后端定（workspace.zip）——这里再插手会
+        // 得到一个叫 "..zip" 的文件。
+        if (list.length === 1 && path !== ".") {
+          link.download = archive ? `${base}.zip` : base
+        }
         document.body.appendChild(link)
         link.click()
         link.remove()
