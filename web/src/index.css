@@ -786,12 +786,13 @@ body[data-resizing] {
   z-index: 20;
 }
 
-/* 对话那一格不是「页签」，而是这块面板的标题：它永远只有自己一个，画成
-   带底色的小方块只会凭空多出一层框。去掉底色与圆角，只留图标与文字。 */
-.dockview-theme-acpp .dv-tab:has([data-panel-kind="chat"]) {
+/* 组里只有一个面板时，那一格不是「页签」而是这块面板的标题——页签的底色与
+   圆角是用来区分「并列的哪几个」的，只有一个时它只会凭空多出一层框。
+   多面板时照旧画页签。判断交给 :only-child，不给某个面板开特例。 */
+.dockview-theme-acpp .dv-tab:only-child {
   background: transparent;
 }
-.dockview-theme-acpp .dv-tab:has([data-panel-kind="chat"]) [data-panel-kind] {
+.dockview-theme-acpp .dv-tab:only-child [data-panel-kind] {
   padding-inline: --spacing(1);
   font-size: 13px;
   font-weight: 500;
