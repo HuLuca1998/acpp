@@ -2,19 +2,19 @@
  * 桌面壳（macOS app）的原生通道。
  *
  * 这里的能力都碰的是**这台机器**而不是服务端：开机启动改的是登录项，系统
- * 通知发的是 macOS 通知中心，后端 API 都够不着，所以走 WKWebView 注入的
- * 消息通道而不是 `lib/api.ts`。浏览器里这些能力不存在，`isDesktop()` 恒为
- * false，相关设置项整块不渲染，通知改走页内提示（见 lib/notify.ts）。
+ * 通知发的是 macOS 通知中心，后端 API 都够不着，所以走壳注入的消息通道而
+ * 不是 `lib/api.ts`。浏览器里这些能力不存在，`isDesktop()` 恒为 false，
+ * 相关设置项整块不渲染，通知改走页内提示（见 lib/notify.ts）。
+ *
+ * 通道由 Electron 壳的 preload 用 contextBridge 暴露，实现在
+ * desktop/electron/preload/index.cjs 与 main/bridge.js——action 名与返回形状
+ * 是跨端契约，两边要一起改。
  */
 
-/** 壳在每个页面注入的标记。 */
+/** 壳在每个页面注入的标记与通道。 */
 interface DesktopWindow extends Window {
   __ACPP_DESKTOP__?: boolean
-  webkit?: {
-    messageHandlers?: {
-      acppDesktop?: { postMessage: (body: unknown) => Promise<unknown> }
-    }
-  }
+  acppDesktop?: { postMessage: (body: unknown) => Promise<unknown> }
 }
 
 /** 当前是否跑在桌面壳里。浏览器（含局域网访客）恒为 false。 */
@@ -31,7 +31,7 @@ export interface LaunchPrefs {
 }
 
 async function bridge<T>(body: Record<string, unknown>): Promise<T> {
-  const handler = (window as DesktopWindow).webkit?.messageHandlers?.acppDesktop
+  const handler = (window as DesktopWindow).acppDesktop
   if (!handler) throw new Error("desktop bridge unavailable")
   return (await handler.postMessage(body)) as T
 }
@@ -50,10 +50,11 @@ export const desktopLaunch = {
 }
 
 /**
- * 通知授权状态，由壳如实回报（见 desktop/macos/Sources/Notifier.swift）。
+ * 通知授权状态，由壳回报（见 desktop/electron/main/notifier.js）。
  *
- * 判断能不能发通知只看 `status`——被拒的 app 上系统的 alertSetting 照样是
- * enabled（实测），拿它判断会得到相反的结论。
+ * ⚠️ Electron 拿不到 macOS 的真实授权状态（没有 `getNotificationSettings` 的
+ * 等价物），壳按「发过没有、发成功没有」**推断**：从没发过 = notDetermined，
+ * 发成功过 = authorized，发失败过 = denied。够设置页做判断，但别把它当权威。
  */
 export interface NotifyStatus {
   status: "notDetermined" | "denied" | "authorized" | "provisional" | "unknown"

@@ -1,0 +1,15 @@
+{
+  "name": "acpp-shell",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ACPP macOS 桌面壳（Electron）",
+  "type": "module",
+  "main": "main/index.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.0.0"
+  }
+}
