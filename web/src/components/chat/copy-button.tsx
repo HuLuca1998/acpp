@@ -1,7 +1,9 @@
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import { copyText } from "@/lib/clipboard"
 import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import { CheckIcon, CopyIcon } from "lucide-react"
@@ -22,14 +24,14 @@ export function CopyButton({
   const timer = useRef<number | undefined>(undefined)
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      window.clearTimeout(timer.current)
-      timer.current = window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // 剪贴板被拒绝（权限/非安全上下文）时静默失败，不打断阅读。
+    // 复制是用户主动点的，失败必须说出来——静默失败会让人以为按钮是坏的。
+    if (!(await copyText(text))) {
+      toast.error(t("common.copyFailed"))
+      return
     }
+    setCopied(true)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setCopied(false), 1500)
   }
 
   return (

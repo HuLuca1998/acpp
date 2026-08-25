@@ -11,6 +11,7 @@ export default {
     delete: "删除",
     close: "关闭",
     copy: "复制",
+    copyFailed: "复制失败：浏览器不允许访问剪贴板",
     browse: "浏览…",
     retry: "重试",
     unnamed: "未命名",

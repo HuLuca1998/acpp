@@ -11,6 +11,7 @@ export default {
     delete: "Delete",
     close: "Close",
     copy: "Copy",
+    copyFailed: "Copy failed: the browser blocked clipboard access",
     browse: "Browse…",
     retry: "Retry",
     unnamed: "Untitled",
@@ -322,7 +323,8 @@ export default {
     copy: "Copy",
     copied: "Copied",
     retryTurn: "Retry",
-    retryTurnHint: "Rerun this message; the failed turn is discarded, no need to resend",
+    retryTurnHint:
+      "Rerun this message; the failed turn is discarded, no need to resend",
     plan: "Plan",
     outline: {
       title: "Prompt index",
@@ -451,7 +453,8 @@ export default {
       skipped: "Skipped",
     },
     stopReason: {
-      interrupted: "Response was cut off (agent disconnected) and may be incomplete",
+      interrupted:
+        "Response was cut off (agent disconnected) and may be incomplete",
       max_tokens: "Answer was truncated by the token limit",
       max_turn_requests: "Answer was truncated by the per-turn request limit",
       refusal: "The agent refused to continue",

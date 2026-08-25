@@ -200,7 +200,10 @@ function DataSourceForm({
   // 的密码天然一致。密码框已有内容（手敲过 / 编辑态的「留空=不改」）就不
   // 碰，只复制。
   async function copyReadonlySQL() {
-    await copyText(readonlyUserSQL(genPassword))
+    if (!(await copyText(readonlyUserSQL(genPassword)))) {
+      toast.error(t("common.copyFailed"))
+      return
+    }
     if (!form.password) {
       set("password", genPassword)
       toast.success(t("db.readonlyUserCopied"))

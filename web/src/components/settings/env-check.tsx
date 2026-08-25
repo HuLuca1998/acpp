@@ -2,6 +2,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
+import { copyText } from "@/lib/clipboard"
+
 import { api } from "@/lib/api"
 import type { EnvDependency } from "@/types/acp"
 import { AgentIcon } from "@/components/agent-icon"
@@ -278,10 +280,10 @@ export function EnvCheck() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          void navigator.clipboard.writeText(
-                            d.installHint ?? ""
-                          )
-                          toast.success(t("settingsPage.env.copied"))
+                          void copyText(d.installHint ?? "").then((ok) => {
+                            if (ok) toast.success(t("settingsPage.env.copied"))
+                            else toast.error(t("common.copyFailed"))
+                          })
                         }}
                       >
                         <CopyIcon data-icon="inline-start" />

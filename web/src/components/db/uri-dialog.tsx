@@ -63,8 +63,8 @@ export function UriDialog({
   }
 
   async function copy(value: string) {
-    await copyText(value)
-    toast.success(t("db.uriCopied"))
+    if (await copyText(value)) toast.success(t("db.uriCopied"))
+    else toast.error(t("common.copyFailed"))
   }
 
   return (
