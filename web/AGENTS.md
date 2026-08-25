@@ -78,7 +78,7 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 - **专用组件优先于裸标签**：空态用 `Empty`，加载用 `Skeleton`（形状贴近真实内容），提示条用 `Alert`，危险确认用 `AlertDialog`（**禁用原生 `window.confirm`**），toast 用 `sonner`，分隔用 `Separator`，标签用 `Badge`。表单用 `FieldGroup`/`Field`，按钮内图标用 `data-icon="inline-start|end"`。
 - **聊天界面**只用 chat 原语：`MessageScroller`（滚动/跟随/回到底部）、`Message`、`Bubble`、`Marker`，不手写滚动容器与气泡 div。消息种类的专用渲染集中在 `components/chat/`：markdown 正文（代码块带语言标签 + 复制）、工具调用（按 ACP kind 换图标，diff/终端视图）、任务计划 `PlanCard`、思考折叠 `ThoughtBlock`、复制按钮。新消息种类先在这里建组件，不在页面里内联。
 - **图标**：只用 `lucide-react`，默认 `size-4`，与文字并排对齐基线；纯图标按钮必须有 `aria-label`。
-- **看不出用途的控件一律配 `Hint`**（`components/hint.tsx`，包住控件即可）：纯图标按钮、只显示当前值的胶囊（模型/思考深度/权限档）、状态点、没有可见 label 的开关。`aria-label` 只有读屏软件听得见，**原生 `title` 不算数**——延迟一两秒、样式不归我们管，桌面壳里更不可靠，见到就换成 `Hint`。写法：`label` 是名字，`desc` 是「按下去会发生什么」（名字已不言自明就别写），有快捷键的传 `shortcut={<Kbd>⌘B</Kbd>}`。气泡是纯说明，不可交互也不吃指针事件，所以盖住谁都不影响点击。
+- **看不出用途的控件一律配 `Hint`**（`components/hint.tsx`，包住控件即可）：纯图标按钮、只显示当前值的胶囊（模型/思考深度/权限档）、状态点、没有可见 label 的开关。`aria-label` 只有读屏软件听得见，**原生 `title` 不算数**——延迟一两秒、样式不归我们管，见到就换成 `Hint`。写法：`label` 是名字，`desc` 是「按下去会发生什么」（名字已不言自明就别写），有快捷键的传 `shortcut={<Kbd>⌘B</Kbd>}`。气泡是纯说明，不可交互也不吃指针事件，所以盖住谁都不影响点击。
 - **类名合并**一律 `cn()`；布局用 `flex gap-*`，不用 `space-x/y-*`；等宽高用 `size-*`。
 
 ### 5.3 状态语言
@@ -111,8 +111,8 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 
 - **创建核心对象走"进入即用"（draft-first），不走表单**：像 ChatGPT/Claude 的新建会话——直接进入空白目标页，参数（agent/工作目录）在输入框旁用胶囊控件就地选、可不选用默认，**首次实质动作才真正创建**（参考 `routes/session-chat.tsx` 的草稿态：首条消息落地才建会话，标题由后端从首条消息自动简写）。不要让用户在见到东西之前先填表。
 - **轻量配置操作才用 `Dialog`**：需要几个字段确认、且完成后要回到原地的操作（改名、危险确认等）原地弹出；内容本身是"一整页"（对话流、详情、列表）才配路由。
-- **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`。注意 WebKit 不把 `<tr>` 的 `relative` 当 absolute 后代的定位基准（桌面壳 WKWebView 里 `::after` 会铺满整张表、点哪都是最后一行），表格行必须同时加任意非 none 的 `transform`（如 `[transform:translate(0)]`）兜底——`DataTable` 已内置，自己手写 `<tr>` 拉伸链接时别漏。
-- **承载功能的行内操作常显**（删除、引用等）：用 `text-muted-foreground` 压低存在感、hover 时才上色，但**不要用 `opacity-0` + `group-hover` 藏起来**。藏起来的按钮就是「hover 专属效果承载了唯一信息」，与下面的可访问性一条直接冲突；而且 macOS 桌面壳的 WKWebView 里 hover 态并不总跟着鼠标走，藏了就等于点不到。纯装饰的提示（可编辑的铅笔、指示方向的箭头）不承载信息，照旧可以 hover 才现。
+- **整行可点**：表格/列表行的主链接用拉伸链接模式（行 `relative` + 链接 `after:absolute after:inset-0`），语义保持 `<a>`。注意 WebKit 不把 `<tr>` 的 `relative` 当 absolute 后代的定位基准（`::after` 会铺满整张表、点哪都是最后一行），表格行必须同时加任意非 none 的 `transform`（如 `[transform:translate(0)]`）兜底。桌面壳换 Electron 后自己不再中招，但**这条依然是硬规则**——局域网访客用的可能就是 Safari——`DataTable` 已内置，自己手写 `<tr>` 拉伸链接时别漏。
+- **承载功能的行内操作常显**（删除、引用等）：用 `text-muted-foreground` 压低存在感、hover 时才上色，但**不要用 `opacity-0` + `group-hover` 藏起来**。藏起来的按钮就是「hover 专属效果承载了唯一信息」，与下面的可访问性一条直接冲突；而且触控板轻点与触屏上根本没有可靠的 hover 态，藏了就等于点不到。纯装饰的提示（可编辑的铅笔、指示方向的箭头）不承载信息，照旧可以 hover 才现。
 - **通知一律走通知中心，不用 toast**：会话事件（决策/问答/答完/出错）与版本更新统一落在侧栏底部的通知中心（`components/shell/notice-center.tsx` + `lib/notify/`），按优先级排序（update > permission/elicitation > error > turn_end，定义在 `lib/notify/store.ts`），折叠态按视口高度平行显示 1–3 张卡、其余折成垫层；标题行（通知中心 + 角标）展开完整列表（按会话分组），**单卡点击直接执行动作**（update 刷新、会话通知跳会话）且**点过即撤走**，hover 单卡出浮角 × 关那一条；入场 280ms / 离场 240ms，列表重排走 View Transitions 平滑让位。toast（sonner）只做**操作的即时反馈**（保存失败、复制成功），弹一下就走；「有事等人处理」的信息必须留得住，两者不许混用。新增通知种类的路径：`store.ts` 加 kind 与优先级 → `notice-center.tsx` 加图标与标题 → `use-notifications.ts` 接事件。通知的产生与打扰判断在 `hooks/use-notifications.ts`（桌面壳走系统通知，浏览器走通知中心 + 标题闪烁 + 提示音），全局事件流的唯一连接在 `hooks/use-server-events.ts`（开发期可用 `window.__acppServerEvent(...)` 注入假事件联调）。完整设计决策、全局调用接口与新增种类的路径见 [docs/adr-013](../docs/adr-013-通知体系.md)——**动通知先读它**。
 - **危险操作**：一律 `AlertDialog` 确认，确认按钮 `variant="destructive"`，文案讲清后果（如"子进程会一并回收，记录不可恢复"）。
 - **时间显示**：列表用相对时间（`lib/format.ts`），`title` 悬停给完整时间；时间与数字列加 `tabular-nums`。
