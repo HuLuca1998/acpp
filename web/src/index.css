@@ -786,6 +786,17 @@ body[data-resizing] {
   z-index: 20;
 }
 
+/* 对话那一格不是「页签」，而是这块面板的标题：它永远只有自己一个，画成
+   带底色的小方块只会凭空多出一层框。去掉底色与圆角，只留图标与文字。 */
+.dockview-theme-acpp .dv-tab:has([data-panel-kind="chat"]) {
+  background: transparent;
+}
+.dockview-theme-acpp .dv-tab:has([data-panel-kind="chat"]) [data-panel-kind] {
+  padding-inline: --spacing(1);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* 标签栏空白处的「移动分组」把手（DOM 由 workspace-dock.tsx 注入）。
    平时不现身，悬停标签栏才浮出来——它是提示，不是装饰。 */
 .dockview-theme-acpp .dv-void-container {
@@ -823,8 +834,7 @@ body[data-resizing] {
    窗口控件让位——否则标签直接被压在它们下面（规范 §5.6）。 */
 [data-sidebar-collapsed="true"]
   .dockview-theme-acpp
-  .dv-view-container
-  > .dv-view:first-child
+  [data-acpp-lead="true"]
   .dv-tabs-and-actions-container {
   padding-left: var(--titlebar-inset);
 }
@@ -848,7 +858,7 @@ body[data-resizing] {
 
 /* 贴着工作区上沿的那一组：去掉上边框与上圆角，与窗口顶部连成一片，
    不要出现一道横贯的边界（会话页没有标题栏，那道线格外扎眼）。 */
-.dockview-theme-acpp .dv-view-container > .dv-view:first-child .dv-groupview {
+.dockview-theme-acpp [data-acpp-lead="true"] .dv-groupview {
   border-top-color: transparent;
   border-top-left-radius: 0;
   border-top-right-radius: 0;

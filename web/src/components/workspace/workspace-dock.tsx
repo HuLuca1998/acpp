@@ -91,6 +91,8 @@ function PanelTab(props: IDockviewPanelHeaderProps) {
         : t(`workspace.panels.${kind}` as never)
   return (
     <div
+      // 类型标记给 CSS 用：对话那一格不长成页签，只是这块面板的标题。
+      data-panel-kind={kind}
       className="flex h-full items-center gap-1.5 px-2 text-xs"
       title={label}
       // tab 的右键不交给 dockview——它的 tab 菜单在企业版里，我们也不需要。
@@ -242,6 +244,30 @@ function lockChatGroup(api: DockviewApi) {
 }
 
 /**
+ * 标出「窗口左上角那一组」。
+ *
+ * 侧栏折叠后窗口控件压在那一格上，这一组的标签栏得给它让位。用 CSS 的
+ * `:first-child` 选不出来——dockview 的容器是嵌套的，每一层的第一个子元素
+ * 都会中招，结果文件树、终端的标签栏也跟着缩进（看着就是「折叠前后对不齐」）。
+ * 按几何位置认最靠左上的那个，才是真的那一个。
+ */
+function markLeadGroup(api: DockviewApi) {
+  let lead: (typeof api.groups)[number] | null = null
+  let best = Infinity
+  for (const group of api.groups) {
+    const box = group.element.getBoundingClientRect()
+    // 左上角优先：先比上边沿，同高再比左边沿。
+    const score = box.top * 10000 + box.left
+    if (score < best) {
+      best = score
+      lead = group
+    }
+    delete group.element.dataset.acppLead
+  }
+  if (lead) lead.element.dataset.acppLead = "true"
+}
+
+/**
  * 给每个分组的标签栏空白处装一个「移动」把手。
  *
  * 标签栏是工作区页的窗口第一行，整条得是窗口拖动区，否则那儿拖不动窗口
@@ -253,6 +279,7 @@ function lockChatGroup(api: DockviewApi) {
  * 的空白移动窗口。锁住的分组（对话）本来就不许拖走，不给把手。
  */
 function attachMoveHandles(api: DockviewApi, label: string) {
+  markLeadGroup(api)
   for (const group of api.groups) {
     const slot = group.element.querySelector<HTMLElement>(".dv-void-container")
     if (!slot) continue
