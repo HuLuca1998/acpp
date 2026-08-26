@@ -46,6 +46,7 @@ export const zhWorkspace = {
     layoutNamePlaceholder: "例如：审查现场",
     resetLayout: "恢复默认布局",
     newTerminal: "新建终端",
+    hasSubagents: "有子代理",
     layouts: "布局",
   },
   layouts: {
@@ -101,7 +102,8 @@ export const zhWorkspace = {
     copyPathMany: "复制 {{count}} 条路径",
     copyLanLinkMany: "复制 {{count}} 条局域网链接",
     lanLinkCopied: "已复制局域网链接",
-    lanLinkCopiedLocalOnly: "已复制链接，但当前只监听本机——这条链接只有这台电脑打得开",
+    lanLinkCopiedLocalOnly:
+      "已复制链接，但当前只监听本机——这条链接只有这台电脑打得开",
   },
   git: {
     askDir: "让 AI 分析这个目录的改动",

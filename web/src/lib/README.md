@@ -35,7 +35,7 @@
 | notify/prefs.ts   | 通知偏好读写（localStorage）：这台设备上的这个人想不想被打扰，不跨设备同步 | `loadNotifyPrefs`、`saveNotifyPrefs`、`NotifyPrefs` |
 | notify/in-page.ts | 页内通知形式（浏览器唯一可用的手段）：标题闪烁、Web Audio 合成提示音、「用户在不在看」判定 | `flashTitle`、`stopFlashTitle`、`playChime`、`isUserWatching` |
 | notify/store.ts   | 通知中心的存量（模块级广播，内存态不落盘）：同 id 覆盖、按优先级排序（update 最高）、上限裁剪 | `pushNotice`、`dismissNotice`、`clearNotices`、`Notice`、`NoticeKind` |
-| subagents.ts      | 子代理清单提取：两端形状（claude 的 Agent 调用 / codex 的独立 thread）归一成条目 | `collectSubagents`、`isSubagentWork`、`subagentLocations`、`SubagentEntry` |
+| subagents.ts      | 子代理清单提取：两端形状（claude 的 Agent 调用 / codex 的独立 thread）归一成条目 | `collectSubagents`、`hasSubagents`、`isSubagentWork`、`subagentLocations`、`SubagentEntry` |
 | status-tone.ts    | 会话/agent 状态 → StatusDot 色调的统一映射                            | `SESSION_STATE_TONE`、`AGENT_STATUS_TONE`、`StatusTone`              |
 | utils.ts          | 类名合并（shadcn 标配）                                               | `cn`                                                                 |
 

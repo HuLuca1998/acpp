@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   BookmarkIcon,
@@ -11,6 +11,9 @@ import {
 } from "lucide-react"
 
 import { Hint } from "@/components/hint"
+import { cn } from "@/lib/utils"
+import { hasSubagents } from "@/lib/subagents"
+import { useChatPanel } from "@/components/workspace/chat-panel-context"
 import { LAYOUT_PRESETS } from "@/components/workspace/layout-presets"
 import {
   deleteLayout,
@@ -49,6 +52,31 @@ import {
 interface TerminalEntry {
   panelId: string
   num: number
+}
+
+/**
+ * 子代理提示点：agent 派出去的活不进主对话流（已被摘掉），子代理面板又
+ * 默认不开——不给个信号，用户根本不知道有一批活正在别处跑。点亮在窗口
+ * 菜单的入口与「子代理」那一项上，顺着点两下就能找到。
+ *
+ * 单独成组件消费聊天上下文：菜单主体不必跟着聊天流的高频重渲染走。
+ * 用 primary 而不是 destructive——这是「有东西」不是「出事了」（§5.3）。
+ */
+function SubagentDot({ className }: { className?: string }) {
+  const { t } = useTranslation()
+  const { chat } = useChatPanel()
+  const has = useMemo(
+    () => hasSubagents(chat.messages, chat.liveTools),
+    [chat.messages, chat.liveTools]
+  )
+  if (!has) return null
+  return (
+    <span
+      role="status"
+      aria-label={t("workspace.menu.hasSubagents")}
+      className={cn("size-1.5 shrink-0 rounded-full bg-primary", className)}
+    />
+  )
 }
 
 /**
@@ -122,9 +150,11 @@ export function WorkspaceMenu({
         >
           <DropdownMenuTrigger
             aria-label={t("workspace.menu.label")}
-            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
+            className="relative flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
           >
             <MoreHorizontalIcon className="size-4" />
+            {/* 贴在按钮内侧右上角，不出边界——⋯ 挨着面板边缘，溢出去会被裁。 */}
+            <SubagentDot className="absolute top-0.5 right-0.5" />
           </DropdownMenuTrigger>
         </Hint>
         <DropdownMenuContent align="end" className="w-52">
@@ -157,6 +187,10 @@ export function WorkspaceMenu({
                 >
                   <Icon className="size-3.5 text-muted-foreground" />
                   {t(`workspace.panels.${id}` as never)}
+                  {/* 勾选指示器是绝对定位在 pr-8 里的，ms-auto 的点落在它左边不打架。 */}
+                  {id === "subagents" ? (
+                    <SubagentDot className="ms-auto" />
+                  ) : null}
                 </DropdownMenuCheckboxItem>
               )
             })}

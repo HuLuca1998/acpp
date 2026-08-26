@@ -49,6 +49,7 @@ export const enWorkspace = {
     layoutNamePlaceholder: "e.g. Review setup",
     resetLayout: "Reset layout",
     newTerminal: "New terminal",
+    hasSubagents: "Has subagents",
     layouts: "Layouts",
   },
   layouts: {
@@ -105,7 +106,8 @@ export const enWorkspace = {
     copyPathMany: "Copy {{count}} paths",
     copyLanLinkMany: "Copy {{count}} LAN links",
     lanLinkCopied: "LAN link copied",
-    lanLinkCopiedLocalOnly: "Link copied, but the server only listens on loopback — it only opens on this machine",
+    lanLinkCopiedLocalOnly:
+      "Link copied, but the server only listens on loopback — it only opens on this machine",
   },
   git: {
     askDir: "Ask AI to analyze changes in this folder",

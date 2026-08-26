@@ -145,6 +145,24 @@ export function collectSubagents(
 }
 
 /**
+ * 这个会话里有没有子代理。只回答有没有，不建清单——窗口菜单上的提示点
+ * 每次聊天流动都要问一遍，为了一个布尔值把全部条目重建一遍不值当。
+ * 先扫流式条目：正在跑的那批最该被提示，通常一眼就命中。
+ */
+export function hasSubagents(
+  messages: Message[],
+  liveTools: LiveToolCall[] = []
+): boolean {
+  for (const tool of liveTools) {
+    if (tool.isSubagent) return true
+  }
+  for (const message of messages) {
+    if (fromMessage(message)) return true
+  }
+  return false
+}
+
+/**
  * 每个子代理当前触碰的文件：取它名下最新一条带 locations 的流式调用。
  * 只对本轮的流式条目有意义——历史条目的位置没有"正在"可言。
  */
