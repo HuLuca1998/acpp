@@ -4,37 +4,51 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
-// 技能包的真实形状：skills/<name>/references/ 放参考文件，.agents/skills 是
-// 指向 skills 的软链（codex 靠它认 skill 根）。旁边再放一个前缀相同的诱饵
-// 目录，用来钉死「前缀匹配」这个经典错法。
+// 造出技能库与分发包的**真实形状**：技能实体住在 <data>/skills/<name>，
+// 分发包里的 skillpack/skills/<name> 只是指向它的软链（文件系统即启用状态）。
+// 于是 agent 拿到的 skillpack 路径解析软链后会落到技能库那一侧——这正是只登记
+// 一个根就会全判不中的地方。旁边再放两个前缀相同的诱饵目录，钉死「前缀匹配」
+// 这个经典错法。返回的 refFile 是 agent 实际会拿到的那条（经分发包访问）。
 func skillpackFixture(t *testing.T) (pack, refFile, evilFile string) {
 	t.Helper()
 	base := t.TempDir()
-	pack = filepath.Join(base, "skillpack")
-	refs := filepath.Join(pack, "skills", "demo", "references")
+
+	refs := filepath.Join(base, "skills", "demo", "references")
 	if err := os.MkdirAll(refs, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	refFile = filepath.Join(refs, "boilerplate.html")
-	if err := os.WriteFile(refFile, []byte("<p>x</p>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(refs, "boilerplate.html"), []byte("<p>x</p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pack = filepath.Join(base, "skillpack")
+	packSkills := filepath.Join(pack, "skills")
+	if err := os.MkdirAll(packSkills, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../../skills/demo", filepath.Join(packSkills, "demo")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(pack, ".agents"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(pack, "skills"), filepath.Join(pack, ".agents", "skills")); err != nil {
+	if err := os.Symlink(packSkills, filepath.Join(pack, ".agents", "skills")); err != nil {
 		t.Fatal(err)
 	}
-	evil := pack + "-evil"
-	if err := os.MkdirAll(evil, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	evilFile = filepath.Join(evil, "secret.txt")
-	if err := os.WriteFile(evilFile, []byte("s"), 0o644); err != nil {
-		t.Fatal(err)
+	refFile = filepath.Join(packSkills, "demo", "references", "boilerplate.html")
+
+	for _, evil := range []string{pack + "-evil", filepath.Join(base, "skills-evil")} {
+		if err := os.MkdirAll(evil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		evilFile = filepath.Join(evil, "secret.txt")
+		if err := os.WriteFile(evilFile, []byte("s"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return pack, refFile, evilFile
 }
@@ -62,11 +76,12 @@ func readRequest(kind string, paths ...string) RequestPermissionParams {
 func TestAutoAllowRead(t *testing.T) {
 	pack, refFile, evilFile := skillpackFixture(t)
 	roots := autoAllowRoots(pack)
-	if len(roots) != 1 {
-		t.Fatalf("autoAllowRoots(%q) = %v, want 1 root", pack, roots)
+	if len(roots) != 2 {
+		t.Fatalf("autoAllowRoots(%q) = %v, want 2 roots (分发包 + 技能库)", pack, roots)
 	}
 	viaSymlink := filepath.Join(pack, ".agents", "skills", "demo", "references", "boilerplate.html")
 	missing := filepath.Join(pack, "skills", "demo", "references", "not-yet.md")
+	libFile := filepath.Join(filepath.Dir(pack), "skills", "demo", "references", "boilerplate.html")
 
 	cases := []struct {
 		name  string
@@ -74,7 +89,8 @@ func TestAutoAllowRead(t *testing.T) {
 		roots []string
 		want  bool
 	}{
-		{"技能包内的读请求", readRequest("read", refFile), roots, true},
+		{"经分发包软链访问技能文件", readRequest("read", refFile), roots, true},
+		{"直接访问技能库里的同一文件", readRequest("read", libFile), roots, true},
 		{"经 .agents 软链访问同一文件", readRequest("read", viaSymlink), roots, true},
 		{"包内还不存在的文件（父目录在包内）", readRequest("read", missing), roots, true},
 		{"前缀相同的诱饵目录不算包内", readRequest("read", evilFile), roots, false},
@@ -144,16 +160,16 @@ func TestIsolation_AutoAllowReadDirs(t *testing.T) {
 	pack, _, _ := skillpackFixture(t)
 
 	claude := claudeAdapter{}.Isolation(IsolationInput{SkillpackDir: pack, Cwd: t.TempDir()})
-	if len(claude.AutoAllowReadDirs) != 1 {
-		t.Fatalf("claude AutoAllowReadDirs = %v, want the skillpack root", claude.AutoAllowReadDirs)
-	}
-	// 登记的必须是解析过软链的真实路径，否则判定时两侧比不上。
-	real, err := filepath.EvalSymlinks(pack)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if claude.AutoAllowReadDirs[0] != real {
-		t.Fatalf("root = %q, want resolved %q", claude.AutoAllowReadDirs[0], real)
+	// 登记的必须是解析过软链的真实路径，否则判定时两侧比不上；分发包与技能库
+	// 两个根都要，技能实体住在后者。
+	for _, want := range []string{pack, filepath.Join(filepath.Dir(pack), "skills")} {
+		real, err := filepath.EvalSymlinks(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(claude.AutoAllowReadDirs, real) {
+			t.Fatalf("AutoAllowReadDirs = %v, want it to contain %q", claude.AutoAllowReadDirs, real)
+		}
 	}
 
 	codex := codexAdapter{}.Isolation(IsolationInput{

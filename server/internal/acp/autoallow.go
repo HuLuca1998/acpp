@@ -74,18 +74,27 @@ func allowOnceOption(opts []PermissionOption) (string, bool) {
 	return "", false
 }
 
-// autoAllowRoots 把技能包目录解析成自动放行的根。解析软链是必须的：判定时
-// 两侧都按真实路径比，根这边不解析就永远比不上（技能包里 .agents/skills
-// 就是指向 skills 的软链）。解析不了（目录不存在）返回空，等于不放行。
-func autoAllowRoots(dir string) []string {
-	if dir == "" {
+// autoAllowRoots 算出自动放行的根。**两个根都要**：技能包里的
+// skills/<name> 是指向技能库 <dataDir>/skills/<name> 的软链（文件系统即启用
+// 状态，见 service.SkillService），路径解析软链后落在技能库那一侧，只登记
+// skillpack 一个根会全部判不中。两边都按解析后的真实路径登记——判定时也解析，
+// 两侧口径必须一致。目录不存在的跳过；都不存在返回空，等于关掉自动放行。
+func autoAllowRoots(skillpackDir string) []string {
+	if skillpackDir == "" {
 		return nil
 	}
-	root, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return nil
+	var roots []string
+	for _, dir := range []string{
+		skillpackDir,
+		filepath.Join(filepath.Dir(skillpackDir), "skills"),
+	} {
+		root, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			continue
+		}
+		roots = append(roots, root)
 	}
-	return []string{root}
+	return roots
 }
 
 func withinAny(path string, roots []string) bool {
