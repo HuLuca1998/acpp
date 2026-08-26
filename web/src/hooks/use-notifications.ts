@@ -14,7 +14,7 @@ import {
 } from "@/lib/desktop"
 import { flashTitle, isUserWatching, playChime, stopFlashTitle } from "@/lib/notify/in-page"
 import { loadNotifyPrefs } from "@/lib/notify/prefs"
-import { dismissNotice, pushNotice } from "@/lib/notify/store"
+import { dismissNotice, getNotices, pushNotice } from "@/lib/notify/store"
 import type { NoticeEvent, ServerEvent } from "@/types/acp"
 
 /** 通知的 id：决策与问答按各自的请求 id，这样处理完能精确撤回。 */
@@ -93,6 +93,14 @@ export function useNotifications() {
       const id = noticeID(ev)
       dismissNotice(id)
       if (isDesktop()) void desktopNotify.dismiss(id).catch(() => {})
+      // 标题闪烁原本只在用户切回页面时停（下面那个 settle）——可决策就是在
+      // 页面上做的，人压根没离开过，focus 事件永远不来，标题于是一直替一件
+      // 已经处理完的事叫。等人的决策清空了就收声；turn_end 那种「好消息」
+      // 不值得继续闪。
+      const waiting = getNotices().some(
+        (n) => n.kind === "permission" || n.kind === "elicitation"
+      )
+      if (!waiting) stopFlashTitle()
       return
     }
 
