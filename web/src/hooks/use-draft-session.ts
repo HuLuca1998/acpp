@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router"
+import { useLocation, useNavigate } from "react-router"
 
 import { api } from "@/lib/api"
 import {
@@ -96,13 +96,15 @@ function modelChoicesOf(agent: Agent, fallbackLabel: string): ModelChoice[] {
  */
 export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
 
   const [agents, setAgents] = useState<Agent[] | null>(null)
   const [choiceKey, setChoiceKey] = useState("")
   // 从项目卡片进来时带着 `?cwd=`：点项目 = 在这个仓库里开会话，
   // 不该让人再去目录选择器里把同一个路径找一遍（adr-007）。
-  const [cwd, setCwd] = useState(() => searchParams.get("cwd") ?? "")
+  const [cwd, setCwd] = useState(
+    () => new URLSearchParams(location.search).get("cwd") ?? ""
+  )
   // 非空表示「在隔离工作区里干活」：建会话时先 git worktree add
   // `<仓库>/worktrees/<名字>`，会话的工作目录随之指向那里。
   const [worktree, setWorktree] = useState("")
@@ -113,6 +115,19 @@ export function useDraftSession(enabled: boolean, defaultModelLabel: string) {
   // 虽是统一交集，但保留跨 agent 的旧选择容易造成误解。
   // 思考深度默认「高」；创建时按所选 agent 的骨架过滤不支持的维度。
   const [draftPatch, setDraftPatch] = useState<SettingsPatch>(DEFAULT_PATCH)
+
+  // 已经停在草稿页时再点侧栏项目的「+」：路由 element 没换，组件不重挂，
+  // 上面那个惰性初值不会重算——URL 的 cwd 换了界面却纹丝不动，看着就是
+  // 「点了没反应」。用 location.key 比对出「刚导航过」（同一 URL 重复点
+  // 也换 key），在渲染期间把目录同步过来；隔离工作区名属于上一个项目，
+  // 一并清掉。放渲染期而不是 effect：effect 里 setState 要多渲一帧，
+  // 用户会看见旧目录闪一下。
+  const [syncedNav, setSyncedNav] = useState(location.key)
+  if (enabled && location.key !== syncedNav) {
+    setSyncedNav(location.key)
+    setCwd(new URLSearchParams(location.search).get("cwd") ?? "")
+    setWorktree("")
+  }
 
   useEffect(() => {
     // 老会话页也会挂这个 hook（hooks 不能条件调用），不启用就不拉清单。
