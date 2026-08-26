@@ -29,6 +29,7 @@
 | adapter.go | 统一词汇表 + Adapter 接口（模型/思考深度/权限档/plan/fast/插话/PlanReview） |
 | adapter_*.go | claude / codex / generic 三个实现 |
 | isolation.go | 技能隔离注入（机器级屏蔽 / 技能包 / 项目级保留，按方言给 Env/Meta/AdditionalDirs） |
+| autoallow.go | 权限自动放行判定：读技能包内的文件直接允许，不惊动用户（只读、只该目录、软链解析后仍在内） |
 
 ## 3. 两个 runtime 的关键差异（改 adapter 必读）
 
@@ -37,7 +38,7 @@
 | 能力快照来源 | session/new 返回 `modes` | session/new 返回 `configOptions`（全量覆盖式更新） |
 | 用户中止 | 按规范返回 stopReason=cancelled | 让在途调用报 "context canceled" 错误字符串，需归一（turn.go） |
 | turn 中插话 | promptQueueing：排队成独立一轮（followUp=true） | `_session/steering`：注入当前轮（followUp=false） |
-| 权限请求 | 带 Title/RawInput/Content；ExitPlanMode 走同通道 | 只有 options，其余字段空 |
+| 权限请求 | 带 Title/RawInput/Content/Locations；ExitPlanMode 走同通道；技能包只读请求由 autoallow.go 自动放行 | 只有 options，其余字段空——拿不到路径，故不参与自动放行 |
 | 技能隔离 | 项目级 skillpack 目录注入 | CODEX_HOME 整体隔离 |
 | fs 代理 | 走（声明的 fs capability 会被真的调用） | 不走（自带 shell） |
 | terminal 代理 | **不走**（2026-08 实测：声明 terminal:true 后仍自带 shell 跑命令，零 terminal/* 反向调用） | **不走**（同左） |

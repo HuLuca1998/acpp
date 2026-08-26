@@ -148,6 +148,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 		}
 		sess.injMeta = inj.Meta
 		sess.injDirs = inj.AdditionalDirs
+		sess.autoReadDirs = inj.AutoAllowReadDirs
 	}
 	// 上层追加注入在技能隔离之后应用：_meta 冲突以上层为准。
 	if len(opts.MetaExtra) > 0 {

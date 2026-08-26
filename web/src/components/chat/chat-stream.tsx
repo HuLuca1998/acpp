@@ -148,7 +148,7 @@ export const ChatStream = memo(function ChatStream({
   const liveActivityCount =
     (chat.streamingThought ? 1 : 0) +
     liveOthers.length +
-    chat.permissions.length
+    chat.resolvedPermissions.length
   // 一轮开始就在等 agent 说第一句话，这时候没有任何内容可挂——单独一条
   // 「思考中」占位。
   const idleBusy =
@@ -156,7 +156,7 @@ export const ChatStream = memo(function ChatStream({
     !chat.streamingText &&
     liveActivityCount === 0 &&
     !chat.elicitation &&
-    !chat.permission
+    chat.pendingPermissions.length === 0
 
   // 分组只依赖消息列表：流式分片、工具状态等高频更新不重算。
   const blocks = useMemo(() => groupMessages(chat.messages), [chat.messages])
@@ -173,7 +173,7 @@ export const ChatStream = memo(function ChatStream({
     liveActivityCount > 0 ? "activity" : null,
     liveEdits.length > 0 ? "edits" : null,
     chat.streamingText ? "text" : null,
-    chat.permission ? "permission" : null,
+    chat.pendingPermissions.length > 0 ? "permission" : null,
     chat.elicitation ? "elicitation" : null,
     idleBusy ? "busy" : null,
   ]
@@ -251,17 +251,19 @@ export const ChatStream = memo(function ChatStream({
                         </MarkerContent>
                       </Marker>
                     ) : null}
-                    {chat.permissions.map((perm) => (
+                    {chat.resolvedPermissions.map((perm) => (
                       <Marker key={perm.id}>
                         <MarkerIcon>
                           <ShieldCheckIcon />
                         </MarkerIcon>
                         <MarkerContent>
-                          {t("chat.permission.resolved", {
-                            title: perm.title,
-                            choice:
-                              perm.choice || t("chat.permission.cancelled"),
-                          })}
+                          {perm.auto
+                            ? t("chat.permission.auto", { title: perm.title })
+                            : t("chat.permission.resolved", {
+                                title: perm.title,
+                                choice:
+                                  perm.choice || t("chat.permission.cancelled"),
+                              })}
                         </MarkerContent>
                       </Marker>
                     ))}
@@ -309,18 +311,19 @@ export const ChatStream = memo(function ChatStream({
               </MessageScrollerItem>
             ) : null}
 
-            {chat.permission ? (
-              <MessageScrollerItem
-                key={chat.permission.id}
-                scrollAnchor={false}
-              >
-                <AgentRow avatar={liveAvatar("permission")}>
-                  {chat.permission.planReview ? (
+            {/* 挂起的权限请求全都渲染出来：agent 会并发发起，只画一张就会
+                把没画出来的那个永远晾在 agent 侧，整轮卡死。头像只戳第一张。 */}
+            {chat.pendingPermissions.map((perm, i) => (
+              <MessageScrollerItem key={perm.id} scrollAnchor={false}>
+                <AgentRow
+                  avatar={i === 0 ? liveAvatar("permission") : undefined}
+                >
+                  {perm.planReview ? (
                     <PlanReviewCard
-                      permission={chat.permission}
+                      permission={perm}
                       onResolve={(optionId, choiceName) =>
                         void chat.resolvePermission(
-                          chat.permission!.id,
+                          perm.id,
                           optionId,
                           choiceName
                         )
@@ -328,10 +331,10 @@ export const ChatStream = memo(function ChatStream({
                     />
                   ) : (
                     <PermissionCard
-                      permission={chat.permission}
+                      permission={perm}
                       onResolve={(optionId, choiceName) =>
                         void chat.resolvePermission(
-                          chat.permission!.id,
+                          perm.id,
                           optionId,
                           choiceName
                         )
@@ -340,7 +343,7 @@ export const ChatStream = memo(function ChatStream({
                   )}
                 </AgentRow>
               </MessageScrollerItem>
-            ) : null}
+            ))}
 
             {chat.elicitation ? (
               <MessageScrollerItem

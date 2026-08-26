@@ -59,6 +59,9 @@ type Session struct {
 	// injMeta 已含上层 MetaExtra 的深合并结果。
 	injMeta map[string]any
 	injDirs []string
+	// autoReadDirs 是可以自动放行只读请求的根目录（技能包），同样 spawn 前
+	// 算好、只读。空 = 一律交用户裁决。
+	autoReadDirs []string
 	// mcpServers 是上层要求挂载的 MCP server 清单（编排会话的系统能力
 	// 注入口），session/new 与 session/load 都要带。
 	mcpServers []any

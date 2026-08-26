@@ -401,6 +401,7 @@ export default {
     permission: {
       title: "Agent 请求权限",
       resolved: "权限已裁决：{{title}} → {{choice}}",
+      auto: "已自动允许：{{title}}",
       cancelled: "已取消",
     },
     planReview: {

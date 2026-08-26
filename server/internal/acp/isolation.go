@@ -28,6 +28,10 @@ type Injection struct {
 	Env            map[string]string
 	Meta           map[string]any
 	AdditionalDirs []string
+	// AutoAllowReadDirs 是「读这里面的文件不必问用户」的根目录。技能包是
+	// 我们自己塞给 agent 的只读知识库，却住在会话 cwd 之外，不放行就每读
+	// 一个参考文件弹一次卡（见 autoallow.go）。
+	AutoAllowReadDirs []string
 }
 
 // Isolation（claude）：一切走 session/new 的 _meta。技能隔离在
@@ -52,6 +56,9 @@ func (claudeAdapter) Isolation(in IsolationInput) Injection {
 		"plugins":         []any{map[string]any{"type": "local", "path": in.SkillpackDir}},
 		"strictMcpConfig": true,
 	}}
+	// 技能包在 cwd 之外，claude 读它的每个参考文件都会请求权限。整目录并进
+	// additionalDirectories 能免问，但那连写也放行了；这里只放行读。
+	inj.AutoAllowReadDirs = autoAllowRoots(in.SkillpackDir)
 	return inj
 }
 

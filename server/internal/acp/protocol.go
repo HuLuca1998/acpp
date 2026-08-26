@@ -132,7 +132,10 @@ type NewSessionParams struct {
 	// MCPServers 必需，可以是空数组。
 	MCPServers []any `json:"mcpServers"`
 	// AdditionalDirectories 是技能隔离注入：codex-acp 把每个目录的
-	// .agents/skills 注册为 skill 根（控制端技能包 + 工作目录）。claude 不认。
+	// .agents/skills 注册为 skill 根（控制端技能包 + 工作目录）。
+	// claude 从 0.70 起也认（dist 实证：params.additionalDirectories 会直接
+	// 展开进 SDK options），但我们不用它给 claude 送技能包——那等于把整个
+	// 技能包目录并进工作区、读写一并放行；只读放行用 autoallow.go 更贴身。
 	AdditionalDirectories []string `json:"additionalDirectories,omitempty"`
 	// Meta 是 _meta：claude 的 claudeCode.options 隔离注入入口（settingSources
 	// / plugins / strictMcpConfig）。codex 不认。
@@ -532,6 +535,9 @@ type PermissionToolCall struct {
 	Title      string          `json:"title,omitempty"`
 	RawInput   json.RawMessage `json:"rawInput,omitempty"`
 	Content    json.RawMessage `json:"content,omitempty"`
+	// Locations 同 UpdateParams.Locations，只有 claude 带。技能包只读自动
+	// 放行按它与 rawInput.file_path 双重取路径（见 autoallow.go）。
+	Locations json.RawMessage `json:"locations,omitempty"`
 }
 
 type PermissionOption struct {

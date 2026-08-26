@@ -14,6 +14,9 @@ const (
 	// 界面收到后应收起卡片。
 	EventPermission     EventKind = "permission"
 	EventPermissionDone EventKind = "permission_done"
+	// EventPermissionAuto 是被自动放行的权限请求（技能包只读，见 autoallow.go）。
+	// 它不进挂起态，界面直接记一条「已自动允许」——放行可以自动，但不能无声。
+	EventPermissionAuto EventKind = "permission_auto"
 	// EventSettings 在 agent 自行切档/改配置后发出，带最新的统一设置视图。
 	EventSettings EventKind = "settings"
 	// EventUsage 是上下文用量快照（usage_update 通知）。

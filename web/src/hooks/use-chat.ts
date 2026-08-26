@@ -407,17 +407,20 @@ export function useChat(sessionId: number) {
       } catch (err) {
         setState((prev) => ({ ...prev, error: (err as Error).message }))
       }
-      // 收起卡片并留一条本轮内的裁决记录。
+      // 从队列里摘掉这一张，留一条本轮内的裁决记录；其余挂起的继续等。
       setState((prev) => {
-        if (prev.permission?.id !== permissionId) return prev
+        const target = prev.pendingPermissions.find((p) => p.id === permissionId)
+        if (!target) return prev
         return {
           ...prev,
-          permission: null,
-          permissions: [
-            ...prev.permissions,
+          pendingPermissions: prev.pendingPermissions.filter(
+            (p) => p.id !== permissionId
+          ),
+          resolvedPermissions: [
+            ...prev.resolvedPermissions,
             {
               id: permissionId,
-              title: prev.permission.title || prev.permission.toolKind || "",
+              title: target.title || target.toolKind || "",
               choice: choiceName,
             },
           ],

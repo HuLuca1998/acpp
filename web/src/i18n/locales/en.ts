@@ -423,6 +423,7 @@ export default {
     permission: {
       title: "The agent requests permission",
       resolved: "Permission resolved: {{title}} → {{choice}}",
+      auto: "Auto-allowed: {{title}}",
       cancelled: "Cancelled",
     },
     planReview: {

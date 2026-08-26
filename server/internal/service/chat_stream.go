@@ -72,6 +72,15 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		br.Publish(StreamEvent{Kind: "permission_done", PermissionID: ev.PermissionID})
 		s.notify(sessionID, StreamNotice{Event: "permission_done", PermissionID: ev.PermissionID})
 
+	case acp.EventPermissionAuto:
+		// 自动放行只在流里留一条痕迹，不发通知——它本来就是为了不打扰用户。
+		br.Publish(StreamEvent{
+			Kind:       "permission_auto",
+			ToolCallID: ev.ToolCallID,
+			ToolKind:   ev.ToolKind,
+			Title:      ev.Title,
+		})
+
 	case acp.EventSettings:
 		// agent 自行改配置推来的视图同样要过配置页的取舍。
 		s.catalogFor(context.Background(), sessionID).filterSettings(ev.Settings)

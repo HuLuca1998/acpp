@@ -419,6 +419,7 @@ export type StreamEventKind =
   | "tool_call"
   | "permission"
   | "permission_done"
+  | "permission_auto"
   | "plan"
   | "settings"
   | "usage"

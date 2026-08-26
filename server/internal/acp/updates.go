@@ -178,6 +178,21 @@ func (m *Manager) ResolveElicitation(key, elicitationID string, result Elicitati
 func (h *sessionHandler) RequestPermission(ctx context.Context, p RequestPermissionParams) (RequestPermissionResult, error) {
 	s := h.session
 
+	// 技能包只读请求直接放行，不惊动用户：技能是控制端自己注入的知识库，
+	// 问了也只有一个答案，却会真的把会话卡死（并发请求 + 单卡界面）。
+	// 判定与边界见 autoallow.go；留痕走 EventPermissionAuto。
+	if optionID, ok := autoAllowRead(p, s.autoReadDirs); ok {
+		s.emit(Event{
+			Kind:       EventPermissionAuto,
+			ToolCallID: p.ToolCall.ToolCallID,
+			ToolKind:   p.ToolCall.Kind,
+			Title:      p.ToolCall.Title,
+		})
+		return RequestPermissionResult{
+			Outcome: PermissionOutcome{Outcome: "selected", OptionID: optionID},
+		}, nil
+	}
+
 	ch := make(chan RequestPermissionResult, 1)
 	s.mu.Lock()
 	s.permissionSeq++

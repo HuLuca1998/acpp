@@ -101,7 +101,8 @@ export const ChatPanel = memo(function ChatPanel() {
     chat.streamingText !== "" ||
     chat.streamingThought !== "" ||
     chat.liveTools.length > 0 ||
-    chat.permissions.length > 0 ||
+    chat.resolvedPermissions.length > 0 ||
+    chat.pendingPermissions.length > 0 ||
     (chat.plan?.length ?? 0) > 0
 
   return (

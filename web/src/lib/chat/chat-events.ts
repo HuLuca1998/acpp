@@ -56,6 +56,8 @@ export interface ResolvedPermission {
   title: string
   /** 用户选中的选项名，空串表示取消。 */
   choice: string
+  /** 后端自动放行的（技能包只读），没经过用户。 */
+  auto?: boolean
 }
 
 export interface ChatState {
@@ -91,12 +93,16 @@ export interface ChatState {
   hasEarlier: boolean
   /** agent 正在等用户作答的交互式提问。 */
   elicitation: PendingElicitation | null
-  /** agent 正在等用户裁决的权限请求。 */
-  permission: PendingPermission | null
+  /**
+   * agent 正在等用户裁决的权限请求，可能同时有多个——agent 会并发发起
+   *（比如并行读几个文件），只留一个会让没被裁决的那个永远挂在 agent 侧，
+   * 整轮就此卡死。
+   */
+  pendingPermissions: PendingPermission[]
   /** agent 的任务计划，每次 plan 事件整体替换；跨轮保留展示最终状态。 */
   plan: PlanEntry[] | null
-  /** 当前轮内已裁决的权限请求。 */
-  permissions: ResolvedPermission[]
+  /** 当前轮内已裁决的权限请求，含后端自动放行的。 */
+  resolvedPermissions: ResolvedPermission[]
   /**
    * 本轮 agent 触碰过的文件位置：最新在前、按路径去重，轮结束清空。
    * 供活动区「正在触碰」一行、文件树状态点与查看器跟随模式消费。
@@ -124,9 +130,9 @@ export const INITIAL_CHAT_STATE: ChatState = {
   commands: [],
   hasEarlier: false,
   elicitation: null,
-  permission: null,
+  pendingPermissions: [],
   plan: null,
-  permissions: [],
+  resolvedPermissions: [],
   touched: [],
   queued: [],
 }
@@ -253,29 +259,54 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
       return { ...prev, plan: entries }
     }
 
-    case "permission":
+    case "permission": {
       if (!inTurn) return prev
       if (!ev.permissionId || !ev.options?.length) return prev
+      const id = ev.permissionId
+      const incoming: PendingPermission = {
+        id,
+        toolCallId: ev.toolCallId,
+        toolKind: ev.toolKind,
+        title: ev.title,
+        rawInput: ev.rawInput,
+        content: ev.content,
+        options: ev.options,
+        planReview: ev.planReview,
+      }
+      // 同 id 重发就地替换，新 id 一律排队：并发请求必须全留住。
+      const seen = prev.pendingPermissions.some((p) => p.id === id)
       return {
         ...prev,
-        permission: {
-          id: ev.permissionId,
-          toolCallId: ev.toolCallId,
-          toolKind: ev.toolKind,
-          title: ev.title,
-          rawInput: ev.rawInput,
-          content: ev.content,
-          options: ev.options,
-          planReview: ev.planReview,
-        },
+        pendingPermissions: seen
+          ? prev.pendingPermissions.map((p) => (p.id === id ? incoming : p))
+          : [...prev.pendingPermissions, incoming],
       }
+    }
 
     case "permission_done":
-      // 裁决 / 超时后收起卡片；不匹配的 id 说明已经换了一个请求。
-      if (prev.permission && prev.permission.id !== ev.permissionId) {
-        return prev
+      // 裁决 / 超时后只收起这一张，队列里其余的继续等。
+      return {
+        ...prev,
+        pendingPermissions: prev.pendingPermissions.filter(
+          (p) => p.id !== ev.permissionId
+        ),
       }
-      return { ...prev, permission: null }
+
+    case "permission_auto":
+      // 技能包只读请求由后端直接放行，没进过挂起态，这里只留一条痕迹。
+      if (!inTurn) return prev
+      return {
+        ...prev,
+        resolvedPermissions: [
+          ...prev.resolvedPermissions,
+          {
+            id: ev.toolCallId || `auto-${prev.resolvedPermissions.length}`,
+            title: ev.title || ev.toolKind || "",
+            choice: "",
+            auto: true,
+          },
+        ],
+      }
 
     case "elicitation":
       if (!inTurn) return prev
@@ -311,8 +342,8 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
         streamingThought: "",
         liveTools: [],
         elicitation: null,
-        permission: null,
-        permissions: [],
+        pendingPermissions: [],
+        resolvedPermissions: [],
         touched: [],
         plan: null,
       }
