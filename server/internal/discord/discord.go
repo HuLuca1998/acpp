@@ -364,6 +364,10 @@ func (s *Service) UpdateBinding(ctx context.Context, channelID string, patch Bin
 	if out.ChannelID == "" {
 		return Binding{}, fmt.Errorf("%w: 频道 %s 没有绑定", ErrNotFound, channelID)
 	}
+	// 频道侧展示（置顶卡 + 主题）跟上网页端的改动，尽力而为。
+	if cfg := s.store.config(); cfg.BotToken != "" {
+		go s.syncChannelCard(context.Background(), cfg.BotToken, out)
+	}
 	return out, nil
 }
 
@@ -377,6 +381,8 @@ type BindingPatch struct {
 
 // RemoveBinding 解绑频道。磁盘上的克隆不动——目录里可能已有未推送的活。
 func (s *Service) RemoveBinding(channelID string) error {
+	cfg := s.store.config()
+	old, existed := cfg.binding(channelID)
 	removed := false
 	_, err := s.store.update(func(c *Config) {
 		removed = c.removeBinding(channelID)
@@ -386,6 +392,10 @@ func (s *Service) RemoveBinding(channelID string) error {
 	}
 	if !removed {
 		return fmt.Errorf("%w: 频道 %s 没有绑定", ErrNotFound, channelID)
+	}
+	// 频道侧收尾（摘置顶卡、清主题）尽力而为。
+	if existed && cfg.BotToken != "" {
+		go s.cleanupChannelCard(context.Background(), cfg.BotToken, old)
 	}
 	return nil
 }

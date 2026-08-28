@@ -35,12 +35,14 @@ type Binding struct {
 	Workdir string `json:"workdir"`
 	// Agent/Model 对齐内置工具的探测缓存（claude/codex 与其模型 id）；
 	// Effort 是统一思考深度五档，空串表示用 agent 默认。
-	Agent      string    `json:"agent"`
-	Model      string    `json:"model"`
-	ModelLabel string    `json:"modelLabel,omitempty"`
-	Effort     string    `json:"effort,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	Agent      string `json:"agent"`
+	Model      string `json:"model"`
+	ModelLabel string `json:"modelLabel,omitempty"`
+	Effort     string `json:"effort,omitempty"`
+	// CardMessageID 是频道里置顶的「工作区身份卡」，配置变化时原地刷新。
+	CardMessageID string    `json:"cardMessageId,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // store 负责 Config 的加载与原子写回。锁只保护内存副本与文件——

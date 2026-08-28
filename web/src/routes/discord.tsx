@@ -281,6 +281,16 @@ function EditBindingDialog({
       : ["low", "medium", "high", "xhigh", "max"]
   }, [info.catalog, model])
 
+  // Base UI 的 SelectValue 闭合态直接渲染 value 字符串（`claude|xxx`），
+  // 手动映射回展示名。
+  const modelDisplay = useMemo(() => {
+    const [agent, modelID] = model.split("|")
+    const label = info.catalog
+      .find((a) => a.agent === agent)
+      ?.models.find((m) => m.id === modelID)?.label
+    return label ? `${agent} · ${label}` : model
+  }, [info.catalog, model])
+
   async function save() {
     const [agent, modelID] = model.split("|")
     const label = info.catalog
@@ -332,7 +342,7 @@ function EditBindingDialog({
               }}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>{modelDisplay}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {info.catalog.map((a) => (
@@ -357,7 +367,11 @@ function EditBindingDialog({
               }}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {effort === "default"
+                    ? t("discord.page.effortDefault")
+                    : effort}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="default">

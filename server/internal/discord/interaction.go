@@ -20,16 +20,65 @@ const (
 )
 
 // registerCommands 注册 guild 级斜杠命令（即时生效；global 有传播延迟）。
-// PUT 语义是全量覆盖，幂等，每次连接对每个 guild 执行一遍。
+// PUT 语义是全量覆盖，幂等，每次连接对每个 guild 执行一遍。/model 的
+// 选项 choices 来自 catalog 快照——模型清单变了要重连（或重启）才刷新，
+// 换来的是原生下拉体验（不用弹表单）。
 func (s *Service) registerCommands(ctx context.Context, token, appID, guildID string) {
-	cmds := []map[string]any{{
-		"name":        "init",
-		"description": "把这个频道绑定到一个 git 仓库工作区",
-	}}
+	var modelChoicesJSON []map[string]any
+	if s.deps.Catalog != nil {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if catalog, err := s.deps.Catalog(cctx); err == nil {
+			for _, c := range modelChoices(catalog) {
+				modelChoicesJSON = append(modelChoicesJSON, map[string]any{
+					"name": trimRunes(c.Label, 90), "value": c.Value,
+				})
+			}
+		}
+		cancel()
+	}
+	modelOption := map[string]any{
+		"type": 3, "name": "model", "description": "要切换到的模型", "required": true,
+	}
+	if len(modelChoicesJSON) > 0 {
+		modelOption["choices"] = modelChoicesJSON
+	}
+	var effortChoicesJSON []map[string]any
+	for _, c := range effortChoices() {
+		effortChoicesJSON = append(effortChoicesJSON, map[string]any{
+			"name": c.Label, "value": c.Value,
+		})
+	}
+	cmds := []map[string]any{
+		{
+			"name":        "init",
+			"description": "把这个频道绑定到一个 git 仓库工作区",
+		},
+		{
+			"name":        "model",
+			"description": "切换这个频道用的模型",
+			"options":     []map[string]any{modelOption},
+		},
+		{
+			"name":        "effort",
+			"description": "切换这个频道的思考深度",
+			"options": []map[string]any{{
+				"type": 3, "name": "effort", "description": "思考深度档位",
+				"required": true, "choices": effortChoicesJSON,
+			}},
+		},
+		{
+			"name":        "status",
+			"description": "查看这个频道的工作区绑定",
+		},
+		{
+			"name":        "unbind",
+			"description": "解绑这个频道的工作区（磁盘克隆保留）",
+		},
+	}
 	err := botREST(ctx, token, "PUT",
 		fmt.Sprintf("/applications/%s/guilds/%s/commands", appID, guildID), cmds, nil)
 	if err != nil {
-		slog.Error("注册 /init 失败", "guild", guildID, "err", err)
+		slog.Error("注册斜杠命令失败", "guild", guildID, "err", err)
 	}
 }
 
@@ -46,11 +95,25 @@ type interactionEvent struct {
 		} `json:"user"`
 	} `json:"member"`
 	Data struct {
-		Name       string          `json:"name"`      // 命令名
-		CustomID   string          `json:"custom_id"` // 组件/modal
-		Values     []string        `json:"values"`    // 消息上的下拉选择
+		Name     string   `json:"name"`      // 命令名
+		CustomID string   `json:"custom_id"` // 组件/modal
+		Values   []string `json:"values"`    // 消息上的下拉选择
+		Options  []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"options"`
 		Components json.RawMessage `json:"components"`
 	} `json:"data"`
+}
+
+// option 取命令入参（没有返回空串）。
+func (e interactionEvent) option(name string) string {
+	for _, o := range e.Data.Options {
+		if o.Name == name {
+			return o.Value
+		}
+	}
+	return ""
 }
 
 // handleInteraction 分发一条 INTERACTION_CREATE：/init 命令、它的 modal
@@ -68,6 +131,14 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 	switch {
 	case ev.Type == 2 && ev.Data.Name == "init":
 		s.openInitModal(ctx, token, ev)
+	case ev.Type == 2 && ev.Data.Name == "model":
+		s.setBindingOption(ctx, token, ev, "model")
+	case ev.Type == 2 && ev.Data.Name == "effort":
+		s.setBindingOption(ctx, token, ev, "effort")
+	case ev.Type == 2 && ev.Data.Name == "status":
+		s.showStatus(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "unbind":
+		s.unbindChannel(ctx, token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):
@@ -357,7 +428,8 @@ func (s *Service) branchPicked(ctx context.Context, token string, ev interaction
 	go s.finishInit(ctx, token, p.ev, in)
 }
 
-// finishInit 是 /init 的慢半段：克隆（或复用）、落绑定、回写结果卡。
+// finishInit 是 /init 的慢半段：克隆（或复用）、落绑定、回写身份卡并
+// 置顶、把摘要写进频道主题。
 func (s *Service) finishInit(ctx context.Context, token string, ev interactionEvent, in initInput) {
 	appID := s.appID()
 	workdir := filepath.Join(s.effectiveWorkRoot(s.store.config()), filepath.FromSlash(workdirName(in.repo, in.branch)))
@@ -387,17 +459,15 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	}
 	cancel()
 
-	modelLabel := s.modelLabel(ctx, in.agent, in.modelID)
+	old, _ := s.store.config().binding(ev.ChannelID)
 	now := time.Now()
-	_, err = s.store.update(func(c *Config) {
-		c.upsertBinding(Binding{
-			ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
-			Repo: in.repo, CloneURL: in.cloneURL, Branch: in.branch, Workdir: workdir,
-			Agent: in.agent, Model: in.modelID, ModelLabel: modelLabel, Effort: in.effort,
-			CreatedAt: now, UpdatedAt: now,
-		})
-	})
-	if err != nil {
+	binding := Binding{
+		ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
+		Repo: in.repo, CloneURL: in.cloneURL, Branch: in.branch, Workdir: workdir,
+		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
+		Effort: in.effort, CreatedAt: now, UpdatedAt: now,
+	}
+	if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
 		slog.Error("绑定落盘失败", "channel", ev.ChannelID, "err", err)
 		s.editOriginal(token, appID, ev.Token, map[string]any{
 			"embeds": []map[string]any{{
@@ -409,31 +479,248 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		return
 	}
 
-	source := "已克隆到"
+	source := "已克隆"
 	if reused {
 		source = "复用已有克隆"
 	}
-	branch := in.branch
-	if branch == "" {
-		branch = "默认分支"
-		if in.defaultBranch != "" {
-			branch = in.defaultBranch
-		}
-	}
-	effort := in.effort
-	if effort == "" {
-		effort = "默认"
-	}
 	s.editOriginal(token, appID, ev.Token, map[string]any{
-		"embeds": []map[string]any{{
-			"title": "✅ 频道工作区已就绪",
-			"description": fmt.Sprintf("**%s** · 分支 **%s**\n%s `%s`\n模型 **%s** · 思考深度 **%s**\n之后这个频道的工作目录就是它。",
-				in.repo, branch, source, workdir, modelLabel, effort),
-			"color": colorGreen,
-		}},
+		"embeds":           []map[string]any{bindingEmbed(binding, source)},
 		"components":       []map[string]any{},
 		"allowed_mentions": noMentions(),
 	})
+
+	// 身份卡置顶：拿到刚编辑的消息 id，钉住并记下来；旧卡（重绑）摘掉。
+	var msg struct {
+		ID string `json:"id"`
+	}
+	gctx, gcancel := context.WithTimeout(ctx, 5*time.Second)
+	err = botREST(gctx, token, "GET",
+		fmt.Sprintf("/webhooks/%s/%s/messages/@original", appID, ev.Token), nil, &msg)
+	gcancel()
+	if err == nil && msg.ID != "" {
+		if old.CardMessageID != "" && old.CardMessageID != msg.ID {
+			s.unpinMessage(ctx, token, ev.ChannelID, old.CardMessageID)
+		}
+		s.pinMessage(ctx, token, ev.ChannelID, msg.ID)
+		binding.CardMessageID = msg.ID
+		if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
+			slog.Warn("身份卡 id 落盘失败", "err", err)
+		}
+	}
+	s.syncTopic(ctx, token, binding)
+}
+
+// bindingEmbed 是频道工作区的身份卡：/init 的结果卡、置顶卡与 /status
+// 共用一个形状，配置变化时原地刷新。
+func bindingEmbed(b Binding, source string) map[string]any {
+	branch := b.Branch
+	if branch == "" {
+		branch = "默认"
+	}
+	effort := b.Effort
+	if effort == "" {
+		effort = "默认"
+	}
+	model := b.ModelLabel
+	if model == "" {
+		model = b.Agent + " · " + b.Model
+	}
+	desc := ""
+	if source != "" {
+		desc = source + "，之后这个频道的工作目录就是它。"
+	}
+	return map[string]any{
+		"title":       "✅ 频道工作区",
+		"description": desc,
+		"color":       colorGreen,
+		"fields": []map[string]any{
+			{"name": "仓库", "value": "`" + b.Repo + "`", "inline": true},
+			{"name": "分支", "value": "`" + branch + "`", "inline": true},
+			{"name": "​", "value": "​", "inline": true},
+			{"name": "模型", "value": model, "inline": true},
+			{"name": "思考深度", "value": effort, "inline": true},
+			{"name": "​", "value": "​", "inline": true},
+			{"name": "工作目录", "value": "`" + b.Workdir + "`", "inline": false},
+		},
+		"footer": map[string]any{"text": "/model 换模型 · /effort 换深度 · /init 重绑 · /status 查看"},
+	}
+}
+
+// setBindingOption 处理 /model 与 /effort：改绑定、刷新置顶卡与频道主题，
+// 回一条只有本人可见的确认。
+func (s *Service) setBindingOption(ctx context.Context, token string, ev interactionEvent, kind string) {
+	cfg := s.store.config()
+	b, ok := cfg.binding(ev.ChannelID)
+	if !ok {
+		s.ephemeral(token, ev, "这个频道还没绑定工作区，先 /init。")
+		return
+	}
+	var confirm string
+	switch kind {
+	case "model":
+		agent, modelID, ok := strings.Cut(ev.option("model"), "|")
+		if !ok {
+			s.ephemeral(token, ev, "认不出这个模型（用命令自带的选项选）。")
+			return
+		}
+		b.Agent, b.Model = agent, modelID
+		b.ModelLabel = s.modelLabel(ctx, agent, modelID)
+		confirm = "✅ 模型已切换：**" + b.ModelLabel + "**"
+	case "effort":
+		v := ev.option("effort")
+		if v == "default" {
+			v = ""
+		}
+		b.Effort = v
+		label := v
+		if label == "" {
+			label = "默认"
+		}
+		confirm = "✅ 思考深度已切换：**" + label + "**"
+	}
+	b.UpdatedAt = time.Now()
+	if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {
+		s.ephemeral(token, ev, "保存失败："+trimRunes(err.Error(), 200))
+		return
+	}
+	s.ephemeral(token, ev, confirm)
+	go s.syncChannelCard(ctx, token, b)
+}
+
+// showStatus 用 /status 回一张只有本人可见的身份卡。
+func (s *Service) showStatus(token string, ev interactionEvent) {
+	cfg := s.store.config()
+	b, ok := cfg.binding(ev.ChannelID)
+	if !ok {
+		s.ephemeral(token, ev, "这个频道还没绑定工作区，先 /init。")
+		return
+	}
+	err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+		"embeds":           []map[string]any{bindingEmbed(b, "")},
+		"flags":            1 << 6,
+		"allowed_mentions": noMentions(),
+	})
+	if err != nil {
+		slog.Error("/status 回复失败", "err", err)
+	}
+}
+
+// unbindChannel 处理 /unbind：撤绑定、摘置顶卡、清频道主题。磁盘上的
+// 克隆保留（里面可能有没推送的活），重新绑定就是再跑一次 /init。
+func (s *Service) unbindChannel(ctx context.Context, token string, ev interactionEvent) {
+	cfg := s.store.config()
+	b, ok := cfg.binding(ev.ChannelID)
+	if !ok {
+		s.ephemeral(token, ev, "这个频道本来就没绑定工作区。")
+		return
+	}
+	if _, err := s.store.update(func(c *Config) { c.removeBinding(ev.ChannelID) }); err != nil {
+		s.ephemeral(token, ev, "解绑失败："+trimRunes(err.Error(), 200))
+		return
+	}
+	s.ephemeral(token, ev, fmt.Sprintf("✅ 已解绑 **%s**。克隆保留在 `%s`，重新绑定用 /init。", b.Repo, b.Workdir))
+	go s.cleanupChannelCard(ctx, token, b)
+}
+
+// cleanupChannelCard 解绑后的频道侧收尾：摘置顶卡、清主题。都是尽力而为。
+func (s *Service) cleanupChannelCard(ctx context.Context, token string, b Binding) {
+	if b.CardMessageID != "" {
+		s.unpinMessage(ctx, token, b.ChannelID, b.CardMessageID)
+	}
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,
+		map[string]any{"topic": ""}, nil); err != nil {
+		slog.Warn("清频道主题失败（可能撞限速）", "err", err)
+	}
+}
+
+// syncChannelCard 让频道里的展示跟上配置：置顶卡原地刷新（被删了就补发
+// 一张再置顶），频道主题写一行摘要。
+func (s *Service) syncChannelCard(ctx context.Context, token string, b Binding) {
+	body := map[string]any{
+		"embeds":           []map[string]any{bindingEmbed(b, "")},
+		"allowed_mentions": noMentions(),
+	}
+	if b.CardMessageID != "" {
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := botREST(cctx, token, "PATCH",
+			fmt.Sprintf("/channels/%s/messages/%s", b.ChannelID, b.CardMessageID), body, nil)
+		cancel()
+		if err != nil {
+			slog.Warn("置顶卡刷新失败，补发新卡", "err", err)
+			b.CardMessageID = ""
+		}
+	}
+	if b.CardMessageID == "" {
+		var msg struct {
+			ID string `json:"id"`
+		}
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := botREST(cctx, token, "POST",
+			fmt.Sprintf("/channels/%s/messages", b.ChannelID), body, &msg)
+		cancel()
+		if err == nil && msg.ID != "" {
+			s.pinMessage(ctx, token, b.ChannelID, msg.ID)
+			b.CardMessageID = msg.ID
+			if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {
+				slog.Warn("身份卡 id 落盘失败", "err", err)
+			}
+		}
+	}
+	s.syncTopic(ctx, token, b)
+}
+
+// syncTopic 把一行摘要写进频道主题（顶部常驻）。平台对改主题限速很狠
+// （每频道 10 分钟 2 次），失败只记日志——置顶卡才是权威展示。
+func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
+	branch := b.Branch
+	if branch == "" {
+		branch = "默认分支"
+	}
+	model := b.ModelLabel
+	if model == "" {
+		model = b.Agent + " · " + b.Model
+	}
+	effort := b.Effort
+	if effort == "" {
+		effort = "默认"
+	}
+	topic := fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s", b.Repo, branch, model, effort)
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,
+		map[string]any{"topic": trimRunes(topic, 1000)}, nil)
+	if err != nil {
+		slog.Warn("写频道主题失败（可能撞限速）", "err", err)
+	}
+}
+
+// pinMessage 置顶消息：先走新路由，老路由兜底（平台 2025 年换过端点）。
+func (s *Service) pinMessage(ctx context.Context, token, channelID, messageID string) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "PUT",
+		fmt.Sprintf("/channels/%s/messages/pins/%s", channelID, messageID), nil, nil)
+	if err != nil {
+		if err2 := botREST(cctx, token, "PUT",
+			fmt.Sprintf("/channels/%s/pins/%s", channelID, messageID), nil, nil); err2 != nil {
+			slog.Warn("置顶身份卡失败", "err", err, "legacyErr", err2)
+		}
+	}
+}
+
+func (s *Service) unpinMessage(ctx context.Context, token, channelID, messageID string) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "DELETE",
+		fmt.Sprintf("/channels/%s/messages/pins/%s", channelID, messageID), nil, nil)
+	if err != nil {
+		if err2 := botREST(cctx, token, "DELETE",
+			fmt.Sprintf("/channels/%s/pins/%s", channelID, messageID), nil, nil); err2 != nil {
+			slog.Warn("摘旧身份卡失败", "err", err, "legacyErr", err2)
+		}
+	}
 }
 
 // modelLabel 反查展示名；catalog 拿不到就退回原 id。
