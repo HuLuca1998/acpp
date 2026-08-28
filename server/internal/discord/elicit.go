@@ -256,16 +256,12 @@ func formModal(ask *pendingAsk, page int) map[string]any {
 	end := min(start+formPageSize, len(ask.questions))
 	pageQs := ask.questions[start:end]
 
+	// 「其他」输入框紧跟它所属的题（用户点名的排布），空位从前往后分。
+	budget := formPageSize - len(pageQs)
 	var comps []map[string]any
 	for _, q := range pageQs {
 		comps = append(comps, formQuestion(q))
-	}
-	// 空位分给「其他」输入框：选项外的自定义答案有地方写。
-	for _, q := range pageQs {
-		if len(comps) >= formPageSize {
-			break
-		}
-		if q.OtherField != "" && len(q.Options) > 0 {
+		if budget > 0 && q.OtherField != "" && len(q.Options) > 0 {
 			comps = append(comps, map[string]any{
 				"type": 18, "label": trimRunes("其他（"+q.Title+"）", 45),
 				"description": "上面选项都不合适时填这里",
@@ -274,6 +270,7 @@ func formModal(ask *pendingAsk, page int) map[string]any {
 					"placeholder": "自定义回答（可留空）…",
 				},
 			})
+			budget--
 		}
 	}
 

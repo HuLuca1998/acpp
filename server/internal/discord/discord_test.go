@@ -358,12 +358,13 @@ func TestFormModal(t *testing.T) {
 		t.Fatalf("组件数 = %d, want 4", len(comps))
 	}
 	kind := func(i int) any { return comps[i]["component"].(map[string]any)["type"] }
-	if kind(0) != 21 || kind(1) != 22 || kind(2) != 4 {
-		t.Errorf("组件类型 = %v %v %v, want 21/22/4", kind(0), kind(1), kind(2))
+	// 「其他」输入框紧跟所属题：q0(单选) → q0 其他 → q1(多选) → q2(输入)。
+	if kind(0) != 21 || kind(2) != 22 || kind(3) != 4 {
+		t.Errorf("组件类型 = %v %v %v, want 21/22/4", kind(0), kind(2), kind(3))
 	}
-	other := comps[3]["component"].(map[string]any)
+	other := comps[1]["component"].(map[string]any)
 	if other["custom_id"] != "q0_custom" {
-		t.Errorf("其他输入框 = %+v", other)
+		t.Errorf("其他输入框应紧跟第一题 = %+v", other)
 	}
 
 	// 入口卡：Container + 填表按钮。
