@@ -441,7 +441,7 @@ export function useChat(sessionId: number) {
     async (
       elicitationId: string,
       action: "accept" | "decline" | "cancel",
-      content?: Record<string, string>
+      content?: Record<string, string | string[]>
     ) => {
       try {
         await api.sessions.resolveElicitation(

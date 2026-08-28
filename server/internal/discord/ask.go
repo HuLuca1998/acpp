@@ -31,10 +31,81 @@ type pendingAsk struct {
 	title string
 	// 权限专用：选项清单（按钮顺序）。
 	permOpts []acp.PermissionOption
-	// 提问专用：题目、当前题号（逐题卡）、已收答案。
+	// 提问专用：题目、当前题号（逐题卡）、已收答案（选项集合与自由输入
+	// 各占一个字段，多选题的选项字段是多值）。
 	questions []elicitQuestion
 	cursor    int
-	partial   map[string]string
+	partial   map[string][]string
+}
+
+// applyAnswer 把一次作答落到当前题上：
+//   - 单选：选项覆盖（清掉自由输入），选项外的文本进自由字段（清掉选项）；
+//   - 多选：选项 toggle（勾/取消），文本进自由字段与选项集合并存。
+//
+// 返回值报告要不要自动前进（单选选完就走，多选停留让人多勾几个）。
+func (s *Service) applyAnswer(ask *pendingAsk, values []string) (advance bool) {
+	cur := ask.questions[ask.cursor]
+	var opts, free []string
+	for _, v := range values {
+		if slices.Contains(cur.Options, v) {
+			opts = append(opts, v)
+		} else if v != "" {
+			free = append(free, v)
+		}
+	}
+	freeField := cur.OtherField
+	if freeField == "" {
+		freeField = cur.ID // 纯输入题的答案直接落题目字段
+	}
+
+	if cur.Multiple {
+		set := ask.partial[cur.ID]
+		for _, o := range opts {
+			if i := slices.Index(set, o); i >= 0 {
+				set = slices.Delete(set, i, i+1)
+			} else {
+				set = append(set, o)
+			}
+		}
+		ask.partial[cur.ID] = set
+		if len(free) > 0 {
+			ask.partial[freeField] = []string{strings.Join(free, "、")}
+		}
+		return false
+	}
+
+	delete(ask.partial, cur.ID)
+	if cur.OtherField != "" {
+		delete(ask.partial, cur.OtherField)
+	}
+	switch {
+	case len(free) > 0:
+		ask.partial[freeField] = []string{free[0]}
+	case len(opts) > 0:
+		ask.partial[cur.ID] = []string{opts[0]}
+	}
+	return ask.cursor < len(ask.questions)-1
+}
+
+// askContent 把答案拼成 ResolveElicitation 的 content：多选题给数组，
+// 其余给单值字符串。
+func askContent(ask *pendingAsk) map[string]any {
+	multiple := map[string]bool{}
+	for _, q := range ask.questions {
+		multiple[q.ID] = q.Multiple
+	}
+	content := map[string]any{}
+	for k, vs := range ask.partial {
+		if len(vs) == 0 {
+			continue
+		}
+		if multiple[k] {
+			content[k] = vs
+		} else {
+			content[k] = vs[0]
+		}
+	}
+	return content
 }
 
 // permClosedEmbed 是权限决策的终态卡：留住决策对象，标出选了什么、谁选的。
@@ -52,13 +123,14 @@ func permClosedEmbed(ask *pendingAsk, opt acp.PermissionOption, by string) map[s
 }
 
 // elicitClosedEmbed 是提问的终态卡：逐题列「问题—答案」，问答记录留在对话里。
-func elicitClosedEmbed(ask *pendingAsk, answers map[string]string, by string) map[string]any {
+func elicitClosedEmbed(ask *pendingAsk, answers map[string][]string, by string) map[string]any {
 	fields := make([]map[string]any, 0, len(ask.questions))
 	for _, q := range ask.questions {
-		a := answers[q.ID]
-		if a == "" && q.OtherField != "" {
-			a = answers[q.OtherField]
+		vals := append([]string(nil), answers[q.ID]...)
+		if q.OtherField != "" {
+			vals = append(vals, answers[q.OtherField]...)
 		}
+		a := strings.Join(vals, "、")
 		if a == "" {
 			a = "—"
 		}
@@ -147,7 +219,7 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 	}
 	ask := &pendingAsk{
 		kind: "elicitation", id: ev.ElicitationID, key: "dc:" + threadID,
-		nonce: nonce, questions: qs, partial: map[string]string{},
+		nonce: nonce, questions: qs, partial: map[string][]string{},
 		title: strings.TrimSpace(ev.Text),
 	}
 
@@ -208,12 +280,23 @@ func (s *Service) handleAskComponent(token string, ev interactionEvent) {
 		if err != nil || idx < 0 || idx >= len(cur.Options) {
 			return
 		}
-		s.advanceAsk(token, ev, ask, cur.Options[idx])
+		s.stepAsk(token, ev, ask, []string{cur.Options[idx]})
 	case "es":
-		if len(ev.Data.Values) == 0 {
+		// 下拉一次交互给出全部选中值（多选下拉天然多值）。
+		s.stepAsk(token, ev, ask, ev.Data.Values)
+	case "en":
+		if len(parts) != 3 {
 			return
 		}
-		s.advanceAsk(token, ev, ask, ev.Data.Values[0])
+		if parts[2] == "p" && ask.cursor > 0 {
+			ask.cursor--
+		}
+		if parts[2] == "n" && ask.cursor < len(ask.questions)-1 {
+			ask.cursor++
+		}
+		s.refreshAskCard(token, ev, ask)
+	case "ez":
+		s.submitAsk(token, ev, ask)
 	case "ei":
 		if err := interactionCallback(token, ev.ID, ev.Token, 9, inputModal(ask)); err != nil {
 			slog.Error("弹输入表单失败", "err", err)
@@ -237,40 +320,45 @@ func (s *Service) handleAskModal(token string, ev interactionEvent) {
 		s.ephemeral(token, ev, "没收到内容，再点一次「✍️ 输入」。")
 		return
 	}
-	s.advanceAsk(token, ev, ask, answer)
+	s.stepAsk(token, ev, ask, []string{answer})
 }
 
-// advanceAsk 记下当前题的答案并推进：还有题就把卡翻到下一题（type 7
-// 原地刷新——整个问答始终是同一张卡），答完整体回传并收口成记录卡。
-func (s *Service) advanceAsk(token string, ev interactionEvent, ask *pendingAsk, answer string) {
-	cur := ask.questions[ask.cursor]
-	// 自由输入且题目带 OtherField 时，选项外的答案落自由字段——两条 ACP
-	// 的「其他」语义都吃得下；答案恰为选项之一就照常落题目字段。
-	field := cur.ID
-	if cur.OtherField != "" && !slices.Contains(cur.Options, answer) {
-		field = cur.OtherField
+// stepAsk 落一次作答并刷新卡片（单选自动前进，多选停留继续勾）。
+// 提交不在这里发生——「提交」按钮是唯一的收口入口，选错随时回去改。
+func (s *Service) stepAsk(token string, ev interactionEvent, ask *pendingAsk, values []string) {
+	if s.applyAnswer(ask, values) {
+		ask.cursor++
 	}
-	ask.partial[field] = answer
-	ask.cursor++
+	s.refreshAskCard(token, ev, ask)
+}
 
-	if ask.cursor < len(ask.questions) {
-		err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-			"embeds":           []map[string]any{questionCardEmbed(ask)},
-			"components":       questionCardComponents(ask),
-			"allowed_mentions": noMentions(),
-		})
-		if err != nil {
-			slog.Error("问答卡翻题失败", "err", err)
+// refreshAskCard 用 interaction callback 原地刷新逐题卡。
+func (s *Service) refreshAskCard(token string, ev interactionEvent, ask *pendingAsk) {
+	err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
+		"embeds":           []map[string]any{questionCardEmbed(ask)},
+		"components":       questionCardComponents(ask),
+		"allowed_mentions": noMentions(),
+	})
+	if err != nil {
+		slog.Error("问答卡刷新失败", "err", err)
+	}
+}
+
+// submitAsk 整体提交：必答缺答就提示（按钮 disabled 兜底，这里防御性
+// 双保险），齐了回传并把卡收口成「问题—答案」记录。
+func (s *Service) submitAsk(token string, ev interactionEvent, ask *pendingAsk) {
+	if !askReady(ask) {
+		for i, q := range ask.questions {
+			if q.Required && len(answersOf(ask, q)) == 0 {
+				s.ephemeral(token, ev, fmt.Sprintf("第 %d 题「%s」还没答。", i+1, trimRunes(q.Title, 60)))
+				return
+			}
 		}
+		s.ephemeral(token, ev, "至少答一题再提交。")
 		return
 	}
-
-	content := map[string]any{}
-	for k, v := range ask.partial {
-		content[k] = v
-	}
 	err := s.acpMgr.ResolveElicitation(ask.key, ask.id,
-		acp.ElicitationResult{Action: "accept", Content: content})
+		acp.ElicitationResult{Action: "accept", Content: askContent(ask)})
 	s.clearAsk(ev.ChannelID, ask)
 	if err != nil {
 		s.ephemeral(token, ev, "这个提问已经失效了（超时或已在别处回答）。")
@@ -326,32 +414,26 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		err = s.acpMgr.ResolvePermission(ask.key, ask.id, opt.OptionID)
 		closed = permClosedEmbed(ask, opt, "以消息作答")
 	case "elicitation":
-		// 逐题卡的文本路径：答的永远是当前题，编号选选项、文字即答案。
+		// 逐题卡的文本路径：编号选当前题的选项（多选可「1 3」一次勾几个），
+		// 其他文字进自由输入；「提交」两个字整体提交。
+		if text == "提交" || strings.EqualFold(text, "submit") {
+			if !askReady(ask) {
+				s.say(ctx, token, threadID, "还有必答题没答，⬅️➡️ 翻回去看看。")
+				return
+			}
+			err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
+				acp.ElicitationResult{Action: "accept", Content: askContent(ask)})
+			closed = elicitClosedEmbed(ask, ask.partial, "以消息作答")
+			break
+		}
 		cur := ask.questions[ask.cursor]
-		answer := text
-		if pick >= 0 && pick < len(cur.Options) {
-			answer = cur.Options[pick]
+		if s.applyAnswer(ask, parseAnswerText(text, cur)) {
+			ask.cursor++
 		}
-		field := cur.ID
-		if cur.OtherField != "" && !slices.Contains(cur.Options, answer) {
-			field = cur.OtherField
-		}
-		ask.partial[field] = answer
-		ask.cursor++
-		if ask.cursor < len(ask.questions) {
-			// 还有题：卡片翻页，作答消息给个 ✅。
-			s.react(ctx, token, threadID, msgID, "✅")
-			s.finalizeAskCardKeep(token, threadID, ask,
-				questionCardEmbed(ask), questionCardComponents(ask))
-			return
-		}
-		content := map[string]any{}
-		for k, v := range ask.partial {
-			content[k] = v
-		}
-		err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
-			acp.ElicitationResult{Action: "accept", Content: content})
-		closed = elicitClosedEmbed(ask, ask.partial, "以消息作答")
+		s.react(ctx, token, threadID, msgID, "✅")
+		s.finalizeAskCardKeep(token, threadID, ask,
+			questionCardEmbed(ask), questionCardComponents(ask))
+		return
 	}
 
 	s.clearAsk(threadID, ask)
@@ -362,6 +444,29 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 	}
 	s.react(ctx, token, threadID, msgID, "✅")
 	s.finalizeAskCard(token, threadID, ask, closed)
+}
+
+// parseAnswerText 把文本作答变成值集合：整条都是编号（空格/逗号分隔）就
+// 映射成选项，否则原文当一个自由输入值。
+func parseAnswerText(text string, q elicitQuestion) []string {
+	fields := strings.FieldsFunc(text, func(r rune) bool {
+		return r == ' ' || r == ',' || r == '，' || r == '、'
+	})
+	var picked []string
+	for _, f := range fields {
+		n, err := strconv.Atoi(f)
+		if err != nil || n < 1 || n > len(q.Options) {
+			return []string{text}
+		}
+		picked = append(picked, q.Options[n-1])
+	}
+	if len(picked) == 0 {
+		return []string{text}
+	}
+	if !q.Multiple {
+		return picked[:1]
+	}
+	return picked
 }
 
 // clearAsk 清掉子区的挂起问答（只清自己那份，防并发覆盖）。

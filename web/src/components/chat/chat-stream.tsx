@@ -47,7 +47,7 @@ export interface ChatStreamSource extends ChatState {
   resolveElicitation: (
     id: string,
     action: "accept" | "decline" | "cancel",
-    content?: Record<string, string>
+    content?: Record<string, string | string[]>
   ) => Promise<void> | void
 }
 

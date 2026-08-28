@@ -334,7 +334,7 @@ func TestParseElicitSchema(t *testing.T) {
 // 按钮行，带自由输入的题附「✍️ 输入」按钮，>5 个选项换下拉。
 func TestQuestionCard(t *testing.T) {
 	ask := &pendingAsk{
-		nonce: "n", partial: map[string]string{},
+		nonce: "n", partial: map[string][]string{},
 		questions: []elicitQuestion{
 			{ID: "q0", Title: "第一题", Options: []string{"a", "b"}, OtherField: "q0_custom"},
 			{ID: "q1", Title: "第二题"},
@@ -345,34 +345,119 @@ func TestQuestionCard(t *testing.T) {
 		t.Errorf("标题缺进度: %v", embed["title"])
 	}
 	rows := questionCardComponents(ask)
-	// 选项按钮一行 + ✍️ 输入一行。
+	// 选项行（2 个编号 + ✍️ 追加）+ 导航行。
 	if len(rows) != 2 {
 		t.Fatalf("组件行数 = %d, want 2", len(rows))
 	}
 	buttons := rows[0]["components"].([]map[string]any)
-	if len(buttons) != 2 || buttons[0]["custom_id"] != "ea:n:0" {
+	if len(buttons) != 3 || buttons[0]["custom_id"] != "ea:n:0" || buttons[2]["custom_id"] != "ei:n" {
 		t.Errorf("选项按钮 = %+v", buttons)
+	}
+	if nav0 := rows[1]["components"].([]map[string]any); len(nav0) != 3 || nav0[2]["custom_id"] != "ez:n" {
+		t.Errorf("导航行 = %+v", nav0)
 	}
 
 	// 答完第一题：进度推进，正文里带已答记录；纯输入题只有 ✍️ 行。
-	ask.partial["q0"] = "a"
+	ask.partial["q0"] = []string{"a"}
 	ask.cursor = 1
 	embed = questionCardEmbed(ask)
-	desc := embed["description"].(string)
-	if !strings.Contains(embed["title"].(string), "2/2") || !strings.Contains(desc, "第一题") || !strings.Contains(desc, "a") {
-		t.Errorf("翻题后卡片 = %v / %s", embed["title"], desc)
+	// 新形态不在正文里堆已答记录（⬅️ 随时可回看），进度在标题与 footer。
+	footer := embed["footer"].(map[string]any)["text"].(string)
+	if !strings.Contains(embed["title"].(string), "2/2") || !strings.Contains(footer, "1/2") {
+		t.Errorf("翻题后卡片 = %v / footer %s", embed["title"], footer)
 	}
 	rows = questionCardComponents(ask)
-	if len(rows) != 1 || rows[0]["components"].([]map[string]any)[0]["custom_id"] != "ei:n" {
-		t.Errorf("纯输入题组件 = %+v", rows)
+	// 纯输入题没有选项行，只剩常驻导航条（⬅️ ➡️ ✍️ 提交）。
+	if len(rows) != 1 {
+		t.Fatalf("纯输入题组件行数 = %d, want 1", len(rows))
+	}
+	nav := rows[0]["components"].([]map[string]any)
+	// 纯输入题：✍️ 落回导航条（⬅️ ➡️ ✍️ 提交）。
+	if len(nav) != 4 || nav[2]["custom_id"] != "ei:n" || nav[3]["custom_id"] != "ez:n" {
+		t.Errorf("导航条 = %+v", nav)
+	}
+	// 第二题（末题）：➡️ 灰、⬅️ 可用；q0 已答但 q1 未答，提交仍可用
+	//（q1 非必答）。
+	if nav[0]["disabled"] != false || nav[1]["disabled"] != true || nav[3]["disabled"] != false {
+		t.Errorf("导航 disabled 状态 = %+v", nav)
 	}
 
 	// >5 个选项换下拉。
-	many := &pendingAsk{nonce: "m", partial: map[string]string{}, questions: []elicitQuestion{{
+	many := &pendingAsk{nonce: "m", partial: map[string][]string{}, questions: []elicitQuestion{{
 		ID: "q", Title: "多选项", Options: []string{"1", "2", "3", "4", "5", "6"},
 	}}}
 	rows = questionCardComponents(many)
 	if rows[0]["components"].([]map[string]any)[0]["custom_id"] != "es:m" {
 		t.Errorf("多选项应为下拉: %+v", rows)
+	}
+}
+
+// 契约：多选题解析与作答——schema 形状取自 2026-08 真实转录（claude 的
+// AskUserQuestion：array + items.anyOf + _askUserQuestionCustomAnswer）。
+func TestMultiSelectFlow(t *testing.T) {
+	raw := json.RawMessage(`{"type":"object","properties":{
+		"question_0":{"type":"string","title":"Color","oneOf":[{"const":"Red"},{"const":"Blue"}]},
+		"question_0_custom":{"type":"string","title":"Other","_meta":{"_askUserQuestionCustomAnswer":{"questionId":"question_0","isCustomAnswer":true}}},
+		"question_1":{"type":"array","title":"Fruits","items":{"anyOf":[{"const":"Apple"},{"const":"Banana"},{"const":"Cherry"}]}},
+		"question_1_custom":{"type":"string","title":"Other","_meta":{"_askUserQuestionCustomAnswer":{"questionId":"question_1","isCustomAnswer":true}}}
+	}}`)
+	qs, err := parseElicitSchema(raw)
+	if err != nil || len(qs) != 2 {
+		t.Fatalf("题目数 = %d, err = %v", len(qs), err)
+	}
+	var single, multi elicitQuestion
+	for _, q := range qs {
+		if q.Multiple {
+			multi = q
+		} else {
+			single = q
+		}
+	}
+	if single.ID != "question_0" || single.OtherField != "question_0_custom" || len(single.Options) != 2 {
+		t.Errorf("单选题 = %+v", single)
+	}
+	if multi.ID != "question_1" || len(multi.Options) != 3 || multi.OtherField != "question_1_custom" {
+		t.Errorf("多选题 = %+v", multi)
+	}
+
+	svc := &Service{}
+	ask := &pendingAsk{questions: []elicitQuestion{single, multi}, partial: map[string][]string{}}
+
+	// 单选：选完自动前进。
+	if adv := svc.applyAnswer(ask, []string{"Red"}); !adv {
+		t.Error("单选应自动前进")
+	}
+	ask.cursor = 1
+	// 多选：toggle 累积，不前进；再点一次取消。
+	if adv := svc.applyAnswer(ask, []string{"Apple"}); adv {
+		t.Error("多选不该自动前进")
+	}
+	svc.applyAnswer(ask, []string{"Cherry"})
+	svc.applyAnswer(ask, []string{"Apple"})
+	if got := ask.partial["question_1"]; len(got) != 1 || got[0] != "Cherry" {
+		t.Errorf("toggle 后集合 = %v", got)
+	}
+	// 自由输入与选项并存。
+	svc.applyAnswer(ask, []string{"Durian"})
+	content := askContent(ask)
+	if content["question_0"] != "Red" {
+		t.Errorf("单选回传 = %v", content["question_0"])
+	}
+	if arr, ok := content["question_1"].([]string); !ok || len(arr) != 1 || arr[0] != "Cherry" {
+		t.Errorf("多选回传 = %v", content["question_1"])
+	}
+	if content["question_1_custom"] != "Durian" {
+		t.Errorf("自由输入回传 = %v", content["question_1_custom"])
+	}
+
+	// 文本作答：「1 3」在多选题上映射两个选项；非编号整条当自由输入。
+	if got := parseAnswerText("1 3", multi); len(got) != 2 || got[0] != "Apple" || got[1] != "Cherry" {
+		t.Errorf("编号多选解析 = %v", got)
+	}
+	if got := parseAnswerText("随便写的", multi); len(got) != 1 || got[0] != "随便写的" {
+		t.Errorf("自由文本解析 = %v", got)
+	}
+	if got := parseAnswerText("1 2", single); len(got) != 1 || got[0] != "Red" {
+		t.Errorf("单选题多编号应只取第一个 = %v", got)
 	}
 }

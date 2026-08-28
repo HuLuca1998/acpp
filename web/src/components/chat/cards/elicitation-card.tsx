@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import type { Message, PendingElicitation } from "@/types/acp"
 import { cn } from "@/lib/utils"
 import {
-  answerFor,
+  answersFor,
   parseElicitationSchema,
   type ElicitationSchema,
 } from "@/lib/elicitation"
@@ -51,7 +51,7 @@ export function ElicitationCard({
   elicitation: PendingElicitation
   onResolve: (
     action: "accept" | "decline",
-    content?: Record<string, string>
+    content?: Record<string, string | string[]>
   ) => void
 }) {
   const { t } = useTranslation()
@@ -81,14 +81,26 @@ export function ElicitationCard({
     if (submitted) return
 
     const data = new FormData(event.currentTarget)
-    const content: Record<string, string> = {}
+    const content: Record<string, string | string[]> = {}
     for (const q of questions) {
-      const value = data.get(q.id)
-      if (typeof value !== "string" || value.trim() === "") continue
       // 自由输入与选项同名，靠「是不是某个选项的值」区分该写回哪个字段：
       // 纯自由输入题没有独立的 other 字段，答案直接写回题目本身。
-      const isOption = q.options.some((o) => o.value === value)
-      content[isOption ? q.id : (q.otherFieldId ?? q.id)] = value
+      // 多选题一名多值（checkbox），选项集合走数组，自由输入仍是单值。
+      const values = data
+        .getAll(q.id)
+        .filter((v): v is string => typeof v === "string" && v.trim() !== "")
+      if (values.length === 0) continue
+      const picked = values.filter((v) => q.options.some((o) => o.value === v))
+      const free = values.find((v) => !q.options.some((o) => o.value === v))
+      if (q.multiple) {
+        if (picked.length > 0) content[q.id] = picked
+        if (free) content[q.otherFieldId ?? q.id] = free
+      } else {
+        const value = picked[0] ?? free
+        if (value === undefined) continue
+        const isOption = picked.length > 0
+        content[isOption ? q.id : (q.otherFieldId ?? q.id)] = value
+      }
     }
 
     setSubmitted(true)
@@ -169,7 +181,12 @@ export function ElicitationCard({
       </ElicitationHeader>
 
       {questions.map((q) => (
-        <QuestionnaireItem key={q.id} name={q.id} required={q.required}>
+        <QuestionnaireItem
+          key={q.id}
+          name={q.id}
+          required={q.required}
+          multiple={q.multiple}
+        >
           <QuestionnaireTitle>{q.title}</QuestionnaireTitle>
           {q.description ? (
             <QuestionnaireDescription>{q.description}</QuestionnaireDescription>
@@ -245,10 +262,11 @@ export function ElicitationAnsweredCard({ message }: { message: Message }) {
         <div className="text-sm text-muted-foreground">{message.content}</div>
       ) : (
         questions.map((q) => {
-          const answer = answerFor(q, payload?.answers)
-          // 答案不在选项里 = 用户自己填的，补一行显示出来。
-          const custom =
-            answer !== "" && !q.options.some((o) => o.value === answer)
+          const answers = answersFor(q, payload?.answers)
+          // 答案不在选项里 = 用户自己填的，补行显示出来（多选可与选项并存）。
+          const customs = answers.filter(
+            (a) => !q.options.some((o) => o.value === a)
+          )
           return (
             <div key={q.id} className="flex flex-col gap-2">
               <div>
@@ -265,11 +283,13 @@ export function ElicitationAnsweredCard({ message }: { message: Message }) {
                     key={option.value}
                     label={option.value}
                     description={option.description}
-                    picked={option.value === answer}
+                    picked={answers.includes(option.value)}
                   />
                 ))}
-                {custom ? <AnsweredChoice label={answer} picked /> : null}
-                {answer === "" ? (
+                {customs.map((c) => (
+                  <AnsweredChoice key={c} label={c} picked />
+                ))}
+                {answers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     {t("chat.elicitation.skipped")}
                   </p>

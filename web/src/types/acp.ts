@@ -515,13 +515,16 @@ export type NoticeEvent =
 
 /**
  * agent 交互式提问的一道题，从 elicitation 的 requestedSchema 解析而来。
- * options 来自 oneOf；otherFieldId 指向对应的自由输入字段（`__other`）。
+ * 单选 options 来自顶层 oneOf，多选（multiple）来自 array 的 items；
+ * otherFieldId 指向对应的自由输入字段。
  */
 export interface ElicitationQuestion {
   id: string
   title: string
   description?: string
   required: boolean
+  /** 多选题（schema 为 array + items 选项集），答案是集合。 */
+  multiple?: boolean
   options: { value: string; description?: string }[]
   otherFieldId?: string
 }

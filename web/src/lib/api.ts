@@ -568,7 +568,7 @@ export const api = {
       id: number,
       elicitationId: string,
       action: "accept" | "decline" | "cancel",
-      content?: Record<string, string>
+      content?: Record<string, string | string[]>
     ) =>
       request<null>(`/sessions/${id}/elicitation`, {
         method: "POST",
