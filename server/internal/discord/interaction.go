@@ -557,11 +557,23 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	s.deleteOriginalLater(token, appID, ev.Token)
 }
 
-// setBindingOption 处理 /model 与 /effort：改绑定、刷新频道主题，
-// 回一条只有本人可见、阅后即焚的确认。
+// bindingForCommand 给绑定类命令找归属：主频道直接查，子区落到父频道的
+// 绑定上（/model /effort /access /status 在子区里也该能用）。
+func (s *Service) bindingForCommand(cfg Config, channelID string) (Binding, bool) {
+	if b, ok := cfg.binding(channelID); ok {
+		return b, true
+	}
+	if t, ok := cfg.thread(channelID); ok {
+		return cfg.binding(t.ChannelID)
+	}
+	return Binding{}, false
+}
+
+// setBindingOption 处理 /model /effort /access：改绑定、刷新频道主题，
+// 回一条只有本人可见、阅后即焚的确认。子区里执行作用于父频道的绑定。
 func (s *Service) setBindingOption(ctx context.Context, token string, ev interactionEvent, kind string) {
 	cfg := s.store.config()
-	b, ok := cfg.binding(ev.ChannelID)
+	b, ok := s.bindingForCommand(cfg, ev.ChannelID)
 	if !ok {
 		s.ephemeral(token, ev, "这个频道还没绑定工作区，先 /init。")
 		return
@@ -607,9 +619,10 @@ func (s *Service) setBindingOption(ctx context.Context, token string, ev interac
 }
 
 // showStatus 用 /status 回一张只有本人可见的绑定详情卡，看完自动消失。
+// 子区里执行给的是父频道的绑定。
 func (s *Service) showStatus(token string, ev interactionEvent) {
 	cfg := s.store.config()
-	b, ok := cfg.binding(ev.ChannelID)
+	b, ok := s.bindingForCommand(cfg, ev.ChannelID)
 	if !ok {
 		s.ephemeral(token, ev, "这个频道还没绑定工作区，先 /init。")
 		return
