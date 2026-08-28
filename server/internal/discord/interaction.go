@@ -88,6 +88,10 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"name":        "unbind",
 			"description": "解绑这个频道的工作区（磁盘克隆保留）",
 		},
+		{
+			"name":        "stop",
+			"description": "中止子区里正在跑的回合",
+		},
 	}
 	err := botREST(ctx, token, "PUT",
 		fmt.Sprintf("/applications/%s/guilds/%s/commands", appID, guildID), cmds, nil)
@@ -155,6 +159,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.showStatus(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "unbind":
 		s.unbindChannel(ctx, token, ev)
+	case ev.Type == 2 && ev.Data.Name == "stop":
+		s.stopThread(token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):

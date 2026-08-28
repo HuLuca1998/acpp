@@ -9,10 +9,10 @@ import (
 	"github.com/coder/websocket"
 )
 
-// 本期只要 GUILDS：斜杠命令与 modal 交互（INTERACTION_CREATE）不需要任何
-// intent，GUILDS 负责送 GUILD_CREATE/DELETE 让状态面知道 bot 在哪些服务器。
-// 未来读频道消息时再加 GUILD_MESSAGES/MESSAGE_CONTENT，重连即生效。
-const gatewayIntents = 1 << 0
+// GUILDS 送 GUILD_CREATE/DELETE（状态面 + 命令注册时机）；
+// GUILD_MESSAGES + MESSAGE_CONTENT 是子区对话的输入通道（MESSAGE_CONTENT
+// 是特权 intent，开发者门户已开）。
+const gatewayIntents = (1 << 0) | (1 << 9) | (1 << 15)
 
 // 重连退避与 SSE 消费同一姿势：翻倍、封顶、连上重置。
 const (

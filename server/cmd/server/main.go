@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -147,6 +148,20 @@ func run() error {
 	discordService, err := discord.New(filepath.Join(cfg.DataDir, "discord.json"), discord.Deps{
 		DefaultWorkRoot: func() string { return filepath.Join(service.DefaultCwd(), "discord") },
 		Catalog:         discordCatalog(agentService),
+		SkillpackDir:    filepath.Join(cfg.DataDir, "skillpack"),
+		// 子区对话拉 acp 子进程的启动方式：按内置工具名查配置。
+		AgentRuntime: func(ctx context.Context, agent string) (acp.Runtime, error) {
+			list, err := agentService.List(ctx)
+			if err != nil {
+				return acp.Runtime{}, err
+			}
+			for _, a := range list {
+				if a.Name == agent {
+					return acp.RuntimeFor(a.Command, a.Args, a.Env), nil
+				}
+			}
+			return acp.Runtime{}, fmt.Errorf("未知的内置工具 %q", agent)
+		},
 		Repos: func(ctx context.Context) ([]discord.RepoOption, error) {
 			repos, err := project.Repos(ctx)
 			if err != nil {

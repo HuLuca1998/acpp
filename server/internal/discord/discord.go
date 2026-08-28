@@ -1,7 +1,8 @@
-// Package discord 是独立于会话体系的 Discord 频道工作区子系统（adr-016）：
-// 频道经 /init 绑定仓库与模型，克隆出专属工作目录。刻意与会话零耦合——
-// 项目内只 import 纯函数叶子包 gitrepo，模型清单由装配层经 CatalogFunc
-// 注入，回退面 = 删本包 + 装配处几行 + 配置文件。
+// Package discord 是独立于会话体系的 Discord 频道工作区子系统
+// （adr-016 绑定面 / adr-017 对话面）：频道经 /init 绑定仓库与模型并克隆
+// 出专属工作目录，@bot 开子区、子区内直接与 acp 对话。刻意与会话零耦合——
+// 项目内只 import 两个叶子包（gitrepo、acp 协议客户端），业务依赖全部经
+// Deps 闭包注入，回退面 = 删本包 + 装配处几行 + 配置文件。
 package discord
 
 import (
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"acpp/server/internal/acp"
 )
 
 // 哨兵错误自带一套（本包不依赖 service），httpapi 的 writeError 登记映射。
@@ -37,13 +40,19 @@ type RepoOption struct {
 	CloneURL string `json:"cloneUrl"`
 }
 
-// Deps 是装配层注入的全部外部依赖，discord 包因此不认识其他业务包。
+// Deps 是装配层注入的全部外部依赖，discord 包因此不认识其他业务包
+// （acp 是叶子协议客户端，与 gitrepo 同性质，直接用）。
 type Deps struct {
 	// DefaultWorkRoot 是没配置工作根时的克隆落点根（<工作区根>/discord，
 	// 与租户 root 同层）。工作区根可运行时改，所以是函数不是值。
 	DefaultWorkRoot func() string
 	Catalog         CatalogFunc
 	Repos           ReposFunc
+	// AgentRuntime 返回内置工具的启动方式（命令/参数/环境），子区对话
+	// 拉起 acp 子进程用。nil 时对话面整体停用（@ 提及不响应）。
+	AgentRuntime func(ctx context.Context, agent string) (acp.Runtime, error)
+	// SkillpackDir 是控制端技能包目录，子区会话与网页会话注入同一份。
+	SkillpackDir string
 }
 
 // AgentOption 是一个内置工具的可选项集合。
@@ -118,6 +127,16 @@ type Service struct {
 	pending map[string]pendingInit
 	// topicRetry 记录哪些频道挂着主题限速重试（每频道最多一个）。
 	topicRetry map[string]bool
+
+	// acpMgr 是 discord 专属的 acp 会话池——与网页会话池完全分开，
+	// 上限与空闲回收独立，互不挤占。AgentRuntime 未注入时为 nil（对话停用）。
+	acpMgr *acp.Manager
+	// chats 是子区的对话运行态（输入队列、挂起的问答），内存态。
+	chatMu sync.Mutex
+	chats  map[string]*threadChat
+	// chanKind 缓存「这个 channel id 是绑定频道的子区吗」的判定结果，
+	// 免得每条消息都去 REST 查一次。
+	chanKind map[string]string
 }
 
 // New 加载配置并构建服务；gateway 由 Start 按配置决定起不起。
@@ -126,25 +145,57 @@ func New(path string, deps Deps) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{store: st, deps: deps, registered: map[string]bool{},
-		pending: map[string]pendingInit{}, topicRetry: map[string]bool{}}, nil
+	s := &Service{store: st, deps: deps, registered: map[string]bool{},
+		pending: map[string]pendingInit{}, topicRetry: map[string]bool{},
+		chats: map[string]*threadChat{}, chanKind: map[string]string{}}
+	if deps.AgentRuntime != nil {
+		// 子区对话的会话池：无人值守场景给宽松的轮超时，上限收紧——
+		// discord 的并发子区不会太多，别让它抢网页会话的资源。
+		s.acpMgr = acp.NewManager(chatMaxSessions, chatTurnTimeout, deps.SkillpackDir)
+	}
+	return s, nil
 }
 
-// Start 记住进程级上下文并按当前配置拉起 gateway。
+// Start 记住进程级上下文并按当前配置拉起 gateway 与空闲回收。
 func (s *Service) Start(ctx context.Context) {
 	s.mu.Lock()
 	s.parent = ctx
 	s.mu.Unlock()
 	s.applyGateway()
+	if s.acpMgr != nil {
+		go s.reapIdle(ctx)
+	}
 }
 
-// Close 停掉 gateway（进程退出时用；幂等）。
+// Close 停掉 gateway 并回收全部 acp 子进程（进程退出时用；幂等）。
 func (s *Service) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
+	}
+	s.mu.Unlock()
+	if s.acpMgr != nil {
+		s.acpMgr.CloseAll()
+	}
+}
+
+// reapIdle 定期回收空闲的子区会话子进程。上下文在 agent 侧持久化
+// （acpSessionId 落盘），下次说话 session/load 无感恢复。
+func (s *Service) reapIdle(ctx context.Context) {
+	tick := time.NewTicker(5 * time.Minute)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			for _, key := range s.acpMgr.Idle(chatIdleTimeout) {
+				if err := s.acpMgr.Close(key); err != nil {
+					slog.Warn("回收子区会话失败", "key", key, "err", err)
+				}
+			}
+		}
 	}
 }
 
@@ -258,6 +309,8 @@ func (s *Service) handleEvent(ctx context.Context, token, t string, d json.RawMe
 			}
 		}
 		s.mu.Unlock()
+	case "MESSAGE_CREATE":
+		s.handleMessage(ctx, token, d)
 	case "INTERACTION_CREATE":
 		s.handleInteraction(ctx, token, d)
 	}

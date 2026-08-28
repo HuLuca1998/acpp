@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -267,5 +268,65 @@ func TestRetryAfter(t *testing.T) {
 	}
 	if d, ok := retryAfter(errors.New("429 Too Many Requests: <html>")); !ok || d != 5*time.Minute {
 		t.Errorf("解不出时长应给保守值: %v, %v", d, ok)
+	}
+}
+
+// 契约：@bot 标记（两种写法）要摘干净；子区标题取首句且限长。
+func TestStripMentionAndTitle(t *testing.T) {
+	if got := stripMention("<@123> 帮我看看 <@!123> 这个", "123"); got != "帮我看看  这个" {
+		t.Errorf("stripMention = %q", got)
+	}
+	if got := threadTitle("第一行问题\n第二行补充"); got != "第一行问题" {
+		t.Errorf("threadTitle = %q", got)
+	}
+	long := strings.Repeat("问", 100)
+	if got := threadTitle(long); len([]rune(got)) != 60 {
+		t.Errorf("超长标题应截到 60，得 %d", len([]rune(got)))
+	}
+}
+
+// 契约：长回复按行分段不超限；被切开的代码围栏每段补闭合、下段重开。
+func TestSplitMessage(t *testing.T) {
+	if got := splitMessage("短消息", 100); len(got) != 1 || got[0] != "短消息" {
+		t.Errorf("短消息不该切: %v", got)
+	}
+
+	var b strings.Builder
+	b.WriteString("说明\n```go\n")
+	for i := range 50 {
+		fmt.Fprintf(&b, "line%d := %d\n", i, i)
+	}
+	b.WriteString("```")
+	segs := splitMessage(b.String(), 200)
+	if len(segs) < 2 {
+		t.Fatalf("应该切成多段, got %d", len(segs))
+	}
+	for i, seg := range segs {
+		if len([]rune(seg)) > 210 {
+			t.Errorf("第 %d 段超限: %d", i, len([]rune(seg)))
+		}
+		// 每段的围栏必须自洽（``` 出现偶数次）。
+		if strings.Count(seg, "```")%2 != 0 {
+			t.Errorf("第 %d 段围栏不闭合:\n%s", i, seg)
+		}
+	}
+}
+
+// 契约：requestedSchema 单题（含 codex 的 __other 与 claude 的 _custom
+// 附属字段）能解出题目与选项；真正的多题拒绝。
+func TestParseSingleQuestion(t *testing.T) {
+	single := json.RawMessage(`{"properties":{
+		"color":{"title":"选个颜色","oneOf":[{"const":"red"},{"const":"blue"}]},
+		"color_custom":{"title":"其他"},
+		"__other":{"_meta":{"codex":{"isOtherAnswer":true}}}
+	}}`)
+	q, err := parseSingleQuestion(single)
+	if err != nil || q.field != "color" || len(q.options) != 2 {
+		t.Errorf("单题解析 = %+v, %v", q, err)
+	}
+
+	multi := json.RawMessage(`{"properties":{"a":{"title":"A"},"b":{"title":"B"}}}`)
+	if _, err := parseSingleQuestion(multi); err == nil {
+		t.Error("多题应拒绝")
 	}
 }

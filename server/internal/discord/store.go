@@ -18,6 +18,18 @@ type Config struct {
 	BotToken string    `json:"botToken,omitempty"`
 	WorkRoot string    `json:"workRoot,omitempty"`
 	Bindings []Binding `json:"bindings,omitempty"`
+	// Threads 是子区 ↔ acp 会话的对应：进程重启后凭 ACPSessionID 走
+	// session/load 恢复上下文，子区因此可以一直聊下去。
+	Threads []Thread `json:"threads,omitempty"`
+}
+
+// Thread 是一个对话子区（Discord thread）。ChannelID 是它所属的绑定频道。
+type Thread struct {
+	ThreadID     string    `json:"threadId"`
+	ChannelID    string    `json:"channelId"`
+	ACPSessionID string    `json:"acpSessionId,omitempty"`
+	Title        string    `json:"title,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // Binding 是一条「频道 ↔ 仓库工作区」的绑定：/init 表单的落盘结果。
@@ -114,6 +126,7 @@ func (s *store) write(cfg Config) error {
 func (c Config) clone() Config {
 	out := c
 	out.Bindings = append([]Binding(nil), c.Bindings...)
+	out.Threads = append([]Thread(nil), c.Threads...)
 	return out
 }
 
@@ -147,13 +160,45 @@ func (c *Config) upsertBinding(b Binding) {
 	c.Bindings = append(c.Bindings, b)
 }
 
-// removeBinding 解绑频道；报告是否真的删了东西。
+// removeBinding 解绑频道；报告是否真的删了东西。子区记录一并清掉——
+// 绑定没了它们指向的工作区也没了。
 func (c *Config) removeBinding(channelID string) bool {
 	for i := range c.Bindings {
 		if c.Bindings[i].ChannelID == channelID {
 			c.Bindings = append(c.Bindings[:i], c.Bindings[i+1:]...)
+			kept := c.Threads[:0]
+			for _, t := range c.Threads {
+				if t.ChannelID != channelID {
+					kept = append(kept, t)
+				}
+			}
+			c.Threads = kept
 			return true
 		}
 	}
 	return false
+}
+
+// thread 按子区 id 查记录。
+func (c Config) thread(threadID string) (Thread, bool) {
+	for _, t := range c.Threads {
+		if t.ThreadID == threadID {
+			return t, true
+		}
+	}
+	return Thread{}, false
+}
+
+// upsertThread 以子区为键写入或覆盖。
+func (c *Config) upsertThread(t Thread) {
+	for i := range c.Threads {
+		if c.Threads[i].ThreadID == t.ThreadID {
+			if t.CreatedAt.IsZero() {
+				t.CreatedAt = c.Threads[i].CreatedAt
+			}
+			c.Threads[i] = t
+			return
+		}
+	}
+	c.Threads = append(c.Threads, t)
 }
