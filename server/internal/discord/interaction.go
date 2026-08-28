@@ -186,11 +186,10 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 	}
 }
 
-// isAskComponent 认问答卡的全部组件前缀（权限按钮、选项、下拉、导航、
-// 提交、自由输入）。新增前缀记得来这里登记——漏了就是「该 APP 未能
-// 及时响应」（实测踩过：en:/ez: 一度没进分发）。
+// isAskComponent 认问答卡的全部组件前缀（权限按钮、填表/继续按钮）。
+// 新增前缀记得来这里登记——漏了就是「该 APP 未能及时响应」（实测踩过）。
 func isAskComponent(customID string) bool {
-	for _, p := range []string{"pm:", "ea:", "es:", "ei:", "en:", "ez:"} {
+	for _, p := range []string{"pm:", "eb:", "ec:"} {
 		if strings.HasPrefix(customID, p) {
 			return true
 		}
@@ -374,11 +373,11 @@ type initInput struct {
 // 后台探分支——多于一个分支就把回执卡编辑成分支下拉，否则直接开工。
 func (s *Service) submitInit(ctx context.Context, token string, ev interactionEvent) {
 	answers := parseModalSubmit(ev.Data.Components)
-	repoIn := strings.TrimSpace(answers["repo_custom"])
+	repoIn := strings.TrimSpace(firstAnswer(answers, "repo_custom"))
 	if repoIn == "" {
-		repoIn = answers["repo_pick"]
+		repoIn = firstAnswer(answers, "repo_pick")
 	}
-	agent, modelID, ok := strings.Cut(answers["model"], "|")
+	agent, modelID, ok := strings.Cut(firstAnswer(answers, "model"), "|")
 	if !ok || repoIn == "" {
 		s.ephemeral(token, ev, "表单不完整（仓库没填/没选），重新 /init 一次。")
 		return
@@ -388,7 +387,7 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 		s.ephemeral(token, ev, err.Error())
 		return
 	}
-	effort := answers["effort"]
+	effort := firstAnswer(answers, "effort")
 	if effort == "default" {
 		effort = ""
 	}
@@ -402,7 +401,7 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 
 	go s.offerBranches(ctx, token, ev, initInput{
 		repo: name, cloneURL: cloneURL,
-		agent: agent, modelID: modelID, effort: effort, access: answers["access"],
+		agent: agent, modelID: modelID, effort: effort, access: firstAnswer(answers, "access"),
 	})
 }
 
@@ -749,8 +748,9 @@ func (s *Service) deleteOriginalLater(token, appID, interactionToken string) {
 
 // parseModalSubmit 从提交载荷里抠答案：Label 包着的输入件在 component
 // 字段，传统 action row 在 components 数组——两种都认（平台过渡期实测）。
-func parseModalSubmit(raw json.RawMessage) map[string]string {
-	answers := map[string]string{}
+// 多选组件（CheckboxGroup/多选下拉）一名多值，答案统一是集合。
+func parseModalSubmit(raw json.RawMessage) map[string][]string {
+	answers := map[string][]string{}
 	var walk func(node json.RawMessage)
 	walk = func(node json.RawMessage) {
 		var n struct {
@@ -766,9 +766,9 @@ func parseModalSubmit(raw json.RawMessage) map[string]string {
 		if n.CustomID != "" {
 			switch {
 			case len(n.Values) > 0:
-				answers[n.CustomID] = n.Values[0]
-			case n.Value != "":
-				answers[n.CustomID] = n.Value
+				answers[n.CustomID] = n.Values
+			case strings.TrimSpace(n.Value) != "":
+				answers[n.CustomID] = []string{strings.TrimSpace(n.Value)}
 			}
 		}
 		if len(n.Component) > 0 {
@@ -786,6 +786,14 @@ func parseModalSubmit(raw json.RawMessage) map[string]string {
 		walk(c)
 	}
 	return answers
+}
+
+// firstAnswer 取一个字段的首个值（单值组件用）。
+func firstAnswer(answers map[string][]string, key string) string {
+	if vs := answers[key]; len(vs) > 0 {
+		return vs[0]
+	}
+	return ""
 }
 
 func trimRunes(s string, n int) string {

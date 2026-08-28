@@ -3,7 +3,6 @@ package discord
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -168,92 +167,6 @@ func answeredLine(q elicitQuestion, answers []string) string {
 	return "✅ ~~" + trimRunes(q.Title, 60) + "~~　**" + trimRunes(strings.Join(answers, "、"), 160) + "**"
 }
 
-// questionCardV2 是逐题卡：标题与已答摘要在头部，当前题的选项每行一个
-// Section（右侧 ✓/○ 按钮，多选 toggle），自由输入一行，底部 ⬅️➡️提交。
-func questionCardV2(ask *pendingAsk) []map[string]any {
-	cur := ask.questions[ask.cursor]
-	sel := answersOf(ask, cur)
-	values := optionValues(cur)
-
-	var inner []map[string]any
-	inner = append(inner, v2Text(fmt.Sprintf("### ❓ agent 有问题问你　·　%d/%d", ask.cursor+1, len(ask.questions))))
-	if ask.title != "" {
-		inner = append(inner, v2Text("-# "+trimRunes(ask.title, 300)))
-	}
-	for i, q := range ask.questions {
-		if i == ask.cursor {
-			continue
-		}
-		if a := answersOf(ask, q); len(a) > 0 {
-			inner = append(inner, v2Text(answeredLine(q, a)))
-		}
-	}
-	inner = append(inner, v2Sep())
-
-	title := "**" + trimRunes(cur.Title, 200)
-	if cur.Description != "" {
-		title += " — " + trimRunes(cur.Description, 200)
-	}
-	title += "**"
-	if cur.Multiple {
-		title += "（可多选）"
-	}
-	inner = append(inner, v2Text(title))
-
-	for i, o := range cur.Options {
-		picked := slices.Contains(sel, o.Const)
-		label := fmt.Sprintf("%d · %s", i+1, trimRunes(o.Const, 120))
-		if picked {
-			label = "**" + label + "**"
-		}
-		if o.Description != "" {
-			label += "\n-# " + trimRunes(o.Description, 140)
-		}
-		btn := map[string]any{
-			"type": 2, "style": 2, "label": "○",
-			"custom_id": fmt.Sprintf("ea:%s:%d", ask.nonce, i),
-		}
-		if picked {
-			btn["style"] = 3
-			btn["label"] = "✓"
-		}
-		inner = append(inner, v2Section(label, btn))
-	}
-
-	// 自由输入行：已输入的显示出来（多选时与选项并存）。
-	var free []string
-	for _, a := range sel {
-		if !slices.Contains(values, a) {
-			free = append(free, a)
-		}
-	}
-	freeLabel := "自由输入"
-	if len(free) > 0 {
-		freeLabel = "✍️ **" + trimRunes(strings.Join(free, "、"), 160) + "**"
-	}
-	inner = append(inner, v2Section(freeLabel, map[string]any{
-		"type": 2, "style": 2, "label": "✍️", "custom_id": "ei:" + ask.nonce,
-	}))
-
-	inner = append(inner, v2Sep())
-
-	answered := 0
-	for _, q := range ask.questions {
-		if len(answersOf(ask, q)) > 0 {
-			answered++
-		}
-	}
-	inner = append(inner, map[string]any{"type": 1, "components": []map[string]any{
-		{"type": 2, "style": 2, "label": "⬅️", "custom_id": "en:" + ask.nonce + ":p",
-			"disabled": ask.cursor == 0},
-		{"type": 2, "style": 2, "label": "➡️", "custom_id": "en:" + ask.nonce + ":n",
-			"disabled": ask.cursor == len(ask.questions)-1},
-		{"type": 2, "style": 3, "label": fmt.Sprintf("提交（%d/%d）", answered, len(ask.questions)),
-			"custom_id": "ez:" + ask.nonce, "disabled": !askReady(ask)},
-	}})
-	return v2Container(colorBlurbe, inner)
-}
-
 // elicitClosedV2 是提问的终态卡：逐题「✅ ~~题~~　答案」，记录留在对话里。
 func elicitClosedV2(ask *pendingAsk, answers map[string][]string, by string) []map[string]any {
 	var inner []map[string]any
@@ -297,18 +210,116 @@ func answersOf(ask *pendingAsk, q elicitQuestion) []string {
 	return out
 }
 
-// inputModal 是自由输入的单题小表单（em:<nonce> 提交，答的是当前题）。
-func inputModal(ask *pendingAsk) map[string]any {
-	cur := ask.questions[ask.cursor]
-	return map[string]any{
-		"custom_id": "em:" + ask.nonce,
-		"title":     trimRunes(cur.Title, 45),
-		"components": []map[string]any{{
-			"type": 18, "label": trimRunes(cur.Title, 45),
-			"component": map[string]any{
-				"type": 4, "custom_id": "answer", "style": 2, "required": true,
-				"placeholder": "在这里输入…",
-			},
-		}},
+// ---- 一次性表单（用户定稿：不逐题翻页，一个 modal 填完全部）----
+
+// askIntroCard 是提问的入口卡：modal 只能由点击触发，这张卡就是那个入口。
+func askIntroCard(ask *pendingAsk) []map[string]any {
+	var inner []map[string]any
+	inner = append(inner, v2Text(fmt.Sprintf("### ❓ agent 有问题问你（%d 题）", len(ask.questions))))
+	if ask.title != "" {
+		inner = append(inner, v2Text(trimRunes(ask.title, 500)))
 	}
+	var lines []string
+	for i, q := range ask.questions {
+		kind := ""
+		if q.Multiple {
+			kind = "（多选）"
+		}
+		lines = append(lines, fmt.Sprintf("%d. %s%s", i+1, trimRunes(q.Title, 80), kind))
+	}
+	inner = append(inner, v2Text(strings.Join(lines, "\n")))
+	label := "📝 填表回答"
+	if formPages(ask.questions) > 1 {
+		label = fmt.Sprintf("📝 填表回答（分 %d 页）", formPages(ask.questions))
+	}
+	inner = append(inner, map[string]any{"type": 1, "components": []map[string]any{{
+		"type": 2, "style": 1, "label": label,
+		"custom_id": "eb:" + ask.nonce + ":0",
+	}}})
+	return v2Container(colorBlurbe, inner)
+}
+
+// modal 一屏最多 5 个顶层组件（平台上限）。现在每题只占一个组件
+// （单选 RadioGroup / 多选 CheckboxGroup / 纯输入 TextInput），claude
+// 单次最多 4 题——常态一页全装下，只有 >5 题才分页兜底。
+const formPageSize = 5
+
+func formPages(qs []elicitQuestion) int {
+	return (len(qs) + formPageSize - 1) / formPageSize
+}
+
+// formModal 拼第 page 页的表单。一页装不完时页内塞满 5 题，提交后经
+// 「继续填写」按钮翻下一页（modal 提交后不能直接再弹 modal，平台规则）。
+// 空余组件位分给带自由输入的题（每题一个「其他」输入框，先到先得）。
+func formModal(ask *pendingAsk, page int) map[string]any {
+	start := page * formPageSize
+	end := min(start+formPageSize, len(ask.questions))
+	pageQs := ask.questions[start:end]
+
+	var comps []map[string]any
+	for _, q := range pageQs {
+		comps = append(comps, formQuestion(q))
+	}
+	// 空位分给「其他」输入框：选项外的自定义答案有地方写。
+	for _, q := range pageQs {
+		if len(comps) >= formPageSize {
+			break
+		}
+		if q.OtherField != "" && len(q.Options) > 0 {
+			comps = append(comps, map[string]any{
+				"type": 18, "label": trimRunes("其他（"+q.Title+"）", 45),
+				"description": "上面选项都不合适时填这里",
+				"component": map[string]any{
+					"type": 4, "custom_id": q.OtherField, "style": 2, "required": false,
+					"placeholder": "自定义回答（可留空）…",
+				},
+			})
+		}
+	}
+
+	title := "agent 的问题"
+	if formPages(ask.questions) > 1 {
+		title = fmt.Sprintf("agent 的问题（%d/%d 页）", page+1, formPages(ask.questions))
+	}
+	return map[string]any{
+		"custom_id":  fmt.Sprintf("em:%s:%d", ask.nonce, page),
+		"title":      title,
+		"components": comps,
+	}
+}
+
+// formQuestion 把一道题变成一个表单组件：多选 CheckboxGroup(22)、
+// 单选 ≤10 项 RadioGroup(21)、更多 String Select(3)、纯输入 TextInput(4)。
+func formQuestion(q elicitQuestion) map[string]any {
+	label := map[string]any{"type": 18, "label": trimRunes(q.Title, 45)}
+	if q.Description != "" {
+		label["description"] = trimRunes(q.Description, 100)
+	}
+	if len(q.Options) == 0 {
+		label["component"] = map[string]any{
+			"type": 4, "custom_id": q.ID, "style": 2, "required": q.Required,
+			"placeholder": "在这里输入…",
+		}
+		return label
+	}
+	opts := make([]map[string]any, 0, len(q.Options))
+	for _, o := range q.Options {
+		opt := map[string]any{"label": trimRunes(o.Const, 90), "value": trimRunes(o.Const, 90)}
+		if o.Description != "" {
+			opt["description"] = trimRunes(o.Description, 90)
+		}
+		opts = append(opts, opt)
+	}
+	kind := 21 // RadioGroup
+	if q.Multiple {
+		kind = 22 // CheckboxGroup
+	} else if len(q.Options) > 10 {
+		kind = 3 // String Select
+	}
+	comp := map[string]any{"type": kind, "custom_id": q.ID, "options": opts, "required": q.Required}
+	if kind == 3 {
+		comp["placeholder"] = "选一个…"
+	}
+	label["component"] = comp
+	return label
 }

@@ -172,22 +172,26 @@ func TestBindingEdits(t *testing.T) {
 	}
 }
 
-// 契约：modal 提交的两种组件树形状（Label 包裹 / action row）都要解出答案。
+// 契约：modal 提交的两种组件树形状（Label 包裹 / action row）都要解出
+// 答案；多选组件一名多值。
 func TestParseModalSubmit(t *testing.T) {
 	labelStyle := json.RawMessage(`[
 		{"type":18,"component":{"type":4,"custom_id":"repo","value":"org/app"}},
 		{"type":18,"component":{"type":21,"custom_id":"model","values":["claude|m1"]}},
-		{"type":18,"component":{"type":21,"custom_id":"effort","values":["default"]}}
+		{"type":18,"component":{"type":22,"custom_id":"fruits","values":["Apple","Cherry"]}}
 	]`)
 	got := parseModalSubmit(labelStyle)
-	if got["repo"] != "org/app" || got["model"] != "claude|m1" || got["effort"] != "default" {
+	if firstAnswer(got, "repo") != "org/app" || firstAnswer(got, "model") != "claude|m1" {
 		t.Errorf("Label 形状解析 = %v", got)
+	}
+	if f := got["fruits"]; len(f) != 2 || f[0] != "Apple" || f[1] != "Cherry" {
+		t.Errorf("多选提交 = %v", f)
 	}
 
 	rowStyle := json.RawMessage(`[
 		{"type":1,"components":[{"type":4,"custom_id":"repo","value":"a/b"}]}
 	]`)
-	if got := parseModalSubmit(rowStyle); got["repo"] != "a/b" {
+	if got := parseModalSubmit(rowStyle); firstAnswer(got, "repo") != "a/b" {
 		t.Errorf("action row 形状解析 = %v", got)
 	}
 }
@@ -330,63 +334,58 @@ func TestParseElicitSchema(t *testing.T) {
 	}
 }
 
-// 契约：V2 逐题卡——标题带进度，选项每行一个 Section（选中的按钮变
-// ✓/绿），自由输入行常驻，导航条 ⬅️➡️提交（边界与未答齐 disabled）。
-func TestQuestionCard(t *testing.T) {
+// 契约：一次性表单——每题一个组件（多选 CheckboxGroup、单选 RadioGroup、
+// 纯输入 TextInput），空位分给「其他」输入框；≤5 题一页装下。
+func TestFormModal(t *testing.T) {
 	ask := &pendingAsk{
 		nonce: "n", partial: map[string][]string{},
 		questions: []elicitQuestion{
-			{ID: "q0", Title: "第一题", Options: []elicitOption{{Const: "a"}, {Const: "b", Description: "说明"}}, OtherField: "q0_custom"},
-			{ID: "q1", Title: "第二题"},
+			{ID: "q0", Title: "单选", Options: []elicitOption{{Const: "a"}, {Const: "b"}}, OtherField: "q0_custom"},
+			{ID: "q1", Title: "多选", Multiple: true, Options: []elicitOption{{Const: "x"}, {Const: "y"}}},
+			{ID: "q2", Title: "输入"},
 		},
 	}
-	comps := questionCardV2(ask)
-	if len(comps) != 1 || comps[0]["type"] != 17 {
-		t.Fatalf("顶层应为 Container: %+v", comps)
+	if formPages(ask.questions) != 1 {
+		t.Fatalf("3 题应一页装下")
 	}
-	inner := comps[0]["components"].([]map[string]any)
-	// 标题、分隔、题干、2 个选项 Section、自由输入 Section、分隔、导航。
-	var sections, rows int
-	for _, c := range inner {
-		switch c["type"] {
-		case 9:
-			sections++
-		case 1:
-			rows++
-		}
+	m := formModal(ask, 0)
+	if m["custom_id"] != "em:n:0" {
+		t.Errorf("custom_id = %v", m["custom_id"])
 	}
-	if sections != 3 || rows != 1 {
-		t.Errorf("Section 数 = %d(want 3), 导航行 = %d(want 1)", sections, rows)
+	comps := m["components"].([]map[string]any)
+	// 3 题 + 1 个「其他」输入框（q0 带 OtherField，空位够）。
+	if len(comps) != 4 {
+		t.Fatalf("组件数 = %d, want 4", len(comps))
 	}
-	if !strings.Contains(inner[0]["content"].(string), "1/2") {
-		t.Errorf("标题缺进度: %v", inner[0]["content"])
+	kind := func(i int) any { return comps[i]["component"].(map[string]any)["type"] }
+	if kind(0) != 21 || kind(1) != 22 || kind(2) != 4 {
+		t.Errorf("组件类型 = %v %v %v, want 21/22/4", kind(0), kind(1), kind(2))
 	}
-	// 选中后按钮变 ✓，导航提交带计数。
-	ask.partial["q0"] = []string{"a"}
-	inner = questionCardV2(ask)[0]["components"].([]map[string]any)
-	var firstSection map[string]any
-	for _, c := range inner {
-		if c["type"] == 9 {
-			firstSection = c
-			break
-		}
+	other := comps[3]["component"].(map[string]any)
+	if other["custom_id"] != "q0_custom" {
+		t.Errorf("其他输入框 = %+v", other)
 	}
-	if firstSection["accessory"].(map[string]any)["label"] != "✓" {
-		t.Errorf("选中按钮 = %+v", firstSection["accessory"])
+
+	// 入口卡：Container + 填表按钮。
+	intro := askIntroCard(ask)
+	if intro[0]["type"] != 17 {
+		t.Errorf("入口卡顶层 = %+v", intro[0])
 	}
-	// 末题：➡️ 灰、提交可用（q1 非必答）。
-	ask.cursor = 1
-	inner = questionCardV2(ask)[0]["components"].([]map[string]any)
-	nav := inner[len(inner)-1]["components"].([]map[string]any)
-	if nav[1]["disabled"] != true || nav[2]["disabled"] != false {
-		t.Errorf("导航 disabled 状态 = %+v", nav)
+
+	// 6 题分两页。
+	var many []elicitQuestion
+	for i := range 6 {
+		many = append(many, elicitQuestion{ID: fmt.Sprintf("m%d", i), Title: "题"})
 	}
-	if !strings.Contains(nav[2]["label"].(string), "1/2") {
-		t.Errorf("提交计数 = %v", nav[2]["label"])
+	if formPages(many) != 2 {
+		t.Errorf("6 题应分 2 页")
+	}
+	if got := len(formModal(&pendingAsk{nonce: "x", questions: many}, 1)["components"].([]map[string]any)); got != 1 {
+		t.Errorf("第 2 页组件数 = %d, want 1", got)
 	}
 }
 
-// 契约：多选题解析与作答——schema 形状取自 2026-08 真实转录（claude 的
+// 契约：多选题解析与回传——schema 形状取自 2026-08 真实转录（claude 的
 // AskUserQuestion：array + items.anyOf + _askUserQuestionCustomAnswer）。
 func TestMultiSelectFlow(t *testing.T) {
 	raw := json.RawMessage(`{"type":"object","properties":{
@@ -414,37 +413,24 @@ func TestMultiSelectFlow(t *testing.T) {
 		t.Errorf("多选题 = %+v", multi)
 	}
 
-	svc := &Service{}
-	ask := &pendingAsk{questions: []elicitQuestion{single, multi}, partial: map[string][]string{}}
-
-	// 单选：选完自动前进。
-	if adv := svc.applyAnswer(ask, []string{"Red"}); !adv {
-		t.Error("单选应自动前进")
-	}
-	ask.cursor = 1
-	// 多选：toggle 累积，不前进；再点一次取消。
-	if adv := svc.applyAnswer(ask, []string{"Apple"}); adv {
-		t.Error("多选不该自动前进")
-	}
-	svc.applyAnswer(ask, []string{"Cherry"})
-	svc.applyAnswer(ask, []string{"Apple"})
-	if got := ask.partial["question_1"]; len(got) != 1 || got[0] != "Cherry" {
-		t.Errorf("toggle 后集合 = %v", got)
-	}
-	// 自由输入与选项并存。
-	svc.applyAnswer(ask, []string{"Durian"})
+	// 表单提交（多值）→ 回传形状：多选数组、单选与自由输入单值。
+	ask := &pendingAsk{questions: []elicitQuestion{single, multi}, partial: map[string][]string{
+		"question_0":        {"Red"},
+		"question_1":        {"Apple", "Cherry"},
+		"question_1_custom": {"Durian"},
+	}}
 	content := askContent(ask)
 	if content["question_0"] != "Red" {
 		t.Errorf("单选回传 = %v", content["question_0"])
 	}
-	if arr, ok := content["question_1"].([]string); !ok || len(arr) != 1 || arr[0] != "Cherry" {
+	if arr, ok := content["question_1"].([]string); !ok || len(arr) != 2 {
 		t.Errorf("多选回传 = %v", content["question_1"])
 	}
 	if content["question_1_custom"] != "Durian" {
 		t.Errorf("自由输入回传 = %v", content["question_1_custom"])
 	}
 
-	// 文本作答：「1 3」在多选题上映射两个选项；非编号整条当自由输入。
+	// 单题文本快捷路径的解析：编号（多选可多个）与自由文本。
 	if got := parseAnswerText("1 3", multi); len(got) != 2 || got[0] != "Apple" || got[1] != "Cherry" {
 		t.Errorf("编号多选解析 = %v", got)
 	}

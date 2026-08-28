@@ -13,9 +13,10 @@ import (
 )
 
 // 本文件是子区里的问答桥：agent 的权限请求变成按钮裁决卡（点一下即
-// 裁决，卡片原地收口），提问变成**逐题卡**——同一张卡上一题一题点过去
-//（已答的累积显示），答完自动整体回传。选项是按钮/下拉，自由输入给
-// 「✍️ 输入」小表单；直接打字/回编号也永远有效（答的是当前题）。
+// 裁决，卡片原地收口）；提问是**入口卡 + 一次性表单**——点「📝 填表」
+// 弹 modal，单选组/多选组/输入框混排、本地勾选零往返、一次提交
+//（参考网页会话问答卡的「一次提交」交互；>5 题才分页兜底）。
+// 单题提问仍可直接打字/回编号作答。
 
 // pendingAsk 是子区里挂起的一次问答。
 type pendingAsk struct {
@@ -36,56 +37,6 @@ type pendingAsk struct {
 	questions []elicitQuestion
 	cursor    int
 	partial   map[string][]string
-}
-
-// applyAnswer 把一次作答落到当前题上：
-//   - 单选：选项覆盖（清掉自由输入），选项外的文本进自由字段（清掉选项）；
-//   - 多选：选项 toggle（勾/取消），文本进自由字段与选项集合并存。
-//
-// 返回值报告要不要自动前进（单选选完就走，多选停留让人多勾几个）。
-func (s *Service) applyAnswer(ask *pendingAsk, values []string) (advance bool) {
-	cur := ask.questions[ask.cursor]
-	var opts, free []string
-	vals := optionValues(cur)
-	for _, v := range values {
-		if slices.Contains(vals, v) {
-			opts = append(opts, v)
-		} else if v != "" {
-			free = append(free, v)
-		}
-	}
-	freeField := cur.OtherField
-	if freeField == "" {
-		freeField = cur.ID // 纯输入题的答案直接落题目字段
-	}
-
-	if cur.Multiple {
-		set := ask.partial[cur.ID]
-		for _, o := range opts {
-			if i := slices.Index(set, o); i >= 0 {
-				set = slices.Delete(set, i, i+1)
-			} else {
-				set = append(set, o)
-			}
-		}
-		ask.partial[cur.ID] = set
-		if len(free) > 0 {
-			ask.partial[freeField] = []string{strings.Join(free, "、")}
-		}
-		return false
-	}
-
-	delete(ask.partial, cur.ID)
-	if cur.OtherField != "" {
-		delete(ask.partial, cur.OtherField)
-	}
-	switch {
-	case len(free) > 0:
-		ask.partial[freeField] = []string{free[0]}
-	case len(opts) > 0:
-		ask.partial[cur.ID] = []string{opts[0]}
-	}
-	return ask.cursor < len(ask.questions)-1
 }
 
 // askContent 把答案拼成 ResolveElicitation 的 content：多选题给数组，
@@ -199,7 +150,7 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 
 	msgID := s.postCard(token, threadID, map[string]any{
 		"flags":            1 << 15,
-		"components":       questionCardV2(ask),
+		"components":       askIntroCard(ask),
 		"allowed_mentions": noMentions(),
 	})
 	ask.msgID = msgID
@@ -220,13 +171,12 @@ func (s *Service) currentAsk(threadID, nonce string) *pendingAsk {
 }
 
 // handleAskComponent 分发问答卡上的组件点击：
-//   - pm:<nonce>:<idx> 权限按钮 → 裁决 + 原地收口
-//   - ea:<nonce>:<idx> 当前题的选项按钮 → 记答案、卡片翻下一题
-//   - es:<nonce>       当前题的选项下拉 → 同上
-//   - ei:<nonce>       「✍️ 输入」→ 弹单题小表单
+//   - pm:<nonce>:<idx>  权限按钮 → 裁决 + 原地收口
+//   - eb:<nonce>:<page> 「📝 填表」→ 弹第 page 页表单
+//   - ec:<nonce>:<page> 「继续填写」→ 弹下一页（仅 >5 题的分页兜底）
 func (s *Service) handleAskComponent(token string, ev interactionEvent) {
 	parts := strings.Split(ev.Data.CustomID, ":")
-	if len(parts) < 2 {
+	if len(parts) != 3 {
 		return
 	}
 	prefix, nonce := parts[0], parts[1]
@@ -237,99 +187,51 @@ func (s *Service) handleAskComponent(token string, ev interactionEvent) {
 	}
 	switch prefix {
 	case "pm":
-		if len(parts) != 3 {
-			return
-		}
 		idx, err := strconv.Atoi(parts[2])
 		if err != nil || idx < 0 || idx >= len(ask.permOpts) {
 			return
 		}
 		s.resolvePermissionAsk(token, ev, ask, idx)
-	case "ea":
-		if len(parts) != 3 {
-			return
-		}
-		cur := ask.questions[ask.cursor]
-		idx, err := strconv.Atoi(parts[2])
-		if err != nil || idx < 0 || idx >= len(cur.Options) {
-			return
-		}
-		s.stepAsk(token, ev, ask, []string{cur.Options[idx].Const})
-	case "es":
-		// 下拉一次交互给出全部选中值（多选下拉天然多值）。
-		s.stepAsk(token, ev, ask, ev.Data.Values)
-	case "en":
-		if len(parts) != 3 {
-			return
-		}
-		if parts[2] == "p" && ask.cursor > 0 {
-			ask.cursor--
-		}
-		if parts[2] == "n" && ask.cursor < len(ask.questions)-1 {
-			ask.cursor++
-		}
-		s.refreshAskCard(token, ev, ask)
-	case "ez":
-		s.submitAsk(token, ev, ask)
-	case "ei":
-		if err := interactionCallback(token, ev.ID, ev.Token, 9, inputModal(ask)); err != nil {
-			slog.Error("弹输入表单失败", "err", err)
+	case "eb", "ec":
+		page, _ := strconv.Atoi(parts[2])
+		if err := interactionCallback(token, ev.ID, ev.Token, 9, formModal(ask, page)); err != nil {
+			slog.Error("弹表单失败", "err", err)
 		}
 	}
 }
 
-// handleAskModal 收「✍️ 输入」的单题答案（em:<nonce>），落到当前题上。
+// handleAskModal 收表单的一页（em:<nonce>:<page>）：常态一页就是全部；
+// >5 题时还有下页就暂存并给「继续填写」按钮，收齐整体回传并收口。
 func (s *Service) handleAskModal(token string, ev interactionEvent) {
 	parts := strings.Split(ev.Data.CustomID, ":")
-	if len(parts) != 2 {
+	if len(parts) != 3 {
 		return
 	}
+	page, _ := strconv.Atoi(parts[2])
 	ask := s.currentAsk(ev.ChannelID, parts[1])
 	if ask == nil || ask.kind != "elicitation" {
 		s.ephemeral(token, ev, "这张卡已经失效了（处理过或超时）。")
 		return
 	}
-	answer := strings.TrimSpace(parseModalSubmit(ev.Data.Components)["answer"])
-	if answer == "" {
-		s.ephemeral(token, ev, "没收到内容，再点一次「✍️ 输入」。")
-		return
+	for k, vs := range parseModalSubmit(ev.Data.Components) {
+		ask.partial[k] = vs
 	}
-	s.stepAsk(token, ev, ask, []string{answer})
-}
-
-// stepAsk 落一次作答并刷新卡片（单选自动前进，多选停留继续勾）。
-// 提交不在这里发生——「提交」按钮是唯一的收口入口，选错随时回去改。
-func (s *Service) stepAsk(token string, ev interactionEvent, ask *pendingAsk, values []string) {
-	if s.applyAnswer(ask, values) {
-		ask.cursor++
-	}
-	s.refreshAskCard(token, ev, ask)
-}
-
-// refreshAskCard 用 interaction callback 原地刷新逐题卡。
-func (s *Service) refreshAskCard(token string, ev interactionEvent, ask *pendingAsk) {
-	err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-		"components":       questionCardV2(ask),
-		"allowed_mentions": noMentions(),
-	})
-	if err != nil {
-		slog.Error("问答卡刷新失败", "err", err)
-	}
-}
-
-// submitAsk 整体提交：必答缺答就提示（按钮 disabled 兜底，这里防御性
-// 双保险），齐了回传并把卡收口成「问题—答案」记录。
-func (s *Service) submitAsk(token string, ev interactionEvent, ask *pendingAsk) {
-	if !askReady(ask) {
-		for i, q := range ask.questions {
-			if q.Required && len(answersOf(ask, q)) == 0 {
-				s.ephemeral(token, ev, fmt.Sprintf("第 %d 题「%s」还没答。", i+1, trimRunes(q.Title, 60)))
-				return
-			}
+	if page+1 < formPages(ask.questions) {
+		err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+			"content": "这一页收到了，还有下一页。",
+			"flags":   1 << 6,
+			"components": []map[string]any{{"type": 1, "components": []map[string]any{{
+				"type": 2, "style": 1, "label": "▶ 继续填写",
+				"custom_id": fmt.Sprintf("ec:%s:%d", ask.nonce, page+1),
+			}}}},
+			"allowed_mentions": noMentions(),
+		})
+		if err != nil {
+			slog.Error("分页续填提示失败", "err", err)
 		}
-		s.ephemeral(token, ev, "至少答一题再提交。")
 		return
 	}
+
 	err := s.acpMgr.ResolveElicitation(ask.key, ask.id,
 		acp.ElicitationResult{Action: "accept", Content: askContent(ask)})
 	s.clearAsk(ev.ChannelID, ask)
@@ -337,13 +239,8 @@ func (s *Service) submitAsk(token string, ev interactionEvent, ask *pendingAsk) 
 		s.ephemeral(token, ev, "这个提问已经失效了（超时或已在别处回答）。")
 		return
 	}
-	cerr := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-		"components":       elicitClosedV2(ask, ask.partial, "由 "+ev.user()+" 提交"),
-		"allowed_mentions": noMentions(),
-	})
-	if cerr != nil {
-		slog.Error("问答卡收口失败", "err", cerr)
-	}
+	s.finalizeAskCard(token, ev.ChannelID, ask, elicitClosedV2(ask, ask.partial, "由 "+ev.user()+" 提交"))
+	s.ephemeral(token, ev, "✅ 已提交给 agent。")
 }
 
 // resolvePermissionAsk 用按钮点击裁决权限：回传 + 原地改终态。
@@ -365,8 +262,8 @@ func (s *Service) resolvePermissionAsk(token string, ev interactionEvent, ask *p
 	}
 }
 
-// answerAsk 用子区的一条普通消息了结挂起的问答（快捷路径）：权限回编号，
-// 单题提问回编号或文字。多题提问必须走卡片上的表单。
+// answerAsk 用子区的一条普通消息了结挂起的问答（快捷路径）：权限回编号；
+// 单题提问回编号（多选可「1 3」）或文字。多题提问请走表单。
 func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pendingAsk, msgID, text string) {
 	pick := -1
 	if n, err := strconv.Atoi(strings.TrimSpace(text)); err == nil && n >= 1 {
@@ -385,25 +282,20 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		err = s.acpMgr.ResolvePermission(ask.key, ask.id, opt.OptionID)
 		closed = permClosedV2(ask, opt, "以消息作答")
 	case "elicitation":
-		// 逐题卡的文本路径：编号选当前题的选项（多选可「1 3」一次勾几个），
-		// 其他文字进自由输入；「提交」两个字整体提交。
-		if text == "提交" || strings.EqualFold(text, "submit") {
-			if !askReady(ask) {
-				s.say(ctx, token, threadID, "还有必答题没答，⬅️➡️ 翻回去看看。")
-				return
-			}
-			err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
-				acp.ElicitationResult{Action: "accept", Content: askContent(ask)})
-			closed = elicitClosedV2(ask, ask.partial, "以消息作答")
-			break
+		if len(ask.questions) != 1 {
+			s.say(ctx, token, threadID, "有好几题，点卡片上的「📝 填表回答」一次填完。")
+			return
 		}
-		cur := ask.questions[ask.cursor]
-		if s.applyAnswer(ask, parseAnswerText(text, cur)) {
-			ask.cursor++
+		q := ask.questions[0]
+		values := parseAnswerText(text, q)
+		field := q.ID
+		if q.OtherField != "" && len(values) == 1 && !slices.Contains(optionValues(q), values[0]) {
+			field = q.OtherField
 		}
-		s.react(ctx, token, threadID, msgID, "✅")
-		s.finalizeAskCard(token, threadID, ask, questionCardV2(ask))
-		return
+		ask.partial[field] = values
+		err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
+			acp.ElicitationResult{Action: "accept", Content: askContent(ask)})
+		closed = elicitClosedV2(ask, ask.partial, "以消息作答")
 	}
 
 	s.clearAsk(threadID, ask)
