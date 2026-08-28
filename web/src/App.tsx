@@ -30,6 +30,7 @@ const Sessions = page(() => import("@/routes/sessions"), "Sessions")
 const SessionChat = page(() => import("@/routes/session-chat"), "SessionChat")
 const Databases = page(() => import("@/routes/databases"), "Databases")
 const Tools = page(() => import("@/routes/tools"), "Tools")
+const Discord = page(() => import("@/routes/discord"), "Discord")
 const Settings = page(() => import("@/routes/settings"), "Settings")
 const Tenants = page(() => import("@/routes/tenants"), "Tenants")
 
@@ -79,6 +80,8 @@ export function App() {
           <Route path="databases" element={<Databases />} />
           {/* 工具台：我方 MCP server 暴露给 agent 的工具，人工查看与试运行。 */}
           <Route path="tools" element={<Tools />} />
+          {/* discord 频道工作区绑定管理（adr-016），与会话体系完全独立。 */}
+          <Route path="discord" element={<Discord />} />
           <Route path="settings" element={<Settings />} />
           {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
           <Route path="connections" element={<Tenants />} />

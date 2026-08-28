@@ -76,7 +76,9 @@ export function DirListView({
             GRID,
             "w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
           )}
-          onClick={() => (isDir ? onOpenDir(entry.path) : onPickFile(entry.path))}
+          onClick={() =>
+            isDir ? onOpenDir(entry.path) : onPickFile(entry.path)
+          }
         >
           <span className="flex min-w-0 items-center gap-2">
             <Icon className="size-4 shrink-0 text-muted-foreground" />

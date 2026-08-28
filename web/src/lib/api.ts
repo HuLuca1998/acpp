@@ -6,6 +6,10 @@ import type {
   DataSourceInput,
   DataSourceTest,
   DataSourceUri,
+  DiscordBinding,
+  DiscordBindingPatch,
+  DiscordConfigPatch,
+  DiscordInfo,
   DbDatabase,
   DbTable,
   DbTableDetail,
@@ -368,6 +372,26 @@ export const api = {
       request<Agent>(`/agents/${id}/catalog`, {
         method: "PUT",
         body: JSON.stringify(input),
+      }),
+  },
+
+  /** discord 频道工作区（adr-016）：配置 + 状态 + 频道绑定，owner 专属。 */
+  discord: {
+    get: () => request<DiscordInfo>("/discord"),
+    saveConfig: (patch: DiscordConfigPatch) =>
+      request<DiscordInfo>("/discord/config", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    /** 改绑定的模型/思考深度；换仓库走频道里重新 /init。 */
+    updateBinding: (channelId: string, patch: DiscordBindingPatch) =>
+      request<DiscordBinding>(`/discord/bindings/${channelId}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    removeBinding: (channelId: string) =>
+      request<{ deleted: boolean }>(`/discord/bindings/${channelId}`, {
+        method: "DELETE",
       }),
   },
 

@@ -69,7 +69,11 @@ export function useChat(sessionId: number) {
         next = reduceChatEvent(next, { kind: "message_chunk", text, seq: 0 })
       }
       if (thought) {
-        next = reduceChatEvent(next, { kind: "thought_chunk", text: thought, seq: 0 })
+        next = reduceChatEvent(next, {
+          kind: "thought_chunk",
+          text: thought,
+          seq: 0,
+        })
       }
       return next
     })
@@ -152,7 +156,8 @@ export function useChat(sessionId: number) {
           // SSE 重放会接上流式），其余状态一律静止——别把 UI 卡在假 busy 上。
           // SSE 若已推进过状态（lastSeq>0）或首发乐观态已置忙，以那边为准，
           // 不许旧快照回拨。
-          busy: prev.busy || (lastSeq.current === 0 && session.state === "active"),
+          busy:
+            prev.busy || (lastSeq.current === 0 && session.state === "active"),
           loading: false,
         }))
       } catch (err) {
@@ -409,7 +414,9 @@ export function useChat(sessionId: number) {
       }
       // 从队列里摘掉这一张，留一条本轮内的裁决记录；其余挂起的继续等。
       setState((prev) => {
-        const target = prev.pendingPermissions.find((p) => p.id === permissionId)
+        const target = prev.pendingPermissions.find(
+          (p) => p.id === permissionId
+        )
         if (!target) return prev
         return {
           ...prev,

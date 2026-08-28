@@ -5,7 +5,7 @@ import { useLocation } from "react-router"
 import { NavUser } from "@/components/shell/nav-user"
 import { NoticeCenter } from "@/components/shell/notice-center"
 import { NavMain } from "@/components/shell/nav-main"
-import { AgentIcon } from "@/components/agent-icon"
+import { AgentIcon, DiscordIcon } from "@/components/agent-icon"
 import { NavProjects } from "@/components/shell/nav-projects"
 import { NavRecent } from "@/components/shell/nav-recent"
 import { SidebarResizer } from "@/components/shell/window/sidebar-resizer"
@@ -106,6 +106,11 @@ export function AppSidebar({
               icon: <DatabaseIcon />,
             },
             { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
+            {
+              title: t("nav.discord"),
+              url: "/discord",
+              icon: <DiscordIcon />,
+            },
             { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
           ]
         : [

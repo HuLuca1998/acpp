@@ -12,10 +12,12 @@ export const enNotify = {
     groupCount: "{{count}} notifications",
   },
   prefs: {
-    description: "Nudge you in-page when a session needs you (the tab title blinks).",
+    description:
+      "Nudge you in-page when a session needs you (the tab title blinks).",
     title: "Notifications",
     descDesktop: "Send a system notification when a session needs you.",
-    descBrowser: "Show an in-page alert when a session needs you (the tab title blinks).",
+    descBrowser:
+      "Show an in-page alert when a session needs you (the tab title blinks).",
     decisions: "Decisions & questions",
     decisionsDesc: "An agent is waiting on you",
     results: "Answer ready",

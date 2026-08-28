@@ -389,10 +389,7 @@ export function reduceChatEvent(prev: ChatState, ev: StreamEvent): ChatState {
  * （append-only，跨请求稳定），消息一旦落成历史就不可变，id + 内容 +
  * 时刻都相同即可安全复用旧引用。
  */
-export function reconcileMessages(
-  prev: Message[],
-  next: Message[]
-): Message[] {
+export function reconcileMessages(prev: Message[], next: Message[]): Message[] {
   if (prev.length === 0) return next
   const byId = new Map(prev.map((m) => [m.id, m]))
   return next.map((m) => {

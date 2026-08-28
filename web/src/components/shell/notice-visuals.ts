@@ -11,14 +11,38 @@ import {
  * （相当于 app 图标的位置），颜色只落在这一块上，卡片本身永远是中性纸面色。
  */
 export const STYLES = {
-  permission: { Icon: ShieldQuestionMarkIcon, tone: "text-warning", tile: "bg-warning/15" },
-  elicitation: { Icon: MessageCircleQuestionMarkIcon, tone: "text-warning", tile: "bg-warning/15" },
-  turn_end: { Icon: CircleCheckIcon, tone: "text-success", tile: "bg-success/15" },
-  error: { Icon: OctagonXIcon, tone: "text-destructive", tile: "bg-destructive/15" },
+  permission: {
+    Icon: ShieldQuestionMarkIcon,
+    tone: "text-warning",
+    tile: "bg-warning/15",
+  },
+  elicitation: {
+    Icon: MessageCircleQuestionMarkIcon,
+    tone: "text-warning",
+    tile: "bg-warning/15",
+  },
+  turn_end: {
+    Icon: CircleCheckIcon,
+    tone: "text-success",
+    tile: "bg-success/15",
+  },
+  error: {
+    Icon: OctagonXIcon,
+    tone: "text-destructive",
+    tile: "bg-destructive/15",
+  },
   update: { Icon: RefreshCwIcon, tone: "text-warning", tile: "bg-warning/15" },
   // 撤回信号不会进列表，列在这里只是让类型收口。
-  permission_done: { Icon: CircleCheckIcon, tone: "text-muted-foreground", tile: "bg-muted" },
-  elicitation_done: { Icon: CircleCheckIcon, tone: "text-muted-foreground", tile: "bg-muted" },
+  permission_done: {
+    Icon: CircleCheckIcon,
+    tone: "text-muted-foreground",
+    tile: "bg-muted",
+  },
+  elicitation_done: {
+    Icon: CircleCheckIcon,
+    tone: "text-muted-foreground",
+    tile: "bg-muted",
+  },
 } as const
 
 export const TITLE_KEYS = {

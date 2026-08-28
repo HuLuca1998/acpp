@@ -58,7 +58,6 @@ export const ChatPanel = memo(function ChatPanel() {
     draftCwd,
   } = useChatPanel()
 
-
   // 本地斜杠命令的结果（目前只有 /db）：浮在输入框上方，不进对话流。
   // null 表示没在看。
   const [localCommand, setLocalCommand] = useState<string | null>(null)
@@ -113,70 +112,72 @@ export const ChatPanel = memo(function ChatPanel() {
           宽，里面的按钮由 .drag-region 规则自动排除。草稿态没有会话，不显示。 */}
       <div className="drag-region shrink-0 px-3 pt-2">
         <div className="w-full">
-        {!isNew ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {chat.session ? (
-              <>
-                {/* 用图标而不是名字：抬头行里会话标题才是主角，agent 是它的
+          {!isNew ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {chat.session ? (
+                <>
+                  {/* 用图标而不是名字：抬头行里会话标题才是主角，agent 是它的
                     出处，一个可辨识的徽标就够了。 */}
-                <Hint label={chat.session.agentName} align="start">
-                  <span
-                    role="img"
-                    aria-label={chat.session.agentName}
-                    className="flex shrink-0 items-center"
-                  >
-                    <AgentIcon
-                      flavor={chat.session.agentFlavor}
-                      className="size-3.5"
-                    />
-                  </span>
-                </Hint>
-                {/* 标题可就地改：后端从首条消息自动简写的名字未必是用户
+                  <Hint label={chat.session.agentName} align="start">
+                    <span
+                      role="img"
+                      aria-label={chat.session.agentName}
+                      className="flex shrink-0 items-center"
+                    >
+                      <AgentIcon
+                        flavor={chat.session.agentFlavor}
+                        className="size-3.5"
+                      />
+                    </span>
+                  </Hint>
+                  {/* 标题可就地改：后端从首条消息自动简写的名字未必是用户
                     认得的说法。单击进入编辑——这一行没有别的点击语义。 */}
-                <EditableTitle
-                  value={chat.session.title}
-                  title={t("workspace.renameSession")}
-                  onSubmit={(next) => {
-                    chat.rename(next).catch(() => {
-                      toast.error(t("workspace.renameFailed"))
-                    })
-                  }}
-                  className="min-w-0 truncate text-sm font-medium text-foreground"
-                  inputClassName="min-w-0 flex-1 text-sm font-medium text-foreground"
-                />
-              </>
-            ) : null}
-            <Hint
-              label={
-                chat.connected ? t("chat.connected") : t("chat.disconnected")
-              }
-              desc={t("chat.connectedDesc")}
-              align="start"
-            >
-              <span
-                aria-label={
+                  <EditableTitle
+                    value={chat.session.title}
+                    title={t("workspace.renameSession")}
+                    onSubmit={(next) => {
+                      chat.rename(next).catch(() => {
+                        toast.error(t("workspace.renameFailed"))
+                      })
+                    }}
+                    className="min-w-0 truncate text-sm font-medium text-foreground"
+                    inputClassName="min-w-0 flex-1 text-sm font-medium text-foreground"
+                  />
+                </>
+              ) : null}
+              <Hint
+                label={
                   chat.connected ? t("chat.connected") : t("chat.disconnected")
                 }
-                className={cn(
-                  // 8px 的点太小，指针够不着；用伪元素把悬停命中区撑到 20px。
-                  "relative size-2 shrink-0 rounded-full before:absolute before:-inset-1.5 before:content-['']",
-                  chat.connected ? "bg-success" : "bg-destructive",
-                  chat.connected &&
-                    chat.busy &&
-                    "animate-breathe motion-reduce:animate-none"
-                )}
-              />
-            </Hint>
-            <div className="ms-auto shrink-0">
-              <WorkspaceMenu
-                onResetLayout={() => {
-                  const api = workspace.getApi()
-                  if (api) resetLayout(api)
-                }}
-              />
+                desc={t("chat.connectedDesc")}
+                align="start"
+              >
+                <span
+                  aria-label={
+                    chat.connected
+                      ? t("chat.connected")
+                      : t("chat.disconnected")
+                  }
+                  className={cn(
+                    // 8px 的点太小，指针够不着；用伪元素把悬停命中区撑到 20px。
+                    "relative size-2 shrink-0 rounded-full before:absolute before:-inset-1.5 before:content-['']",
+                    chat.connected ? "bg-success" : "bg-destructive",
+                    chat.connected &&
+                      chat.busy &&
+                      "animate-breathe motion-reduce:animate-none"
+                  )}
+                />
+              </Hint>
+              <div className="ms-auto shrink-0">
+                <WorkspaceMenu
+                  onResetLayout={() => {
+                    const api = workspace.getApi()
+                    if (api) resetLayout(api)
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
         </div>
 
         {(() => {

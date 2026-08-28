@@ -744,3 +744,4 @@ export interface RemoteRepo {
 export * from "./db"
 export * from "./mcp"
 export * from "./git"
+export * from "./discord"

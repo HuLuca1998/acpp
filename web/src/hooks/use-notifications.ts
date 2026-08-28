@@ -12,7 +12,12 @@ import {
   isDesktop,
   type NotificationAction,
 } from "@/lib/desktop"
-import { flashTitle, isUserWatching, playChime, stopFlashTitle } from "@/lib/notify/in-page"
+import {
+  flashTitle,
+  isUserWatching,
+  playChime,
+  stopFlashTitle,
+} from "@/lib/notify/in-page"
 import { loadNotifyPrefs } from "@/lib/notify/prefs"
 import { dismissNotice, getNotices, pushNotice } from "@/lib/notify/store"
 import type { NoticeEvent, ServerEvent } from "@/types/acp"
@@ -181,7 +186,8 @@ export function useNotifications() {
     if (!isDesktop()) return
 
     const handle = (e: Event) => {
-      const { actionId, userInfo } = (e as CustomEvent<NotificationAction>).detail
+      const { actionId, userInfo } = (e as CustomEvent<NotificationAction>)
+        .detail
       const sessionId = Number(userInfo.sessionId ?? 0)
       if (!sessionId) return
 

@@ -456,9 +456,7 @@ const TreeNode = memo(function TreeNode({
               <ContextMenuItem onClick={() => onOpenFile(entry.path)}>
                 {t("workspace.refMenu.openPreview")}
               </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() => onDownload(targets, many)}
-              >
+              <ContextMenuItem onClick={() => onDownload(targets, many)}>
                 {many
                   ? t("workspace.refMenu.downloadMany", { count })
                   : t("workspace.refMenu.download")}
@@ -503,7 +501,7 @@ const TreeNode = memo(function TreeNode({
               targetsFor={targetsFor}
               onAddReference={onAddReference}
               onDownload={onDownload}
-          onCopyLanLink={onCopyLanLink}
+              onCopyLanLink={onCopyLanLink}
               changes={changes}
               touched={touched}
             />

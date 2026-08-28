@@ -87,7 +87,7 @@ export function EditableTitle({
         // 双击不阻止默认行为——那是"选中一个词"，编辑时正需要它。
         onDoubleClick={(e) => e.stopPropagation()}
         className={cn(
-          "min-w-0 flex-1 rounded-sm bg-transparent outline-none ring-1 ring-ring/50",
+          "min-w-0 flex-1 rounded-sm bg-transparent ring-1 ring-ring/50 outline-none",
           inputClassName ?? className
         )}
       />

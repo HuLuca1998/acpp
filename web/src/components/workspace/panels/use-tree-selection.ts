@@ -67,8 +67,7 @@ export function useTreeSelection() {
    * 选择本身）。这是 Finder 与 VSCode 的共同约定，照做能省掉一句说明。
    */
   const targetsFor = useCallback(
-    (path: string): string[] =>
-      selected.has(path) ? [...selected] : [path],
+    (path: string): string[] => (selected.has(path) ? [...selected] : [path]),
     [selected]
   )
 

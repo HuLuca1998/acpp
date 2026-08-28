@@ -70,9 +70,7 @@ export const ChatHistory = memo(function ChatHistory({
               <ChatMessage
                 message={block.message}
                 userName={userName}
-                onRetry={
-                  block.message.id === retryableId ? onRetry : undefined
-                }
+                onRetry={block.message.id === retryableId ? onRetry : undefined}
               />
             </MessageScrollerItem>
           )

@@ -19,9 +19,21 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 
 const SWITCHES = [
-  { key: "decisions", label: "notify.prefs.decisions", desc: "notify.prefs.decisionsDesc" },
-  { key: "results", label: "notify.prefs.results", desc: "notify.prefs.resultsDesc" },
-  { key: "errors", label: "notify.prefs.errors", desc: "notify.prefs.errorsDesc" },
+  {
+    key: "decisions",
+    label: "notify.prefs.decisions",
+    desc: "notify.prefs.decisionsDesc",
+  },
+  {
+    key: "results",
+    label: "notify.prefs.results",
+    desc: "notify.prefs.resultsDesc",
+  },
+  {
+    key: "errors",
+    label: "notify.prefs.errors",
+    desc: "notify.prefs.errorsDesc",
+  },
 ] as const
 
 /**

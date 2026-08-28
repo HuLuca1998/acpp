@@ -199,9 +199,7 @@ function splitConnectionName(name: string): ParsedUri {
   if (at > 0 && at < name.length - 1) {
     return { project: name.slice(0, at), env: name.slice(at + 1) }
   }
-  return COMMON_ENVS.has(name.toLowerCase())
-    ? { env: name }
-    : { project: name }
+  return COMMON_ENVS.has(name.toLowerCase()) ? { env: name } : { project: name }
 }
 
 /** Navicat 的 SSH 验证方法 → 我们的三档。 */

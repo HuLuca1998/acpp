@@ -309,8 +309,8 @@ export function ToolCallBlock({
     payload && truncated && full != null
       ? {
           ...payload,
-          rawInput: (full.rawInput ?? payload.rawInput) as
-            ToolCallPayload["rawInput"],
+          rawInput: (full.rawInput ??
+            payload.rawInput) as ToolCallPayload["rawInput"],
           rawOutput: full.rawOutput ?? payload.rawOutput,
           rawInputTruncated: false,
           rawOutputTruncated: false,

@@ -24,10 +24,7 @@ export function SidebarResizer({
       title={t("nav.resizeSidebar")}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
-      className="absolute inset-y-0 end-0 z-20 w-2 cursor-col-resize
-        after:absolute after:inset-y-0 after:start-1/2 after:w-px after:-translate-x-1/2
-        after:bg-sidebar-ring after:opacity-0 after:transition-opacity after:duration-150
-        hover:after:opacity-60 in-[body[data-resizing]]:after:opacity-60"
+      className="absolute inset-y-0 end-0 z-20 w-2 cursor-col-resize after:absolute after:inset-y-0 after:start-1/2 after:w-px after:-translate-x-1/2 after:bg-sidebar-ring after:opacity-0 after:transition-opacity after:duration-150 hover:after:opacity-60 in-[body[data-resizing]]:after:opacity-60"
     />
   )
 }

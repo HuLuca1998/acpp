@@ -188,7 +188,7 @@ function NoticeCard({ notice }: { notice: Notice }) {
         className={cn(
           "absolute -end-1 -top-1 z-10 hidden size-4 items-center justify-center",
           "rounded-full border bg-popover text-muted-foreground shadow-xs",
-          "hover:text-foreground group-hover/card:flex"
+          "group-hover/card:flex hover:text-foreground"
         )}
         aria-label={t("notify.center.dismiss")}
         onClick={leave}

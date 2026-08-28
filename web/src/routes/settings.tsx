@@ -6,7 +6,8 @@ import { toast } from "sonner"
 import { api } from "@/lib/api"
 import type { SystemInfo } from "@/types/acp"
 import { cn } from "@/lib/utils"
-import { AgentIcon, OllamaIcon } from "@/components/agent-icon"
+import { AgentIcon, DiscordIcon, OllamaIcon } from "@/components/agent-icon"
+import { DiscordConfigCard } from "@/components/settings/discord-config"
 import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
@@ -59,6 +60,7 @@ const SECTIONS = [
   { key: "claude", icon: <AgentIcon flavor="claude" className="size-4" /> },
   { key: "codex", icon: <AgentIcon flavor="codex" className="size-4" /> },
   { key: "ollama", icon: <OllamaIcon className="size-4" /> },
+  { key: "discord", icon: <DiscordIcon className="size-4" /> },
   { key: "about", icon: <InfoIcon className="size-4" /> },
 ] as const
 
@@ -161,6 +163,11 @@ export function Settings() {
         /* ollama 分区：本机模型运行时，目前只服务于会话标题生成。 */
         <div className="flex min-w-0 flex-1 flex-col">
           <TitleModelCard />
+        </div>
+      ) : section === "discord" ? (
+        /* discord 分区：频道工作区子系统的开关与 bot 配置（adr-016）。 */
+        <div className="flex min-w-0 flex-1 flex-col">
+          <DiscordConfigCard />
         </div>
       ) : section !== "system" ? (
         /* 工具分区：内置 claude / codex 的配置面。这条是兜底分支，

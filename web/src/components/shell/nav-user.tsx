@@ -36,9 +36,7 @@ import {
 } from "@/components/ui/sidebar"
 
 type Health =
-  | { status: "ok"; version: string; repo: string }
-  | { status: "down" }
-  | null
+  { status: "ok"; version: string; repo: string } | { status: "down" } | null
 
 /**
  * 侧栏底部的用户条目：身份 + 全部次级入口收进一个菜单（shadcn 的
@@ -88,9 +86,7 @@ export function NavUser({
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<SidebarMenuButton className="h-9" />}
-          >
+          <DropdownMenuTrigger render={<SidebarMenuButton className="h-9" />}>
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
               <UserRoundIcon className="size-3.5 text-muted-foreground" />
             </span>
@@ -179,7 +175,11 @@ export function NavUser({
               <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-muted-foreground">
                 {health?.status === "ok" ? (
                   <>
-                    <StatusDot tone="success" pulse label={t("backend.connected")} />
+                    <StatusDot
+                      tone="success"
+                      pulse
+                      label={t("backend.connected")}
+                    />
                     <span className="font-mono">v{health.version}</span>
                   </>
                 ) : (

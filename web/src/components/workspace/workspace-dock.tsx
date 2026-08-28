@@ -156,7 +156,8 @@ function HeaderActions(props: IDockviewHeaderActionsProps) {
   if (hasChat) return null
   // 只有一个面板时那一格是标题而不是页签（见 index.css），关闭钮跟着挪到
   // 这一行的右端——标题里塞一颗 × 会让它重新长得像页签。
-  if (props.panels.length === 1) return <ClosePanelSlot id={props.panels[0].id} />
+  if (props.panels.length === 1)
+    return <ClosePanelSlot id={props.panels[0].id} />
   return <CloseAllSlot ids={props.panels.map((p) => p.id)} />
 }
 
@@ -208,7 +209,6 @@ function CloseAllSlot({ ids }: { ids: string[] }) {
     </div>
   )
 }
-
 
 /** 初始默认布局：见 layout-presets 的 default 预设（对话 80% + 右栏 tab 组）。 */
 function buildDefaultLayout(api: DockviewApi) {

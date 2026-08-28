@@ -1,6 +1,7 @@
 import { zhWorkspace } from "./zh-workspace"
 import { zhNotify } from "./zh-notify"
 import { zhDb } from "./zh-db"
+import { zhDiscord } from "./zh-discord"
 
 export default {
   common: {
@@ -34,6 +35,7 @@ export default {
     databases: "数据库",
     tools: "工具",
     logs: "日志",
+    discord: "Discord",
     settings: "设置",
     connections: "连接",
     help: "帮助",
@@ -143,6 +145,7 @@ export default {
     remove: "删掉这个传过的文件",
   },
   db: zhDb,
+  discord: zhDiscord,
   skills: {
     title: "技能",
     description:
@@ -577,6 +580,7 @@ export default {
       claude: "Claude",
       codex: "Codex",
       ollama: "Ollama",
+      discord: "Discord",
       about: "关于与更新",
     },
     about: {

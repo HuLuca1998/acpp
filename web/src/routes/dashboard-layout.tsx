@@ -79,27 +79,27 @@ function Shell({ title, workspace }: { title: string; workspace: boolean }) {
   const frame = useSidebarFrame()
 
   return (
-      <SidebarProvider
-        // 锁定整个 shell 到视口高度，滚动交给内容区自己处理，
-        // 这样聊天页的输入框才能始终固定在底部。
-        className="h-svh"
-        style={{ "--sidebar-width": `${frame.width}px` } as React.CSSProperties}
-      >
-        <AppSidebar variant="inset" frame={frame} />
-        {/* 侧栏与内容区直接拼接：不留白、不描边、不切圆角、不投阴影，区分
+    <SidebarProvider
+      // 锁定整个 shell 到视口高度，滚动交给内容区自己处理，
+      // 这样聊天页的输入框才能始终固定在底部。
+      className="h-svh"
+      style={{ "--sidebar-width": `${frame.width}px` } as React.CSSProperties}
+    >
+      <AppSidebar variant="inset" frame={frame} />
+      {/* 侧栏与内容区直接拼接：不留白、不描边、不切圆角、不投阴影，区分
             只靠两块底色的差（规范 §5.6）。原来的 inset 卡片把内容区做成
             「浮起的一张纸」，与桌面壳那种整窗一体的观感相冲。 */}
-        <SidebarInset className="overflow-hidden md:peer-data-[variant=inset]:m-0! md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-none">
-          {workspace ? null : <TitleBar title={title} />}
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="@container/main flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-              <Outlet />
-            </div>
+      <SidebarInset className="overflow-hidden md:peer-data-[variant=inset]:m-0! md:peer-data-[variant=inset]:rounded-none md:peer-data-[variant=inset]:shadow-none">
+        {workspace ? null : <TitleBar title={title} />}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="@container/main flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <Outlet />
           </div>
-        </SidebarInset>
-        {/* 全局唯一的一组窗口控件，fixed 钉在窗口左上角——展开、折叠、浮出
+        </div>
+      </SidebarInset>
+      {/* 全局唯一的一组窗口控件，fixed 钉在窗口左上角——展开、折叠、浮出
             三态下它都不动（规范 §5.6）。放在 provider 内是因为要读侧栏状态。 */}
-        <WindowControls frame={frame} />
-      </SidebarProvider>
+      <WindowControls frame={frame} />
+    </SidebarProvider>
   )
 }

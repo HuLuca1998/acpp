@@ -62,7 +62,8 @@ let audioCtx: AudioContext | null = null
  */
 export function playChime() {
   try {
-    const Ctor = window.AudioContext ?? (window as LegacyAudioWindow).webkitAudioContext
+    const Ctor =
+      window.AudioContext ?? (window as LegacyAudioWindow).webkitAudioContext
     if (!Ctor) return
     audioCtx ??= new Ctor()
     if (audioCtx.state === "suspended") void audioCtx.resume()

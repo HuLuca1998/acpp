@@ -204,7 +204,10 @@ export function NoticeRow({
 }) {
   const { t, i18n } = useTranslation()
   const { Icon, tone, tile } = STYLES[notice.kind]
-  const when = formatRelativeTime(new Date(notice.at).toISOString(), i18n.language)
+  const when = formatRelativeTime(
+    new Date(notice.at).toISOString(),
+    i18n.language
+  )
   const desc = [showSession ? notice.sessionTitle : "", notice.text]
     .filter(Boolean)
     .join(" · ")

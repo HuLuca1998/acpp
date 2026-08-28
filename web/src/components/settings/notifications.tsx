@@ -19,11 +19,20 @@ import { Skeleton } from "@/components/ui/skeleton"
 // as const 保住字面量：i18n 的类型增强只认字面 key，退化成 string 就漏检了。
 const TONES = {
   authorized: { tone: "success", key: "settingsPage.notifications.authorized" },
-  provisional: { tone: "warning", key: "settingsPage.notifications.provisional" },
+  provisional: {
+    tone: "warning",
+    key: "settingsPage.notifications.provisional",
+  },
   denied: { tone: "destructive", key: "settingsPage.notifications.denied" },
-  notDetermined: { tone: "muted", key: "settingsPage.notifications.notDetermined" },
+  notDetermined: {
+    tone: "muted",
+    key: "settingsPage.notifications.notDetermined",
+  },
   unknown: { tone: "muted", key: "settingsPage.notifications.unknown" },
-} as const satisfies Record<NotifyStatus["status"], { tone: StatusTone; key: string }>
+} as const satisfies Record<
+  NotifyStatus["status"],
+  { tone: StatusTone; key: string }
+>
 
 /**
  * 系统通知权限。只在 macOS 壳里出现——它管的是这台机器的通知中心，浏览器
@@ -127,7 +136,9 @@ export function NotificationsCard() {
           </Alert>
         ) : status.status === "denied" ? (
           <Alert>
-            <AlertTitle>{t("settingsPage.notifications.deniedTitle")}</AlertTitle>
+            <AlertTitle>
+              {t("settingsPage.notifications.deniedTitle")}
+            </AlertTitle>
             <AlertDescription>
               {t("settingsPage.notifications.deniedDesc")}
             </AlertDescription>

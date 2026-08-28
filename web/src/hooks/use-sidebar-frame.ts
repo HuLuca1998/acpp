@@ -45,7 +45,10 @@ export function useSidebarFrame() {
 
   const closePeek = useCallback(() => {
     window.clearTimeout(closeTimer.current)
-    closeTimer.current = window.setTimeout(() => setPeek(false), PEEK_CLOSE_DELAY)
+    closeTimer.current = window.setTimeout(
+      () => setPeek(false),
+      PEEK_CLOSE_DELAY
+    )
   }, [])
 
   /** 指针离开折叠钮：解锁，下次悬停可以正常浮出。 */
@@ -66,7 +69,8 @@ export function useSidebarFrame() {
     event.preventDefault()
     const handle = event.currentTarget
     const startX = event.clientX
-    const startWidth = handle.parentElement?.getBoundingClientRect().width ?? WIDTH_DEFAULT
+    const startWidth =
+      handle.parentElement?.getBoundingClientRect().width ?? WIDTH_DEFAULT
     handle.setPointerCapture(event.pointerId)
     document.body.dataset.resizing = "true"
 

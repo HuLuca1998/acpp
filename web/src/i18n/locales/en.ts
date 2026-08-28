@@ -1,6 +1,7 @@
 import { enWorkspace } from "./en-workspace"
 import { enNotify } from "./en-notify"
 import { enDb } from "./en-db"
+import { enDiscord } from "./en-discord"
 
 export default {
   common: {
@@ -34,6 +35,7 @@ export default {
     databases: "Databases",
     tools: "Tools",
     logs: "Logs",
+    discord: "Discord",
     settings: "Settings",
     connections: "Connections",
     help: "Get Help",
@@ -145,6 +147,7 @@ export default {
     remove: "Delete this uploaded file",
   },
   db: enDb,
+  discord: enDiscord,
   skills: {
     title: "Skills",
     description:
@@ -611,6 +614,7 @@ export default {
       claude: "Claude",
       codex: "Codex",
       ollama: "Ollama",
+      discord: "Discord",
       about: "About & Updates",
     },
     about: {

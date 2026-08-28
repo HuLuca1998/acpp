@@ -52,7 +52,8 @@ export function DbRefPicker({
   const { t } = useTranslation()
   // 草稿态换到 `/workspace/...?cwd=` 作用域，方法签名不变（id 被忽略）。
   const activeScope = useMemo(
-    () => (!sessionId && draftCwd ? workspaceScopeApi("/sessions", draftCwd) : scope),
+    () =>
+      !sessionId && draftCwd ? workspaceScopeApi("/sessions", draftCwd) : scope,
     [sessionId, draftCwd, scope]
   )
   return (
