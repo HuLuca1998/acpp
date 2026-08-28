@@ -50,10 +50,17 @@ func bindingEmbed(b Binding, source string) map[string]any {
 	}
 }
 
-// cleanupChannelCard 解绑后的频道侧收尾：摘置顶卡、清主题。都是尽力而为。
+// cleanupChannelCard 解绑后的频道侧收尾：摘置顶、删身份卡、清主题。
+// 都是尽力而为——解绑后频道不该留任何绑定痕迹（单卡原则的另一半）。
 func (s *Service) cleanupChannelCard(ctx context.Context, token string, b Binding) {
 	if b.CardMessageID != "" {
 		s.unpinMessage(ctx, token, b.ChannelID, b.CardMessageID)
+		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := botREST(dctx, token, "DELETE",
+			fmt.Sprintf("/channels/%s/messages/%s", b.ChannelID, b.CardMessageID), nil, nil); err != nil {
+			slog.Warn("删身份卡失败", "err", err)
+		}
+		dcancel()
 	}
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -90,6 +97,7 @@ func (s *Service) syncChannelCard(ctx context.Context, token string, b Binding) 
 		cancel()
 		if err == nil && msg.ID != "" {
 			s.pinMessage(ctx, token, b.ChannelID, msg.ID)
+			s.deletePinNotice(ctx, token, b.ChannelID)
 			b.CardMessageID = msg.ID
 			if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {
 				slog.Warn("身份卡 id 落盘失败", "err", err)
@@ -97,6 +105,30 @@ func (s *Service) syncChannelCard(ctx context.Context, token string, b Binding) 
 		}
 	}
 	s.syncTopic(ctx, token, b)
+}
+
+// deletePinNotice 把置顶动作产生的系统消息（type 6）从时间线里清掉——
+// 频道只留身份卡本身。尽力而为，找不到就算了。
+func (s *Service) deletePinNotice(ctx context.Context, token, channelID string) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var msgs []struct {
+		ID   string `json:"id"`
+		Type int    `json:"type"`
+	}
+	if err := botREST(cctx, token, "GET",
+		fmt.Sprintf("/channels/%s/messages?limit=5", channelID), nil, &msgs); err != nil {
+		return
+	}
+	for _, m := range msgs {
+		if m.Type == 6 {
+			if err := botREST(cctx, token, "DELETE",
+				fmt.Sprintf("/channels/%s/messages/%s", channelID, m.ID), nil, nil); err != nil {
+				slog.Warn("清置顶系统消息失败", "err", err)
+			}
+			return
+		}
+	}
 }
 
 // syncTopic 把一行摘要写进频道主题（顶部常驻）。平台对改主题限速很狠

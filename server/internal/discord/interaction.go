@@ -321,8 +321,9 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 		effort = ""
 	}
 
-	// type 5 = deferred：先占住回执位（对全频道可见），结果稍后编辑进来。
-	if err := interactionCallback(token, ev.ID, ev.Token, 5, nil); err != nil {
+	// type 5 + ephemeral = 过程只有发起者可见。频道里永远只有一张身份卡，
+	// 分支选择、进行中、失败原因这些过程态不进频道时间线。
+	if err := interactionCallback(token, ev.ID, ev.Token, 5, map[string]any{"flags": 1 << 6}); err != nil {
 		slog.Error("/init deferred 回执失败", "err", err)
 		return
 	}
@@ -428,8 +429,8 @@ func (s *Service) branchPicked(ctx context.Context, token string, ev interaction
 	go s.finishInit(ctx, token, p.ev, in)
 }
 
-// finishInit 是 /init 的慢半段：克隆（或复用）、落绑定、回写身份卡并
-// 置顶、把摘要写进频道主题。
+// finishInit 是 /init 的慢半段：克隆（或复用）、落绑定、把结果写到频道
+// 唯一的身份卡上（有卡改卡、无卡才发新的），ephemeral 回执给一句结论。
 func (s *Service) finishInit(ctx context.Context, token string, ev interactionEvent, in initInput) {
 	appID := s.appID()
 	workdir := filepath.Join(s.effectiveWorkRoot(s.store.config()), filepath.FromSlash(workdirName(in.repo, in.branch)))
@@ -459,13 +460,14 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	}
 	cancel()
 
+	// 重绑继承既有身份卡：一个频道永远只有一张卡，/init 只是改它的内容。
 	old, _ := s.store.config().binding(ev.ChannelID)
 	now := time.Now()
 	binding := Binding{
 		ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
 		Repo: in.repo, CloneURL: in.cloneURL, Branch: in.branch, Workdir: workdir,
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
-		Effort: in.effort, CreatedAt: now, UpdatedAt: now,
+		Effort: in.effort, CardMessageID: old.CardMessageID, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
 		slog.Error("绑定落盘失败", "channel", ev.ChannelID, "err", err)
@@ -483,31 +485,13 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	if reused {
 		source = "复用已有克隆"
 	}
+	s.syncChannelCard(ctx, token, binding)
 	s.editOriginal(token, appID, ev.Token, map[string]any{
-		"embeds":           []map[string]any{bindingEmbed(binding, source)},
+		"content":          fmt.Sprintf("✅ **%s** 工作区已就绪（%s），详情见频道置顶卡。", in.repo, source),
+		"embeds":           []map[string]any{},
 		"components":       []map[string]any{},
 		"allowed_mentions": noMentions(),
 	})
-
-	// 身份卡置顶：拿到刚编辑的消息 id，钉住并记下来；旧卡（重绑）摘掉。
-	var msg struct {
-		ID string `json:"id"`
-	}
-	gctx, gcancel := context.WithTimeout(ctx, 5*time.Second)
-	err = botREST(gctx, token, "GET",
-		fmt.Sprintf("/webhooks/%s/%s/messages/@original", appID, ev.Token), nil, &msg)
-	gcancel()
-	if err == nil && msg.ID != "" {
-		if old.CardMessageID != "" && old.CardMessageID != msg.ID {
-			s.unpinMessage(ctx, token, ev.ChannelID, old.CardMessageID)
-		}
-		s.pinMessage(ctx, token, ev.ChannelID, msg.ID)
-		binding.CardMessageID = msg.ID
-		if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
-			slog.Warn("身份卡 id 落盘失败", "err", err)
-		}
-	}
-	s.syncTopic(ctx, token, binding)
 }
 
 // setBindingOption 处理 /model 与 /effort：改绑定、刷新置顶卡与频道主题，
