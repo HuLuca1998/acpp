@@ -321,7 +321,12 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	case err != nil:
 		s.say(ctx, token, threadID, "❌ 这一轮失败了："+trimRunes(err.Error(), 500))
 	case reply == "":
-		s.say(ctx, token, threadID, fmt.Sprintf("（这一轮没有文字回复，结束原因：%s）", result.StopReason))
+		// 纯工具轮正常结束就沉默——活干完了没话说不该打扰；异常结束
+		//（中止/超限/拒绝）才值得说一声。
+		if result.StopReason != acp.StopEndTurn && result.StopReason != "" &&
+			result.StopReason != acp.StopCancelled {
+			s.say(ctx, token, threadID, fmt.Sprintf("（这一轮没说完：%s）", result.StopReason))
+		}
 	default:
 		for _, seg := range splitMessage(reply, discordMsgLimit) {
 			s.say(ctx, token, threadID, seg)

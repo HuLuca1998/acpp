@@ -239,8 +239,17 @@ func (s *Service) handleAskModal(token string, ev interactionEvent) {
 		s.ephemeral(token, ev, "这个提问已经失效了（超时或已在别处回答）。")
 		return
 	}
-	s.finalizeAskCard(token, ev.ChannelID, ask, elicitClosedV2(ask, ask.partial, "由 "+ev.user()+" 提交"))
-	s.ephemeral(token, ev, "✅ 已提交给 agent。")
+	// modal 的 callback 直接把入口卡原地改成记录卡——一步收口，
+	// 不再补一条多余的「已提交」确认（用户点名嫌吵）。
+	closed := elicitClosedV2(ask, ask.partial, "由 "+ev.user()+" 提交")
+	cerr := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
+		"components":       closed,
+		"allowed_mentions": noMentions(),
+	})
+	if cerr != nil {
+		slog.Warn("表单收口改卡失败，走 REST 兜底", "err", cerr)
+		s.finalizeAskCard(token, ev.ChannelID, ask, closed)
+	}
 }
 
 // resolvePermissionAsk 用按钮点击裁决权限：回传 + 原地改终态。
