@@ -312,21 +312,58 @@ func TestSplitMessage(t *testing.T) {
 	}
 }
 
-// 契约：requestedSchema 单题（含 codex 的 __other 与 claude 的 _custom
-// 附属字段）能解出题目与选项；真正的多题拒绝。
-func TestParseSingleQuestion(t *testing.T) {
-	single := json.RawMessage(`{"properties":{
+// 契约：requestedSchema 解析——codex 的 __other 标记与 claude 的 _custom
+// 命名都归位成题目的自由输入栏，不算独立题目。
+func TestParseElicitSchema(t *testing.T) {
+	raw := json.RawMessage(`{"properties":{
 		"color":{"title":"选个颜色","oneOf":[{"const":"red"},{"const":"blue"}]},
 		"color_custom":{"title":"其他"},
-		"__other":{"_meta":{"codex":{"isOtherAnswer":true}}}
-	}}`)
-	q, err := parseSingleQuestion(single)
-	if err != nil || q.field != "color" || len(q.options) != 2 {
-		t.Errorf("单题解析 = %+v, %v", q, err)
+		"__other":{"_meta":{"codex":{"isOtherAnswer":true,"questionId":"color"}}}
+	},"required":["color"]}`)
+	qs, err := parseElicitSchema(raw)
+	if err != nil || len(qs) != 1 {
+		t.Fatalf("题目数 = %d, err = %v", len(qs), err)
+	}
+	q := qs[0]
+	if q.ID != "color" || len(q.Options) != 2 || !q.Required || q.OtherField == "" {
+		t.Errorf("题目解析 = %+v", q)
+	}
+}
+
+// 契约：分页 modal 一页最多 5 个组件（带自由输入的题占两位），
+// custom_id 带 nonce 与页码；elicitRemaining 如实报告还有没有下一页。
+func TestElicitModalPaging(t *testing.T) {
+	var qs []elicitQuestion
+	for i := range 7 {
+		qs = append(qs, elicitQuestion{ID: fmt.Sprintf("q%d", i), Title: fmt.Sprintf("题 %d", i)})
+	}
+	page0 := elicitModal("abc", qs, 0)
+	if got := len(page0["components"].([]map[string]any)); got != 5 {
+		t.Errorf("第 0 页组件数 = %d, want 5", got)
+	}
+	if page0["custom_id"] != "em:abc:0" {
+		t.Errorf("custom_id = %v", page0["custom_id"])
+	}
+	if !elicitRemaining(qs, 0) {
+		t.Error("第 0 页之后应该还有题")
+	}
+	page1 := elicitModal("abc", qs, 1)
+	if got := len(page1["components"].([]map[string]any)); got != 2 {
+		t.Errorf("第 1 页组件数 = %d, want 2", got)
+	}
+	if elicitRemaining(qs, 1) {
+		t.Error("第 1 页之后不该有题")
 	}
 
-	multi := json.RawMessage(`{"properties":{"a":{"title":"A"},"b":{"title":"B"}}}`)
-	if _, err := parseSingleQuestion(multi); err == nil {
-		t.Error("多题应拒绝")
+	// 「选项 + 自由输入」占两位：3 道这样的题一页只装 2 道。
+	var wide []elicitQuestion
+	for i := range 3 {
+		wide = append(wide, elicitQuestion{
+			ID: fmt.Sprintf("w%d", i), Title: "宽题",
+			Options: []string{"a", "b"}, OtherField: fmt.Sprintf("w%d_custom", i),
+		})
+	}
+	if got := len(elicitModal("x", wide, 0)["components"].([]map[string]any)); got != 4 {
+		t.Errorf("宽题第 0 页组件数 = %d, want 4", got)
 	}
 }

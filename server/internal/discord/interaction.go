@@ -109,9 +109,14 @@ type interactionEvent struct {
 	ChannelID string `json:"channel_id"`
 	Member    struct {
 		User struct {
-			Bot bool `json:"bot"`
+			Username string `json:"username"`
+			Bot      bool   `json:"bot"`
 		} `json:"user"`
 	} `json:"member"`
+	// DM 里用户在顶层（guild 内在 member 下）。
+	User struct {
+		Username string `json:"username"`
+	} `json:"user"`
 	Data struct {
 		Name     string   `json:"name"`      // 命令名
 		CustomID string   `json:"custom_id"` // 组件/modal
@@ -122,6 +127,14 @@ type interactionEvent struct {
 		} `json:"options"`
 		Components json.RawMessage `json:"components"`
 	} `json:"data"`
+}
+
+// user 取发起者的展示名（问答卡收口标注「由谁处理」）。
+func (e interactionEvent) user() string {
+	if e.Member.User.Username != "" {
+		return e.Member.User.Username
+	}
+	return e.User.Username
 }
 
 // option 取命令入参（没有返回空串）。
@@ -163,8 +176,13 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.stopThread(token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
+	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):
+		s.handleAskModal(token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):
 		s.branchPicked(ctx, token, ev)
+	case ev.Type == 3 && (strings.HasPrefix(ev.Data.CustomID, "pm:") ||
+		strings.HasPrefix(ev.Data.CustomID, "eb:") || strings.HasPrefix(ev.Data.CustomID, "ec:")):
+		s.handleAskComponent(token, ev)
 	}
 }
 

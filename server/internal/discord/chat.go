@@ -191,7 +191,7 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 	ask := tc.ask
 	tc.mu.Unlock()
 	if ask != nil {
-		s.answerAsk(ctx, token, ev.ChannelID, tc, ask, ev.ID, text)
+		s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text)
 		return
 	}
 	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, msgID: ev.ID})
@@ -400,11 +400,7 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 	case acp.EventElicitation:
 		go s.askElicitation(token, threadID, tc, ev)
 	case acp.EventPermissionDone, acp.EventElicitationDone:
-		tc.mu.Lock()
-		if tc.ask != nil && tc.ask.id == ev.PermissionID+ev.ElicitationID {
-			tc.ask = nil
-		}
-		tc.mu.Unlock()
+		go s.askDone(token, threadID, tc, ev.PermissionID+ev.ElicitationID)
 	}
 }
 
