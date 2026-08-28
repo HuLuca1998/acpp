@@ -43,10 +43,10 @@ func bindingEmbed(b Binding, source string) map[string]any {
 			{"name": "​", "value": "​", "inline": true},
 			{"name": "模型", "value": model, "inline": true},
 			{"name": "思考深度", "value": effort, "inline": true},
-			{"name": "​", "value": "​", "inline": true},
+			{"name": "安全权限", "value": accessLabel(b.AccessOrDefault()), "inline": true},
 			{"name": "工作目录", "value": "`" + b.Workdir + "`", "inline": false},
 		},
-		"footer": map[string]any{"text": "/model 换模型 · /effort 换深度 · /init 重绑 · /status 查看"},
+		"footer": map[string]any{"text": "/model 模型 · /effort 深度 · /access 权限 · /init 重绑 · /status 查看"},
 	}
 }
 
@@ -162,8 +162,8 @@ func topicLine(b Binding) string {
 	if effort == "" {
 		effort = "默认"
 	}
-	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 目录 %s",
-		b.Repo, branch, model, effort, b.Workdir)
+	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 权限 %s · 目录 %s",
+		b.Repo, branch, model, effort, accessLabel(b.AccessOrDefault()), b.Workdir)
 }
 
 // retryAfter 从 429 错误文本里抠 retry_after 秒数（botREST 的错误带响应体）。

@@ -355,6 +355,7 @@ func (s *Service) UpdateBinding(ctx context.Context, channelID string, patch Bin
 				c.Bindings[i].Model = patch.Model
 				c.Bindings[i].ModelLabel = patch.ModelLabel
 				c.Bindings[i].Effort = patch.Effort
+				c.Bindings[i].Access = patch.Access
 				c.Bindings[i].UpdatedAt = time.Now()
 				out = c.Bindings[i]
 				return
@@ -380,6 +381,7 @@ type BindingPatch struct {
 	Model      string `json:"model"`
 	ModelLabel string `json:"modelLabel"`
 	Effort     string `json:"effort"`
+	Access     string `json:"access"`
 }
 
 // RemoveBinding 解绑频道。磁盘上的克隆不动——目录里可能已有未推送的活。

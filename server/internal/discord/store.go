@@ -39,6 +39,9 @@ type Binding struct {
 	Model      string `json:"model"`
 	ModelLabel string `json:"modelLabel,omitempty"`
 	Effort     string `json:"effort,omitempty"`
+	// Access 是统一权限档（safe/auto-edit/full，对齐 acp.AccessLevel）；
+	// 空串按 auto-edit 兜底（老绑定没这字段）。
+	Access string `json:"access,omitempty"`
 	// CardMessageID 是早期版本置顶身份卡的遗留（卡已退役，频道侧常驻
 	// 信息面只有主题）；非空时下次同步会把卡删掉并清空此字段。
 	CardMessageID string    `json:"cardMessageId,omitempty"`
@@ -112,6 +115,14 @@ func (c Config) clone() Config {
 	out := c
 	out.Bindings = append([]Binding(nil), c.Bindings...)
 	return out
+}
+
+// AccessOrDefault 是权限档的读取口径：老绑定没存按 auto-edit 算。
+func (b Binding) AccessOrDefault() string {
+	if b.Access == "" {
+		return "auto-edit"
+	}
+	return b.Access
 }
 
 // binding 按频道查绑定。

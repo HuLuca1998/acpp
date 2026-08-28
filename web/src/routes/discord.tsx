@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Link } from "react-router"
 import { toast } from "sonner"
 
@@ -150,6 +151,7 @@ export function Discord() {
                 <TableHead>{t("discord.page.workdir")}</TableHead>
                 <TableHead>{t("discord.page.model")}</TableHead>
                 <TableHead>{t("discord.page.effort")}</TableHead>
+                <TableHead>{t("discord.page.access")}</TableHead>
                 <TableHead>{t("discord.page.updatedAt")}</TableHead>
                 <TableHead />
               </TableRow>
@@ -177,6 +179,9 @@ export function Discord() {
                   </TableCell>
                   <TableCell className="text-sm">
                     {b.effort || t("discord.page.effortDefault")}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {accessLabel(b.access, t)}
                   </TableCell>
                   <TableCell
                     className="text-sm text-muted-foreground tabular-nums"
@@ -255,7 +260,19 @@ export function Discord() {
   )
 }
 
-/** 编辑绑定：模型（按 agent 分组）与思考深度。仓库不在这改——重建工作区走频道里的 /init。 */
+/** 权限档展示名（key 保持字面量，动态模板过不了 i18n 类型增强）。 */
+function accessLabel(v: string | undefined, t: TFunction) {
+  switch (v) {
+    case "safe":
+      return t("discord.page.accessSafe")
+    case "full":
+      return t("discord.page.accessFull")
+    default:
+      return t("discord.page.accessAutoEdit")
+  }
+}
+
+/** 编辑绑定：模型（按 agent 分组）、思考深度与安全权限。仓库不在这改——重建工作区走频道里的 /init。 */
 function EditBindingDialog({
   binding,
   info,
@@ -271,6 +288,7 @@ function EditBindingDialog({
   // 与后端 /init 表单同一编码：`agent|modelID`。
   const [model, setModel] = useState(`${binding.agent}|${binding.model}`)
   const [effort, setEffort] = useState(binding.effort || "default")
+  const [access, setAccess] = useState(binding.access || "auto-edit")
   const [saving, setSaving] = useState(false)
 
   const efforts = useMemo(() => {
@@ -303,6 +321,7 @@ function EditBindingDialog({
         model: modelID,
         modelLabel: label ? `${agent} · ${label}` : modelID,
         effort: effort === "default" ? "" : effort,
+        access,
       })
       onSaved(next)
       toast.success(t("discord.page.saved"))
@@ -382,6 +401,30 @@ function EditBindingDialog({
                     {e}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>{t("discord.page.access")}</Label>
+            <Select
+              value={access}
+              onValueChange={(v) => {
+                if (v) setAccess(v)
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{accessLabel(access, t)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto-edit">
+                  {t("discord.page.accessAutoEdit")}
+                </SelectItem>
+                <SelectItem value="full">
+                  {t("discord.page.accessFull")}
+                </SelectItem>
+                <SelectItem value="safe">
+                  {t("discord.page.accessSafe")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

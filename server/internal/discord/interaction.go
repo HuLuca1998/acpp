@@ -48,6 +48,12 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"name": c.Label, "value": c.Value,
 		})
 	}
+	var accessChoicesJSON []map[string]any
+	for _, c := range accessChoices() {
+		accessChoicesJSON = append(accessChoicesJSON, map[string]any{
+			"name": c.Label + "——" + c.Description, "value": c.Value,
+		})
+	}
 	cmds := []map[string]any{
 		{
 			"name":        "init",
@@ -64,6 +70,14 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"options": []map[string]any{{
 				"type": 3, "name": "effort", "description": "思考深度档位",
 				"required": true, "choices": effortChoicesJSON,
+			}},
+		},
+		{
+			"name":        "access",
+			"description": "切换这个频道的安全权限档",
+			"options": []map[string]any{{
+				"type": 3, "name": "access", "description": "权限档位",
+				"required": true, "choices": accessChoicesJSON,
 			}},
 		},
 		{
@@ -135,6 +149,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.setBindingOption(ctx, token, ev, "model")
 	case ev.Type == 2 && ev.Data.Name == "effort":
 		s.setBindingOption(ctx, token, ev, "effort")
+	case ev.Type == 2 && ev.Data.Name == "access":
+		s.setBindingOption(ctx, token, ev, "access")
 	case ev.Type == 2 && ev.Data.Name == "status":
 		s.showStatus(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "unbind":
@@ -201,6 +217,7 @@ func (s *Service) openInitModal(ctx context.Context, token string, ev interactio
 	comps = append(comps,
 		map[string]any{"type": 18, "label": "模型", "component": selectComponent("model", models, true)},
 		map[string]any{"type": 18, "label": "思考深度", "component": selectComponent("effort", effortChoices(), true)},
+		map[string]any{"type": 18, "label": "安全权限", "component": selectComponent("access", accessChoices(), true)},
 	)
 
 	data := map[string]any{
@@ -263,6 +280,25 @@ func effortChoices() []choice {
 	}
 }
 
+// accessLabel 是权限档的展示名（认不出的档位返回空串，兼作校验）。
+func accessLabel(v string) string {
+	for _, c := range accessChoices() {
+		if c.Value == v {
+			return c.Label
+		}
+	}
+	return ""
+}
+
+// accessChoices 是统一权限三档（对齐 acp.AccessLevel 词汇）。
+func accessChoices() []choice {
+	return []choice{
+		{Label: "自动编辑", Value: "auto-edit", Description: "自动接受编辑，危险命令仍拦"},
+		{Label: "完全放开", Value: "full", Description: "跳过一切确认，适合无人值守"},
+		{Label: "安全", Value: "safe", Description: "写操作逐项确认（要有人批）"},
+	}
+}
+
 // selectComponent 选组件：≤10 项用 RadioGroup（一眼全见），更多用
 // String Select（实测结论，速查 §8）。
 func selectComponent(customID string, choices []choice, required bool) map[string]any {
@@ -293,7 +329,7 @@ type pendingInit struct {
 }
 
 type initInput struct {
-	repo, cloneURL, agent, modelID, effort string
+	repo, cloneURL, agent, modelID, effort, access string
 	// branch 空 = 默认分支；defaultBranch 用于把「选了默认」归一成空。
 	branch, defaultBranch string
 }
@@ -330,7 +366,7 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 
 	go s.offerBranches(ctx, token, ev, initInput{
 		repo: name, cloneURL: cloneURL,
-		agent: agent, modelID: modelID, effort: effort,
+		agent: agent, modelID: modelID, effort: effort, access: answers["access"],
 	})
 }
 
@@ -468,7 +504,8 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
 		Repo: in.repo, CloneURL: in.cloneURL, Branch: in.branch, Workdir: workdir,
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
-		Effort: in.effort, CardMessageID: old.CardMessageID, CreatedAt: now, UpdatedAt: now,
+		Effort: in.effort, Access: in.access,
+		CardMessageID: old.CardMessageID, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
 		slog.Error("绑定落盘失败", "channel", ev.ChannelID, "err", err)
@@ -527,6 +564,14 @@ func (s *Service) setBindingOption(ctx context.Context, token string, ev interac
 			label = "默认"
 		}
 		confirm = "✅ 思考深度已切换：**" + label + "**"
+	case "access":
+		v := ev.option("access")
+		if accessLabel(v) == "" {
+			s.ephemeral(token, ev, "认不出这个权限档（用命令自带的选项选）。")
+			return
+		}
+		b.Access = v
+		confirm = "✅ 安全权限已切换：**" + accessLabel(v) + "**"
 	}
 	b.UpdatedAt = time.Now()
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {

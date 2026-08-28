@@ -40,6 +40,8 @@ export interface DiscordBinding {
   modelLabel?: string
   /** 空串 = 跟随 agent 默认档。 */
   effort?: string
+  /** 统一权限档 safe/auto-edit/full；空按 auto-edit 兜底。 */
+  access?: string
   createdAt: string
   updatedAt: string
 }
@@ -74,4 +76,5 @@ export interface DiscordBindingPatch {
   model: string
   modelLabel: string
   effort: string
+  access: string
 }
