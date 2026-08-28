@@ -17,6 +17,7 @@ const (
 	colorGreen  = 0x57F287
 	colorRed    = 0xED4245
 	colorBlurbe = 0x5865F2
+	colorGrey   = 0x95A5A6
 )
 
 // registerCommands 注册 guild 级斜杠命令（即时生效；global 有传播延迟）。

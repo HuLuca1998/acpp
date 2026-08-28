@@ -26,11 +26,55 @@ type pendingAsk struct {
 	nonce string
 	// msgID 是问答卡消息，收口时原地改终态。
 	msgID string
+	// title 是这次问答的题面（权限的操作标题 / 提问的引言），终态卡要
+	// 留住它——收口后也得看得出当初问的是什么。
+	title string
 	// 权限专用：选项清单（按钮顺序）。
 	permOpts []acp.PermissionOption
 	// 提问专用：题目、分页中途答案。
 	questions []elicitQuestion
 	partial   map[string]string
+}
+
+// permClosedEmbed 是权限决策的终态卡：留住决策对象，标出选了什么、谁选的。
+func permClosedEmbed(ask *pendingAsk, opt acp.PermissionOption, by string) map[string]any {
+	mark, color := "✅", colorGreen
+	if strings.HasPrefix(opt.Kind, "reject") {
+		mark, color = "❌", colorRed
+	}
+	return map[string]any{
+		"title": ask.title,
+		"description": fmt.Sprintf("%s **%s** · %s · <t:%d:R>",
+			mark, orDefault(opt.Name, opt.OptionID), by, time.Now().Unix()),
+		"color": color,
+	}
+}
+
+// elicitClosedEmbed 是提问的终态卡：逐题列「问题—答案」，问答记录留在对话里。
+func elicitClosedEmbed(ask *pendingAsk, answers map[string]string, by string) map[string]any {
+	fields := make([]map[string]any, 0, len(ask.questions))
+	for _, q := range ask.questions {
+		a := answers[q.ID]
+		if a == "" && q.OtherField != "" {
+			a = answers[q.OtherField]
+		}
+		if a == "" {
+			a = "—"
+		}
+		fields = append(fields, map[string]any{
+			"name": "❓ " + trimRunes(q.Title, 240), "value": trimRunes(a, 1000), "inline": false,
+		})
+	}
+	embed := map[string]any{
+		"title":  "✅ 已回答",
+		"fields": fields,
+		"footer": map[string]any{"text": by},
+		"color":  colorGreen,
+	}
+	if ask.title != "" {
+		embed["description"] = trimRunes(ask.title, 500)
+	}
+	return embed
 }
 
 // askPermission 把权限请求发成按钮裁决卡。claude 的计划审批（PlanReview）
@@ -51,6 +95,7 @@ func (s *Service) askPermission(token, threadID string, tc *threadChat, ev acp.E
 		title = "📋 计划完成，请求开始执行"
 		desc = trimRunes(ev.PlanReview.Plan, 3800) + "\n\n点按钮裁决。"
 	}
+	ask.title = title
 	var buttons []map[string]any
 	for i, o := range ev.Options {
 		if i == 5 {
@@ -103,6 +148,7 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 	ask := &pendingAsk{
 		kind: "elicitation", id: ev.ElicitationID, key: "dc:" + threadID,
 		nonce: nonce, questions: qs, partial: map[string]string{},
+		title: strings.TrimSpace(ev.Text),
 	}
 
 	var lines []string
@@ -227,7 +273,7 @@ func (s *Service) handleAskModal(token string, ev interactionEvent) {
 		s.ephemeral(token, ev, "这个提问已经失效了（超时或已在别处回答）。")
 		return
 	}
-	s.finalizeAskCard(token, ev.ChannelID, ask, "✅ 已回答", "由 "+ev.user()+" 提交")
+	s.finalizeAskCard(token, ev.ChannelID, ask, elicitClosedEmbed(ask, ask.partial, "由 "+ev.user()+" 提交"))
 	s.ephemeral(token, ev, "✅ 已提交给 agent。")
 }
 
@@ -240,17 +286,9 @@ func (s *Service) resolvePermissionAsk(token string, ev interactionEvent, ask *p
 		s.ephemeral(token, ev, "这条已经处理过了（或已失效）。")
 		return
 	}
-	mark, color := "✅", colorGreen
-	if strings.HasPrefix(opt.Kind, "reject") {
-		mark, color = "❌", colorRed
-	}
-	// type 7 = 原地改卡：按钮摘掉，亮出谁做了什么裁决。
+	// type 7 = 原地改卡：按钮摘掉，决策对象与裁决结果都留在对话里。
 	cerr := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-		"embeds": []map[string]any{{
-			"title":       fmt.Sprintf("%s %s", mark, orDefault(opt.Name, opt.OptionID)),
-			"description": "由 " + ev.user() + " · <t:" + strconv.FormatInt(time.Now().Unix(), 10) + ":R>",
-			"color":       color,
-		}},
+		"embeds":           []map[string]any{permClosedEmbed(ask, opt, "由 "+ev.user())},
 		"components":       []map[string]any{},
 		"allowed_mentions": noMentions(),
 	})
@@ -268,7 +306,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 	}
 
 	var err error
-	var closing string
+	var closed map[string]any
 	switch ask.kind {
 	case "permission":
 		if pick < 0 || pick >= len(ask.permOpts) {
@@ -277,10 +315,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		}
 		opt := ask.permOpts[pick]
 		err = s.acpMgr.ResolvePermission(ask.key, ask.id, opt.OptionID)
-		closing = "✅ " + orDefault(opt.Name, opt.OptionID)
-		if strings.HasPrefix(opt.Kind, "reject") {
-			closing = "❌ " + orDefault(opt.Name, opt.OptionID)
-		}
+		closed = permClosedEmbed(ask, opt, "以消息作答")
 	case "elicitation":
 		if len(ask.questions) != 1 {
 			s.say(ctx, token, threadID, "这是个多题表单，点卡片上的「回答」逐页填写。")
@@ -293,7 +328,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		}
 		err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
 			acp.ElicitationResult{Action: "accept", Content: map[string]any{q.ID: answer}})
-		closing = "✅ 已回答"
+		closed = elicitClosedEmbed(ask, map[string]string{q.ID: answer}, "以消息作答")
 	}
 
 	s.clearAsk(threadID, ask)
@@ -303,7 +338,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		return
 	}
 	s.react(ctx, token, threadID, msgID, "✅")
-	s.finalizeAskCard(token, threadID, ask, closing, "以消息作答")
+	s.finalizeAskCard(token, threadID, ask, closed)
 }
 
 // clearAsk 清掉子区的挂起问答（只清自己那份，防并发覆盖）。
@@ -318,7 +353,7 @@ func (s *Service) clearAsk(threadID string, ask *pendingAsk) {
 
 // finalizeAskCard 把问答卡改成终态（摘按钮）。自己点按钮的场景走
 // interaction callback 原地改，这里服务别的收口路径（消息作答、别处处理）。
-func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, title, detail string) {
+func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, embed map[string]any) {
 	if ask.msgID == "" {
 		return
 	}
@@ -326,9 +361,7 @@ func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, title
 	defer cancel()
 	err := botREST(ctx, token, "PATCH",
 		fmt.Sprintf("/channels/%s/messages/%s", threadID, ask.msgID), map[string]any{
-			"embeds": []map[string]any{{
-				"title": title, "description": detail, "color": colorGreen,
-			}},
+			"embeds":           []map[string]any{embed},
 			"components":       []map[string]any{},
 			"allowed_mentions": noMentions(),
 		}, nil)
@@ -348,7 +381,12 @@ func (s *Service) askDone(token, threadID string, tc *threadChat, doneID string)
 	}
 	tc.ask = nil
 	tc.mu.Unlock()
-	s.finalizeAskCard(token, threadID, ask, "⚪ 已处理", "在别处处理或已超时")
+	// 题面留住，只把状态标灰——别处处理的也得看得出当初问的是什么。
+	s.finalizeAskCard(token, threadID, ask, map[string]any{
+		"title":       ask.title,
+		"description": "⚪ 已在别处处理，或已超时。",
+		"color":       colorGrey,
+	})
 }
 
 // postCard 发一条带组件的卡，返回消息 id（失败给空串，问答仍可用文本路径）。
