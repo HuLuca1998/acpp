@@ -330,65 +330,59 @@ func TestParseElicitSchema(t *testing.T) {
 	}
 }
 
-// 契约：逐题卡——标题带进度（k/M），已答的题累积进正文；≤5 个选项给
-// 按钮行，带自由输入的题附「✍️ 输入」按钮，>5 个选项换下拉。
+// 契约：V2 逐题卡——标题带进度，选项每行一个 Section（选中的按钮变
+// ✓/绿），自由输入行常驻，导航条 ⬅️➡️提交（边界与未答齐 disabled）。
 func TestQuestionCard(t *testing.T) {
 	ask := &pendingAsk{
 		nonce: "n", partial: map[string][]string{},
 		questions: []elicitQuestion{
-			{ID: "q0", Title: "第一题", Options: []string{"a", "b"}, OtherField: "q0_custom"},
+			{ID: "q0", Title: "第一题", Options: []elicitOption{{Const: "a"}, {Const: "b", Description: "说明"}}, OtherField: "q0_custom"},
 			{ID: "q1", Title: "第二题"},
 		},
 	}
-	embed := questionCardEmbed(ask)
-	if !strings.Contains(embed["title"].(string), "1/2") {
-		t.Errorf("标题缺进度: %v", embed["title"])
+	comps := questionCardV2(ask)
+	if len(comps) != 1 || comps[0]["type"] != 17 {
+		t.Fatalf("顶层应为 Container: %+v", comps)
 	}
-	rows := questionCardComponents(ask)
-	// 选项行（2 个编号 + ✍️ 追加）+ 导航行。
-	if len(rows) != 2 {
-		t.Fatalf("组件行数 = %d, want 2", len(rows))
+	inner := comps[0]["components"].([]map[string]any)
+	// 标题、分隔、题干、2 个选项 Section、自由输入 Section、分隔、导航。
+	var sections, rows int
+	for _, c := range inner {
+		switch c["type"] {
+		case 9:
+			sections++
+		case 1:
+			rows++
+		}
 	}
-	buttons := rows[0]["components"].([]map[string]any)
-	if len(buttons) != 3 || buttons[0]["custom_id"] != "ea:n:0" || buttons[2]["custom_id"] != "ei:n" {
-		t.Errorf("选项按钮 = %+v", buttons)
+	if sections != 3 || rows != 1 {
+		t.Errorf("Section 数 = %d(want 3), 导航行 = %d(want 1)", sections, rows)
 	}
-	if nav0 := rows[1]["components"].([]map[string]any); len(nav0) != 3 || nav0[2]["custom_id"] != "ez:n" {
-		t.Errorf("导航行 = %+v", nav0)
+	if !strings.Contains(inner[0]["content"].(string), "1/2") {
+		t.Errorf("标题缺进度: %v", inner[0]["content"])
 	}
-
-	// 答完第一题：进度推进，正文里带已答记录；纯输入题只有 ✍️ 行。
+	// 选中后按钮变 ✓，导航提交带计数。
 	ask.partial["q0"] = []string{"a"}
+	inner = questionCardV2(ask)[0]["components"].([]map[string]any)
+	var firstSection map[string]any
+	for _, c := range inner {
+		if c["type"] == 9 {
+			firstSection = c
+			break
+		}
+	}
+	if firstSection["accessory"].(map[string]any)["label"] != "✓" {
+		t.Errorf("选中按钮 = %+v", firstSection["accessory"])
+	}
+	// 末题：➡️ 灰、提交可用（q1 非必答）。
 	ask.cursor = 1
-	embed = questionCardEmbed(ask)
-	// 新形态不在正文里堆已答记录（⬅️ 随时可回看），进度在标题与 footer。
-	footer := embed["footer"].(map[string]any)["text"].(string)
-	if !strings.Contains(embed["title"].(string), "2/2") || !strings.Contains(footer, "1/2") {
-		t.Errorf("翻题后卡片 = %v / footer %s", embed["title"], footer)
-	}
-	rows = questionCardComponents(ask)
-	// 纯输入题没有选项行，只剩常驻导航条（⬅️ ➡️ ✍️ 提交）。
-	if len(rows) != 1 {
-		t.Fatalf("纯输入题组件行数 = %d, want 1", len(rows))
-	}
-	nav := rows[0]["components"].([]map[string]any)
-	// 纯输入题：✍️ 落回导航条（⬅️ ➡️ ✍️ 提交）。
-	if len(nav) != 4 || nav[2]["custom_id"] != "ei:n" || nav[3]["custom_id"] != "ez:n" {
-		t.Errorf("导航条 = %+v", nav)
-	}
-	// 第二题（末题）：➡️ 灰、⬅️ 可用；q0 已答但 q1 未答，提交仍可用
-	//（q1 非必答）。
-	if nav[0]["disabled"] != false || nav[1]["disabled"] != true || nav[3]["disabled"] != false {
+	inner = questionCardV2(ask)[0]["components"].([]map[string]any)
+	nav := inner[len(inner)-1]["components"].([]map[string]any)
+	if nav[1]["disabled"] != true || nav[2]["disabled"] != false {
 		t.Errorf("导航 disabled 状态 = %+v", nav)
 	}
-
-	// >5 个选项换下拉。
-	many := &pendingAsk{nonce: "m", partial: map[string][]string{}, questions: []elicitQuestion{{
-		ID: "q", Title: "多选项", Options: []string{"1", "2", "3", "4", "5", "6"},
-	}}}
-	rows = questionCardComponents(many)
-	if rows[0]["components"].([]map[string]any)[0]["custom_id"] != "es:m" {
-		t.Errorf("多选项应为下拉: %+v", rows)
+	if !strings.Contains(nav[2]["label"].(string), "1/2") {
+		t.Errorf("提交计数 = %v", nav[2]["label"])
 	}
 }
 
@@ -413,7 +407,7 @@ func TestMultiSelectFlow(t *testing.T) {
 			single = q
 		}
 	}
-	if single.ID != "question_0" || single.OtherField != "question_0_custom" || len(single.Options) != 2 {
+	if single.ID != "question_0" || single.OtherField != "question_0_custom" || len(single.Options) != 2 || single.Options[0].Const != "Red" {
 		t.Errorf("单选题 = %+v", single)
 	}
 	if multi.ID != "question_1" || len(multi.Options) != 3 || multi.OtherField != "question_1_custom" {

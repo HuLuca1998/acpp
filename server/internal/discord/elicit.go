@@ -7,10 +7,9 @@ import (
 	"strings"
 )
 
-// 本文件是提问表单的形状层：requestedSchema → 题目列表 → 分页 modal。
-// 两条 ACP 的自由输入标记不同：codex 用 `_meta.codex.isOtherAnswer`
-// （字段名 __other），claude 用 `<题目>_custom` 命名约定——差异吃在
-// 解析里，与 web 端 lib/elicitation.ts 同一口径。
+// 本文件是提问的形状层：requestedSchema → 题目列表 → Components V2 逐题卡
+//（用户定稿的布局：标题+已答摘要、题干、每选项一行 Section 右侧 ✓/○ 按钮、
+// 自由输入行、⬅️➡️提交导航条）。解析口径与 web 端 lib/elicitation.ts 一致。
 
 // elicitQuestion 是解析后的一道题。
 type elicitQuestion struct {
@@ -21,15 +20,24 @@ type elicitQuestion struct {
 	// Multiple 表示多选题（schema 是 array + items 选项集）：答案是集合，
 	// 交互上点选是勾选/取消，不自动前进。
 	Multiple bool
-	Options  []string
+	Options  []elicitOption
 	// OtherField 非空表示这道题带自由输入栏，答案要落到这个字段上。
 	OtherField string
 }
 
-// elicitOption 是 schema 里的一个选项形状。
+// elicitOption 是 schema 里的一个选项形状（Const 是值，Description 是说明）。
 type elicitOption struct {
 	Const       string `json:"const"`
 	Description string `json:"description"`
+}
+
+// optionValues 取一道题的全部选项值。
+func optionValues(q elicitQuestion) []string {
+	out := make([]string, 0, len(q.Options))
+	for _, o := range q.Options {
+		out = append(out, o.Const)
+	}
+	return out
 }
 
 // parseElicitSchema 把 requestedSchema 解析成题目列表。形状是 2026-08 从
@@ -109,19 +117,19 @@ func parseElicitSchema(raw json.RawMessage) ([]elicitQuestion, error) {
 			for _, list := range [][]elicitOption{prop.Items.AnyOf, prop.Items.OneOf} {
 				for _, o := range list {
 					if o.Const != "" {
-						q.Options = append(q.Options, o.Const)
+						q.Options = append(q.Options, o)
 					}
 				}
 			}
 			for _, e := range prop.Items.Enum {
 				if e != "" {
-					q.Options = append(q.Options, e)
+					q.Options = append(q.Options, elicitOption{Const: e})
 				}
 			}
 		} else {
 			for _, o := range prop.OneOf {
 				if o.Const != "" {
-					q.Options = append(q.Options, o.Const)
+					q.Options = append(q.Options, o)
 				}
 			}
 		}
@@ -130,49 +138,104 @@ func parseElicitSchema(raw json.RawMessage) ([]elicitQuestion, error) {
 	return qs, nil
 }
 
-// questionCardEmbed 是逐题问答卡：正文列当前题与全部选项（单选标 ●，
-// 多选标 ☑），下方一行编号按钮 + ⬅️➡️✍️提交导航条。可来回翻题改答案，
-// 答完手动提交（用户点名的形态：不自动交，选错随时回去改）。
-func questionCardEmbed(ask *pendingAsk) map[string]any {
+// ---- Components V2 渲染（布局由用户以 JSON 定稿）----
+
+// v2Text 是一个 Text Display 组件。
+func v2Text(content string) map[string]any {
+	return map[string]any{"type": 10, "content": content}
+}
+
+// v2Sep 是分隔线。
+func v2Sep() map[string]any {
+	return map[string]any{"type": 14, "divider": true, "spacing": 1}
+}
+
+// v2Section 是「左文字 + 右按钮」的一行。
+func v2Section(content string, button map[string]any) map[string]any {
+	return map[string]any{
+		"type": 9, "components": []map[string]any{v2Text(content)},
+		"accessory": button,
+	}
+}
+
+// v2Container 把内容包进带色条的容器（消息顶层组件）。
+func v2Container(color int, inner []map[string]any) []map[string]any {
+	return []map[string]any{{"type": 17, "accent_color": color, "components": inner}}
+}
+
+// answeredLine 是一道已答题的摘要行：「✅ ~~题~~　**答案**」。
+func answeredLine(q elicitQuestion, answers []string) string {
+	return "✅ ~~" + trimRunes(q.Title, 60) + "~~　**" + trimRunes(strings.Join(answers, "、"), 160) + "**"
+}
+
+// questionCardV2 是逐题卡：标题与已答摘要在头部，当前题的选项每行一个
+// Section（右侧 ✓/○ 按钮，多选 toggle），自由输入一行，底部 ⬅️➡️提交。
+func questionCardV2(ask *pendingAsk) []map[string]any {
 	cur := ask.questions[ask.cursor]
 	sel := answersOf(ask, cur)
-	var lines []string
+	values := optionValues(cur)
+
+	var inner []map[string]any
+	inner = append(inner, v2Text(fmt.Sprintf("### ❓ agent 有问题问你　·　%d/%d", ask.cursor+1, len(ask.questions))))
 	if ask.title != "" {
-		lines = append(lines, trimRunes(ask.title, 400), "")
+		inner = append(inner, v2Text("-# "+trimRunes(ask.title, 300)))
 	}
-	kind := ""
-	if cur.Multiple {
-		kind = "（多选）"
+	for i, q := range ask.questions {
+		if i == ask.cursor {
+			continue
+		}
+		if a := answersOf(ask, q); len(a) > 0 {
+			inner = append(inner, v2Text(answeredLine(q, a)))
+		}
 	}
-	lines = append(lines, "❓ **"+trimRunes(cur.Title, 240)+"**"+kind)
+	inner = append(inner, v2Sep())
+
+	title := "**" + trimRunes(cur.Title, 200)
 	if cur.Description != "" {
-		lines = append(lines, trimRunes(cur.Description, 300))
+		title += " — " + trimRunes(cur.Description, 200)
 	}
-	marks := [2]string{"○", "●"}
+	title += "**"
 	if cur.Multiple {
-		marks = [2]string{"☐", "☑"}
+		title += "（可多选）"
 	}
+	inner = append(inner, v2Text(title))
+
+	for i, o := range cur.Options {
+		picked := slices.Contains(sel, o.Const)
+		label := fmt.Sprintf("%d · %s", i+1, trimRunes(o.Const, 120))
+		if picked {
+			label = "**" + label + "**"
+		}
+		if o.Description != "" {
+			label += "\n-# " + trimRunes(o.Description, 140)
+		}
+		btn := map[string]any{
+			"type": 2, "style": 2, "label": "○",
+			"custom_id": fmt.Sprintf("ea:%s:%d", ask.nonce, i),
+		}
+		if picked {
+			btn["style"] = 3
+			btn["label"] = "✓"
+		}
+		inner = append(inner, v2Section(label, btn))
+	}
+
+	// 自由输入行：已输入的显示出来（多选时与选项并存）。
 	var free []string
 	for _, a := range sel {
-		if !slices.Contains(cur.Options, a) {
+		if !slices.Contains(values, a) {
 			free = append(free, a)
 		}
 	}
-	for i, o := range cur.Options {
-		mark := marks[0]
-		if slices.Contains(sel, o) {
-			mark = marks[1]
-		}
-		lines = append(lines, fmt.Sprintf("%s **%d** · %s", mark, i+1, trimRunes(o, 90)))
-	}
+	freeLabel := "自由输入"
 	if len(free) > 0 {
-		lines = append(lines, "✍️ 已输入：**"+trimRunes(strings.Join(free, "、"), 200)+"**")
+		freeLabel = "✍️ **" + trimRunes(strings.Join(free, "、"), 160) + "**"
 	}
-	hint := "点编号选择（自动到下一题）"
-	if cur.Multiple {
-		hint = "点编号勾选/取消（可多个），选完 ➡️ 下一题"
-	}
-	lines = append(lines, "-# "+hint+"；⬅️➡️ 翻题可改答案，全部答完按「提交」。打字/回编号也行。")
+	inner = append(inner, v2Section(freeLabel, map[string]any{
+		"type": 2, "style": 2, "label": "✍️", "custom_id": "ei:" + ask.nonce,
+	}))
+
+	inner = append(inner, v2Sep())
 
 	answered := 0
 	for _, q := range ask.questions {
@@ -180,80 +243,36 @@ func questionCardEmbed(ask *pendingAsk) map[string]any {
 			answered++
 		}
 	}
-	return map[string]any{
-		"title":       fmt.Sprintf("❓ agent 有问题问你（%d/%d）", ask.cursor+1, len(ask.questions)),
-		"description": strings.Join(lines, "\n"),
-		"color":       colorBlurbe,
-		"footer":      map[string]any{"text": fmt.Sprintf("已答 %d/%d 题", answered, len(ask.questions))},
-	}
-}
-
-// questionCardComponents：编号按钮一行（选中的高亮，>5 个选项换下拉；
-// 多选下拉带 max_values），「✍️ 输入」跟在选项后面当追加项（行满或
-// 纯输入题落导航条）+ 导航条 [⬅️][➡️][提交]。边界与未答齐用 disabled 表达。
-func questionCardComponents(ask *pendingAsk) []map[string]any {
-	cur := ask.questions[ask.cursor]
-	sel := answersOf(ask, cur)
-	inputBtn := map[string]any{
-		"type": 2, "style": 2, "label": "✍️ 输入", "custom_id": "ei:" + ask.nonce,
-	}
-	inputPlaced := false
-	var rows []map[string]any
-	switch {
-	case len(cur.Options) == 0:
-	case len(cur.Options) <= 5:
-		var buttons []map[string]any
-		for i, o := range cur.Options {
-			style := 2
-			if slices.Contains(sel, o) {
-				style = 1
-			}
-			buttons = append(buttons, map[string]any{
-				"type": 2, "style": style,
-				"label":     fmt.Sprintf("%d", i+1),
-				"custom_id": fmt.Sprintf("ea:%s:%d", ask.nonce, i),
-			})
-		}
-		// ✍️ 是选项之外的「第 N+1 个选择」，跟在编号后面（一行最多 5 个）。
-		if len(buttons) < 5 {
-			buttons = append(buttons, inputBtn)
-			inputPlaced = true
-		}
-		rows = append(rows, map[string]any{"type": 1, "components": buttons})
-	default:
-		opts := make([]map[string]any, 0, len(cur.Options))
-		for _, o := range cur.Options {
-			opt := map[string]any{"label": trimRunes(o, 90), "value": trimRunes(o, 90)}
-			if slices.Contains(sel, o) {
-				opt["default"] = true
-			}
-			opts = append(opts, opt)
-		}
-		selComp := map[string]any{
-			"type": 3, "custom_id": "es:" + ask.nonce, "options": opts,
-			"placeholder": "选一个…",
-		}
-		if cur.Multiple {
-			selComp["placeholder"] = "可以选多个…"
-			selComp["min_values"] = 0
-			selComp["max_values"] = len(opts)
-		}
-		rows = append(rows, map[string]any{"type": 1, "components": []map[string]any{selComp}})
-	}
-	nav := []map[string]any{
+	inner = append(inner, map[string]any{"type": 1, "components": []map[string]any{
 		{"type": 2, "style": 2, "label": "⬅️", "custom_id": "en:" + ask.nonce + ":p",
 			"disabled": ask.cursor == 0},
 		{"type": 2, "style": 2, "label": "➡️", "custom_id": "en:" + ask.nonce + ":n",
 			"disabled": ask.cursor == len(ask.questions)-1},
+		{"type": 2, "style": 3, "label": fmt.Sprintf("提交（%d/%d）", answered, len(ask.questions)),
+			"custom_id": "ez:" + ask.nonce, "disabled": !askReady(ask)},
+	}})
+	return v2Container(colorBlurbe, inner)
+}
+
+// elicitClosedV2 是提问的终态卡：逐题「✅ ~~题~~　答案」，记录留在对话里。
+func elicitClosedV2(ask *pendingAsk, answers map[string][]string, by string) []map[string]any {
+	var inner []map[string]any
+	inner = append(inner, v2Text("### ✅ 已回答"))
+	if ask.title != "" {
+		inner = append(inner, v2Text("-# "+trimRunes(ask.title, 300)))
 	}
-	if !inputPlaced {
-		nav = append(nav, inputBtn)
+	for _, q := range ask.questions {
+		vals := append([]string(nil), answers[q.ID]...)
+		if q.OtherField != "" {
+			vals = append(vals, answers[q.OtherField]...)
+		}
+		if len(vals) == 0 {
+			vals = []string{"—"}
+		}
+		inner = append(inner, v2Text(answeredLine(q, vals)))
 	}
-	nav = append(nav, map[string]any{
-		"type": 2, "style": 3, "label": "提交", "custom_id": "ez:" + ask.nonce,
-		"disabled": !askReady(ask)})
-	rows = append(rows, map[string]any{"type": 1, "components": nav})
-	return rows
+	inner = append(inner, v2Text("-# "+by))
+	return v2Container(colorGreen, inner)
 }
 
 // askReady 报告可否提交：必答题全部有答案，且至少答过一题。

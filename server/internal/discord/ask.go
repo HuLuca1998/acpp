@@ -46,8 +46,9 @@ type pendingAsk struct {
 func (s *Service) applyAnswer(ask *pendingAsk, values []string) (advance bool) {
 	cur := ask.questions[ask.cursor]
 	var opts, free []string
+	vals := optionValues(cur)
 	for _, v := range values {
-		if slices.Contains(cur.Options, v) {
+		if slices.Contains(vals, v) {
 			opts = append(opts, v)
 		} else if v != "" {
 			free = append(free, v)
@@ -108,46 +109,17 @@ func askContent(ask *pendingAsk) map[string]any {
 	return content
 }
 
-// permClosedEmbed 是权限决策的终态卡：留住决策对象，标出选了什么、谁选的。
-func permClosedEmbed(ask *pendingAsk, opt acp.PermissionOption, by string) map[string]any {
+// permClosedV2 是权限决策的终态卡：留住决策对象，标出选了什么、谁选的。
+func permClosedV2(ask *pendingAsk, opt acp.PermissionOption, by string) []map[string]any {
 	mark, color := "✅", colorGreen
 	if strings.HasPrefix(opt.Kind, "reject") {
 		mark, color = "❌", colorRed
 	}
-	return map[string]any{
-		"title": ask.title,
-		"description": fmt.Sprintf("%s **%s** · %s · <t:%d:R>",
-			mark, orDefault(opt.Name, opt.OptionID), by, time.Now().Unix()),
-		"color": color,
-	}
-}
-
-// elicitClosedEmbed 是提问的终态卡：逐题列「问题—答案」，问答记录留在对话里。
-func elicitClosedEmbed(ask *pendingAsk, answers map[string][]string, by string) map[string]any {
-	fields := make([]map[string]any, 0, len(ask.questions))
-	for _, q := range ask.questions {
-		vals := append([]string(nil), answers[q.ID]...)
-		if q.OtherField != "" {
-			vals = append(vals, answers[q.OtherField]...)
-		}
-		a := strings.Join(vals, "、")
-		if a == "" {
-			a = "—"
-		}
-		fields = append(fields, map[string]any{
-			"name": "❓ " + trimRunes(q.Title, 240), "value": trimRunes(a, 1000), "inline": false,
-		})
-	}
-	embed := map[string]any{
-		"title":  "✅ 已回答",
-		"fields": fields,
-		"footer": map[string]any{"text": by},
-		"color":  colorGreen,
-	}
-	if ask.title != "" {
-		embed["description"] = trimRunes(ask.title, 500)
-	}
-	return embed
+	return v2Container(color, []map[string]any{
+		v2Text("### " + ask.title),
+		v2Text(fmt.Sprintf("%s **%s** · %s · <t:%d:R>",
+			mark, orDefault(opt.Name, opt.OptionID), by, time.Now().Unix())),
+	})
 }
 
 // askPermission 把权限请求发成按钮裁决卡。claude 的计划审批（PlanReview）
@@ -189,10 +161,12 @@ func (s *Service) askPermission(token, threadID string, tc *threadChat, ev acp.E
 	}
 
 	msgID := s.postCard(token, threadID, map[string]any{
-		"embeds": []map[string]any{{
-			"title": title, "description": desc, "color": colorBlurbe,
-		}},
-		"components":       []map[string]any{{"type": 1, "components": buttons}},
+		"flags": 1 << 15,
+		"components": v2Container(colorBlurbe, []map[string]any{
+			v2Text("### " + title),
+			v2Text("-# " + desc),
+			{"type": 1, "components": buttons},
+		}),
 		"allowed_mentions": noMentions(),
 	})
 	ask.msgID = msgID
@@ -224,8 +198,8 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 	}
 
 	msgID := s.postCard(token, threadID, map[string]any{
-		"embeds":           []map[string]any{questionCardEmbed(ask)},
-		"components":       questionCardComponents(ask),
+		"flags":            1 << 15,
+		"components":       questionCardV2(ask),
 		"allowed_mentions": noMentions(),
 	})
 	ask.msgID = msgID
@@ -280,7 +254,7 @@ func (s *Service) handleAskComponent(token string, ev interactionEvent) {
 		if err != nil || idx < 0 || idx >= len(cur.Options) {
 			return
 		}
-		s.stepAsk(token, ev, ask, []string{cur.Options[idx]})
+		s.stepAsk(token, ev, ask, []string{cur.Options[idx].Const})
 	case "es":
 		// 下拉一次交互给出全部选中值（多选下拉天然多值）。
 		s.stepAsk(token, ev, ask, ev.Data.Values)
@@ -335,8 +309,7 @@ func (s *Service) stepAsk(token string, ev interactionEvent, ask *pendingAsk, va
 // refreshAskCard 用 interaction callback 原地刷新逐题卡。
 func (s *Service) refreshAskCard(token string, ev interactionEvent, ask *pendingAsk) {
 	err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-		"embeds":           []map[string]any{questionCardEmbed(ask)},
-		"components":       questionCardComponents(ask),
+		"components":       questionCardV2(ask),
 		"allowed_mentions": noMentions(),
 	})
 	if err != nil {
@@ -365,8 +338,7 @@ func (s *Service) submitAsk(token string, ev interactionEvent, ask *pendingAsk) 
 		return
 	}
 	cerr := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-		"embeds":           []map[string]any{elicitClosedEmbed(ask, ask.partial, "由 "+ev.user()+" 提交")},
-		"components":       []map[string]any{},
+		"components":       elicitClosedV2(ask, ask.partial, "由 "+ev.user()+" 提交"),
 		"allowed_mentions": noMentions(),
 	})
 	if cerr != nil {
@@ -385,8 +357,7 @@ func (s *Service) resolvePermissionAsk(token string, ev interactionEvent, ask *p
 	}
 	// type 7 = 原地改卡：按钮摘掉，决策对象与裁决结果都留在对话里。
 	cerr := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
-		"embeds":           []map[string]any{permClosedEmbed(ask, opt, "由 "+ev.user())},
-		"components":       []map[string]any{},
+		"components":       permClosedV2(ask, opt, "由 "+ev.user()),
 		"allowed_mentions": noMentions(),
 	})
 	if cerr != nil {
@@ -403,7 +374,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 	}
 
 	var err error
-	var closed map[string]any
+	var closed []map[string]any
 	switch ask.kind {
 	case "permission":
 		if pick < 0 || pick >= len(ask.permOpts) {
@@ -412,7 +383,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		}
 		opt := ask.permOpts[pick]
 		err = s.acpMgr.ResolvePermission(ask.key, ask.id, opt.OptionID)
-		closed = permClosedEmbed(ask, opt, "以消息作答")
+		closed = permClosedV2(ask, opt, "以消息作答")
 	case "elicitation":
 		// 逐题卡的文本路径：编号选当前题的选项（多选可「1 3」一次勾几个），
 		// 其他文字进自由输入；「提交」两个字整体提交。
@@ -423,7 +394,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 			}
 			err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
 				acp.ElicitationResult{Action: "accept", Content: askContent(ask)})
-			closed = elicitClosedEmbed(ask, ask.partial, "以消息作答")
+			closed = elicitClosedV2(ask, ask.partial, "以消息作答")
 			break
 		}
 		cur := ask.questions[ask.cursor]
@@ -431,8 +402,7 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 			ask.cursor++
 		}
 		s.react(ctx, token, threadID, msgID, "✅")
-		s.finalizeAskCardKeep(token, threadID, ask,
-			questionCardEmbed(ask), questionCardComponents(ask))
+		s.finalizeAskCard(token, threadID, ask, questionCardV2(ask))
 		return
 	}
 
@@ -458,7 +428,7 @@ func parseAnswerText(text string, q elicitQuestion) []string {
 		if err != nil || n < 1 || n > len(q.Options) {
 			return []string{text}
 		}
-		picked = append(picked, q.Options[n-1])
+		picked = append(picked, q.Options[n-1].Const)
 	}
 	if len(picked) == 0 {
 		return []string{text}
@@ -479,15 +449,9 @@ func (s *Service) clearAsk(threadID string, ask *pendingAsk) {
 	tc.mu.Unlock()
 }
 
-// finalizeAskCard 把问答卡改成终态（摘按钮）。自己点按钮的场景走
-// interaction callback 原地改，这里服务别的收口路径（消息作答、别处处理）。
-func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, embed map[string]any) {
-	s.finalizeAskCardKeep(token, threadID, ask, embed, []map[string]any{})
-}
-
-// finalizeAskCardKeep 用 REST 改问答卡（components 由调用方给——翻题保留
-// 组件，收口传空摘掉）。
-func (s *Service) finalizeAskCardKeep(token, threadID string, ask *pendingAsk, embed map[string]any, components []map[string]any) {
+// finalizeAskCard 用 REST 把问答卡整卡替换（V2 组件树）——服务
+// interaction callback 之外的路径（消息作答的翻题与收口、别处处理）。
+func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, components []map[string]any) {
 	if ask.msgID == "" {
 		return
 	}
@@ -495,7 +459,6 @@ func (s *Service) finalizeAskCardKeep(token, threadID string, ask *pendingAsk, e
 	defer cancel()
 	err := botREST(ctx, token, "PATCH",
 		fmt.Sprintf("/channels/%s/messages/%s", threadID, ask.msgID), map[string]any{
-			"embeds":           []map[string]any{embed},
 			"components":       components,
 			"allowed_mentions": noMentions(),
 		}, nil)
@@ -516,11 +479,14 @@ func (s *Service) askDone(token, threadID string, tc *threadChat, doneID string)
 	tc.ask = nil
 	tc.mu.Unlock()
 	// 题面留住，只把状态标灰——别处处理的也得看得出当初问的是什么。
-	s.finalizeAskCard(token, threadID, ask, map[string]any{
-		"title":       ask.title,
-		"description": "⚪ 已在别处处理，或已超时。",
-		"color":       colorGrey,
-	})
+	title := ask.title
+	if title == "" {
+		title = "agent 的提问"
+	}
+	s.finalizeAskCard(token, threadID, ask, v2Container(colorGrey, []map[string]any{
+		v2Text("### " + trimRunes(title, 200)),
+		v2Text("⚪ 已在别处处理，或已超时。"),
+	}))
 }
 
 // postCard 发一条带组件的卡，返回消息 id（失败给空串，问答仍可用文本路径）。
