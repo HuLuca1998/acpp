@@ -162,7 +162,10 @@ export function Discord() {
                       #{b.channelName || b.channelId}
                     </span>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{b.repo}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {b.repo}
+                    {b.branch ? `@${b.branch}` : ""}
+                  </TableCell>
                   <TableCell
                     className="max-w-56 truncate font-mono text-xs text-muted-foreground"
                     title={b.workdir}

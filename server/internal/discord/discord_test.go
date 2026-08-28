@@ -100,7 +100,7 @@ func TestStoreRoundTrip(t *testing.T) {
 // 契约：SaveConfig 对 token 做形状检查，对工作根要求绝对路径；
 // enabled 开关不动其他字段。
 func TestSaveConfigValidation(t *testing.T) {
-	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), nil)
+	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestSaveConfigValidation(t *testing.T) {
 
 // 契约：绑定编辑只动模型三件套，解绑不认识的频道报 ErrNotFound。
 func TestBindingEdits(t *testing.T) {
-	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), nil)
+	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestEnsureWorkdirReuse(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	reused, err := ensureWorkdir(context.Background(), "https://example.com/x.git", dir)
+	reused, err := ensureWorkdir(context.Background(), "https://example.com/x.git", "", dir)
 	if err != nil || !reused {
 		t.Errorf("已有克隆应复用: reused=%v err=%v", reused, err)
 	}
@@ -205,8 +205,32 @@ func TestEnsureWorkdirReuse(t *testing.T) {
 	if err := os.MkdirAll(plain, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ensureWorkdir(context.Background(), "https://example.com/x.git", plain); err == nil {
+	if _, err := ensureWorkdir(context.Background(), "https://example.com/x.git", "", plain); err == nil {
 		t.Error("非 git 目录应报错")
+	}
+}
+
+// 契约：ls-remote --symref 输出要解出默认分支与全部分支；落点命名默认分支
+// 用 `<组织>/<仓库>`，指定分支加 @ 后缀且斜杠转安全字符。
+func TestParseLsRemoteAndWorkdirName(t *testing.T) {
+	out := "ref: refs/heads/main\tHEAD\n" +
+		"aaaa\tHEAD\n" +
+		"aaaa\trefs/heads/main\n" +
+		"bbbb\trefs/heads/feat/login\n" +
+		"cccc\trefs/tags/v1.0\n"
+	def, branches := parseLsRemote(out)
+	if def != "main" {
+		t.Errorf("默认分支 = %q, want main", def)
+	}
+	if len(branches) != 2 || branches[0] != "main" || branches[1] != "feat/login" {
+		t.Errorf("分支清单 = %v", branches)
+	}
+
+	if got := workdirName("org/app", ""); got != "org/app" {
+		t.Errorf("默认分支落点 = %q", got)
+	}
+	if got := workdirName("org/app", "feat/login"); got != "org/app@feat-login" {
+		t.Errorf("分支落点 = %q", got)
 	}
 }
 

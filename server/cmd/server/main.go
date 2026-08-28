@@ -140,9 +140,25 @@ func run() error {
 	noticeHub := stream.NewHub()
 	chatService.SetNotifyHub(noticeHub)
 
-	// discord 频道工作区（adr-016）：与会话零耦合的独立子系统。模型清单
-	// 经闭包注入——discord 包因此不认识 model/db，回退只动这一段装配。
-	discordService, err := discord.New(filepath.Join(cfg.DataDir, "discord.json"), discordCatalog(agentService))
+	// discord 频道工作区（adr-016）：与会话零耦合的独立子系统。模型清单、
+	// 远端仓库清单与默认工作根都经闭包注入——discord 包因此不认识
+	// model/db/service，回退只动这一段装配。默认工作根落在 <工作区根>/discord，
+	// 与租户 root（<工作区根>/<租户>）同层。
+	discordService, err := discord.New(filepath.Join(cfg.DataDir, "discord.json"), discord.Deps{
+		DefaultWorkRoot: func() string { return filepath.Join(service.DefaultCwd(), "discord") },
+		Catalog:         discordCatalog(agentService),
+		Repos: func(ctx context.Context) ([]discord.RepoOption, error) {
+			repos, err := project.Repos(ctx)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]discord.RepoOption, 0, len(repos))
+			for _, r := range repos {
+				out = append(out, discord.RepoOption{Name: r.Name, CloneURL: r.CloneURL})
+			}
+			return out, nil
+		},
+	})
 	if err != nil {
 		return err
 	}

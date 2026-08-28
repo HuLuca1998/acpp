@@ -29,7 +29,10 @@ type Binding struct {
 	// Repo 是规范化的 `<组织>/<仓库>`；CloneURL 是实际交给 git 的地址。
 	Repo     string `json:"repo"`
 	CloneURL string `json:"cloneUrl"`
-	Workdir  string `json:"workdir"`
+	// Branch 空串表示默认分支；指定分支的克隆落在 `<仓库>@<分支>` 目录，
+	// 与默认分支的克隆互不打扰（多个频道可能共享同一仓库）。
+	Branch  string `json:"branch,omitempty"`
+	Workdir string `json:"workdir"`
 	// Agent/Model 对齐内置工具的探测缓存（claude/codex 与其模型 id）；
 	// Effort 是统一思考深度五档，空串表示用 agent 默认。
 	Agent      string    `json:"agent"`

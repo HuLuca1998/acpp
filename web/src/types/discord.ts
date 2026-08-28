@@ -32,6 +32,8 @@ export interface DiscordBinding {
   guildId?: string
   repo: string
   cloneUrl: string
+  /** 空/缺省 = 默认分支；指定分支的克隆落在 `<仓库>@<分支>` 目录。 */
+  branch?: string
   workdir: string
   agent: string
   model: string

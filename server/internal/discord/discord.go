@@ -27,6 +27,25 @@ var (
 // 清单，/init 表单与绑定编辑框的选项都从这来。
 type CatalogFunc func(ctx context.Context) ([]AgentOption, error)
 
+// ReposFunc 由装配层提供：可克隆的远端仓库清单（gh CLI），/init 表单的
+// 仓库下拉用。取不到不挡流程——表单退化成纯手输。
+type ReposFunc func(ctx context.Context) ([]RepoOption, error)
+
+// RepoOption 是仓库下拉的一项。
+type RepoOption struct {
+	Name     string `json:"name"`
+	CloneURL string `json:"cloneUrl"`
+}
+
+// Deps 是装配层注入的全部外部依赖，discord 包因此不认识其他业务包。
+type Deps struct {
+	// DefaultWorkRoot 是没配置工作根时的克隆落点根（<工作区根>/discord，
+	// 与租户 root 同层）。工作区根可运行时改，所以是函数不是值。
+	DefaultWorkRoot func() string
+	Catalog         CatalogFunc
+	Repos           ReposFunc
+}
+
 // AgentOption 是一个内置工具的可选项集合。
 type AgentOption struct {
 	Agent   string        `json:"agent"`
@@ -84,8 +103,8 @@ type ConfigPatch struct {
 
 // Service 管子系统生命周期：配置变化时起停 gateway，维护状态快照。
 type Service struct {
-	store   *store
-	catalog CatalogFunc
+	store *store
+	deps  Deps
 
 	mu sync.Mutex
 	// parent 是 Start 收到的进程级上下文，gateway 每次重启从它派生。
@@ -94,15 +113,18 @@ type Service struct {
 	st     Status
 	// registered 记录本次连接内已注册过 /init 的 guild，重连后清零重来。
 	registered map[string]bool
+	// pending 是等着选分支的 /init（id → 中途状态），15 分钟过期
+	//（interaction token 的时效）。
+	pending map[string]pendingInit
 }
 
 // New 加载配置并构建服务；gateway 由 Start 按配置决定起不起。
-func New(path string, catalog CatalogFunc) (*Service, error) {
+func New(path string, deps Deps) (*Service, error) {
 	st, err := newStore(path)
 	if err != nil {
 		return nil, err
 	}
-	return &Service{store: st, catalog: catalog, registered: map[string]bool{}}, nil
+	return &Service{store: st, deps: deps, registered: map[string]bool{}, pending: map[string]pendingInit{}}, nil
 }
 
 // Start 记住进程级上下文并按当前配置拉起 gateway。
@@ -257,8 +279,8 @@ func (s *Service) Info(ctx context.Context) Info {
 	s.mu.Unlock()
 
 	catalog := []AgentOption{}
-	if s.catalog != nil {
-		if opts, err := s.catalog(ctx); err != nil {
+	if s.deps.Catalog != nil {
+		if opts, err := s.deps.Catalog(ctx); err != nil {
 			slog.Warn("discord 取模型清单失败", "err", err)
 		} else {
 			catalog = opts
@@ -272,7 +294,7 @@ func (s *Service) Info(ctx context.Context) Info {
 		Config: ConfigView{
 			Enabled:  cfg.Enabled,
 			TokenSet: cfg.BotToken != "",
-			WorkRoot: effectiveWorkRoot(cfg),
+			WorkRoot: s.effectiveWorkRoot(cfg),
 		},
 		Status:   st,
 		Bindings: bindings,
@@ -368,15 +390,21 @@ func (s *Service) RemoveBinding(channelID string) error {
 	return nil
 }
 
-// effectiveWorkRoot 是克隆落点的根：没配置就用 ~/acpp-discord——
-// 与主工作区（~/acpp）并排、一眼可分，这正是「单独的 discord 工作目录」。
-func effectiveWorkRoot(cfg Config) string {
+// effectiveWorkRoot 是克隆落点的根：没配置就用 <工作区根>/discord——
+// 与租户 root 同层摆放（`~/acpp/<租户>` 旁边的 `~/acpp/discord`），
+// 这正是「单独的 discord 工作目录」但不脱离工作区的家。
+func (s *Service) effectiveWorkRoot(cfg Config) string {
 	if cfg.WorkRoot != "" {
 		return cfg.WorkRoot
+	}
+	if s.deps.DefaultWorkRoot != nil {
+		if root := s.deps.DefaultWorkRoot(); root != "" {
+			return root
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "acpp-discord"
 	}
-	return filepath.Join(home, "acpp-discord")
+	return filepath.Join(home, "acpp", "discord")
 }
