@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-// 本文件是频道侧展示面：工作区身份卡（置顶）、频道主题摘要，以及它们的
-// 同步与收尾。卡片形状只有 bindingEmbed 一处，/init、/status、配置变更
-// 与网页端编辑共用。
+// 本文件是频道侧展示面。频道里不留任何 bot 消息（用户拍板）：常驻信息
+// 面只有**频道主题**一行摘要；详情卡（bindingEmbed）只在 /status 时以
+// ephemeral 出现，看完自动消失。早期版本的置顶身份卡已退役，遗留的卡
+// 在下次同步时清掉。
 
-// bindingEmbed 是频道工作区的身份卡：/init 的结果卡、置顶卡与 /status
-// 共用一个形状，配置变化时原地刷新。
+// bindingEmbed 是绑定详情卡（/status 专用，ephemeral）。
 func bindingEmbed(b Binding, source string) map[string]any {
 	branch := b.Branch
 	if branch == "" {
@@ -50,18 +50,10 @@ func bindingEmbed(b Binding, source string) map[string]any {
 	}
 }
 
-// cleanupChannelCard 解绑后的频道侧收尾：摘置顶、删身份卡、清主题。
-// 都是尽力而为——解绑后频道不该留任何绑定痕迹（单卡原则的另一半）。
+// cleanupChannelCard 解绑后的频道侧收尾：删遗留卡（如有）、清主题。
+// 都是尽力而为——解绑后频道不该留任何绑定痕迹。
 func (s *Service) cleanupChannelCard(ctx context.Context, token string, b Binding) {
-	if b.CardMessageID != "" {
-		s.unpinMessage(ctx, token, b.ChannelID, b.CardMessageID)
-		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
-		if err := botREST(dctx, token, "DELETE",
-			fmt.Sprintf("/channels/%s/messages/%s", b.ChannelID, b.CardMessageID), nil, nil); err != nil {
-			slog.Warn("删身份卡失败", "err", err)
-		}
-		dcancel()
-	}
+	s.retireCard(ctx, token, b.ChannelID, b.CardMessageID)
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,
@@ -70,71 +62,42 @@ func (s *Service) cleanupChannelCard(ctx context.Context, token string, b Bindin
 	}
 }
 
-// syncChannelCard 让频道里的展示跟上配置：置顶卡原地刷新（被删了就补发
-// 一张再置顶），频道主题写一行摘要。
+// syncChannelCard 让频道侧展示跟上配置：主题刷成最新摘要；早期版本的
+// 置顶卡如果还挂着，趁这次同步退役掉。
 func (s *Service) syncChannelCard(ctx context.Context, token string, b Binding) {
-	body := map[string]any{
-		"embeds":           []map[string]any{bindingEmbed(b, "")},
-		"allowed_mentions": noMentions(),
-	}
 	if b.CardMessageID != "" {
-		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err := botREST(cctx, token, "PATCH",
-			fmt.Sprintf("/channels/%s/messages/%s", b.ChannelID, b.CardMessageID), body, nil)
-		cancel()
-		if err != nil {
-			slog.Warn("置顶卡刷新失败，补发新卡", "err", err)
-			b.CardMessageID = ""
-		}
-	}
-	if b.CardMessageID == "" {
-		var msg struct {
-			ID string `json:"id"`
-		}
-		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err := botREST(cctx, token, "POST",
-			fmt.Sprintf("/channels/%s/messages", b.ChannelID), body, &msg)
-		cancel()
-		if err == nil && msg.ID != "" {
-			s.pinMessage(ctx, token, b.ChannelID, msg.ID)
-			s.deletePinNotice(ctx, token, b.ChannelID)
-			b.CardMessageID = msg.ID
-			if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {
-				slog.Warn("身份卡 id 落盘失败", "err", err)
+		s.retireCard(ctx, token, b.ChannelID, b.CardMessageID)
+		b.CardMessageID = ""
+		if _, err := s.store.update(func(c *Config) {
+			for i := range c.Bindings {
+				if c.Bindings[i].ChannelID == b.ChannelID {
+					c.Bindings[i].CardMessageID = ""
+				}
 			}
+		}); err != nil {
+			slog.Warn("清身份卡 id 失败", "err", err)
 		}
 	}
 	s.syncTopic(ctx, token, b)
 }
 
-// deletePinNotice 把置顶动作产生的系统消息（type 6）从时间线里清掉——
-// 频道只留身份卡本身。尽力而为，找不到就算了。
-func (s *Service) deletePinNotice(ctx context.Context, token, channelID string) {
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	var msgs []struct {
-		ID   string `json:"id"`
-		Type int    `json:"type"`
-	}
-	if err := botREST(cctx, token, "GET",
-		fmt.Sprintf("/channels/%s/messages?limit=5", channelID), nil, &msgs); err != nil {
+// retireCard 删掉一张历史遗留的置顶身份卡（删除消息连带解除置顶）。
+func (s *Service) retireCard(ctx context.Context, token, channelID, messageID string) {
+	if messageID == "" {
 		return
 	}
-	for _, m := range msgs {
-		if m.Type == 6 {
-			if err := botREST(cctx, token, "DELETE",
-				fmt.Sprintf("/channels/%s/messages/%s", channelID, m.ID), nil, nil); err != nil {
-				slog.Warn("清置顶系统消息失败", "err", err)
-			}
-			return
-		}
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := botREST(cctx, token, "DELETE",
+		fmt.Sprintf("/channels/%s/messages/%s", channelID, messageID), nil, nil); err != nil {
+		slog.Warn("删遗留身份卡失败", "err", err)
 	}
 }
 
-// syncTopic 把一行摘要写进频道主题（顶部常驻）。平台对改主题限速很狠
-// （每频道 10 分钟 2 次，实测 429 的 retry_after 能到 5 分钟），撞了就按
-// 它说的时间挂一个延迟重写——重写时取最新绑定状态，中间的连续变更自动
-// 收敛成一次。每频道最多挂一个重试，绑定没了就作罢。
+// syncTopic 把摘要写进频道主题（频道侧唯一常驻信息面）。平台对改主题
+// 限速很狠（每频道 10 分钟 2 次，实测 429 的 retry_after 能到 5 分钟），
+// 撞了就按它说的时间挂一个延迟重写——重写时取最新绑定状态，中间的连续
+// 变更自动收敛成一次。每频道最多挂一个重试，绑定没了就作罢。
 func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
 	topic := topicLine(b)
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -184,7 +147,8 @@ func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
 	}()
 }
 
-// topicLine 是主题摘要的唯一格式。
+// topicLine 是主题摘要的唯一格式。主题是频道侧唯一常驻信息面，工作目录
+// 也带上——顶栏截断没关系，点开主题能看全文。
 func topicLine(b Binding) string {
 	branch := b.Branch
 	if branch == "" {
@@ -198,7 +162,8 @@ func topicLine(b Binding) string {
 	if effort == "" {
 		effort = "默认"
 	}
-	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s", b.Repo, branch, model, effort)
+	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 目录 %s",
+		b.Repo, branch, model, effort, b.Workdir)
 }
 
 // retryAfter 从 429 错误文本里抠 retry_after 秒数（botREST 的错误带响应体）。
@@ -220,33 +185,6 @@ func retryAfter(err error) (time.Duration, bool) {
 }
 
 var retryAfterRe = regexp.MustCompile(`"retry_after":\s*([0-9.]+)`)
-
-// pinMessage 置顶消息：先走新路由，老路由兜底（平台 2025 年换过端点）。
-func (s *Service) pinMessage(ctx context.Context, token, channelID, messageID string) {
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	err := botREST(cctx, token, "PUT",
-		fmt.Sprintf("/channels/%s/messages/pins/%s", channelID, messageID), nil, nil)
-	if err != nil {
-		if err2 := botREST(cctx, token, "PUT",
-			fmt.Sprintf("/channels/%s/pins/%s", channelID, messageID), nil, nil); err2 != nil {
-			slog.Warn("置顶身份卡失败", "err", err, "legacyErr", err2)
-		}
-	}
-}
-
-func (s *Service) unpinMessage(ctx context.Context, token, channelID, messageID string) {
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	err := botREST(cctx, token, "DELETE",
-		fmt.Sprintf("/channels/%s/messages/pins/%s", channelID, messageID), nil, nil)
-	if err != nil {
-		if err2 := botREST(cctx, token, "DELETE",
-			fmt.Sprintf("/channels/%s/pins/%s", channelID, messageID), nil, nil); err2 != nil {
-			slog.Warn("摘旧身份卡失败", "err", err, "legacyErr", err2)
-		}
-	}
-}
 
 // editOriginal 编辑 deferred 回执（webhook 路径，15 分钟时效）。
 func (s *Service) editOriginal(token, appID, interactionToken string, body map[string]any) {

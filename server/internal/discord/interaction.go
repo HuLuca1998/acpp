@@ -429,8 +429,8 @@ func (s *Service) branchPicked(ctx context.Context, token string, ev interaction
 	go s.finishInit(ctx, token, p.ev, in)
 }
 
-// finishInit 是 /init 的慢半段：克隆（或复用）、落绑定、把结果写到频道
-// 唯一的身份卡上（有卡改卡、无卡才发新的），ephemeral 回执给一句结论。
+// finishInit 是 /init 的慢半段：克隆（或复用）、落绑定、把频道主题刷成
+// 最新摘要（频道侧唯一常驻信息面），ephemeral 回执给一句结论后阅后即焚。
 func (s *Service) finishInit(ctx context.Context, token string, ev interactionEvent, in initInput) {
 	appID := s.appID()
 	workdir := filepath.Join(s.effectiveWorkRoot(s.store.config()), filepath.FromSlash(workdirName(in.repo, in.branch)))
@@ -460,7 +460,8 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	}
 	cancel()
 
-	// 重绑继承既有身份卡：一个频道永远只有一张卡，/init 只是改它的内容。
+	// CardMessageID 只为清掉历史遗留的置顶卡（卡已退役），继承后交给
+	// syncChannelCard 收尾。
 	old, _ := s.store.config().binding(ev.ChannelID)
 	now := time.Now()
 	binding := Binding{
@@ -487,15 +488,16 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	}
 	s.syncChannelCard(ctx, token, binding)
 	s.editOriginal(token, appID, ev.Token, map[string]any{
-		"content":          fmt.Sprintf("✅ **%s** 工作区已就绪（%s），详情见频道置顶卡。", in.repo, source),
+		"content":          fmt.Sprintf("✅ **%s** 工作区已就绪（%s）。绑定详情看频道主题，或随时 /status。", in.repo, source),
 		"embeds":           []map[string]any{},
 		"components":       []map[string]any{},
 		"allowed_mentions": noMentions(),
 	})
+	s.deleteOriginalLater(token, appID, ev.Token)
 }
 
-// setBindingOption 处理 /model 与 /effort：改绑定、刷新置顶卡与频道主题，
-// 回一条只有本人可见的确认。
+// setBindingOption 处理 /model 与 /effort：改绑定、刷新频道主题，
+// 回一条只有本人可见、阅后即焚的确认。
 func (s *Service) setBindingOption(ctx context.Context, token string, ev interactionEvent, kind string) {
 	cfg := s.store.config()
 	b, ok := cfg.binding(ev.ChannelID)
@@ -535,7 +537,7 @@ func (s *Service) setBindingOption(ctx context.Context, token string, ev interac
 	go s.syncChannelCard(ctx, token, b)
 }
 
-// showStatus 用 /status 回一张只有本人可见的身份卡。
+// showStatus 用 /status 回一张只有本人可见的绑定详情卡，看完自动消失。
 func (s *Service) showStatus(token string, ev interactionEvent) {
 	cfg := s.store.config()
 	b, ok := cfg.binding(ev.ChannelID)
@@ -550,7 +552,9 @@ func (s *Service) showStatus(token string, ev interactionEvent) {
 	})
 	if err != nil {
 		slog.Error("/status 回复失败", "err", err)
+		return
 	}
+	s.deleteOriginalLater(token, s.appID(), ev.Token)
 }
 
 // unbindChannel 处理 /unbind：撤绑定、摘置顶卡、清频道主题。磁盘上的
@@ -608,7 +612,8 @@ func randomID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-// ephemeral 回一条只有发起者可见的说明。
+// ephemeral 回一条只有发起者可见的说明，看完自动消失——确认与提示都是
+// 一次性信息，常驻的事实面在频道主题与 /status。
 func (s *Service) ephemeral(token string, ev interactionEvent, text string) {
 	err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
 		"content":          text,
@@ -617,7 +622,32 @@ func (s *Service) ephemeral(token string, ev interactionEvent, text string) {
 	})
 	if err != nil {
 		slog.Error("ephemeral 回复失败", "err", err)
+		return
 	}
+	s.deleteOriginalLater(token, s.appID(), ev.Token)
+}
+
+// ephemeralTTL 是终态 ephemeral 回执的存活时间：确认看一眼就够了，
+// 到点自动清掉，不在发起者的视图里堆积。失败卡刻意不走这条路——
+// 错误信息可能要复制，留到刷新自然消失。
+const ephemeralTTL = time.Minute
+
+// deleteOriginalLater 在 TTL 后删掉 interaction 的 @original 回执。
+// interaction token 活 15 分钟，一分钟后删绰绰有余；删失败无所谓——
+// ephemeral 本来就只有发起者可见，客户端刷新也会消失。
+func (s *Service) deleteOriginalLater(token, appID, interactionToken string) {
+	if appID == "" {
+		return
+	}
+	time.AfterFunc(ephemeralTTL, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := botREST(ctx, token, "DELETE",
+			fmt.Sprintf("/webhooks/%s/%s/messages/@original", appID, interactionToken), nil, nil)
+		if err != nil {
+			slog.Debug("清理 ephemeral 回执失败", "err", err)
+		}
+	})
 }
 
 // parseModalSubmit 从提交载荷里抠答案：Label 包着的输入件在 component

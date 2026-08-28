@@ -39,7 +39,8 @@ type Binding struct {
 	Model      string `json:"model"`
 	ModelLabel string `json:"modelLabel,omitempty"`
 	Effort     string `json:"effort,omitempty"`
-	// CardMessageID 是频道里置顶的「工作区身份卡」，配置变化时原地刷新。
+	// CardMessageID 是早期版本置顶身份卡的遗留（卡已退役，频道侧常驻
+	// 信息面只有主题）；非空时下次同步会把卡删掉并清空此字段。
 	CardMessageID string    `json:"cardMessageId,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
