@@ -645,8 +645,11 @@ func (s *Service) deleteOriginalLater(token, appID, interactionToken string) {
 		err := botREST(ctx, token, "DELETE",
 			fmt.Sprintf("/webhooks/%s/%s/messages/@original", appID, interactionToken), nil, nil)
 		if err != nil {
-			slog.Debug("清理 ephemeral 回执失败", "err", err)
+			// 失败要看得见——这是排查「卡片没消失」的唯一线索。
+			slog.Warn("清理 ephemeral 回执失败", "err", err)
+			return
 		}
+		slog.Info("已清理 ephemeral 回执")
 	})
 }
 
