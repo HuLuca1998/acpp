@@ -508,10 +508,10 @@ func TestReportPath(t *testing.T) {
 		t.Errorf("正常路径: got %q err %v", got, err)
 	}
 	for name, rel := range map[string]string{
-		"越界":   "../outside.html",
+		"越界":    "../outside.html",
 		"非HTML": "note.txt",
-		"不存在":  "ghost.html",
-		"空路径":  "",
+		"不存在":   "ghost.html",
+		"空路径":   "",
 	} {
 		if _, err := s.ReportPath("ch1", rel); err == nil {
 			t.Errorf("%s（%q）应该被拒", name, rel)
