@@ -38,6 +38,32 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 	if err != nil {
 		return nil, nil, err
 	}
+	servers, meta := s.mountPayload(flavor, token)
+	return servers, meta, nil
+}
+
+// MountsForCwd 为一个纯工作目录上下文算挂载——给没有会话记录的调用方
+// （discord 子区对话）用。工具面、项目过滤与会话那条完全同源，差别只在
+// 回连凭证：绑到 cwd 而不是会话 id，存内存（cwdToken），进程重启即失效，
+// 挂载方每次开会话都会现领，不需要落库。
+func (s *Service) MountsForCwd(ctx context.Context, cwd, flavor string) ([]any, map[string]any, error) {
+	if strings.TrimSpace(cwd) == "" {
+		return nil, nil, nil
+	}
+	sources, err := s.ForCwd(ctx, cwd, true)
+	if err != nil || len(sources) == 0 {
+		return nil, nil, err
+	}
+	token, err := s.cwdTok.issue(cwd)
+	if err != nil {
+		return nil, nil, err
+	}
+	servers, meta := s.mountPayload(flavor, token)
+	return servers, meta, nil
+}
+
+// mountPayload 按 agent 方言拼挂载载荷（注入口差异见文件头注释）。
+func (s *Service) mountPayload(flavor, token string) ([]any, map[string]any) {
 	url := s.mcpBase + token
 
 	if flavor == "claude" {
@@ -48,7 +74,7 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 				},
 				"allowedTools": allowedTools(),
 			}},
-		}, nil
+		}
 	}
 
 	servers := []any{map[string]any{
@@ -57,7 +83,7 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 		"url":     url,
 		"headers": []any{},
 	}}
-	return servers, nil, nil
+	return servers, nil
 }
 
 // allowedTools 是 claude 侧预批的工具名（`mcp__<server>__<tool>`）。

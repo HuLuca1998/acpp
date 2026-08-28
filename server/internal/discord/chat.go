@@ -349,6 +349,18 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 		resume = t.ACPSessionID
 	}
 	token := s.store.config().BotToken
+	// 数据库工具面与网页会话同源：clone 目录归属的项目配了数据源才挂，
+	// 挂载失败不拦对话（数据源是增强，不是前提）。
+	var mcpServers []any
+	var metaExtra map[string]any
+	if s.deps.Mounts != nil {
+		var mErr error
+		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, b.Workdir, b.Agent)
+		if mErr != nil {
+			slog.Warn("数据源挂载失败，跳过", "workdir", b.Workdir, "err", mErr)
+			mcpServers, metaExtra = nil, nil
+		}
+	}
 	sess, err := s.acpMgr.Open(ctx, acp.OpenOptions{
 		Key:     key,
 		Runtime: rt,
@@ -357,6 +369,8 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 			s.onChatEvent(token, threadID, tc, ev)
 		},
 		ResumeACPSessionID: resume,
+		MCPServers:         mcpServers,
+		MetaExtra:          metaExtra,
 	})
 	if err != nil {
 		return nil, err

@@ -59,6 +59,8 @@ type Service struct {
 	calls         Calls
 	// mcpBase 是 agent 回连的 MCP 端点前缀（http://127.0.0.1:<port>/api/mcp/db/）。
 	mcpBase string
+	// cwdTok 是非会话调用方（discord 子区）的 cwd 级回连凭证，见 cwdtoken.go。
+	cwdTok cwdTokens
 }
 
 func NewService(db *gorm.DB, sessions Sessions, addr string) *Service {

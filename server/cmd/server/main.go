@@ -173,6 +173,8 @@ func run() error {
 			}
 			return out, nil
 		},
+		// 数据库工具面与网页会话同源（datasource），凭证走 cwd 级通道。
+		Mounts: datasourceService.MountsForCwd,
 	})
 	if err != nil {
 		return err

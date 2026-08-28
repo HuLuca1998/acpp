@@ -44,6 +44,12 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 	srv := mcp.Server{
 		Name: mcpServerName,
 		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
+			// cwd 级凭证（discord 子区）优先：不落库，sessionID 记 0
+			//（与工具台人工试运行同一语义，见 model.MCPCall）。
+			if dir, ok := s.cwdTok.lookup(token); ok {
+				cwd = dir
+				return s.toolsForCwd(ctx, dir)
+			}
 			if s.sessions == nil {
 				return nil, fmt.Errorf("datasource mcp not wired")
 			}

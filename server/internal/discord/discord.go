@@ -53,6 +53,10 @@ type Deps struct {
 	AgentRuntime func(ctx context.Context, agent string) (acp.Runtime, error)
 	// SkillpackDir 是控制端技能包目录，子区会话与网页会话注入同一份。
 	SkillpackDir string
+	// Mounts 为一个工作目录算数据库工具面的挂载载荷（MCP server 清单 +
+	// _meta 追加），与网页会话同一来源（datasource.MountsForCwd）。目录
+	// 所在项目没有数据源时返回全零值，跳过挂载。nil 表示不接数据源。
+	Mounts func(ctx context.Context, cwd, flavor string) (mcpServers []any, metaExtra map[string]any, err error)
 }
 
 // AgentOption 是一个内置工具的可选项集合。
