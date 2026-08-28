@@ -40,6 +40,7 @@ type threadChat struct {
 // （开子区的那条 @），标记要打回那边。
 type queuedMsg struct {
 	text        string
+	atts        []attachment
 	msgID       string
 	mainChannel string
 	queued      bool
@@ -70,6 +71,7 @@ type messageEvent struct {
 	Mentions []struct {
 		ID string `json:"id"`
 	} `json:"mentions"`
+	Attachments []attachment `json:"attachments"`
 }
 
 // handleMessage 消费一条 MESSAGE_CREATE：
@@ -153,7 +155,7 @@ func (s *Service) threadBinding(ctx context.Context, token string, cfg Config, c
 // startThread 处理主频道的 @bot：以那条消息开子区，问题作为第一轮输入。
 func (s *Service) startThread(ctx context.Context, token string, b Binding, ev messageEvent) {
 	text := stripMention(ev.Content, s.botID())
-	if text == "" {
+	if text == "" && len(ev.Attachments) == 0 {
 		return
 	}
 	var th struct {
@@ -177,24 +179,25 @@ func (s *Service) startThread(ctx context.Context, token string, b Binding, ev m
 	s.chanKind[th.ID] = b.ChannelID
 	s.chatMu.Unlock()
 	// 首条输入是主频道那条 @ 消息，进入对话的 ✅ 打在它身上。
-	s.enqueue(ctx, token, b, th.ID, queuedMsg{text: text, msgID: ev.ID, mainChannel: ev.ChannelID})
+	s.enqueue(ctx, token, b, th.ID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID, mainChannel: ev.ChannelID})
 }
 
 // threadInput 处理子区里的一条用户消息：优先喂给挂起的问答，否则排队进对话。
 func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev messageEvent) {
 	text := strings.TrimSpace(stripMention(ev.Content, s.botID()))
-	if text == "" {
+	if text == "" && len(ev.Attachments) == 0 {
 		return
 	}
 	tc := s.chatState(ev.ChannelID)
 	tc.mu.Lock()
 	ask := tc.ask
 	tc.mu.Unlock()
-	if ask != nil {
+	// 挂着问答时纯文字优先当答案；带附件的消息不像答案，照常排队。
+	if ask != nil && text != "" && len(ev.Attachments) == 0 {
 		s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text)
 		return
 	}
-	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, msgID: ev.ID})
+	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID})
 }
 
 // enqueue 把输入排进子区队列；没有回合在跑就起 runner。回合在跑时给
@@ -242,8 +245,12 @@ func (s *Service) runThread(ctx context.Context, token string, b Binding, thread
 		// 进入对话的标记：排队的摘 ⏳，全部盖 ✅。首条消息在主频道，
 		// 标记要打回它所在的频道。
 		texts := make([]string, 0, len(batch))
+		var atts []attachment
 		for _, q := range batch {
-			texts = append(texts, q.text)
+			if q.text != "" {
+				texts = append(texts, q.text)
+			}
+			atts = append(atts, q.atts...)
 			markChannel := threadID
 			if q.mainChannel != "" {
 				markChannel = q.mainChannel
@@ -253,7 +260,7 @@ func (s *Service) runThread(ctx context.Context, token string, b Binding, thread
 			}
 			s.react(ctx, token, markChannel, q.msgID, "✅")
 		}
-		s.runTurn(ctx, token, b, threadID, tc, strings.Join(texts, "\n\n"))
+		s.runTurn(ctx, token, b, threadID, tc, strings.Join(texts, "\n\n"), atts)
 	}
 }
 
@@ -281,12 +288,17 @@ func (s *Service) unreact(ctx context.Context, token, channelID, msgID, emoji st
 
 // runTurn 跑一轮：确保会话（load 恢复优先）、对齐绑定设置、发 prompt、
 // 轮末把正文分段发回子区。
-func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID string, tc *threadChat, input string) {
+func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID string, tc *threadChat, input string, atts []attachment) {
 	key := "dc:" + threadID
 	sess, err := s.openChatSession(ctx, key, b, threadID, tc)
 	if err != nil {
 		s.say(ctx, token, threadID, "❌ 拉不起 agent："+trimRunes(err.Error(), 500))
 		return
+	}
+	// 附件先落盘再转内容块；个别失败只提示，不拦整轮。
+	attBlocks, attNotes := s.attachmentBlocks(ctx, b.Workdir, atts)
+	for _, n := range attNotes {
+		s.say(ctx, token, threadID, n)
 	}
 	// 每轮前把绑定的模型/深度/权限拨到位——绑定可能刚被 /model 改过。
 	s.applyBindingSettings(ctx, key, b)
@@ -308,7 +320,14 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 		}
 	}()
 
-	result, err := s.acpMgr.Prompt(ctx, key, []acp.ContentBlock{{Type: "text", Text: input}})
+	blocks := attBlocks
+	if input != "" {
+		blocks = append(blocks, acp.ContentBlock{Type: "text", Text: input})
+	}
+	if len(blocks) == 0 {
+		return
+	}
+	result, err := s.acpMgr.Prompt(ctx, key, blocks)
 	stopTyping()
 
 	tc.mu.Lock()

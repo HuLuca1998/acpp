@@ -442,3 +442,42 @@ func TestMultiSelectFlow(t *testing.T) {
 		t.Errorf("单选题多编号应只取第一个 = %v", got)
 	}
 }
+
+func TestAttachmentHelpers(t *testing.T) {
+	if !isTextAttachment("text/plain; charset=utf-8", nil) {
+		t.Error("text/* 应判为文本")
+	}
+	if isTextAttachment("image/png", []byte("abc")) {
+		t.Error("image/* 不该判为文本")
+	}
+	if !isTextAttachment("", []byte("package main\n")) {
+		t.Error("无 content_type 的纯文本应判为文本")
+	}
+	if isTextAttachment("application/octet-stream", []byte{0x1f, 0x00, 0x8b}) {
+		t.Error("含 NUL 的内容不该判为文本")
+	}
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "info"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	att := attachment{ID: "123", Filename: "note.md", ContentType: "text/markdown"}
+	path, err := saveUpload(dir, att, []byte("hi"))
+	if err != nil {
+		t.Fatalf("saveUpload: %v", err)
+	}
+	if filepath.Base(path) != "123-note.md" {
+		t.Errorf("落盘名 = %s", filepath.Base(path))
+	}
+	// exclude 首次写入，且重复保存不再追加
+	if _, err := saveUpload(dir, att, []byte("hi2")); err != nil {
+		t.Fatal(err)
+	}
+	ex, err := os.ReadFile(filepath.Join(dir, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatalf("exclude 未写入: %v", err)
+	}
+	if got := strings.Count(string(ex), uploadsDir+"/"); got != 1 {
+		t.Errorf("exclude 里出现 %d 次，期望 1", got)
+	}
+}
