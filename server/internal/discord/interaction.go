@@ -181,11 +181,21 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.handleAskModal(token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):
 		s.branchPicked(ctx, token, ev)
-	case ev.Type == 3 && (strings.HasPrefix(ev.Data.CustomID, "pm:") ||
-		strings.HasPrefix(ev.Data.CustomID, "ea:") || strings.HasPrefix(ev.Data.CustomID, "es:") ||
-		strings.HasPrefix(ev.Data.CustomID, "ei:")):
+	case ev.Type == 3 && isAskComponent(ev.Data.CustomID):
 		s.handleAskComponent(token, ev)
 	}
+}
+
+// isAskComponent 认问答卡的全部组件前缀（权限按钮、选项、下拉、导航、
+// 提交、自由输入）。新增前缀记得来这里登记——漏了就是「该 APP 未能
+// 及时响应」（实测踩过：en:/ez: 一度没进分发）。
+func isAskComponent(customID string) bool {
+	for _, p := range []string{"pm:", "ea:", "es:", "ei:", "en:", "ez:"} {
+		if strings.HasPrefix(customID, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // openInitModal 弹出绑定表单：仓库下拉（gh 的组织仓库清单）+ 自定义输入
