@@ -182,7 +182,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):
 		s.branchPicked(ctx, token, ev)
 	case ev.Type == 3 && (strings.HasPrefix(ev.Data.CustomID, "pm:") ||
-		strings.HasPrefix(ev.Data.CustomID, "eb:") || strings.HasPrefix(ev.Data.CustomID, "ec:")):
+		strings.HasPrefix(ev.Data.CustomID, "ea:") || strings.HasPrefix(ev.Data.CustomID, "es:") ||
+		strings.HasPrefix(ev.Data.CustomID, "ei:")):
 		s.handleAskComponent(token, ev)
 	}
 }

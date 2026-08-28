@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,9 +13,9 @@ import (
 )
 
 // 本文件是子区里的问答桥：agent 的权限请求变成按钮裁决卡（点一下即
-// 裁决，卡片原地收口），提问变成「回答」按钮 + 分页 modal 表单（一页
-// 5 项，提交后「继续回答」——modal 提交后不能直接再弹 modal，平台规则）。
-// 单题提问仍接受直接打字作答（快捷路径）。
+// 裁决，卡片原地收口），提问变成**逐题卡**——同一张卡上一题一题点过去
+//（已答的累积显示），答完自动整体回传。选项是按钮/下拉，自由输入给
+// 「✍️ 输入」小表单；直接打字/回编号也永远有效（答的是当前题）。
 
 // pendingAsk 是子区里挂起的一次问答。
 type pendingAsk struct {
@@ -31,8 +31,9 @@ type pendingAsk struct {
 	title string
 	// 权限专用：选项清单（按钮顺序）。
 	permOpts []acp.PermissionOption
-	// 提问专用：题目、分页中途答案。
+	// 提问专用：题目、当前题号（逐题卡）、已收答案。
 	questions []elicitQuestion
+	cursor    int
 	partial   map[string]string
 }
 
@@ -128,8 +129,7 @@ func (s *Service) askPermission(token, threadID string, tc *threadChat, ev acp.E
 	tc.mu.Unlock()
 }
 
-// askElicitation 把 agent 的提问发成「回答」按钮卡；点开是分页 modal。
-// 单题时也接受直接打字作答。
+// askElicitation 把 agent 的提问发成逐题卡：从第一题开始，点选即翻题。
 func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.Event) {
 	qs, err := parseElicitSchema(ev.RawInput)
 	if err != nil || len(qs) == 0 {
@@ -151,35 +151,9 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 		title: strings.TrimSpace(ev.Text),
 	}
 
-	var lines []string
-	if msg := strings.TrimSpace(ev.Text); msg != "" {
-		lines = append(lines, trimRunes(msg, 800))
-	}
-	hint := "点「回答」填表。"
-	if len(qs) == 1 {
-		if len(qs[0].Options) > 0 {
-			var opts []string
-			for i, o := range qs[0].Options {
-				opts = append(opts, fmt.Sprintf("%d. %s", i+1, trimRunes(o, 90)))
-			}
-			lines = append(lines, strings.Join(opts, "\n"))
-			hint = "点「回答」填表，或直接回复编号/文字。"
-		} else {
-			hint = "点「回答」填表，或直接回复文字。"
-		}
-	} else {
-		hint = fmt.Sprintf("共 %d 题，点「回答」逐页填写。", len(qs))
-	}
-	lines = append(lines, "-# "+hint)
-
 	msgID := s.postCard(token, threadID, map[string]any{
-		"embeds": []map[string]any{{
-			"title": "❓ agent 有问题问你", "description": strings.Join(lines, "\n"), "color": colorBlurbe,
-		}},
-		"components": []map[string]any{{"type": 1, "components": []map[string]any{{
-			"type": 2, "style": 1, "label": "📝 回答",
-			"custom_id": "eb:" + nonce + ":0",
-		}}}},
+		"embeds":           []map[string]any{questionCardEmbed(ask)},
+		"components":       questionCardComponents(ask),
 		"allowed_mentions": noMentions(),
 	})
 	ask.msgID = msgID
@@ -200,15 +174,16 @@ func (s *Service) currentAsk(threadID, nonce string) *pendingAsk {
 }
 
 // handleAskComponent 分发问答卡上的组件点击：
-//   - pm:<nonce>:<idx>  权限按钮 → 裁决 + 原地收口
-//   - eb:<nonce>:<page> 「回答」按钮 → 弹第 page 页 modal
-//   - ec:<nonce>:<page> 「继续回答」按钮 → 弹下一页 modal
+//   - pm:<nonce>:<idx> 权限按钮 → 裁决 + 原地收口
+//   - ea:<nonce>:<idx> 当前题的选项按钮 → 记答案、卡片翻下一题
+//   - es:<nonce>       当前题的选项下拉 → 同上
+//   - ei:<nonce>       「✍️ 输入」→ 弹单题小表单
 func (s *Service) handleAskComponent(token string, ev interactionEvent) {
 	parts := strings.Split(ev.Data.CustomID, ":")
-	if len(parts) != 3 {
+	if len(parts) < 2 {
 		return
 	}
-	prefix, nonce, arg := parts[0], parts[1], parts[2]
+	prefix, nonce := parts[0], parts[1]
 	ask := s.currentAsk(ev.ChannelID, nonce)
 	if ask == nil {
 		s.ephemeral(token, ev, "这张卡已经失效了（处理过或超时）。")
@@ -216,48 +191,76 @@ func (s *Service) handleAskComponent(token string, ev interactionEvent) {
 	}
 	switch prefix {
 	case "pm":
-		idx, err := strconv.Atoi(arg)
+		if len(parts) != 3 {
+			return
+		}
+		idx, err := strconv.Atoi(parts[2])
 		if err != nil || idx < 0 || idx >= len(ask.permOpts) {
 			return
 		}
 		s.resolvePermissionAsk(token, ev, ask, idx)
-	case "eb", "ec":
-		page, _ := strconv.Atoi(arg)
-		data := elicitModal(ask.nonce, ask.questions, page)
-		if err := interactionCallback(token, ev.ID, ev.Token, 9, data); err != nil {
-			slog.Error("弹提问表单失败", "err", err)
+	case "ea":
+		if len(parts) != 3 {
+			return
+		}
+		cur := ask.questions[ask.cursor]
+		idx, err := strconv.Atoi(parts[2])
+		if err != nil || idx < 0 || idx >= len(cur.Options) {
+			return
+		}
+		s.advanceAsk(token, ev, ask, cur.Options[idx])
+	case "es":
+		if len(ev.Data.Values) == 0 {
+			return
+		}
+		s.advanceAsk(token, ev, ask, ev.Data.Values[0])
+	case "ei":
+		if err := interactionCallback(token, ev.ID, ev.Token, 9, inputModal(ask)); err != nil {
+			slog.Error("弹输入表单失败", "err", err)
 		}
 	}
 }
 
-// handleAskModal 收提问表单的一页（em:<nonce>:<page>）：还有下一页就暂存
-// 并给「继续回答」按钮，没有了就整体回传并收口。
+// handleAskModal 收「✍️ 输入」的单题答案（em:<nonce>），落到当前题上。
 func (s *Service) handleAskModal(token string, ev interactionEvent) {
 	parts := strings.Split(ev.Data.CustomID, ":")
-	if len(parts) != 3 {
+	if len(parts) != 2 {
 		return
 	}
-	nonce := parts[1]
-	page, _ := strconv.Atoi(parts[2])
-	ask := s.currentAsk(ev.ChannelID, nonce)
+	ask := s.currentAsk(ev.ChannelID, parts[1])
 	if ask == nil || ask.kind != "elicitation" {
 		s.ephemeral(token, ev, "这张卡已经失效了（处理过或超时）。")
 		return
 	}
+	answer := strings.TrimSpace(parseModalSubmit(ev.Data.Components)["answer"])
+	if answer == "" {
+		s.ephemeral(token, ev, "没收到内容，再点一次「✍️ 输入」。")
+		return
+	}
+	s.advanceAsk(token, ev, ask, answer)
+}
 
-	maps.Copy(ask.partial, parseModalSubmit(ev.Data.Components))
-	if elicitRemaining(ask.questions, page) {
-		err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
-			"content": "这一页收到了，还有几题。",
-			"flags":   1 << 6,
-			"components": []map[string]any{{"type": 1, "components": []map[string]any{{
-				"type": 2, "style": 1, "label": "▶ 继续回答",
-				"custom_id": fmt.Sprintf("ec:%s:%d", ask.nonce, page+1),
-			}}}},
+// advanceAsk 记下当前题的答案并推进：还有题就把卡翻到下一题（type 7
+// 原地刷新——整个问答始终是同一张卡），答完整体回传并收口成记录卡。
+func (s *Service) advanceAsk(token string, ev interactionEvent, ask *pendingAsk, answer string) {
+	cur := ask.questions[ask.cursor]
+	// 自由输入且题目带 OtherField 时，选项外的答案落自由字段——两条 ACP
+	// 的「其他」语义都吃得下；答案恰为选项之一就照常落题目字段。
+	field := cur.ID
+	if cur.OtherField != "" && !slices.Contains(cur.Options, answer) {
+		field = cur.OtherField
+	}
+	ask.partial[field] = answer
+	ask.cursor++
+
+	if ask.cursor < len(ask.questions) {
+		err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
+			"embeds":           []map[string]any{questionCardEmbed(ask)},
+			"components":       questionCardComponents(ask),
 			"allowed_mentions": noMentions(),
 		})
 		if err != nil {
-			slog.Error("分页续答提示失败", "err", err)
+			slog.Error("问答卡翻题失败", "err", err)
 		}
 		return
 	}
@@ -273,8 +276,14 @@ func (s *Service) handleAskModal(token string, ev interactionEvent) {
 		s.ephemeral(token, ev, "这个提问已经失效了（超时或已在别处回答）。")
 		return
 	}
-	s.finalizeAskCard(token, ev.ChannelID, ask, elicitClosedEmbed(ask, ask.partial, "由 "+ev.user()+" 提交"))
-	s.ephemeral(token, ev, "✅ 已提交给 agent。")
+	cerr := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
+		"embeds":           []map[string]any{elicitClosedEmbed(ask, ask.partial, "由 "+ev.user()+" 提交")},
+		"components":       []map[string]any{},
+		"allowed_mentions": noMentions(),
+	})
+	if cerr != nil {
+		slog.Error("问答卡收口失败", "err", cerr)
+	}
 }
 
 // resolvePermissionAsk 用按钮点击裁决权限：回传 + 原地改终态。
@@ -317,18 +326,32 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 		err = s.acpMgr.ResolvePermission(ask.key, ask.id, opt.OptionID)
 		closed = permClosedEmbed(ask, opt, "以消息作答")
 	case "elicitation":
-		if len(ask.questions) != 1 {
-			s.say(ctx, token, threadID, "这是个多题表单，点卡片上的「回答」逐页填写。")
+		// 逐题卡的文本路径：答的永远是当前题，编号选选项、文字即答案。
+		cur := ask.questions[ask.cursor]
+		answer := text
+		if pick >= 0 && pick < len(cur.Options) {
+			answer = cur.Options[pick]
+		}
+		field := cur.ID
+		if cur.OtherField != "" && !slices.Contains(cur.Options, answer) {
+			field = cur.OtherField
+		}
+		ask.partial[field] = answer
+		ask.cursor++
+		if ask.cursor < len(ask.questions) {
+			// 还有题：卡片翻页，作答消息给个 ✅。
+			s.react(ctx, token, threadID, msgID, "✅")
+			s.finalizeAskCardKeep(token, threadID, ask,
+				questionCardEmbed(ask), questionCardComponents(ask))
 			return
 		}
-		q := ask.questions[0]
-		answer := text
-		if pick >= 0 && pick < len(q.Options) {
-			answer = q.Options[pick]
+		content := map[string]any{}
+		for k, v := range ask.partial {
+			content[k] = v
 		}
 		err = s.acpMgr.ResolveElicitation(ask.key, ask.id,
-			acp.ElicitationResult{Action: "accept", Content: map[string]any{q.ID: answer}})
-		closed = elicitClosedEmbed(ask, map[string]string{q.ID: answer}, "以消息作答")
+			acp.ElicitationResult{Action: "accept", Content: content})
+		closed = elicitClosedEmbed(ask, ask.partial, "以消息作答")
 	}
 
 	s.clearAsk(threadID, ask)
@@ -354,6 +377,12 @@ func (s *Service) clearAsk(threadID string, ask *pendingAsk) {
 // finalizeAskCard 把问答卡改成终态（摘按钮）。自己点按钮的场景走
 // interaction callback 原地改，这里服务别的收口路径（消息作答、别处处理）。
 func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, embed map[string]any) {
+	s.finalizeAskCardKeep(token, threadID, ask, embed, []map[string]any{})
+}
+
+// finalizeAskCardKeep 用 REST 改问答卡（components 由调用方给——翻题保留
+// 组件，收口传空摘掉）。
+func (s *Service) finalizeAskCardKeep(token, threadID string, ask *pendingAsk, embed map[string]any, components []map[string]any) {
 	if ask.msgID == "" {
 		return
 	}
@@ -362,11 +391,11 @@ func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, embed
 	err := botREST(ctx, token, "PATCH",
 		fmt.Sprintf("/channels/%s/messages/%s", threadID, ask.msgID), map[string]any{
 			"embeds":           []map[string]any{embed},
-			"components":       []map[string]any{},
+			"components":       components,
 			"allowed_mentions": noMentions(),
 		}, nil)
 	if err != nil {
-		slog.Warn("问答卡收口失败", "err", err)
+		slog.Warn("问答卡更新失败", "err", err)
 	}
 }
 

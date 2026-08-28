@@ -330,40 +330,49 @@ func TestParseElicitSchema(t *testing.T) {
 	}
 }
 
-// 契约：分页 modal 一页最多 5 个组件（带自由输入的题占两位），
-// custom_id 带 nonce 与页码；elicitRemaining 如实报告还有没有下一页。
-func TestElicitModalPaging(t *testing.T) {
-	var qs []elicitQuestion
-	for i := range 7 {
-		qs = append(qs, elicitQuestion{ID: fmt.Sprintf("q%d", i), Title: fmt.Sprintf("题 %d", i)})
+// 契约：逐题卡——标题带进度（k/M），已答的题累积进正文；≤5 个选项给
+// 按钮行，带自由输入的题附「✍️ 输入」按钮，>5 个选项换下拉。
+func TestQuestionCard(t *testing.T) {
+	ask := &pendingAsk{
+		nonce: "n", partial: map[string]string{},
+		questions: []elicitQuestion{
+			{ID: "q0", Title: "第一题", Options: []string{"a", "b"}, OtherField: "q0_custom"},
+			{ID: "q1", Title: "第二题"},
+		},
 	}
-	page0 := elicitModal("abc", qs, 0)
-	if got := len(page0["components"].([]map[string]any)); got != 5 {
-		t.Errorf("第 0 页组件数 = %d, want 5", got)
+	embed := questionCardEmbed(ask)
+	if !strings.Contains(embed["title"].(string), "1/2") {
+		t.Errorf("标题缺进度: %v", embed["title"])
 	}
-	if page0["custom_id"] != "em:abc:0" {
-		t.Errorf("custom_id = %v", page0["custom_id"])
+	rows := questionCardComponents(ask)
+	// 选项按钮一行 + ✍️ 输入一行。
+	if len(rows) != 2 {
+		t.Fatalf("组件行数 = %d, want 2", len(rows))
 	}
-	if !elicitRemaining(qs, 0) {
-		t.Error("第 0 页之后应该还有题")
-	}
-	page1 := elicitModal("abc", qs, 1)
-	if got := len(page1["components"].([]map[string]any)); got != 2 {
-		t.Errorf("第 1 页组件数 = %d, want 2", got)
-	}
-	if elicitRemaining(qs, 1) {
-		t.Error("第 1 页之后不该有题")
+	buttons := rows[0]["components"].([]map[string]any)
+	if len(buttons) != 2 || buttons[0]["custom_id"] != "ea:n:0" {
+		t.Errorf("选项按钮 = %+v", buttons)
 	}
 
-	// 「选项 + 自由输入」占两位：3 道这样的题一页只装 2 道。
-	var wide []elicitQuestion
-	for i := range 3 {
-		wide = append(wide, elicitQuestion{
-			ID: fmt.Sprintf("w%d", i), Title: "宽题",
-			Options: []string{"a", "b"}, OtherField: fmt.Sprintf("w%d_custom", i),
-		})
+	// 答完第一题：进度推进，正文里带已答记录；纯输入题只有 ✍️ 行。
+	ask.partial["q0"] = "a"
+	ask.cursor = 1
+	embed = questionCardEmbed(ask)
+	desc := embed["description"].(string)
+	if !strings.Contains(embed["title"].(string), "2/2") || !strings.Contains(desc, "第一题") || !strings.Contains(desc, "a") {
+		t.Errorf("翻题后卡片 = %v / %s", embed["title"], desc)
 	}
-	if got := len(elicitModal("x", wide, 0)["components"].([]map[string]any)); got != 4 {
-		t.Errorf("宽题第 0 页组件数 = %d, want 4", got)
+	rows = questionCardComponents(ask)
+	if len(rows) != 1 || rows[0]["components"].([]map[string]any)[0]["custom_id"] != "ei:n" {
+		t.Errorf("纯输入题组件 = %+v", rows)
+	}
+
+	// >5 个选项换下拉。
+	many := &pendingAsk{nonce: "m", partial: map[string]string{}, questions: []elicitQuestion{{
+		ID: "q", Title: "多选项", Options: []string{"1", "2", "3", "4", "5", "6"},
+	}}}
+	rows = questionCardComponents(many)
+	if rows[0]["components"].([]map[string]any)[0]["custom_id"] != "es:m" {
+		t.Errorf("多选项应为下拉: %+v", rows)
 	}
 }

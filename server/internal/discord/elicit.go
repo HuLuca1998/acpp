@@ -89,84 +89,98 @@ func parseElicitSchema(raw json.RawMessage) ([]elicitQuestion, error) {
 	return qs, nil
 }
 
-// modal 一屏最多 5 个顶层组件（平台上限）；「选项 + 自由输入」的题占两个位置。
-const modalPageSize = 5
-
-func questionSlots(q elicitQuestion) int {
-	if len(q.Options) > 0 && q.OtherField != "" {
-		return 2
+// questionCardEmbed 是逐题问答卡的当前形态：已答的题累积显示在正文里，
+// 下方是当前题——一张卡从头答到尾，不弹多页表单（用户嫌 modal 翻页繁琐，
+// 平台又不允许 modal 内翻页）。
+func questionCardEmbed(ask *pendingAsk) map[string]any {
+	cur := ask.questions[ask.cursor]
+	var lines []string
+	if ask.title != "" {
+		lines = append(lines, trimRunes(ask.title, 500), "")
 	}
-	return 1
-}
-
-// elicitModal 拼第 page 页的 modal 载荷（callback type 9 的 data）。
-// custom_id 形如 `em:<nonce>:<page>`——nonce 挡旧卡的残留按钮。
-func elicitModal(nonce string, qs []elicitQuestion, page int) map[string]any {
-	var comps []map[string]any
-
-	// 按占位切页：从既往页累计跳过，装满一屏为止。
-	skip := 0
-	for range page {
-		used := 0
-		for skip < len(qs) && used+questionSlots(qs[skip]) <= modalPageSize {
-			used += questionSlots(qs[skip])
-			skip++
-		}
+	for i := 0; i < ask.cursor; i++ {
+		q := ask.questions[i]
+		lines = append(lines, "✅ "+trimRunes(q.Title, 100)+"：**"+trimRunes(answerOf(ask, q), 200)+"**")
 	}
-
-	used := 0
-	end := skip
-	for end < len(qs) && used+questionSlots(qs[end]) <= modalPageSize {
-		q := qs[end]
-		if len(q.Options) == 0 {
-			comps = append(comps, elicitLabel(q, elicitTextInput(q.ID, q.Required)))
-		} else {
-			choices := make([]choice, 0, len(q.Options))
-			for _, o := range q.Options {
-				choices = append(choices, choice{Label: o, Value: o})
-			}
-			comps = append(comps, elicitLabel(q, selectComponent(q.ID, choices, q.Required)))
-			if q.OtherField != "" {
-				comps = append(comps, map[string]any{
-					"type": 18, "label": "其他（" + trimRunes(q.Title, 30) + "）",
-					"description": "上一题选项都不合适时填这里",
-					"component":   elicitTextInput(q.OtherField, false),
-				})
-			}
-		}
-		used += questionSlots(q)
-		end++
+	if ask.cursor > 0 {
+		lines = append(lines, "")
 	}
-
-	title := "agent 的问题"
-	if end < len(qs) {
-		title = fmt.Sprintf("agent 的问题（还有 %d 题）", len(qs)-end)
+	lines = append(lines, "❓ **"+trimRunes(cur.Title, 240)+"**")
+	if cur.Description != "" {
+		lines = append(lines, trimRunes(cur.Description, 300))
 	}
+	hint := "点按钮作答，或直接回复文字。"
+	if len(cur.Options) > 0 {
+		hint = "点按钮作答；回复编号/文字也行。"
+	}
+	lines = append(lines, "-# "+hint)
 	return map[string]any{
-		"custom_id":  fmt.Sprintf("em:%s:%d", nonce, page),
-		"title":      title,
-		"components": comps,
+		"title":       fmt.Sprintf("❓ agent 有问题问你（%d/%d）", ask.cursor+1, len(ask.questions)),
+		"description": strings.Join(lines, "\n"),
+		"color":       colorBlurbe,
 	}
 }
 
-// elicitRemaining 报告第 page 页之后还有没有题（分页提示用）。
-func elicitRemaining(qs []elicitQuestion, page int) bool {
-	probe := elicitModal("0", qs, page+1)
-	comps := probe["components"].([]map[string]any)
-	return len(comps) > 0
-}
-
-func elicitLabel(q elicitQuestion, inner map[string]any) map[string]any {
-	out := map[string]any{"type": 18, "label": trimRunes(q.Title, 45), "component": inner}
-	if q.Description != "" {
-		out["description"] = trimRunes(q.Description, 100)
+// questionCardComponents 是当前题的作答组件：≤5 个选项直接按钮，更多换
+// 下拉；带自由输入（或纯输入题）附「✍️ 输入」按钮弹单题小表单。
+func questionCardComponents(ask *pendingAsk) []map[string]any {
+	cur := ask.questions[ask.cursor]
+	var rows []map[string]any
+	switch {
+	case len(cur.Options) == 0:
+	case len(cur.Options) <= 5:
+		var buttons []map[string]any
+		for i, o := range cur.Options {
+			buttons = append(buttons, map[string]any{
+				"type": 2, "style": 2,
+				"label":     trimRunes(fmt.Sprintf("%d · %s", i+1, o), 76),
+				"custom_id": fmt.Sprintf("ea:%s:%d", ask.nonce, i),
+			})
+		}
+		rows = append(rows, map[string]any{"type": 1, "components": buttons})
+	default:
+		opts := make([]choice, 0, len(cur.Options))
+		for _, o := range cur.Options {
+			opts = append(opts, choice{Label: o, Value: o})
+		}
+		sel := selectComponent("es:"+ask.nonce, opts, false)
+		sel["type"] = 3
+		sel["placeholder"] = "选一个…"
+		delete(sel, "required")
+		rows = append(rows, map[string]any{"type": 1, "components": []map[string]any{sel}})
 	}
-	return out
+	if len(cur.Options) == 0 || cur.OtherField != "" {
+		rows = append(rows, map[string]any{"type": 1, "components": []map[string]any{{
+			"type": 2, "style": 1, "label": "✍️ 输入",
+			"custom_id": "ei:" + ask.nonce,
+		}}})
+	}
+	return rows
 }
 
-func elicitTextInput(id string, required bool) map[string]any {
+// answerOf 取一道题的已存答案（自由输入落在 OtherField 上的也认）。
+func answerOf(ask *pendingAsk, q elicitQuestion) string {
+	if a := ask.partial[q.ID]; a != "" {
+		return a
+	}
+	if q.OtherField != "" {
+		return ask.partial[q.OtherField]
+	}
+	return ""
+}
+
+// inputModal 是自由输入的单题小表单（em:<nonce> 提交，答的是当前题）。
+func inputModal(ask *pendingAsk) map[string]any {
+	cur := ask.questions[ask.cursor]
 	return map[string]any{
-		"type": 4, "custom_id": id, "style": 2, "required": required,
-		"placeholder": "在这里输入…",
+		"custom_id": "em:" + ask.nonce,
+		"title":     trimRunes(cur.Title, 45),
+		"components": []map[string]any{{
+			"type": 18, "label": trimRunes(cur.Title, 45),
+			"component": map[string]any{
+				"type": 4, "custom_id": "answer", "style": 2, "required": true,
+				"placeholder": "在这里输入…",
+			},
+		}},
 	}
 }
