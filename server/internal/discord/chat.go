@@ -33,6 +33,9 @@ type threadChat struct {
 	buf strings.Builder
 	// ask 是挂起的权限/提问，子区的下一条消息优先当作答。
 	ask *pendingAsk
+	// planMsgID/planGen 是本回合计划卡的消息 id 与更新代号（见 plan.go）。
+	planMsgID string
+	planGen   uint64
 }
 
 // queuedMsg 是排队中的一条输入。queued 标记它曾在回合进行中等待过
@@ -240,6 +243,8 @@ func (s *Service) runThread(ctx context.Context, token string, b Binding, thread
 		batch := tc.queue
 		tc.queue = nil
 		tc.buf.Reset()
+		// 计划卡按回合另起：上一回合的卡定格成历史，这一回合的计划新发。
+		tc.planMsgID = ""
 		tc.mu.Unlock()
 
 		// 进入对话的标记：排队的摘 ⏳，全部盖 ✅。首条消息在主频道，
@@ -441,6 +446,8 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 		go s.askElicitation(token, threadID, tc, ev)
 	case acp.EventPermissionDone, acp.EventElicitationDone:
 		go s.askDone(token, threadID, tc, ev.PermissionID+ev.ElicitationID)
+	case acp.EventPlan:
+		go s.updatePlanCard(token, threadID, tc, ev.Entries)
 	}
 }
 
