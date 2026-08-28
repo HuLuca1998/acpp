@@ -135,6 +135,8 @@ func isOwnerOnly(r *http.Request) bool {
 		// 工具台能对着线上库发任意 SQL，权限等同数据库页。注意别写成
 		// /api/mcp——agent 回连端点在那个前缀下，且必须保持公开。
 		strings.HasPrefix(path, "/api/tools"),
+		// discord 配置里有 bot token 与本机路径，整面 owner 专属。
+		strings.HasPrefix(path, "/api/discord"),
 		strings.HasPrefix(path, "/api/system"):
 		return true
 	case strings.HasPrefix(path, "/api/skills"),

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"acpp/server/internal/config"
+	"acpp/server/internal/discord"
 	"acpp/server/internal/service"
 	"acpp/server/internal/system"
 	"acpp/server/internal/titler"
@@ -215,4 +216,52 @@ func (h systemHandler) titleModelTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, map[string]string{"title": title})
+}
+
+// ---- discord 频道工作区（adr-016）----
+// handler 落在 system.go 而不是独立文件：httpapi 贴着反平铺硬线，且
+// discord 配置面与 title-model 同属「系统平台配置」一类。
+
+type discordHandler struct {
+	discord *discord.Service
+}
+
+func (h discordHandler) get(w http.ResponseWriter, r *http.Request) {
+	writeData(w, http.StatusOK, h.discord.Info(r.Context()))
+}
+
+func (h discordHandler) saveConfig(w http.ResponseWriter, r *http.Request) {
+	var in discord.ConfigPatch
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	info, err := h.discord.SaveConfig(r.Context(), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, info)
+}
+
+func (h discordHandler) updateBinding(w http.ResponseWriter, r *http.Request) {
+	var in discord.BindingPatch
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	binding, err := h.discord.UpdateBinding(r.Context(), r.PathValue("channelId"), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, binding)
+}
+
+func (h discordHandler) removeBinding(w http.ResponseWriter, r *http.Request) {
+	if err := h.discord.RemoveBinding(r.PathValue("channelId")); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
 }

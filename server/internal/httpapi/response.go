@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/discord"
 	"acpp/server/internal/service"
 )
 
@@ -53,9 +54,10 @@ func writeData(w http.ResponseWriter, status int, data any) {
 func writeError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, service.ErrNotFound):
+	// discord 包刻意零依赖（adr-016），哨兵自带一套，这里做同义映射。
+	case errors.Is(err, service.ErrNotFound), errors.Is(err, discord.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, service.ErrInvalid):
+	case errors.Is(err, service.ErrInvalid), errors.Is(err, discord.ErrInvalid):
 		status = http.StatusBadRequest
 	case errors.Is(err, service.ErrUnauthorized):
 		// 没有有效身份：前端据此跳到「需要邀请链接」页面（adr-007）。

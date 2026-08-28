@@ -15,6 +15,7 @@ import (
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/db"
+	"acpp/server/internal/discord"
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
@@ -139,6 +140,14 @@ func run() error {
 	noticeHub := stream.NewHub()
 	chatService.SetNotifyHub(noticeHub)
 
+	// discord 频道工作区（adr-016）：与会话零耦合的独立子系统。模型清单
+	// 经闭包注入——discord 包因此不认识 model/db，回退只动这一段装配。
+	discordService, err := discord.New(filepath.Join(cfg.DataDir, "discord.json"), discordCatalog(agentService))
+	if err != nil {
+		return err
+	}
+	defer discordService.Close()
+
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
 	defer terminalService.Shutdown()
@@ -163,6 +172,7 @@ func run() error {
 		DataSources: datasourceService,
 		Reports:     reportService,
 		MCPCalls:    mcpCalls,
+		Discord:     discordService,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -178,6 +188,8 @@ func run() error {
 
 	// 空闲子进程定期回收：上下文在 agent 侧持久化，续聊时无感恢复。
 	chatService.StartIdleReaper(ctx, cfg.IdleTimeout)
+	// discord gateway 挂进程级上下文，配置启用时自动上线。
+	discordService.Start(ctx)
 	// 老会话的消息数缓存回填，后台低优跑一次。
 	go chatService.BackfillMessageCounts(ctx)
 
@@ -202,5 +214,37 @@ func run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
+	}
+}
+
+// discordCatalog 把内置工具的探测缓存拼成 discord 表单的选项清单：
+// 启用的模型（alias 优先的展示名）+ 各自的思考深度档位。
+func discordCatalog(agents *service.AgentService) discord.CatalogFunc {
+	return func(ctx context.Context) ([]discord.AgentOption, error) {
+		list, err := agents.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var out []discord.AgentOption
+		for _, a := range list {
+			opt := discord.AgentOption{Agent: a.Name, Efforts: a.Skeleton.Efforts}
+			for _, m := range a.Models {
+				if m.Disabled {
+					continue
+				}
+				label := m.Alias
+				if label == "" {
+					label = m.Name
+				}
+				if label == "" {
+					label = m.ID
+				}
+				opt.Models = append(opt.Models, discord.ModelOption{ID: m.ID, Label: label})
+			}
+			if len(opt.Models) > 0 {
+				out = append(out, opt)
+			}
+		}
+		return out, nil
 	}
 }

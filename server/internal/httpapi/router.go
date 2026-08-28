@@ -10,6 +10,7 @@ import (
 
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
+	"acpp/server/internal/discord"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
 	"acpp/server/internal/report"
@@ -40,6 +41,8 @@ type Services struct {
 	MCPCalls *mcpcall.Service
 	// Notices 是全局通知广播口，全局事件流从这里取本人名下的通知。
 	Notices *stream.Hub
+	// Discord 是独立于会话的频道工作区子系统（adr-016），可为 nil（未装配）。
+	Discord *discord.Service
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -142,6 +145,16 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 
 	api.HandleFunc("GET /api/system/update", system.updateInfo)
 	api.HandleFunc("POST /api/system/update/apply", system.updateApply)
+
+	// discord 频道工作区（adr-016）：配置面 + 频道绑定管理，owner 专属
+	// （isOwnerOnly 按前缀覆盖）。绑定的创建只发生在 Discord 侧的 /init。
+	if svcs.Discord != nil {
+		dc := discordHandler{discord: svcs.Discord}
+		api.HandleFunc("GET /api/discord", dc.get)
+		api.HandleFunc("PUT /api/discord/config", dc.saveConfig)
+		api.HandleFunc("PUT /api/discord/bindings/{channelId}", dc.updateBinding)
+		api.HandleFunc("DELETE /api/discord/bindings/{channelId}", dc.removeBinding)
+	}
 
 	// 技能库：磁盘为事实源（~/.acpp/skills + skillpack 分发链接），无数据库表。
 	api.HandleFunc("GET /api/skills", skills.list)
