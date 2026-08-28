@@ -93,8 +93,9 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 	s.say(context.Background(), token, threadID, strings.Join(lines, "\n"))
 }
 
-// answerAsk 用子区的一条消息了结挂起的问答。
-func (s *Service) answerAsk(ctx context.Context, token, threadID string, tc *threadChat, ask *pendingAsk, text string) {
+// answerAsk 用子区的一条消息了结挂起的问答。回执用 reaction 标在作答
+// 消息上（✅ 已回传 / ⚠️ 已失效），不再往子区堆确认文字。
+func (s *Service) answerAsk(ctx context.Context, token, threadID string, tc *threadChat, ask *pendingAsk, msgID, text string) {
 	pick := -1
 	if n, err := strconv.Atoi(strings.TrimSpace(text)); err == nil && n >= 1 && n <= len(ask.options) {
 		pick = n - 1
@@ -126,10 +127,11 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, tc *thr
 	}
 	tc.mu.Unlock()
 	if err != nil {
+		s.react(ctx, token, threadID, msgID, "⚠️")
 		s.say(ctx, token, threadID, "这条问答已经失效了（可能超时或已在别处处理）。")
 		return
 	}
-	s.say(ctx, token, threadID, "✅ 已回传给 agent。")
+	s.react(ctx, token, threadID, msgID, "✅")
 }
 
 // singleQuestion 是解析后的单题提问。

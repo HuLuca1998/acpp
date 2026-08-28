@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -26,12 +27,22 @@ const (
 // 输出缓冲 + 挂起的问答。全部内存态——对话记录本身就在 Discord 里。
 type threadChat struct {
 	mu      sync.Mutex
-	queue   []string
+	queue   []queuedMsg
 	running bool
 	// buf 收当前回合的 agent 正文（OnEvent 是会话级回调，回合开始前重置）。
 	buf strings.Builder
 	// ask 是挂起的权限/提问，子区的下一条消息优先当作答。
 	ask *pendingAsk
+}
+
+// queuedMsg 是排队中的一条输入。queued 标记它曾在回合进行中等待过
+// （挂过 ⏳，进入对话时要摘）；mainChannel 非空表示消息在主频道
+// （开子区的那条 @），标记要打回那边。
+type queuedMsg struct {
+	text        string
+	msgID       string
+	mainChannel string
+	queued      bool
 }
 
 // chatState 取（或建）子区的运行态。
@@ -165,7 +176,8 @@ func (s *Service) startThread(ctx context.Context, token string, b Binding, ev m
 	s.chatMu.Lock()
 	s.chanKind[th.ID] = b.ChannelID
 	s.chatMu.Unlock()
-	s.enqueue(ctx, token, b, th.ID, text)
+	// 首条输入是主频道那条 @ 消息，进入对话的 ✅ 打在它身上。
+	s.enqueue(ctx, token, b, th.ID, queuedMsg{text: text, msgID: ev.ID, mainChannel: ev.ChannelID})
 }
 
 // threadInput 处理子区里的一条用户消息：优先喂给挂起的问答，否则排队进对话。
@@ -179,24 +191,31 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 	ask := tc.ask
 	tc.mu.Unlock()
 	if ask != nil {
-		s.answerAsk(ctx, token, ev.ChannelID, tc, ask, text)
+		s.answerAsk(ctx, token, ev.ChannelID, tc, ask, ev.ID, text)
 		return
 	}
-	s.enqueue(ctx, token, b, ev.ChannelID, text)
+	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, msgID: ev.ID})
 }
 
-// enqueue 把输入排进子区队列；没有回合在跑就起 runner。回合在跑时给消息
-// 记个 ⏳，表示收到了、会在下一轮带上。
-func (s *Service) enqueue(ctx context.Context, token string, b Binding, threadID, text string) {
+// enqueue 把输入排进子区队列；没有回合在跑就起 runner。回合在跑时给
+// 消息标 ⏳（已排队，下一轮带上）——被吞进对话时换成 ✅，用户凭标记
+// 分得清「进了对话」和「还在排队」。
+func (s *Service) enqueue(ctx context.Context, token string, b Binding, threadID string, msg queuedMsg) {
 	tc := s.chatState(threadID)
 	tc.mu.Lock()
-	tc.queue = append(tc.queue, text)
 	busy := tc.running
+	msg.queued = busy
+	tc.queue = append(tc.queue, msg)
 	if !busy {
 		tc.running = true
 	}
 	tc.mu.Unlock()
 	if busy {
+		mark := threadID
+		if msg.mainChannel != "" {
+			mark = msg.mainChannel
+		}
+		s.react(ctx, token, mark, msg.msgID, "⏳")
 		return
 	}
 	go s.runThread(ctx, token, b, threadID, tc)
@@ -215,12 +234,48 @@ func (s *Service) runThread(ctx context.Context, token string, b Binding, thread
 			tc.mu.Unlock()
 			return
 		}
-		input := strings.Join(tc.queue, "\n\n")
+		batch := tc.queue
 		tc.queue = nil
 		tc.buf.Reset()
 		tc.mu.Unlock()
 
-		s.runTurn(ctx, token, b, threadID, tc, input)
+		// 进入对话的标记：排队的摘 ⏳，全部盖 ✅。首条消息在主频道，
+		// 标记要打回它所在的频道。
+		texts := make([]string, 0, len(batch))
+		for _, q := range batch {
+			texts = append(texts, q.text)
+			markChannel := threadID
+			if q.mainChannel != "" {
+				markChannel = q.mainChannel
+			}
+			if q.queued {
+				s.unreact(ctx, token, markChannel, q.msgID, "⏳")
+			}
+			s.react(ctx, token, markChannel, q.msgID, "✅")
+		}
+		s.runTurn(ctx, token, b, threadID, tc, strings.Join(texts, "\n\n"))
+	}
+}
+
+// react / unreact 给消息加、摘一个 bot 自己的 reaction（尽力而为，
+// 平台对 reaction 限速较狠，失败只记日志）。
+func (s *Service) react(ctx context.Context, token, channelID, msgID, emoji string) {
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "PUT",
+		fmt.Sprintf("/channels/%s/messages/%s/reactions/%s/@me", channelID, msgID, url.PathEscape(emoji)), nil, nil)
+	if err != nil {
+		slog.Warn("加回执标记失败", "err", err)
+	}
+}
+
+func (s *Service) unreact(ctx context.Context, token, channelID, msgID, emoji string) {
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "DELETE",
+		fmt.Sprintf("/channels/%s/messages/%s/reactions/%s/@me", channelID, msgID, url.PathEscape(emoji)), nil, nil)
+	if err != nil {
+		slog.Warn("摘回执标记失败", "err", err)
 	}
 }
 
