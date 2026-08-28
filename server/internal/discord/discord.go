@@ -116,6 +116,8 @@ type Service struct {
 	// pending 是等着选分支的 /init（id → 中途状态），15 分钟过期
 	//（interaction token 的时效）。
 	pending map[string]pendingInit
+	// topicRetry 记录哪些频道挂着主题限速重试（每频道最多一个）。
+	topicRetry map[string]bool
 }
 
 // New 加载配置并构建服务；gateway 由 Start 按配置决定起不起。
@@ -124,7 +126,8 @@ func New(path string, deps Deps) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{store: st, deps: deps, registered: map[string]bool{}, pending: map[string]pendingInit{}}, nil
+	return &Service{store: st, deps: deps, registered: map[string]bool{},
+		pending: map[string]pendingInit{}, topicRetry: map[string]bool{}}, nil
 }
 
 // Start 记住进程级上下文并按当前配置拉起 gateway。

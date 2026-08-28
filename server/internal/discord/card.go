@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -97,8 +100,60 @@ func (s *Service) syncChannelCard(ctx context.Context, token string, b Binding) 
 }
 
 // syncTopic 把一行摘要写进频道主题（顶部常驻）。平台对改主题限速很狠
-// （每频道 10 分钟 2 次），失败只记日志——置顶卡才是权威展示。
+// （每频道 10 分钟 2 次，实测 429 的 retry_after 能到 5 分钟），撞了就按
+// 它说的时间挂一个延迟重写——重写时取最新绑定状态，中间的连续变更自动
+// 收敛成一次。每频道最多挂一个重试，绑定没了就作罢。
 func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
+	topic := topicLine(b)
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,
+		map[string]any{"topic": trimRunes(topic, 1000)}, nil)
+	if err == nil {
+		return
+	}
+	delay, ok := retryAfter(err)
+	if !ok {
+		slog.Warn("写频道主题失败", "err", err)
+		return
+	}
+	s.mu.Lock()
+	already := s.topicRetry[b.ChannelID]
+	if !already {
+		s.topicRetry[b.ChannelID] = true
+	}
+	s.mu.Unlock()
+	if already {
+		return
+	}
+	slog.Info("频道主题撞限速，稍后重写", "channel", b.ChannelID, "delay", delay)
+	go func() {
+		select {
+		case <-time.After(delay + time.Second):
+		case <-ctx.Done():
+		}
+		s.mu.Lock()
+		delete(s.topicRetry, b.ChannelID)
+		s.mu.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+		fresh, ok := s.store.config().binding(b.ChannelID)
+		if !ok {
+			return
+		}
+		rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
+		defer rcancel()
+		err := botREST(rctx, token, "PATCH", "/channels/"+fresh.ChannelID,
+			map[string]any{"topic": trimRunes(topicLine(fresh), 1000)}, nil)
+		if err != nil {
+			slog.Warn("频道主题重写仍失败", "err", err)
+		}
+	}()
+}
+
+// topicLine 是主题摘要的唯一格式。
+func topicLine(b Binding) string {
 	branch := b.Branch
 	if branch == "" {
 		branch = "默认分支"
@@ -111,15 +166,28 @@ func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
 	if effort == "" {
 		effort = "默认"
 	}
-	topic := fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s", b.Repo, branch, model, effort)
-	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,
-		map[string]any{"topic": trimRunes(topic, 1000)}, nil)
-	if err != nil {
-		slog.Warn("写频道主题失败（可能撞限速）", "err", err)
-	}
+	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s", b.Repo, branch, model, effort)
 }
+
+// retryAfter 从 429 错误文本里抠 retry_after 秒数（botREST 的错误带响应体）。
+func retryAfter(err error) (time.Duration, bool) {
+	msg := err.Error()
+	if !strings.Contains(msg, "429") {
+		return 0, false
+	}
+	m := retryAfterRe.FindStringSubmatch(msg)
+	if m == nil {
+		// 429 但没解出时长：给个保守值，总比放弃强。
+		return 5 * time.Minute, true
+	}
+	secs, perr := strconv.ParseFloat(m[1], 64)
+	if perr != nil || secs <= 0 || secs > 3600 {
+		return 5 * time.Minute, true
+	}
+	return time.Duration(secs * float64(time.Second)), true
+}
+
+var retryAfterRe = regexp.MustCompile(`"retry_after":\s*([0-9.]+)`)
 
 // pinMessage 置顶消息：先走新路由，老路由兜底（平台 2025 年换过端点）。
 func (s *Service) pinMessage(ctx context.Context, token, channelID, messageID string) {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 契约：简写按 GitHub https 解析，完整 URL 原样放行，危险与畸形输入拒收。
@@ -251,5 +252,20 @@ func TestModelChoices(t *testing.T) {
 	}
 	if got := modelChoices([]AgentOption{{Agent: "x", Models: many}}); len(got) != 25 {
 		t.Errorf("超限截断后 %d 项, want 25", len(got))
+	}
+}
+
+// 契约：429 错误按响应体里的 retry_after 给出重试间隔，非 429 不重试，
+// 解不出时长给保守值。
+func TestRetryAfter(t *testing.T) {
+	d, ok := retryAfter(errors.New(`PATCH /channels/1 → 429 Too Many Requests: {"message":"rate limited.","retry_after":295.292,"global":false}`))
+	if !ok || d < 295*time.Second || d > 296*time.Second {
+		t.Errorf("retryAfter = %v, %v", d, ok)
+	}
+	if _, ok := retryAfter(errors.New("PATCH /channels/1 → 500 oops")); ok {
+		t.Error("非 429 不该重试")
+	}
+	if d, ok := retryAfter(errors.New("429 Too Many Requests: <html>")); !ok || d != 5*time.Minute {
+		t.Errorf("解不出时长应给保守值: %v, %v", d, ok)
 	}
 }
