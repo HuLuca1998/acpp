@@ -31,6 +31,29 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 	if err != nil {
 		return nil, nil, err
 	}
+	servers, meta := s.mountPayload(flavor, token)
+	return servers, meta, nil
+}
+
+// MountsForPeer 为一个非会话调用方（discord 子区）算挂载。工具面与会话
+// 完全同源，差别有二：回连凭证绑 (key, cwd) 存内存（进程重启失效，挂载
+// 方每次开会话现领）；「报告打开了」不走 Notifier（那是按会话 id 广播
+// 的），改走这里登记的 onOpen——报告要送回哪个子区只有挂载方知道。
+func (s *Service) MountsForPeer(ctx context.Context, key, cwd, flavor string, onOpen func(rel, title string)) ([]any, map[string]any, error) {
+	if strings.TrimSpace(cwd) == "" {
+		return nil, nil, nil
+	}
+	token, err := s.peerTok.Issue(key, cwd)
+	if err != nil {
+		return nil, nil, err
+	}
+	s.peerOpen.Store(key, onOpen)
+	servers, meta := s.mountPayload(flavor, token)
+	return servers, meta, nil
+}
+
+// mountPayload 按 agent 方言拼挂载载荷（注入口差异见 MountsFor 注释）。
+func (s *Service) mountPayload(flavor, token string) ([]any, map[string]any) {
 	url := s.mcpBase + token
 
 	if flavor == "claude" {
@@ -41,7 +64,7 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 				},
 				"allowedTools": allowedTools(),
 			}},
-		}, nil
+		}
 	}
 
 	servers := []any{map[string]any{
@@ -50,7 +73,7 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 		"url":     url,
 		"headers": []any{},
 	}}
-	return servers, nil, nil
+	return servers, nil
 }
 
 // allowedTools 是 claude 侧预批的工具名（`mcp__<server>__<tool>`）。

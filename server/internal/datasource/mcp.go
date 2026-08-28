@@ -46,7 +46,7 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
 			// cwd 级凭证（discord 子区）优先：不落库，sessionID 记 0
 			//（与工具台人工试运行同一语义，见 model.MCPCall）。
-			if dir, ok := s.cwdTok.lookup(token); ok {
+			if _, dir, ok := s.peerTok.Lookup(token); ok {
 				cwd = dir
 				return s.toolsForCwd(ctx, dir)
 			}

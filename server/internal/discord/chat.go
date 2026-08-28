@@ -374,7 +374,9 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 	var metaExtra map[string]any
 	if s.deps.Mounts != nil {
 		var mErr error
-		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, b.Workdir, b.Agent)
+		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, key, b.Workdir, b.Agent, func(rel, title string) {
+			s.reportOpened(token, threadID, b, rel, title)
+		})
 		if mErr != nil {
 			slog.Warn("数据源挂载失败，跳过", "workdir", b.Workdir, "err", mErr)
 			mcpServers, metaExtra = nil, nil

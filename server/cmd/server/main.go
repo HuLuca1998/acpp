@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -173,8 +174,23 @@ func run() error {
 			}
 			return out, nil
 		},
-		// 数据库工具面与网页会话同源（datasource），凭证走 cwd 级通道。
-		Mounts: datasourceService.MountsForCwd,
+		// 工具面与网页会话同源：数据库按项目有条件挂（datasource），
+		// 报告无条件挂（report），凭证都走非会话通道。单面失败只降级。
+		Mounts: func(ctx context.Context, key, cwd, flavor string, onReport func(rel, title string)) ([]any, map[string]any, error) {
+			servers, meta, err := datasourceService.MountsForCwd(ctx, cwd, flavor)
+			if err != nil {
+				slog.Warn("discord 数据源挂载失败", "err", err)
+				servers, meta = nil, nil
+			}
+			rs, rm, err := reportService.MountsForPeer(ctx, key, cwd, flavor, onReport)
+			if err != nil {
+				slog.Warn("discord 报告挂载失败", "err", err)
+				return servers, meta, nil
+			}
+			return append(servers, rs...), service.MergeClaudeMounts(meta, rm), nil
+		},
+		// 报告卡链接的前缀：agent 与浏览器都在本机，回环 + 监听端口即达。
+		PreviewBase: previewBase(cfg.Addr),
 	})
 	if err != nil {
 		return err
@@ -280,4 +296,13 @@ func discordCatalog(agents *service.AgentService) discord.CatalogFunc {
 		}
 		return out, nil
 	}
+}
+
+// previewBase 从监听地址推浏览器可达的后端前缀（0.0.0.0 时走回环）。
+func previewBase(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		port = "48080"
+	}
+	return "http://127.0.0.1:" + port
 }

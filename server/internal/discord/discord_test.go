@@ -481,3 +481,43 @@ func TestAttachmentHelpers(t *testing.T) {
 		t.Errorf("exclude 里出现 %d 次，期望 1", got)
 	}
 }
+
+func TestReportPath(t *testing.T) {
+	dir := t.TempDir()
+	work, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "报告.html"), []byte("<html/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "note.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.update(func(c *Config) {
+		c.Bindings = []Binding{{ChannelID: "ch1", Workdir: work}}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := s.ReportPath("ch1", "报告.html"); err != nil || got != filepath.Join(work, "报告.html") {
+		t.Errorf("正常路径: got %q err %v", got, err)
+	}
+	for name, rel := range map[string]string{
+		"越界":   "../outside.html",
+		"非HTML": "note.txt",
+		"不存在":  "ghost.html",
+		"空路径":  "",
+	} {
+		if _, err := s.ReportPath("ch1", rel); err == nil {
+			t.Errorf("%s（%q）应该被拒", name, rel)
+		}
+	}
+	if _, err := s.ReportPath("nope", "报告.html"); err == nil {
+		t.Error("未绑定频道应该被拒")
+	}
+}

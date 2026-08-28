@@ -153,6 +153,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		api.HandleFunc("GET /api/discord", dc.get)
 		api.HandleFunc("PUT /api/discord/config", dc.saveConfig)
 		api.HandleFunc("PUT /api/discord/bindings/{channelId}", dc.updateBinding)
+		api.HandleFunc("GET /api/discord/reports/{channelId}", dc.reportPreview)
 		api.HandleFunc("DELETE /api/discord/bindings/{channelId}", dc.removeBinding)
 	}
 

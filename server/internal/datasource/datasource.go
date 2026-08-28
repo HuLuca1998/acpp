@@ -18,6 +18,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/mcp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
 )
@@ -59,8 +60,9 @@ type Service struct {
 	calls         Calls
 	// mcpBase 是 agent 回连的 MCP 端点前缀（http://127.0.0.1:<port>/api/mcp/db/）。
 	mcpBase string
-	// cwdTok 是非会话调用方（discord 子区）的 cwd 级回连凭证，见 cwdtoken.go。
-	cwdTok cwdTokens
+	// peerTok 是非会话调用方（discord 子区）的回连凭证（key 用 cwd——
+	// 这个工具面按目录算工具集，同目录天然共享）。
+	peerTok mcp.PeerTokens
 }
 
 func NewService(db *gorm.DB, sessions Sessions, addr string) *Service {

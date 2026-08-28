@@ -21,7 +21,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
+	"acpp/server/internal/mcp"
 	"acpp/server/internal/model"
 )
 
@@ -61,6 +63,10 @@ type Service struct {
 	// mcpBase 是 agent 回连的 MCP 端点前缀
 	// （http://127.0.0.1:<port>/api/mcp/report/）。
 	mcpBase string
+	// peerTok / peerOpen 是非会话调用方（discord 子区）的回连凭证与
+	// 「报告打开了」的回调路由，见 MountsForPeer。
+	peerTok  mcp.PeerTokens
+	peerOpen sync.Map // key → func(rel, title string)
 }
 
 func NewService(sessions Sessions, addr string) *Service {

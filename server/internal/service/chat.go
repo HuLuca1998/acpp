@@ -37,7 +37,7 @@ type ChatService struct {
 
 	// mounters 是所有要给会话挂 MCP 工具面的能力（数据源、报告……）。
 	// 单独列一份而不是只认 sources：工具面不止一种，而它们要挂进的是
-	// **同一个** _meta，谁覆盖谁都是 bug（见 mergeClaudeMounts）。
+	// **同一个** _meta，谁覆盖谁都是 bug（见 MergeClaudeMounts）。
 	mounters []Mounter
 
 	// titler 生成会话标题；nil 或未启用时退回首句派生。
@@ -189,12 +189,12 @@ func (s *ChatService) collectMounts(ctx context.Context, sessionID uint, cwd, fl
 			continue
 		}
 		servers = append(servers, srv...)
-		meta = mergeClaudeMounts(meta, mx)
+		meta = MergeClaudeMounts(meta, mx)
 	}
 	return servers, meta
 }
 
-// mergeClaudeMounts 合并 claude 侧的 _meta 挂载片段。
+// MergeClaudeMounts 合并 claude 侧的 _meta 挂载片段（装配层给 discord 合并多工具面时也用）。
 //
 // claude 的形状是嵌套 map：`claudeCode.options.{mcpServers, allowedTools}`。
 // 每个工具面都往这里塞自己那份，**直接覆盖会让后来的顶掉前面的**——数据库
@@ -203,7 +203,7 @@ func (s *ChatService) collectMounts(ctx context.Context, sessionID uint, cwd, fl
 //
 // 只按这一个已知形状逐层合并，不做通用深合并：形状是我们自己定的，写死
 // 比递归好读，也不会在遇到意外结构时悄悄合出个四不像。
-func mergeClaudeMounts(dst, src map[string]any) map[string]any {
+func MergeClaudeMounts(dst, src map[string]any) map[string]any {
 	if len(src) == 0 {
 		return dst
 	}

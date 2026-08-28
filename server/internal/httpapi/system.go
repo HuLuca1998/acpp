@@ -230,6 +230,21 @@ func (h discordHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, h.discord.Info(r.Context()))
 }
 
+// reportPreview 在浏览器里打开子区会话产出的 HTML 报告（discord 报告卡
+// 上的链接指到这里）。CSP sandbox 口径与工作区文件的 inline 下发一致：
+// 这些字节是 agent 生成的 HTML，与本应用同源，不设防就能跑脚本读 cookie。
+func (h discordHandler) reportPreview(w http.ResponseWriter, r *http.Request) {
+	target, err := h.discord.ReportPath(r.PathValue("channelId"), r.URL.Query().Get("path"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "sandbox")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeFile(w, r, target)
+}
+
 func (h discordHandler) saveConfig(w http.ResponseWriter, r *http.Request) {
 	var in discord.ConfigPatch
 	if err := decodeJSON(r, &in); err != nil {
