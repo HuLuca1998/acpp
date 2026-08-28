@@ -130,22 +130,6 @@ func TestCleanProjectName(t *testing.T) {
 	}
 }
 
-// 契约：克隆落点是 `<root>/<组织>/<仓库>`，两种 URL 形式都要还原出同样的
-// 两层——用户要的就是 `<租户>/BDBGAME2024/pp-game` 这个形状。
-func TestRepoNameFromURL(t *testing.T) {
-	cases := map[string]string{
-		"https://github.com/BDBGAME2024/pp-game.git": "BDBGAME2024/pp-game",
-		"https://github.com/BDBGAME2024/pp-game":     "BDBGAME2024/pp-game",
-		"git@github.com:BDBGAME2024/pp-game.git":     "BDBGAME2024/pp-game",
-		"https://gitlab.com/group/sub/proj.git":      "sub/proj",
-	}
-	for url, want := range cases {
-		if got := repoNameFromURL(url); got != want {
-			t.Errorf("repoNameFromURL(%q) = %q, want %q", url, got, want)
-		}
-	}
-}
-
 // 契约：只放行 https 与 scp 形式的 git URL。file:// 与 ext:: 这类传输能
 // 在本机乱指、甚至直接执行命令，克隆框不是让人干这个的地方。
 func TestService_Clone_RejectsUnsafeURLs(t *testing.T) {

@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"acpp/server/internal/gitrepo"
 	"acpp/server/internal/service"
 )
 
@@ -67,13 +67,13 @@ func (s *Service) Clone(scope service.Scope, in CloneInput) (*Clone, error) {
 	if url == "" {
 		return nil, fmt.Errorf("%w: url is required", service.ErrInvalid)
 	}
-	if !cloneURLRe.MatchString(url) {
+	if !gitrepo.ValidCloneURL(url) {
 		return nil, fmt.Errorf("%w: only https:// or git@host:owner/repo URLs are accepted", service.ErrInvalid)
 	}
 
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		name = repoNameFromURL(url)
+		name = gitrepo.Name(url)
 	}
 	rel, err := cleanProjectName(name)
 	if err != nil {
@@ -190,27 +190,6 @@ func (t *cloneTracker) list(scope service.Scope) []Clone {
 		}
 	}
 	return out
-}
-
-// cloneURLRe 只放行 https 与 scp 形式的 git URL。挡掉 `file://`、`ext::`
-// 这类能在本机乱指或直接执行命令的传输方式。
-var cloneURLRe = regexp.MustCompile(`^(https://[\w.-]+/[\w./~-]+|[\w.-]+@[\w.-]+:[\w./~-]+)$`)
-
-// repoNameFromURL 把仓库 URL 还原成 `<组织>/<仓库>`——克隆落点就是
-// 工作区根下的这两层（用户要的 `<租户>/BDBGAME2024/pp-game`）。
-func repoNameFromURL(url string) string {
-	trimmed := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(url), "/"), ".git")
-	if _, after, ok := strings.Cut(trimmed, "@"); ok {
-		// git@github.com:owner/repo
-		if _, path, ok := strings.Cut(after, ":"); ok {
-			trimmed = path
-		}
-	}
-	segments := strings.Split(trimmed, "/")
-	if len(segments) >= 2 {
-		return segments[len(segments)-2] + "/" + segments[len(segments)-1]
-	}
-	return trimmed
 }
 
 // tailLines 取输出末尾的若干行：git 的失败原因基本都在最后几行，
