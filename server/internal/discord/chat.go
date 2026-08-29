@@ -352,7 +352,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 			s.say(ctx, token, threadID, fmt.Sprintf("（这一轮没说完：%s）", result.StopReason))
 		}
 	default:
-		for _, seg := range splitMessage(reply, discordMsgLimit) {
+		for _, seg := range splitMessage(mdToDiscord(reply), discordMsgLimit) {
 			s.say(ctx, token, threadID, seg)
 		}
 	}

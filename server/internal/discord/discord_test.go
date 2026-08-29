@@ -521,3 +521,55 @@ func TestReportPath(t *testing.T) {
 		t.Error("未绑定频道应该被拒")
 	}
 }
+
+func TestMdToDiscord(t *testing.T) {
+	in := strings.Join([]string{
+		"### 标题保留",
+		"#### 深标题降级",
+		"| 名字 | 值 |",
+		"|---|---|",
+		"| pp-game/local | 127.0.0.1 |",
+		"| 中文名 | x |",
+		"---",
+		"- [ ] 待办",
+		"- [x] 已做",
+		"```go",
+		"#### 代码里的不动",
+		"| a | b |",
+		"```",
+	}, "\n")
+	out := mdToDiscord(in)
+
+	for _, want := range []string{
+		"### 标题保留",
+		"**深标题降级**",
+		"☐ 待办",
+		"✅ 已做",
+		"#### 代码里的不动", // 围栏内原样
+		"| a | b |",     // 围栏内原样
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("缺少 %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "|---|") || strings.Contains(strings.Split(out, "```")[0], "| 名字 |") {
+		t.Errorf("表格没转成代码块：\n%s", out)
+	}
+	if strings.Contains(out, "\n---\n") {
+		t.Errorf("分隔线没去掉：\n%s", out)
+	}
+	// 表格代码块里两行数据列应对齐（中文按 2 宽）
+	lines := strings.Split(out, "\n")
+	var col2 []int
+	for _, l := range lines {
+		if i := strings.Index(l, "127.0.0.1"); i >= 0 {
+			col2 = append(col2, displayWidth(l[:i]))
+		}
+		if i := strings.Index(l, "x"); i >= 0 && strings.Contains(l, "中文名") {
+			col2 = append(col2, displayWidth(l[:i]))
+		}
+	}
+	if len(col2) == 2 && col2[0] != col2[1] {
+		t.Errorf("表格列没对齐（%v）：\n%s", col2, out)
+	}
+}
