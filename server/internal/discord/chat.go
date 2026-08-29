@@ -218,6 +218,12 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 		s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text)
 		return
 	}
+	// 消息里带 @db 令牌 = 引用数据库：当场挂载工具面（重开会话带上，
+	// 上下文经 acpSessionId 恢复），令牌本身不进 prompt。
+	if hasDBToken(text) {
+		text = stripDBToken(text)
+		s.setThreadDB(ev.ChannelID, true)
+	}
 	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID})
 }
 
@@ -396,8 +402,12 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 	var mcpServers []any
 	var metaExtra map[string]any
 	if s.deps.Mounts != nil {
+		withDB := false
+		if t, ok := s.store.config().thread(threadID); ok {
+			withDB = t.DBEnabled
+		}
 		var mErr error
-		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, key, b.Workdir, b.Agent, func(rel, title string) {
+		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, key, b.Workdir, b.Agent, withDB, func(rel, title string) {
 			s.reportOpened(token, threadID, b, rel, title)
 		})
 		if mErr != nil {
@@ -620,4 +630,59 @@ func (s *Service) botID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.st.BotID
+}
+
+// ---- 数据库工具面的按需开关 ----
+
+var dbToken = regexp.MustCompile(`(^|\s)@(db\b|数据库)`)
+
+func hasDBToken(text string) bool { return dbToken.MatchString(text) }
+
+func stripDBToken(text string) string {
+	return strings.TrimSpace(dbToken.ReplaceAllString(text, "$1"))
+}
+
+// setThreadDB 落盘子区的数据库开关并关掉现有会话——挂载是 session/new
+// 参数，改不了在跑的会话；关掉后下一轮凭 acpSessionId 无感恢复上下文。
+func (s *Service) setThreadDB(threadID string, on bool) bool {
+	changed := false
+	if _, err := s.store.update(func(c *Config) {
+		if t, ok := c.thread(threadID); ok && t.DBEnabled != on {
+			t.DBEnabled = on
+			c.upsertThread(t)
+			changed = true
+		}
+	}); err != nil {
+		slog.Warn("数据库开关落盘失败", "err", err)
+		return false
+	}
+	if changed && s.acpMgr != nil {
+		if err := s.acpMgr.Close("dc:" + threadID); err != nil {
+			slog.Warn("重开子区会话失败", "err", err)
+		}
+	}
+	return changed
+}
+
+// toggleDB 处理 /db：只在子区里有意义（挂载是会话级的）。
+func (s *Service) toggleDB(token string, ev interactionEvent) {
+	t, known := s.store.config().thread(ev.ChannelID)
+	if !known {
+		s.ephemeral(token, ev, "这里不是工作区子区（或子区还没说过话）。在子区里聊一句之后再用 /db。")
+		return
+	}
+	switch ev.option("switch") {
+	case "on":
+		s.setThreadDB(ev.ChannelID, true)
+		s.ephemeral(token, ev, "🗄️ 数据库工具面已挂载，下一轮生效。消息里带 @db 也能直接开。")
+	case "off":
+		s.setThreadDB(ev.ChannelID, false)
+		s.ephemeral(token, ev, "数据库工具面已卸载，下一轮生效。")
+	default:
+		state := "关（默认）"
+		if t.DBEnabled {
+			state = "开"
+		}
+		s.ephemeral(token, ev, "本子区数据库工具面："+state+"。/db on 挂载、/db off 卸载，消息里带 @db 一步开启。")
+	}
 }

@@ -176,11 +176,16 @@ func run() error {
 		},
 		// 工具面与网页会话同源：数据库按项目有条件挂（datasource），
 		// 报告无条件挂（report），凭证都走非会话通道。单面失败只降级。
-		Mounts: func(ctx context.Context, key, cwd, flavor string, onReport func(rel, title string)) ([]any, map[string]any, error) {
-			servers, meta, err := datasourceService.MountsForCwd(ctx, cwd, flavor)
-			if err != nil {
-				slog.Warn("discord 数据源挂载失败", "err", err)
-				servers, meta = nil, nil
+		Mounts: func(ctx context.Context, key, cwd, flavor string, withDB bool, onReport func(rel, title string)) ([]any, map[string]any, error) {
+			var servers []any
+			var meta map[string]any
+			if withDB {
+				var err error
+				servers, meta, err = datasourceService.MountsForCwd(ctx, cwd, flavor)
+				if err != nil {
+					slog.Warn("discord 数据源挂载失败", "err", err)
+					servers, meta = nil, nil
+				}
 			}
 			rs, rm, err := reportService.MountsForPeer(ctx, key, cwd, flavor, onReport)
 			if err != nil {

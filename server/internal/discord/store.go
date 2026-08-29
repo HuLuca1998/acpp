@@ -25,11 +25,14 @@ type Config struct {
 
 // Thread 是一个对话子区（Discord thread）。ChannelID 是它所属的绑定频道。
 type Thread struct {
-	ThreadID     string    `json:"threadId"`
-	ChannelID    string    `json:"channelId"`
-	ACPSessionID string    `json:"acpSessionId,omitempty"`
-	Title        string    `json:"title,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ThreadID     string `json:"threadId"`
+	ChannelID    string `json:"channelId"`
+	ACPSessionID string `json:"acpSessionId,omitempty"`
+	Title        string `json:"title,omitempty"`
+	// DBEnabled：本子区是否挂数据库工具面。默认关——工具常挂会诱发
+	// 「平时问答也去查库」，用户拍板按需开（/db on 或消息里带 @db）。
+	DBEnabled bool      `json:"dbEnabled,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // Binding 是一条「频道 ↔ 仓库工作区」的绑定：/init 表单的落盘结果。

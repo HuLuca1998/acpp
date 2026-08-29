@@ -573,3 +573,24 @@ func TestMdToDiscord(t *testing.T) {
 		t.Errorf("表格列没对齐（%v）：\n%s", col2, out)
 	}
 }
+
+func TestDBToken(t *testing.T) {
+	cases := map[string]bool{
+		"@db 查一下玩家数":   true,
+		"查一下 @数据库 的表":  true,
+		"邮箱是 a@db.com": false,
+		"平时问答不带令牌":     false,
+		"@db":          true,
+	}
+	for in, want := range cases {
+		if got := hasDBToken(in); got != want {
+			t.Errorf("hasDBToken(%q) = %v, 期望 %v", in, got, want)
+		}
+	}
+	if got := stripDBToken("@db 查一下玩家数"); got != "查一下玩家数" {
+		t.Errorf("stripDBToken = %q", got)
+	}
+	if got := stripDBToken("先看 @数据库 再说"); got != "先看  再说" && got != "先看 再说" {
+		t.Errorf("stripDBToken 中文令牌 = %q", got)
+	}
+}

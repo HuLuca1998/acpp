@@ -92,6 +92,18 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"name":        "stop",
 			"description": "中止子区里正在跑的回合",
 		},
+		{
+			"name":        "db",
+			"description": "本子区的数据库工具面开关（默认关，防止没必要的查询）",
+			"options": []map[string]any{{
+				"type": 3, "name": "switch", "description": "on 挂载 / off 卸载 / status 查看",
+				"required": true, "choices": []map[string]any{
+					{"name": "on", "value": "on"},
+					{"name": "off", "value": "off"},
+					{"name": "status", "value": "status"},
+				},
+			}},
+		},
 	}
 	err := botREST(ctx, token, "PUT",
 		fmt.Sprintf("/applications/%s/guilds/%s/commands", appID, guildID), cmds, nil)
@@ -174,6 +186,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.unbindChannel(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "stop":
 		s.stopThread(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "db":
+		s.toggleDB(token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):
