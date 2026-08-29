@@ -60,16 +60,18 @@ func askContent(ask *pendingAsk) map[string]any {
 	return content
 }
 
-// permClosedV2 是权限决策的终态卡：留住决策对象，标出选了什么、谁选的。
+// permClosedV2 是权限决策的终态卡。刻意压成两行小卡（用户点名嫌大）：
+// 决策对象截成一行，命令全文没必要留——它马上就要在对话里被执行了。
 func permClosedV2(ask *pendingAsk, opt acp.PermissionOption, by string) []map[string]any {
 	mark, color := "✅", colorGreen
 	if strings.HasPrefix(opt.Kind, "reject") {
 		mark, color = "❌", colorRed
 	}
+	title := strings.TrimSpace(strings.SplitN(ask.title, "\n", 2)[0])
+	title = strings.TrimPrefix(title, "### ")
 	return v2Container(color, []map[string]any{
-		v2Text("### " + ask.title),
-		v2Text(fmt.Sprintf("%s **%s** · %s · <t:%d:R>",
-			mark, orDefault(opt.Name, opt.OptionID), by, time.Now().Unix())),
+		v2Text(fmt.Sprintf("%s **%s**　%s\n-# %s · <t:%d:R>",
+			mark, orDefault(opt.Name, opt.OptionID), trimRunes(title, 90), by, time.Now().Unix())),
 	})
 }
 
