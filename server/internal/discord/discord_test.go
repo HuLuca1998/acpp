@@ -609,3 +609,21 @@ func TestTurnSummary(t *testing.T) {
 		t.Errorf("turnSummary = %q", got)
 	}
 }
+
+func TestResolveInWorkdir(t *testing.T) {
+	dir := t.TempDir()
+	work, _ := filepath.EvalSymlinks(dir)
+	if err := os.WriteFile(filepath.Join(work, "chart.png"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := resolveInWorkdir(work, "chart.png"); err != nil || got != filepath.Join(work, "chart.png") {
+		t.Errorf("正常路径: %q %v", got, err)
+	}
+	for name, rel := range map[string]string{
+		"越界": "../evil.txt", "空": "", "目录": ".", "不存在": "ghost.png",
+	} {
+		if _, err := resolveInWorkdir(work, rel); err == nil {
+			t.Errorf("%s（%q）应该被拒", name, rel)
+		}
+	}
+}

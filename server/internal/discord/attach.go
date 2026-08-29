@@ -50,7 +50,7 @@ func (s *Service) attachmentBlocks(ctx context.Context, workdir string, atts []a
 	for _, att := range atts {
 		b, err := s.attachmentBlock(ctx, workdir, att)
 		if err != nil {
-			notes = append(notes, fmt.Sprintf("⚠️ 附件 %s 没接住：%s", att.Filename, trimRunes(err.Error(), 200)))
+			notes = append(notes, fmt.Sprintf("⚠️ 附件 %s 处理失败\n-# %s", att.Filename, trimRunes(err.Error(), 200)))
 			continue
 		}
 		blocks = append(blocks, b...)

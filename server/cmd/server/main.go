@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -149,6 +150,7 @@ func run() error {
 		DefaultWorkRoot: func() string { return filepath.Join(service.DefaultCwd(), "discord") },
 		Catalog:         discordCatalog(agentService),
 		SkillpackDir:    filepath.Join(cfg.DataDir, "skillpack"),
+		MCPBase:         mcpDiscordBase(cfg.Addr),
 		// 子区对话拉 acp 子进程的启动方式：按内置工具名查配置。
 		AgentRuntime: func(ctx context.Context, agent string) (acp.Runtime, error) {
 			list, err := agentService.List(ctx)
@@ -298,4 +300,13 @@ func discordCatalog(agents *service.AgentService) discord.CatalogFunc {
 		}
 		return out, nil
 	}
+}
+
+// mcpDiscordBase 推 discord 自家工具面的回连前缀（同机回环）。
+func mcpDiscordBase(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		port = "48080"
+	}
+	return "http://127.0.0.1:" + port + "/api/mcp/discord/"
 }

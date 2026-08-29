@@ -33,7 +33,7 @@ func (s *Service) updatePlanCard(token, threadID string, tc *threadChat, raw jso
 
 	body := map[string]any{
 		"flags":      1 << 15,
-		"components": v2Container(colorBlurbe, planLines(entries)),
+		"components": v2Container(colorGrey, planLines(entries)),
 	}
 
 	tc.mu.Lock()

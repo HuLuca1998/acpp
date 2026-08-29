@@ -122,3 +122,33 @@ func renderToolCard(log []toolEntry) string {
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
+
+// finalizeToolCard 在回合结束时给工具活动卡收口：全部成功就压成一行
+// ——对话滚动区里一张 8 行的过程清单在事后只是噪音；有失败的保留明细
+// （排查要看是哪一步挂的）。
+func (s *Service) finalizeToolCard(token, threadID string, tc *threadChat) {
+	tc.mu.Lock()
+	msgID := tc.toolMsgID
+	total := len(tc.toolLog)
+	failed := 0
+	for _, e := range tc.toolLog {
+		if e.status == "failed" {
+			failed++
+		}
+	}
+	tc.mu.Unlock()
+	if msgID == "" || total == 0 || failed > 0 {
+		return
+	}
+	body := map[string]any{
+		"flags": 1 << 15,
+		"components": v2Container(colorGrey, []map[string]any{
+			v2Text(fmt.Sprintf("-# 🔧 %d 次工具调用 · 全部完成", total)),
+		}),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := botREST(ctx, token, "PATCH", "/channels/"+threadID+"/messages/"+msgID, body, nil); err != nil {
+		slog.Warn("工具卡收口失败", "err", err)
+	}
+}

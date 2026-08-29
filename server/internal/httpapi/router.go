@@ -311,6 +311,11 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)
 	reports := reportHandler{reports: svcs.Reports}
 	api.HandleFunc("/api/mcp/report/{token}", reports.mcp)
+	// discord 自家工具面（send_file）的回连端点，形状同上两条。
+	if svcs.Discord != nil {
+		dcm := discordMCPHandler{discord: svcs.Discord}
+		api.HandleFunc("/api/mcp/discord/{token}", dcm.mcp)
+	}
 
 	// 工具台（页面 /tools）：看工具面、人工试运行、发自定义 JSON-RPC、
 	// 回看调用记录。owner 专属，与上面那条公开的回连端点刻意分前缀。

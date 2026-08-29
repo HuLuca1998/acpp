@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"acpp/server/internal/datasource"
+	"acpp/server/internal/discord"
 	"acpp/server/internal/mcp"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
@@ -188,6 +189,37 @@ func (h reportHandler) mcp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		// 连接已断，只能放弃响应。
+		return
+	}
+}
+
+// discordMCPHandler 是 discord 自家工具面的回连端点（/api/mcp/discord/{token}）。
+type discordMCPHandler struct {
+	discord *discord.Service
+}
+
+func (h discordMCPHandler) mcp(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+	case http.MethodDelete:
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	resp, hasResp := h.discord.HandleChatMCP(r.Context(), r.PathValue("token"), raw)
+	if !hasResp {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return
 	}
 }

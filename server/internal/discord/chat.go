@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/mcp"
 )
 
 // 子区对话的资源边界：discord 的并发子区不多，池子收紧；无人值守场景
@@ -358,7 +359,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	key := "dc:" + threadID
 	sess, err := s.openChatSession(ctx, key, b, threadID, tc)
 	if err != nil {
-		s.say(ctx, token, threadID, "❌ 拉不起 agent："+trimRunes(err.Error(), 500))
+		s.say(ctx, token, threadID, "❌ 会话启动失败\n-# "+trimRunes(err.Error(), 400))
 		return
 	}
 	// 附件先落盘再转内容块；个别失败只提示，不拦整轮。
@@ -405,15 +406,17 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	touched := len(tc.touched)
 	tc.mu.Unlock()
 
+	s.finalizeToolCard(token, threadID, tc)
+
 	switch {
 	case err != nil:
-		s.say(ctx, token, threadID, "❌ 这一轮失败了："+trimRunes(err.Error(), 500))
+		s.say(ctx, token, threadID, "❌ 这一轮失败了\n-# "+trimRunes(err.Error(), 400))
 	case reply == "":
 		// 纯工具轮正常结束就沉默——活干完了没话说不该打扰；异常结束
 		//（中止/超限/拒绝）才值得说一声。
 		if result.StopReason != acp.StopEndTurn && result.StopReason != "" &&
 			result.StopReason != acp.StopCancelled {
-			s.say(ctx, token, threadID, fmt.Sprintf("（这一轮没说完：%s）", result.StopReason))
+			s.say(ctx, token, threadID, fmt.Sprintf("-# ⚠️ 回合中止：%s", result.StopReason))
 		}
 	default:
 		segs := splitMessage(mdToDiscord(reply), discordMsgLimit)
@@ -461,6 +464,13 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 			slog.Warn("数据源挂载失败，跳过", "workdir", b.Workdir, "err", mErr)
 			mcpServers, metaExtra = nil, nil
 		}
+	}
+	// 自家 acpp-chat 工具面（send_file）：agent 把文件直接发给用户的出口。
+	if cs, cm, cErr := s.chatMounts(threadID, b); cErr != nil {
+		slog.Warn("chat 工具面挂载失败，跳过", "err", cErr)
+	} else {
+		mcpServers = append(mcpServers, cs...)
+		metaExtra = mcp.MergeClaudeMounts(metaExtra, cm)
 	}
 	sess, err := s.acpMgr.Open(ctx, acp.OpenOptions{
 		Key:     key,
@@ -697,7 +707,8 @@ const discordInstructions = `# Discord 对话须知
 
 - 回复保持紧凑。结构化成果（盘点、对比、调研、方案、数据报告）不要在对话里铺长文，按 html-report 技能写成单文件报告并用 report_open 打开——它会以长图直接出现在频道里。
 - 少用宽表格与四级以下标题：Discord 只认有限的 markdown，宽表格在手机上没法读。
-- 数据库只经 mcp__acpp-db__* 工具访问。工具清单里没有它们就是数据库面没挂载，此时不要用 ssh、mysql 客户端或任何别的途径碰数据库——告诉用户在消息里带 @db（或用 /db on）挂载后再继续。`
+- 数据库只经 mcp__acpp-db__* 工具访问。工具清单里没有它们就是数据库面没挂载，此时不要用 ssh、mysql 客户端或任何别的途径碰数据库——告诉用户在消息里带 @db（或用 /db on）挂载后再继续。
+- 生成了图片、图表或文件要给用户看时，用 mcp__acpp-chat__send_file 把它发进对话（.html 自动渲染成长图）——只贴路径用户什么都看不到。`
 
 // ---- 数据库工具面的按需开关 ----
 

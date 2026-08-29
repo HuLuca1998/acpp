@@ -36,7 +36,7 @@ func TestCollectMountsKeepsEveryFace(t *testing.T) {
 
 	t.Run("claude 侧两个 server 与两组预批都在", func(t *testing.T) {
 		_, meta := s.collectMounts(context.Background(), 1, "/w", "claude")
-		opts, ok := claudeOptions(meta)
+		opts, ok := testClaudeOptions(meta)
 		if !ok {
 			t.Fatalf("meta 形状不对：%v", meta)
 		}
@@ -69,7 +69,7 @@ func TestCollectMountsSurvivesOneFailure(t *testing.T) {
 	s.AddMounter(stubMounter{name: "acpp-report"})
 
 	_, meta := s.collectMounts(context.Background(), 1, "/w", "claude")
-	opts, ok := claudeOptions(meta)
+	opts, ok := testClaudeOptions(meta)
 	if !ok {
 		t.Fatalf("一个源失败就不该拖垮另一个，meta = %v", meta)
 	}
@@ -90,4 +90,15 @@ func TestCollectMountsEmpty(t *testing.T) {
 	if servers != nil || meta != nil {
 		t.Errorf("没有工具面时应该两个都是 nil，得到 servers=%v meta=%v", servers, meta)
 	}
+}
+
+// testClaudeOptions 是测试自用的取层小工具（实现随 MergeClaudeMounts 挪进
+// 了 mcp 包，测试只看形状，本地留一份最省事）。
+func testClaudeOptions(meta map[string]any) (map[string]any, bool) {
+	cc, ok := meta["claudeCode"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	opts, ok := cc["options"].(map[string]any)
+	return opts, ok
 }

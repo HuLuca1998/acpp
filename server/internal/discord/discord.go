@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/mcp"
 )
 
 // 哨兵错误自带一套（本包不依赖 service），httpapi 的 writeError 登记映射。
@@ -53,6 +54,9 @@ type Deps struct {
 	AgentRuntime func(ctx context.Context, agent string) (acp.Runtime, error)
 	// SkillpackDir 是控制端技能包目录，子区会话与网页会话注入同一份。
 	SkillpackDir string
+	// MCPBase 是自家 acpp-chat 工具面（send_file）的回连端点前缀
+	// （http://127.0.0.1:<port>/api/mcp/discord/）。空则不挂这个工具面。
+	MCPBase string
 	// Mounts 为一个子区会话算工具面挂载载荷（MCP server 清单 + _meta
 	// 追加），与网页会话同源：报告工具面无条件挂，数据库工具面还要项目
 	// 配了数据源才有。key 是子区会话键（回连凭证与报告回调按它路由）；
@@ -146,6 +150,8 @@ type Service struct {
 	chanKind map[string]string
 	// botRoles 缓存 bot 在各 guild 的集成角色 id（@角色也算 @bot）。
 	botRoles map[string]string
+	// chatTok 是自家 acpp-chat 工具面（send_file）的回连凭证。
+	chatTok mcp.PeerTokens
 }
 
 // New 加载配置并构建服务；gateway 由 Start 按配置决定起不起。
