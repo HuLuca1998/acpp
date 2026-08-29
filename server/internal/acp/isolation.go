@@ -16,6 +16,10 @@ import (
 type IsolationInput struct {
 	// SkillpackDir 是控制端技能包目录（<dataDir>/skillpack）。为空 = 不隔离。
 	SkillpackDir string
+	// InstructionsExtra 是调用方（discord 场景等）追加在基础提示词之后的
+	// 场景约定。只对 claude 生效——codex 的提示词住在全局 AGENTS.md，
+	// 没有会话级注入口（实测），追加内容对它静默忽略。
+	InstructionsExtra string
 	// Cwd 是会话工作目录，用于保留项目级 skill。
 	Cwd string
 	// Home 是用户家目录，用于定位系统 codex 的 auth/config（codex 隔离）。
@@ -44,9 +48,13 @@ type Injection struct {
 //
 // 提示词不受技能包有无的影响：没配技能包也照样注入，两者只是恰好共用注入口。
 func (claudeAdapter) Isolation(in IsolationInput) Injection {
+	prompt := ClaudeInstructions()
+	if in.InstructionsExtra != "" {
+		prompt += "\n\n" + in.InstructionsExtra
+	}
 	inj := Injection{
 		Env:  map[string]string{"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
-		Meta: map[string]any{"systemPrompt": map[string]any{"append": ClaudeInstructions()}},
+		Meta: map[string]any{"systemPrompt": map[string]any{"append": prompt}},
 	}
 	if in.SkillpackDir == "" {
 		return inj

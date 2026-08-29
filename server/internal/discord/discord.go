@@ -60,9 +60,6 @@ type Deps struct {
 	// cwd）。nil 表示两个工具面都不接。
 	// withDB 为真才挂数据库工具面（子区默认关，/db 或 @db 按需开）。
 	Mounts func(ctx context.Context, key, cwd, flavor string, withDB bool, onReport func(rel, title string)) (mcpServers []any, metaExtra map[string]any, err error)
-	// PreviewBase 是浏览器可达的后端地址（如 http://127.0.0.1:48080），
-	// 报告卡上「打开预览」链接的前缀。空则不放链接。
-	PreviewBase string
 }
 
 // AgentOption 是一个内置工具的可选项集合。

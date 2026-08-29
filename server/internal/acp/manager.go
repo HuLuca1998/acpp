@@ -68,6 +68,9 @@ type OpenOptions struct {
 	// ResumeACPSessionID 非空且 agent 声明 loadSession 时，先尝试
 	// session/load 恢复这条会话的上下文，失败再回退 session/new。
 	ResumeACPSessionID string
+	// InstructionsExtra 追加在基础提示词之后的场景约定（只对 claude 生效，
+	// 见 IsolationInput）。
+	InstructionsExtra string
 	// MetaExtra 深合并进 session/new 与 session/load 的 _meta（上层要追加的
 	// systemPrompt、工具收口走这里），与技能隔离的 Meta 冲突时以
 	// MetaExtra 为准。
@@ -136,9 +139,10 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 	// codex）。Meta/AdditionalDirs 留给 handshake 的 session/new 与 load 用。
 	if m.skillpackDir != "" {
 		inj := adapterFor(FlavorOf("", opts.Runtime.Command)).Isolation(IsolationInput{
-			SkillpackDir: m.skillpackDir,
-			Cwd:          opts.Cwd,
-			Home:         os.Getenv("HOME"),
+			SkillpackDir:      m.skillpackDir,
+			InstructionsExtra: opts.InstructionsExtra,
+			Cwd:               opts.Cwd,
+			Home:              os.Getenv("HOME"),
 		})
 		if len(inj.Env) > 0 {
 			env := make(map[string]string, len(opts.Runtime.Env)+len(inj.Env))

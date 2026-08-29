@@ -191,7 +191,6 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/discord/config` | 存 discord 配置（`{enabled?, botToken?, workRoot?}`，token 空串=清除），gateway 即时起停 |
 | PUT | `/api/discord/bindings/{channelId}` | 改频道绑定的模型/思考深度（换仓库走频道里重新 `/init`） |
 | DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（磁盘上的克隆保留） |
-| GET | `/api/discord/reports/{channelId}?path=…` | 在浏览器里打开子区会话产出的 HTML 报告（discord 报告卡链接指到这里；路径护栏 + CSP sandbox） |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录；`?files=1` 连文件、`?hidden=1` 含隐藏项；条目带大小与修改时间），供选择器导航 |
 | GET | `/api/fs/places` | 选择器侧边栏的默认位置（家目录/桌面/文稿/下载/工作区；租户只有自己的 root） |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |

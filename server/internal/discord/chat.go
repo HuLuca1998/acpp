@@ -472,6 +472,7 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 		ResumeACPSessionID: resume,
 		MCPServers:         mcpServers,
 		MetaExtra:          metaExtra,
+		InstructionsExtra:  discordInstructions,
 	})
 	if err != nil {
 		return nil, err
@@ -685,6 +686,18 @@ func (s *Service) botID() string {
 	defer s.mu.Unlock()
 	return s.st.BotID
 }
+
+// discordInstructions 是 discord 子区会话的场景约定，追加在基础提示词后
+// （口径与 acp/instructions.go 一致：可判定、带理由、只讲模型不知道的）。
+// 第三条是被真实事故逼出来的：数据库面没挂载时，agent 试图 ssh 隧道直连
+// 生产库——那种野路子必须在提示词层面焊死。
+const discordInstructions = `# Discord 对话须知
+
+你在 Discord 频道的子区里与用户对话，输出以手机可读为准：
+
+- 回复保持紧凑。结构化成果（盘点、对比、调研、方案、数据报告）不要在对话里铺长文，按 html-report 技能写成单文件报告并用 report_open 打开——它会以长图直接出现在频道里。
+- 少用宽表格与四级以下标题：Discord 只认有限的 markdown，宽表格在手机上没法读。
+- 数据库只经 mcp__acpp-db__* 工具访问。工具清单里没有它们就是数据库面没挂载，此时不要用 ssh、mysql 客户端或任何别的途径碰数据库——告诉用户在消息里带 @db（或用 /db on）挂载后再继续。`
 
 // ---- 数据库工具面的按需开关 ----
 

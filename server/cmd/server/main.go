@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -194,8 +193,6 @@ func run() error {
 			}
 			return append(servers, rs...), service.MergeClaudeMounts(meta, rm), nil
 		},
-		// 报告卡链接的前缀：agent 与浏览器都在本机，回环 + 监听端口即达。
-		PreviewBase: previewBase(cfg.Addr),
 	})
 	if err != nil {
 		return err
@@ -301,13 +298,4 @@ func discordCatalog(agents *service.AgentService) discord.CatalogFunc {
 		}
 		return out, nil
 	}
-}
-
-// previewBase 从监听地址推浏览器可达的后端前缀（0.0.0.0 时走回环）。
-func previewBase(addr string) string {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil || port == "" {
-		port = "48080"
-	}
-	return "http://127.0.0.1:" + port
 }

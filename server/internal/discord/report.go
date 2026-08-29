@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,23 +17,15 @@ import (
 // 给一个跳浏览器的链接（本机点开即回环地址，owner 判定零摩擦）。
 
 // reportOpened 是 report_open 的回调（经 Deps.Mounts 注册）：往子区发卡，
-// 然后异步把报告渲染成整页长图直接发进子区（用户拍板的首选形态——
-// 手机上不用跳浏览器）。渲染依赖本机 Chrome，失败只降级：卡上仍有
-// 预览链接。
+// 然后异步把报告渲染成整页长图直接发进子区。不放预览链接——链接指向
+// 本机后端，频道里的用户多半不在同一局域网，点不开的按钮比没有更糟
+// （用户拍板：直接给图片就行）。
 func (s *Service) reportOpened(token, threadID string, b Binding, rel, title string) {
-	inner := []map[string]any{
-		v2Text("### 📊 报告《" + trimRunes(title, 100) + "》"),
-		v2Text("-# " + trimRunes(rel, 200)),
-	}
-	if s.deps.PreviewBase != "" {
-		href := strings.TrimRight(s.deps.PreviewBase, "/") +
-			"/api/discord/reports/" + b.ChannelID + "?path=" + url.QueryEscape(rel)
-		inner = append(inner, map[string]any{"type": 1, "components": []map[string]any{{
-			"type": 2, "style": 5, "label": "🔗 打开预览", "url": href,
-		}}})
-	}
 	s.postCard(token, threadID, map[string]any{
-		"flags": 1 << 15, "components": v2Container(colorBlurbe, inner),
+		"flags": 1 << 15, "components": v2Container(colorBlurbe, []map[string]any{
+			v2Text("### 📊 报告《" + trimRunes(title, 100) + "》"),
+			v2Text("-# " + trimRunes(rel, 200) + " · 长图生成中…"),
+		}),
 	})
 	go s.postReportImage(token, threadID, b, rel)
 }
