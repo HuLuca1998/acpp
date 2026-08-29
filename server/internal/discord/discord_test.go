@@ -546,7 +546,7 @@ func TestMdToDiscord(t *testing.T) {
 		"☐ 待办",
 		"✅ 已做",
 		"#### 代码里的不动", // 围栏内原样
-		"| a | b |",     // 围栏内原样
+		"| a | b |",   // 围栏内原样
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("缺少 %q\n%s", want, out)
