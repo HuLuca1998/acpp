@@ -37,6 +37,9 @@ type threadChat struct {
 	// planMsgID/planGen 是本回合计划卡的消息 id 与更新代号（见 plan.go）。
 	planMsgID string
 	planGen   uint64
+	// tools 收本回合见过的工具调用 id（同一调用会推多次状态，按 id 去重），
+	// 回合小结报个数用。
+	tools map[string]struct{}
 }
 
 // queuedMsg 是排队中的一条输入。queued 标记它曾在回合进行中等待过
@@ -356,6 +359,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	if len(blocks) == 0 {
 		return
 	}
+	started := time.Now()
 	result, err := s.acpMgr.Prompt(ctx, key, blocks)
 	stopTyping()
 
@@ -363,6 +367,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	reply := strings.TrimSpace(tc.buf.String())
 	tc.buf.Reset()
 	tc.ask = nil
+	toolCount := len(tc.tools)
 	tc.mu.Unlock()
 
 	switch {
@@ -376,7 +381,14 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 			s.say(ctx, token, threadID, fmt.Sprintf("（这一轮没说完：%s）", result.StopReason))
 		}
 	default:
-		for _, seg := range splitMessage(mdToDiscord(reply), discordMsgLimit) {
+		segs := splitMessage(mdToDiscord(reply), discordMsgLimit)
+		// 干过活的回合在末段附一行小结（秒答的琐碎问答不值得带尾巴）。
+		if note := turnSummary(time.Since(started), toolCount); note != "" {
+			if last := segs[len(segs)-1]; len(last)+len(note)+1 <= discordMsgLimit+80 {
+				segs[len(segs)-1] = last + "\n" + note
+			}
+		}
+		for _, seg := range segs {
 			s.say(ctx, token, threadID, seg)
 		}
 	}
@@ -476,6 +488,13 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 		go s.askDone(token, threadID, tc, ev.PermissionID+ev.ElicitationID)
 	case acp.EventPlan:
 		go s.updatePlanCard(token, threadID, tc, ev.Entries)
+	case acp.EventToolCall:
+		tc.mu.Lock()
+		if tc.tools == nil {
+			tc.tools = map[string]struct{}{}
+		}
+		tc.tools[ev.ToolCallID] = struct{}{}
+		tc.mu.Unlock()
 	}
 }
 
@@ -685,4 +704,20 @@ func (s *Service) toggleDB(token string, ev interactionEvent) {
 		}
 		s.ephemeral(token, ev, "本子区数据库工具面："+state+"。/db on 挂载、/db off 卸载，消息里带 @db 一步开启。")
 	}
+}
+
+// turnSummary 是回合结束时的观察小字：耗时 + 工具调用数。快问快答
+// （<20s 且没动工具）不带尾巴——那种回合一眼就看完了，小结只是噪音。
+func turnSummary(d time.Duration, tools int) string {
+	if d < 20*time.Second && tools == 0 {
+		return ""
+	}
+	t := fmt.Sprintf("%ds", int(d.Seconds()))
+	if d >= time.Minute {
+		t = fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	if tools == 0 {
+		return "-# ⏱ " + t
+	}
+	return fmt.Sprintf("-# ⏱ %s · 🔧 %d 次工具调用", t, tools)
 }

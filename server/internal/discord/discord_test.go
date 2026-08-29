@@ -594,3 +594,15 @@ func TestDBToken(t *testing.T) {
 		t.Errorf("stripDBToken 中文令牌 = %q", got)
 	}
 }
+
+func TestTurnSummary(t *testing.T) {
+	if got := turnSummary(3*time.Second, 0); got != "" {
+		t.Errorf("快问快答不该带小结，got %q", got)
+	}
+	if got := turnSummary(83*time.Second, 5); got != "-# ⏱ 1m23s · 🔧 5 次工具调用" {
+		t.Errorf("turnSummary = %q", got)
+	}
+	if got := turnSummary(45*time.Second, 0); got != "-# ⏱ 45s" {
+		t.Errorf("turnSummary = %q", got)
+	}
+}

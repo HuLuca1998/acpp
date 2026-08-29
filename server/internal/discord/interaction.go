@@ -93,6 +93,10 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"description": "中止子区里正在跑的回合",
 		},
 		{
+			"name":        "help",
+			"description": "acpp 使用指南",
+		},
+		{
 			"name":        "db",
 			"description": "本子区的数据库工具面开关（默认关，防止没必要的查询）",
 			"options": []map[string]any{{
@@ -188,6 +192,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.stopThread(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "db":
 		s.toggleDB(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "help":
+		s.showHelp(token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):
@@ -444,4 +450,20 @@ func trimRunes(s string, n int) string {
 		return s
 	}
 	return string(runes[:n-1]) + "…"
+}
+
+// showHelp 是 /help：只有本人可见，不自动删——说明书要留着慢慢看。
+func (s *Service) showHelp(token string, ev interactionEvent) {
+	text := "## acpp 使用指南\n" +
+		"**开始对话** — 在绑定频道 @acpp 说话（@ 出来选用户或角色都行），自动开子区；之后在子区里直接说话。\n" +
+		"**发文件** — 消息附件直接进对话：图片给模型看，文本嵌全文，大文件落盘给路径。\n" +
+		"**查数据库** — 默认不连库；`/db on` 或消息里带 `@db` 挂载数据库工具，`/db off` 卸载。\n" +
+		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
+		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
+		"**常用命令** — `/model` `/effort` `/access` 调模型与权限档；`/status` 看绑定；`/stop` 中止本轮；`/unbind` 解绑；`/init` 绑定频道。"
+	if err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+		"content": text, "flags": 1 << 6, "allowed_mentions": noMentions(),
+	}); err != nil {
+		slog.Error("help 回复失败", "err", err)
+	}
 }
