@@ -30,8 +30,12 @@ type Thread struct {
 	ACPSessionID string `json:"acpSessionId,omitempty"`
 	Title        string `json:"title,omitempty"`
 	// DBEnabled：本子区是否挂数据库工具面。默认关——工具常挂会诱发
-	// 「平时问答也去查库」，用户拍板按需开（/db on 或消息里带 @db）。
-	DBEnabled bool      `json:"dbEnabled,omitempty"`
+	// 「平时问答也去查库」，用户拍板按需开（/db on、消息带 @db，或
+	// 消息里出现明确的数据库意图词时自动开）。
+	DBEnabled bool `json:"dbEnabled,omitempty"`
+	// DBManual：用户用 /db 显式拨过开关——之后意图词不再自动改，显式
+	// 决定比推断高一级。
+	DBManual  bool      `json:"dbManual,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

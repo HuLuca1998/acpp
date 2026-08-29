@@ -296,7 +296,11 @@ func (s *Service) resolvePermissionAsk(token string, ev interactionEvent, ask *p
 
 // answerAsk 用子区的一条普通消息了结挂起的问答（快捷路径）：权限回编号；
 // 单题提问回编号（多选可「1 3」）或文字。多题提问请走表单。
-func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pendingAsk, msgID, text string) {
+// answerAsk 尝试把一条消息当挂起问答的答案消费。返回 false 表示这条
+// 消息**不像答案**（权限卡收到非编号、多题提问收到闲文本）——调用方
+// 应把它当普通输入排队，而不是怼回去丢掉：问答挂着的时候用户完全可能
+// 在补充需求（真实报障：「好像消息队列有问题」）。
+func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pendingAsk, msgID, text string) bool {
 	pick := -1
 	if n, err := strconv.Atoi(strings.TrimSpace(text)); err == nil && n >= 1 {
 		pick = n - 1
@@ -307,16 +311,14 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 	switch ask.kind {
 	case "permission":
 		if pick < 0 || pick >= len(ask.permOpts) {
-			s.say(ctx, token, threadID, fmt.Sprintf("点卡片按钮，或回复 1–%d 的编号。", len(ask.permOpts)))
-			return
+			return false
 		}
 		opt := ask.permOpts[pick]
 		err = s.acpMgr.ResolvePermission(ask.key, ask.id, opt.OptionID)
 		closed = permClosedV2(ask, opt, "以消息作答")
 	case "elicitation":
 		if len(ask.questions) != 1 {
-			s.say(ctx, token, threadID, "有好几题，点卡片上的「📝 填表回答」一次填完。")
-			return
+			return false
 		}
 		q := ask.questions[0]
 		values := parseAnswerText(text, q)
@@ -334,10 +336,11 @@ func (s *Service) answerAsk(ctx context.Context, token, threadID string, ask *pe
 	if err != nil {
 		s.react(ctx, token, threadID, msgID, "⚠️")
 		s.say(ctx, token, threadID, "这条问答已经失效了（可能超时或已在别处处理）。")
-		return
+		return true
 	}
 	s.react(ctx, token, threadID, msgID, "✅")
 	s.finalizeAskCard(token, threadID, ask, closed)
+	return true
 }
 
 // parseAnswerText 把文本作答变成值集合：整条都是编号（空格/逗号分隔）就

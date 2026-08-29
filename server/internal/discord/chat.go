@@ -110,7 +110,9 @@ func (s *Service) handleMessage(ctx context.Context, token string, d json.RawMes
 
 	cfg := s.store.config()
 	if b, ok := cfg.binding(ev.ChannelID); ok {
-		// 绑定主频道：只认 @bot（bot 用户或它的集成角色都算）。
+		// 绑定主频道：认 @bot（bot 用户或它的集成角色），也认 @db 令牌
+		// ——「@db 查一下」的意图明明白白是在叫 bot，静默忽略只会让人
+		// 以为 bot 挂了（真实报障：「为什么我发的消息 ai 不回复」）。
 		mentioned := false
 		for _, m := range ev.Mentions {
 			if m.ID == botID {
@@ -126,6 +128,9 @@ func (s *Service) handleMessage(ctx context.Context, token string, d json.RawMes
 					break
 				}
 			}
+		}
+		if !mentioned && hasDBToken(ev.Content) {
+			mentioned = true
 		}
 		if mentioned {
 			go s.startThread(ctx, token, b, ev)
@@ -188,6 +193,10 @@ func (s *Service) threadBinding(ctx context.Context, token string, cfg Config, c
 // startThread 处理主频道的 @bot：以那条消息开子区，问题作为第一轮输入。
 func (s *Service) startThread(ctx context.Context, token string, b Binding, ev messageEvent) {
 	text := stripMention(ev.Content, s.botID())
+	withDB := hasDBToken(text) || hasDBIntent(text)
+	if hasDBToken(text) {
+		text = stripDBToken(text)
+	}
 	if text == "" && len(ev.Attachments) == 0 {
 		return
 	}
@@ -204,7 +213,8 @@ func (s *Service) startThread(ctx context.Context, token string, b Binding, ev m
 		return
 	}
 	if _, err := s.store.update(func(c *Config) {
-		c.upsertThread(Thread{ThreadID: th.ID, ChannelID: b.ChannelID, Title: threadTitle(text), CreatedAt: time.Now()})
+		c.upsertThread(Thread{ThreadID: th.ID, ChannelID: b.ChannelID, Title: threadTitle(text),
+			DBEnabled: withDB, CreatedAt: time.Now()})
 	}); err != nil {
 		slog.Warn("子区记录落盘失败", "err", err)
 	}
@@ -225,10 +235,12 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 	tc.mu.Lock()
 	ask := tc.ask
 	tc.mu.Unlock()
-	// 挂着问答时纯文字优先当答案；带附件的消息不像答案，照常排队。
+	// 挂着问答时纯文字优先尝试当答案；不像答案的（权限卡收到非编号、
+	// 多题提问收到闲文本）落回下面照常排队，不吞不怼。
 	if ask != nil && text != "" && len(ev.Attachments) == 0 {
-		s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text)
-		return
+		if s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text) {
+			return
+		}
 	}
 	// 打成纯文本的斜杠命令不进对话——把 /help 当消息发出去，agent 只会
 	// 回一句「不认识」白费一轮。裸命令词才拦，带正文的不动。
@@ -237,10 +249,15 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 		return
 	}
 	// 消息里带 @db 令牌 = 引用数据库：当场挂载工具面（重开会话带上，
-	// 上下文经 acpSessionId 恢复），令牌本身不进 prompt。
+	// 上下文经 acpSessionId 恢复），令牌本身不进 prompt。意图词也自动
+	// 挂——用户显式 /db 拨过的子区除外（显式决定比推断高一级）。
 	if hasDBToken(text) {
 		text = stripDBToken(text)
 		s.setThreadDB(ev.ChannelID, true)
+	} else if hasDBIntent(text) {
+		if t, ok := s.store.config().thread(ev.ChannelID); ok && !t.DBManual && !t.DBEnabled {
+			s.setThreadDB(ev.ChannelID, true)
+		}
 	}
 	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID, author: ev.Author.ID})
 }
@@ -274,14 +291,13 @@ func (s *Service) enqueue(ctx context.Context, token string, b Binding, threadID
 
 // runThread 是子区的回合循环：每轮吞掉队列里的全部输入，直到队列干净。
 func (s *Service) runThread(ctx context.Context, token string, b Binding, threadID string, tc *threadChat) {
-	defer func() {
-		tc.mu.Lock()
-		tc.running = false
-		tc.mu.Unlock()
-	}()
 	for {
 		tc.mu.Lock()
 		if len(tc.queue) == 0 {
+			// 「确认队列空」和「交出执行权」必须在同一临界区——分开的话，
+			// 收尾窗口里 enqueue 的消息会看到 running=true 只排队不起
+			// runner，队列里就此躺一条没人管的消息（真实报障过）。
+			tc.running = false
 			tc.mu.Unlock()
 			return
 		}
@@ -676,6 +692,13 @@ var dbToken = regexp.MustCompile(`(^|\s)@(db\b|数据库)`)
 
 func hasDBToken(text string) bool { return dbToken.MatchString(text) }
 
+// dbIntent 识别「这条消息在说数据库」的意图词——比 @db 令牌宽、比常挂
+// 精准：漏挂的代价是 AI 没工具只能编数据（真实报障），误挂的代价只是
+// 工具清单多五条描述。词表刻意保守，单字「表」「库」不算。
+var dbIntent = regexp.MustCompile(`数据库|数据源|数据表|表结构|建表|查库|库里|\bSQL\b|\bsql\b`)
+
+func hasDBIntent(text string) bool { return dbIntent.MatchString(text) }
+
 func stripDBToken(text string) string {
 	return strings.TrimSpace(dbToken.ReplaceAllString(text, "$1"))
 }
@@ -702,6 +725,18 @@ func (s *Service) setThreadDB(threadID string, on bool) bool {
 	return changed
 }
 
+// markDBManual 记下「用户显式拨过开关」——此后意图词推断闭嘴。
+func (s *Service) markDBManual(threadID string) {
+	if _, err := s.store.update(func(c *Config) {
+		if t, ok := c.thread(threadID); ok && !t.DBManual {
+			t.DBManual = true
+			c.upsertThread(t)
+		}
+	}); err != nil {
+		slog.Warn("DBManual 落盘失败", "err", err)
+	}
+}
+
 // toggleDB 处理 /db：只在子区里有意义（挂载是会话级的）。
 func (s *Service) toggleDB(token string, ev interactionEvent) {
 	t, known := s.store.config().thread(ev.ChannelID)
@@ -712,10 +747,12 @@ func (s *Service) toggleDB(token string, ev interactionEvent) {
 	switch ev.option("switch") {
 	case "on":
 		s.setThreadDB(ev.ChannelID, true)
+		s.markDBManual(ev.ChannelID)
 		s.ephemeral(token, ev, "🗄️ 数据库工具面已挂载，下一轮生效。消息里带 @db 也能直接开。")
 	case "off":
 		s.setThreadDB(ev.ChannelID, false)
-		s.ephemeral(token, ev, "数据库工具面已卸载，下一轮生效。")
+		s.markDBManual(ev.ChannelID)
+		s.ephemeral(token, ev, "数据库工具面已卸载，下一轮生效（这个子区不再按意图词自动挂载）。")
 	default:
 		state := "关（默认）"
 		if t.DBEnabled {
