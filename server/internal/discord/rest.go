@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"time"
 )
@@ -62,4 +63,49 @@ func interactionCallback(token, interactionID, interactionToken string, kind int
 // parse-all，编辑时漏带还会重新解析（实测），所以收在这一个出口。
 func noMentions() map[string]any {
 	return map[string]any{"parse": []string{}}
+}
+
+// botRESTFile 以 multipart 发一条带单个附件的消息（报告长图用）。
+// payload 是常规消息 JSON（attachments 里要预登记 id 0 的文件名）。
+func botRESTFile(ctx context.Context, token, channelID string, payload map[string]any, filename string, data []byte) error {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	pj, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if err := w.WriteField("payload_json", string(pj)); err != nil {
+		return err
+	}
+	part, err := w.CreateFormFile("files[0]", filename)
+	if err != nil {
+		return err
+	}
+	if _, err := part.Write(data); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		"https://discord.com/api/v10/channels/"+channelID+"/messages", &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bot "+token)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("User-Agent", "acpp (https://github.com/acpp, 0.1)")
+	// 附件几 MB 起步，超时给宽些。
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("上传附件 → %s: %s", resp.Status, raw)
+	}
+	return nil
 }

@@ -1,18 +1,26 @@
 package discord
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"acpp/server/internal/webshot"
 )
 
 // 报告面：agent 在子区会话里调 report_open 后，把「报告出炉了」这件事
 // 变成子区里的一张卡。网页会话是就地弹预览面板；discord 没有面板，卡上
 // 给一个跳浏览器的链接（本机点开即回环地址，owner 判定零摩擦）。
 
-// reportOpened 是 report_open 的回调（经 Deps.Mounts 注册）：往子区发卡。
+// reportOpened 是 report_open 的回调（经 Deps.Mounts 注册）：往子区发卡，
+// 然后异步把报告渲染成整页长图直接发进子区（用户拍板的首选形态——
+// 手机上不用跳浏览器）。渲染依赖本机 Chrome，失败只降级：卡上仍有
+// 预览链接。
 func (s *Service) reportOpened(token, threadID string, b Binding, rel, title string) {
 	inner := []map[string]any{
 		v2Text("### 📊 报告《" + trimRunes(title, 100) + "》"),
@@ -28,6 +36,37 @@ func (s *Service) reportOpened(token, threadID string, b Binding, rel, title str
 	s.postCard(token, threadID, map[string]any{
 		"flags": 1 << 15, "components": v2Container(colorBlurbe, inner),
 	})
+	go s.postReportImage(token, threadID, b, rel)
+}
+
+// reportImageMax 是长图直发的体积上限（Discord 免费档附件 25MB，留余量）。
+const reportImageMax = 24 << 20
+
+// postReportImage 把报告渲染成整页 PNG 发进子区。
+func (s *Service) postReportImage(token, threadID string, b Binding, rel string) {
+	abs, err := s.ReportPath(b.ChannelID, rel)
+	if err != nil {
+		slog.Warn("报告长图：路径解析失败", "rel", rel, "err", err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	png, err := webshot.Capture(ctx, "file://"+abs, 1100)
+	if err != nil {
+		slog.Warn("报告长图：渲染失败（卡上仍有预览链接）", "rel", rel, "err", err)
+		return
+	}
+	if len(png) > reportImageMax {
+		slog.Warn("报告长图：超出附件上限，不发", "bytes", len(png))
+		return
+	}
+	err = botRESTFile(ctx, token, threadID, map[string]any{
+		"attachments":      []map[string]any{{"id": 0, "filename": "report.png"}},
+		"allowed_mentions": noMentions(),
+	}, "report.png", png)
+	if err != nil {
+		slog.Warn("报告长图：发送失败", "err", err)
+	}
 }
 
 // ReportPath 把预览请求解析成一个确认落在绑定工作目录内的 .html 绝对
