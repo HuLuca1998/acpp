@@ -146,6 +146,8 @@ type Service struct {
 	// chanKind 缓存「这个 channel id 是绑定频道的子区吗」的判定结果，
 	// 免得每条消息都去 REST 查一次。
 	chanKind map[string]string
+	// botRoles 缓存 bot 在各 guild 的集成角色 id（@角色也算 @bot）。
+	botRoles map[string]string
 }
 
 // New 加载配置并构建服务；gateway 由 Start 按配置决定起不起。
@@ -156,7 +158,7 @@ func New(path string, deps Deps) (*Service, error) {
 	}
 	s := &Service{store: st, deps: deps, registered: map[string]bool{},
 		pending: map[string]pendingInit{}, topicRetry: map[string]bool{},
-		chats: map[string]*threadChat{}, chanKind: map[string]string{}}
+		chats: map[string]*threadChat{}, chanKind: map[string]string{}, botRoles: map[string]string{}}
 	if deps.AgentRuntime != nil {
 		// 子区对话的会话池：无人值守场景给宽松的轮超时，上限收紧——
 		// discord 的并发子区不会太多，别让它抢网页会话的资源。

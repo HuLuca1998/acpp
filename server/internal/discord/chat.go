@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,11 @@ type messageEvent struct {
 	Mentions []struct {
 		ID string `json:"id"`
 	} `json:"mentions"`
-	Attachments []attachment `json:"attachments"`
+	// MentionRoles：@ 到角色时用户 mention 数组是空的——bot 在 guild 里有
+	// 一个同名集成角色，自动补全里排在 bot 用户旁边，选到它的概率一半一半，
+	// 必须两种都认（实测踩坑：选了角色的 @ 完全没反应）。
+	MentionRoles []string     `json:"mention_roles"`
+	Attachments  []attachment `json:"attachments"`
 }
 
 // handleMessage 消费一条 MESSAGE_CREATE：
@@ -93,12 +98,25 @@ func (s *Service) handleMessage(ctx context.Context, token string, d json.RawMes
 
 	cfg := s.store.config()
 	if b, ok := cfg.binding(ev.ChannelID); ok {
-		// 绑定主频道：只认 @bot。
+		// 绑定主频道：只认 @bot（bot 用户或它的集成角色都算）。
+		mentioned := false
 		for _, m := range ev.Mentions {
 			if m.ID == botID {
-				go s.startThread(ctx, token, b, ev)
-				return
+				mentioned = true
+				break
 			}
+		}
+		if !mentioned && len(ev.MentionRoles) > 0 {
+			role := s.botRoleIn(ctx, token, ev.GuildID)
+			for _, r := range ev.MentionRoles {
+				if r != "" && r == role {
+					mentioned = true
+					break
+				}
+			}
+		}
+		if mentioned {
+			go s.startThread(ctx, token, b, ev)
 		}
 		return
 	}
@@ -492,7 +510,48 @@ func (s *Service) stopThread(token string, ev interactionEvent) {
 func stripMention(content, botID string) string {
 	content = strings.ReplaceAll(content, "<@"+botID+">", "")
 	content = strings.ReplaceAll(content, "<@!"+botID+">", "")
+	content = roleMention.ReplaceAllString(content, "")
 	return strings.TrimSpace(content)
+}
+
+var roleMention = regexp.MustCompile(`<@&\d+>`)
+
+// botRoleIn 查 bot 在一个 guild 里的集成角色 id（tags.bot_id 指向自己），
+// 结论缓存（含查不到的负结论——空串）。
+func (s *Service) botRoleIn(ctx context.Context, token, guildID string) string {
+	if guildID == "" {
+		return ""
+	}
+	s.chatMu.Lock()
+	role, ok := s.botRoles[guildID]
+	s.chatMu.Unlock()
+	if ok {
+		return role
+	}
+	var roles []struct {
+		ID   string `json:"id"`
+		Tags struct {
+			BotID string `json:"bot_id"`
+		} `json:"tags"`
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	err := botREST(cctx, token, "GET", "/guilds/"+guildID+"/roles", nil, &roles)
+	cancel()
+	found := ""
+	if err != nil {
+		slog.Warn("查 guild 角色失败", "guild", guildID, "err", err)
+	} else {
+		for _, r := range roles {
+			if r.Tags.BotID == s.botID() {
+				found = r.ID
+				break
+			}
+		}
+	}
+	s.chatMu.Lock()
+	s.botRoles[guildID] = found
+	s.chatMu.Unlock()
+	return found
 }
 
 // threadTitle 从首句取子区标题（平台上限 100，取 60 够认）。
