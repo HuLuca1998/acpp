@@ -113,14 +113,23 @@ func (s *Service) askPermission(token, threadID string, tc *threadChat, ev acp.E
 		})
 	}
 
+	inner := []map[string]any{v2Text("### " + title)}
+	mentions := noMentions()
+	tc.mu.Lock()
+	user := tc.lastUser
+	tc.mu.Unlock()
+	if user != "" {
+		// @ 发起的人：权限卡就是「等你拍板」，人不在屏幕前也要收到推送。
+		inner = append(inner, v2Text("<@"+user+"> "+desc))
+		mentions = map[string]any{"users": []string{user}}
+	} else {
+		inner = append(inner, v2Text("-# "+desc))
+	}
+	inner = append(inner, map[string]any{"type": 1, "components": buttons})
 	msgID := s.postCard(token, threadID, map[string]any{
-		"flags": 1 << 15,
-		"components": v2Container(colorBlurbe, []map[string]any{
-			v2Text("### " + title),
-			v2Text("-# " + desc),
-			{"type": 1, "components": buttons},
-		}),
-		"allowed_mentions": noMentions(),
+		"flags":            1 << 15,
+		"components":       v2Container(colorBlurbe, inner),
+		"allowed_mentions": mentions,
 	})
 	ask.msgID = msgID
 	tc.mu.Lock()
@@ -150,10 +159,22 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 		title: strings.TrimSpace(ev.Text),
 	}
 
+	cardBody := askIntroCard(ask)
+	mentions := noMentions()
+	tc.mu.Lock()
+	user := tc.lastUser
+	tc.mu.Unlock()
+	if user != "" {
+		// 提问和权限一样是「等你回答」，@ 发起的人补一条推送。
+		if inner, ok := cardBody[0]["components"].([]map[string]any); ok {
+			cardBody[0]["components"] = append(inner, v2Text("-# <@"+user+">"))
+		}
+		mentions = map[string]any{"users": []string{user}}
+	}
 	msgID := s.postCard(token, threadID, map[string]any{
 		"flags":            1 << 15,
-		"components":       askIntroCard(ask),
-		"allowed_mentions": noMentions(),
+		"components":       cardBody,
+		"allowed_mentions": mentions,
 	})
 	ask.msgID = msgID
 	tc.mu.Lock()

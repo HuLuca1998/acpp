@@ -43,6 +43,11 @@ type threadChat struct {
 	toolMsgID    string
 	toolGen      uint64
 	toolRendered string
+	// touched 收本回合 edit 类工具动过的文件（回合小结报个数）。
+	touched map[string]struct{}
+	// lastUser 是最近一位发起输入的用户 id——权限/提问卡 @ 它，让
+	// 走开的人收到手机推送（无人值守场景的核心闭环）。
+	lastUser string
 }
 
 // queuedMsg 是排队中的一条输入。queued 标记它曾在回合进行中等待过
@@ -52,6 +57,7 @@ type queuedMsg struct {
 	text        string
 	atts        []attachment
 	msgID       string
+	author      string
 	mainChannel string
 	queued      bool
 }
@@ -206,7 +212,7 @@ func (s *Service) startThread(ctx context.Context, token string, b Binding, ev m
 	s.chanKind[th.ID] = b.ChannelID
 	s.chatMu.Unlock()
 	// 首条输入是主频道那条 @ 消息，进入对话的 ✅ 打在它身上。
-	s.enqueue(ctx, token, b, th.ID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID, mainChannel: ev.ChannelID})
+	s.enqueue(ctx, token, b, th.ID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID, author: ev.Author.ID, mainChannel: ev.ChannelID})
 }
 
 // threadInput 处理子区里的一条用户消息：优先喂给挂起的问答，否则排队进对话。
@@ -236,7 +242,7 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 		text = stripDBToken(text)
 		s.setThreadDB(ev.ChannelID, true)
 	}
-	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID})
+	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID, author: ev.Author.ID})
 }
 
 // enqueue 把输入排进子区队列；没有回合在跑就起 runner。回合在跑时给
@@ -248,6 +254,9 @@ func (s *Service) enqueue(ctx context.Context, token string, b Binding, threadID
 	busy := tc.running
 	msg.queued = busy
 	tc.queue = append(tc.queue, msg)
+	if msg.author != "" {
+		tc.lastUser = msg.author
+	}
 	if !busy {
 		tc.running = true
 	}
@@ -377,6 +386,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	tc.buf.Reset()
 	tc.ask = nil
 	toolCount := len(tc.toolLog)
+	touched := len(tc.touched)
 	tc.mu.Unlock()
 
 	switch {
@@ -392,7 +402,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	default:
 		segs := splitMessage(mdToDiscord(reply), discordMsgLimit)
 		// 干过活的回合在末段附一行小结（秒答的琐碎问答不值得带尾巴）。
-		if note := turnSummary(time.Since(started), toolCount); note != "" {
+		if note := turnSummary(time.Since(started), toolCount, touched, result.Usage); note != "" {
 			if last := segs[len(segs)-1]; len(last)+len(note)+1 <= discordMsgLimit+80 {
 				segs[len(segs)-1] = last + "\n" + note
 			}
@@ -486,6 +496,11 @@ func (s *Service) applyBindingSettings(ctx context.Context, key string, b Bindin
 func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Event) {
 	switch ev.Kind {
 	case acp.EventMessage:
+		// 子代理的过程输出不混进主回复（网页端也是单独归属显示）；
+		// 子代理的启动与结果在工具活动卡上有它自己的行。
+		if ev.SubagentOf != "" {
+			return
+		}
 		tc.mu.Lock()
 		tc.buf.WriteString(ev.Text)
 		tc.mu.Unlock()
@@ -710,9 +725,10 @@ func (s *Service) toggleDB(token string, ev interactionEvent) {
 	}
 }
 
-// turnSummary 是回合结束时的观察小字：耗时 + 工具调用数。快问快答
-// （<20s 且没动工具）不带尾巴——那种回合一眼就看完了，小结只是噪音。
-func turnSummary(d time.Duration, tools int) string {
+// turnSummary 是回合结束时的观察小字：耗时 + 工具数 + 改动文件数 +
+// token 用量。快问快答（<20s 且没动工具）不带尾巴——那种回合一眼就看
+// 完了，小结只是噪音。
+func turnSummary(d time.Duration, tools, touched int, usage *acp.Usage) string {
 	if d < 20*time.Second && tools == 0 {
 		return ""
 	}
@@ -720,10 +736,29 @@ func turnSummary(d time.Duration, tools int) string {
 	if d >= time.Minute {
 		t = fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
-	if tools == 0 {
-		return "-# ⏱ " + t
+	out := "-# ⏱ " + t
+	if tools > 0 {
+		out += fmt.Sprintf(" · 🔧 %d", tools)
 	}
-	return fmt.Sprintf("-# ⏱ %s · 🔧 %d 次工具调用", t, tools)
+	if touched > 0 {
+		out += fmt.Sprintf(" · ✏️ %d 个文件", touched)
+	}
+	if usage != nil && usage.TotalTokens > 0 {
+		out += " · 🧮 " + fmtTokens(usage.TotalTokens)
+	}
+	return out
+}
+
+// fmtTokens 把 token 数缩成 12.3k 这种量级读法。
+func fmtTokens(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM tok", float64(n)/1_000_000)
+	case n >= 1000:
+		return fmt.Sprintf("%.1fk tok", float64(n)/1000)
+	default:
+		return fmt.Sprintf("%d tok", n)
+	}
 }
 
 // slashTypo 是「打成纯文本的斜杠命令」集合：只拦裸命令词。

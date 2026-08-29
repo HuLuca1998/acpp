@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -22,9 +23,25 @@ type toolEntry struct {
 	status string
 }
 
-// noteToolCall 消费一条工具事件：新调用追加，老调用更新状态/标题。
+// noteToolCall 消费一条工具事件：新调用追加，老调用更新状态/标题；
+// edit 类调用的文件路径顺带收进 touched（回合小结报改动文件数）。
 func (s *Service) noteToolCall(token, threadID string, tc *threadChat, ev acp.Event) {
 	tc.mu.Lock()
+	if (ev.ToolKind == "edit" || ev.ToolKind == "delete" || ev.ToolKind == "move") && len(ev.Locations) > 0 {
+		var locs []struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(ev.Locations, &locs) == nil {
+			if tc.touched == nil {
+				tc.touched = map[string]struct{}{}
+			}
+			for _, l := range locs {
+				if l.Path != "" {
+					tc.touched[l.Path] = struct{}{}
+				}
+			}
+		}
+	}
 	found := false
 	for i := range tc.toolLog {
 		if tc.toolLog[i].id == ev.ToolCallID {

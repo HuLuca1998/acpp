@@ -1,6 +1,8 @@
 package discord
 
 import (
+	"acpp/server/internal/acp"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -596,13 +598,14 @@ func TestDBToken(t *testing.T) {
 }
 
 func TestTurnSummary(t *testing.T) {
-	if got := turnSummary(3*time.Second, 0); got != "" {
+	if got := turnSummary(3*time.Second, 0, 0, nil); got != "" {
 		t.Errorf("快问快答不该带小结，got %q", got)
 	}
-	if got := turnSummary(83*time.Second, 5); got != "-# ⏱ 1m23s · 🔧 5 次工具调用" {
+	got := turnSummary(83*time.Second, 5, 2, &acp.Usage{TotalTokens: 12345})
+	if got != "-# ⏱ 1m23s · 🔧 5 · ✏️ 2 个文件 · 🧮 12.3k tok" {
 		t.Errorf("turnSummary = %q", got)
 	}
-	if got := turnSummary(45*time.Second, 0); got != "-# ⏱ 45s" {
+	if got := turnSummary(45*time.Second, 0, 0, nil); got != "-# ⏱ 45s" {
 		t.Errorf("turnSummary = %q", got)
 	}
 }
