@@ -323,6 +323,8 @@ func (s *Service) handleEvent(ctx context.Context, token, t string, d json.RawMe
 		s.mu.Unlock()
 	case "MESSAGE_CREATE":
 		s.handleMessage(ctx, token, d)
+	case "MESSAGE_UPDATE":
+		s.handleMessageEdit(d)
 	case "INTERACTION_CREATE":
 		s.handleInteraction(ctx, token, d)
 	}

@@ -37,9 +37,12 @@ type threadChat struct {
 	// planMsgID/planGen 是本回合计划卡的消息 id 与更新代号（见 plan.go）。
 	planMsgID string
 	planGen   uint64
-	// tools 收本回合见过的工具调用 id（同一调用会推多次状态，按 id 去重），
-	// 回合小结报个数用。
-	tools map[string]struct{}
+	// toolLog/toolMsgID/toolGen/toolRendered 是本回合工具活动卡的状态
+	// （见 tools.go）；toolLog 的长度就是回合小结里的工具调用数。
+	toolLog      []toolEntry
+	toolMsgID    string
+	toolGen      uint64
+	toolRendered string
 }
 
 // queuedMsg 是排队中的一条输入。queued 标记它曾在回合进行中等待过
@@ -221,6 +224,12 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 		s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text)
 		return
 	}
+	// 打成纯文本的斜杠命令不进对话——把 /help 当消息发出去，agent 只会
+	// 回一句「不认识」白费一轮。裸命令词才拦，带正文的不动。
+	if slashTypo[text] {
+		s.say(ctx, token, ev.ChannelID, "-# 斜杠命令要从输入框弹出的菜单里选（输入 / 会弹出来）。")
+		return
+	}
 	// 消息里带 @db 令牌 = 引用数据库：当场挂载工具面（重开会话带上，
 	// 上下文经 acpSessionId 恢复），令牌本身不进 prompt。
 	if hasDBToken(text) {
@@ -367,7 +376,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	reply := strings.TrimSpace(tc.buf.String())
 	tc.buf.Reset()
 	tc.ask = nil
-	toolCount := len(tc.tools)
+	toolCount := len(tc.toolLog)
 	tc.mu.Unlock()
 
 	switch {
@@ -489,12 +498,7 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 	case acp.EventPlan:
 		go s.updatePlanCard(token, threadID, tc, ev.Entries)
 	case acp.EventToolCall:
-		tc.mu.Lock()
-		if tc.tools == nil {
-			tc.tools = map[string]struct{}{}
-		}
-		tc.tools[ev.ToolCallID] = struct{}{}
-		tc.mu.Unlock()
+		go s.noteToolCall(token, threadID, tc, ev)
 	}
 }
 
@@ -720,4 +724,36 @@ func turnSummary(d time.Duration, tools int) string {
 		return "-# ⏱ " + t
 	}
 	return fmt.Sprintf("-# ⏱ %s · 🔧 %d 次工具调用", t, tools)
+}
+
+// slashTypo 是「打成纯文本的斜杠命令」集合：只拦裸命令词。
+var slashTypo = map[string]bool{
+	"/help": true, "/db": true, "/stop": true, "/status": true,
+	"/model": true, "/effort": true, "/access": true, "/init": true, "/unbind": true,
+}
+
+// handleMessageEdit 消费 MESSAGE_UPDATE：还在排队（⏳）的消息，编辑
+// 即生效——下一轮带的是新文本。已进入对话的编辑不追溯（那一轮已经跑
+// 完了），也不提示：编辑历史记录是用户的自由，bot 不该指手画脚。
+func (s *Service) handleMessageEdit(d json.RawMessage) {
+	var ev messageEvent
+	if err := json.Unmarshal(d, &ev); err != nil || ev.Author.Bot || ev.ID == "" {
+		return
+	}
+	s.chatMu.Lock()
+	tc, ok := s.chats[ev.ChannelID]
+	s.chatMu.Unlock()
+	if !ok {
+		return
+	}
+	text := strings.TrimSpace(stripMention(ev.Content, s.botID()))
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	for i := range tc.queue {
+		if tc.queue[i].msgID == ev.ID {
+			tc.queue[i].text = text
+			tc.queue[i].atts = ev.Attachments
+			return
+		}
+	}
 }
