@@ -49,11 +49,12 @@ func TestEnsureWorktree(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "org", "app")
 	ctx := context.Background()
 
-	dir, branch, reused, err := ensureWorktree(ctx, src, home, "")
+	first, err := ensureWorktree(ctx, src, home, "")
 	if err != nil {
 		t.Fatalf("默认分支建树: %v", err)
 	}
-	if reused {
+	dir, branch := first.Dir, first.Branch
+	if first.Reused {
 		t.Error("首次建树不该报复用")
 	}
 	if branch == "" {
@@ -69,20 +70,61 @@ func TestEnsureWorktree(t *testing.T) {
 		t.Errorf("默认分支的树内容 = %q, err=%v", body, err)
 	}
 
-	devDir, devBranch, _, err := ensureWorktree(ctx, src, home, "dev")
+	devTree, err := ensureWorktree(ctx, src, home, "dev")
 	if err != nil {
 		t.Fatalf("dev 建树: %v", err)
 	}
-	if devBranch != "dev" || devDir == dir {
-		t.Fatalf("dev 应是独立的树: branch=%q dir=%q", devBranch, devDir)
+	devDir := devTree.Dir
+	if devTree.Branch != "dev" || devDir == dir {
+		t.Fatalf("dev 应是独立的树: branch=%q dir=%q", devTree.Branch, devDir)
 	}
 	if body, err := os.ReadFile(filepath.Join(devDir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != "dev" {
 		t.Errorf("dev 树内容 = %q, err=%v", body, err)
 	}
 
-	again, _, reused, err := ensureWorktree(ctx, src, home, "dev")
-	if err != nil || !reused || again != devDir {
-		t.Errorf("同分支再绑应复用同一棵树: dir=%q reused=%v err=%v", again, reused, err)
+	again, err := ensureWorktree(ctx, src, home, "dev")
+	if err != nil || !again.Reused || again.Dir != devDir {
+		t.Errorf("同分支再绑应复用同一棵树: %+v err=%v", again, err)
+	}
+}
+
+// 契约：老布局的克隆占着新布局的项目目录时，要**整体挪开**再建新工作树
+// ——里面可能有没推送的活，还有 git status 看不见的 .gitignore 文件
+// （上传件、.env、构建产物），删掉就找不回来了。
+func TestEnsureWorktreeRetiresLegacyClone(t *testing.T) {
+	src := seedRepo(t)
+	home := filepath.Join(t.TempDir(), "org", "app")
+	ctx := context.Background()
+
+	// 造一个老布局的克隆：项目目录本身就是一棵工作树，里面躺着一个
+	// 未跟踪文件与一个被忽略的文件。
+	if err := os.MkdirAll(filepath.Dir(home), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, filepath.Dir(home), "clone", "--quiet", src, home)
+	for _, name := range []string{"untracked.txt", "secret.env"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte("keep me\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res, err := ensureWorktree(ctx, src, home, "dev")
+	if err != nil {
+		t.Fatalf("ensureWorktree: %v", err)
+	}
+	if res.RetiredLegacy == "" {
+		t.Fatal("老克隆应被挪开并报出新位置")
+	}
+	for _, name := range []string{"untracked.txt", "secret.env"} {
+		if _, err := os.Stat(filepath.Join(res.RetiredLegacy, name)); err != nil {
+			t.Errorf("老克隆里的 %s 不该丢: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, gitDirName, "HEAD")); err != nil {
+		t.Errorf("新布局应就位: %v", err)
+	}
+	if body, err := os.ReadFile(filepath.Join(res.Dir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != "dev" {
+		t.Errorf("新工作树内容 = %q, err=%v", body, err)
 	}
 }
 

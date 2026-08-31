@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -110,44 +111,65 @@ func safeBranchDir(branch string) string {
 	return safe
 }
 
-// ensureWorktree 保证 `<home>/.worktree/<分支>` 是这个分支的一棵工作树，
-// 返回工作目录、**实际**分支名与是否复用了已有的树。
+// worktreeResult 是一次工作树准备的结果。
+type worktreeResult struct {
+	// Dir 是频道要用的工作目录。
+	Dir string
+	// Branch 是它检出的分支（传空时解析出的默认分支真名）。
+	Branch string
+	// Reused 表示这棵树本来就在，这次只是复用。
+	Reused bool
+	// RetiredLegacy 非空时，老布局的克隆被挪到了这个路径（见 retireLegacyClone）。
+	RetiredLegacy string
+}
+
+// ensureWorktree 保证 `<home>/.worktree/<分支>` 是这个分支的一棵工作树。
 //
 // branch 传空表示默认分支：克隆之后从 HEAD 现读出来，因此落盘的绑定里
 // 存的永远是真实分支名，展示与 /status 不用再猜「默认」是哪个。
-func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (dir, resolved string, reused bool, err error) {
+func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (worktreeResult, error) {
+	var res worktreeResult
+	legacy, err := retireLegacyClone(home)
+	if err != nil {
+		return res, err
+	}
+	res.RetiredLegacy = legacy
+
 	git := gitHome(home)
 	if err := ensureGitHome(ctx, cloneURL, git); err != nil {
-		return "", "", false, err
+		return res, err
 	}
 	if branch == "" {
 		if branch, err = defaultBranchOf(ctx, git); err != nil {
-			return "", "", false, err
+			return res, err
 		}
 	}
+	res.Branch = branch
 	// fetch 失败不拦路：本地已有 ref 就还能建树，离线也该能干活。
 	if out, ferr := runGit(ctx, fetchTimeout, git, "fetch", "--prune", "origin"); ferr != nil {
 		slog.Warn("fetch 失败，用本地已有的 ref 继续", "repo", home, "err", gitReason(out, ferr))
 	}
 
-	dir = worktreeDir(home, branch)
+	dir := worktreeDir(home, branch)
+	res.Dir = dir
 	if st, statErr := os.Stat(dir); statErr == nil {
 		if !st.IsDir() {
-			return "", "", false, fmt.Errorf("工作树落点被文件占了: %s", dir)
+			return res, fmt.Errorf("工作树落点被文件占了: %s", dir)
 		}
 		// 工作树的 .git 是文件（指回 .repo/worktrees/<名>），不是目录。
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-			return "", "", false, fmt.Errorf("目录已存在但不是工作树: %s", dir)
+			return res, fmt.Errorf("目录已存在但不是工作树: %s", dir)
 		}
 		// 分支名里的 `/` 被压成 `-`，理论上两个分支可能撞到同一目录名——
 		// 复用前核一次它检出的到底是谁，别把 feat/x 的树当成 feat-x 用。
 		if cur, curErr := currentBranch(ctx, dir); curErr == nil && cur != branch {
-			return "", "", false, fmt.Errorf("目录 %s 已被分支 %s 占用，换个分支名再绑", dir, cur)
+			return res, fmt.Errorf("目录 %s 已被分支 %s 占用，换个分支名再绑", dir, cur)
 		}
-		return dir, branch, true, nil
+		res.Reused = true
+		return res, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
-		return "", "", false, fmt.Errorf("建工作树目录: %w", err)
+		return res, fmt.Errorf("建工作树目录: %w", err)
 	}
 
 	args := []string{"worktree", "add", dir, branch}
@@ -166,9 +188,37 @@ func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (dir, re
 	if out, err := runGit(ctx, cloneTimeout, git, args...); err != nil {
 		_ = os.RemoveAll(dir)
 		_, _ = runGit(ctx, 30*time.Second, git, "worktree", "prune")
-		return "", "", false, fmt.Errorf("git worktree add 失败: %s", gitReason(out, err))
+		return res, fmt.Errorf("git worktree add 失败: %s", gitReason(out, err))
 	}
-	return dir, branch, false, nil
+	return res, nil
+}
+
+// retireLegacyClone 给老布局的克隆让路，返回它被挪到哪（没有就返回空串）。
+//
+// 老布局把默认分支的克隆直接放在 `<组织>/<仓库>`——正好是新布局的项目
+// 容器目录。不挪开的话 .repo 与 .worktree 会长进那棵老工作树里：老频道的
+// AI 一 grep 就扫到别的分支的副本，正是这次要根治的问题。
+//
+// **只重命名不删除**：里面可能有没推送的活，也可能有 .gitignore 掉的
+// .env、上传件与构建产物——git status 看不见它们，删了就找不回来了。
+func retireLegacyClone(home string) (string, error) {
+	st, err := os.Stat(filepath.Join(home, ".git"))
+	if err != nil || !st.IsDir() {
+		// 新布局的项目目录里没有 .git；工作树的 .git 是文件，也不该走到这。
+		return "", nil
+	}
+	dest := home + "@legacy"
+	for i := 2; ; i++ {
+		if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		dest = fmt.Sprintf("%s@legacy%d", home, i)
+	}
+	if err := os.Rename(home, dest); err != nil {
+		return "", fmt.Errorf("给老克隆让路失败（%s → %s）: %w", home, dest, err)
+	}
+	slog.Info("老布局克隆已挪开", "from", home, "to", dest)
+	return dest, nil
 }
 
 // ensureGitHome 保证 bare git 数据就位：clone 过就直接用，否则现场克隆并

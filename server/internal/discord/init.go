@@ -400,7 +400,7 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	if branch == "" {
 		branch = in.defaultBranch
 	}
-	workdir, branch, reused, err := ensureWorktree(ctx, in.cloneURL, home, branch)
+	tree, err := ensureWorktree(ctx, in.cloneURL, home, branch)
 	if err != nil {
 		s.editOriginal(token, appID, ev.Token, map[string]any{
 			"embeds": []map[string]any{{
@@ -431,7 +431,7 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	now := time.Now()
 	binding := Binding{
 		ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
-		Repo: in.repo, CloneURL: in.cloneURL, Branch: branch, Workdir: workdir,
+		Repo: in.repo, CloneURL: in.cloneURL, Branch: tree.Branch, Workdir: tree.Dir,
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
 		Effort: in.effort, Access: in.access,
 		DataSourceID: in.dbID, DataSourceRef: in.dbRef,
@@ -450,8 +450,13 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	}
 
 	source := "已建工作树"
-	if reused {
+	if tree.Reused {
 		source = "复用已有工作树"
+	}
+	if tree.RetiredLegacy != "" {
+		// 老布局的克隆占着项目目录，已挪开——里面可能有没推送的活，
+		// 必须让用户知道它去哪了。
+		source += fmt.Sprintf("；老克隆已挪到 `%s`", tree.RetiredLegacy)
 	}
 	s.syncChannelCard(ctx, token, binding)
 	// 频道置顶使用手册：新成员第一眼能看懂怎么用。
