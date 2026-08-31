@@ -128,7 +128,7 @@ func (s *Service) showGitStatus(ctx context.Context, token string, ev interactio
 	}
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	st, err := readGitStatus(cctx, b.Workdir)
+	st, err := readGitStatus(cctx, b.Workdir, b.Base)
 	if err != nil {
 		s.ephemeral(token, ev, "读 git 状态失败："+trimRunes(err.Error(), 300))
 		return
@@ -152,6 +152,19 @@ func (s *Service) showGitStatus(ctx context.Context, token string, ev interactio
 			w.WriteString(fmt.Sprintf("：落后 %d 个提交", st.Behind))
 		default:
 			w.WriteString("：同步")
+		}
+	}
+	if st.Base != "" {
+		fmt.Fprintf(&w, "\n基于 `%s`", st.Base)
+		switch {
+		case st.BaseAhead > 0 && st.BaseBehind > 0:
+			fmt.Fprintf(&w, "：多 %d 个提交、少 %d 个（base 有新东西，考虑合过来）", st.BaseAhead, st.BaseBehind)
+		case st.BaseAhead > 0:
+			fmt.Fprintf(&w, "：多 %d 个提交", st.BaseAhead)
+		case st.BaseBehind > 0:
+			fmt.Fprintf(&w, "：落后 %d 个提交", st.BaseBehind)
+		default:
+			w.WriteString("：一致")
 		}
 	}
 	w.WriteString("\n")

@@ -15,7 +15,8 @@ import (
 func guideMD(b Binding) string {
 	return fmt.Sprintf(`# 🤖 acpp 使用手册
 
-本频道已绑定仓库 **%s** @ %s（%s · 思考深度 %s · 权限 %s）。
+本频道已绑定仓库 **%s**，在 %s 上干活（%s · 思考深度 %s · 权限 %s）。
+-# 提交都落在这条自己的分支上，base 分支不受影响。
 
 ## 开始对话
 - 在本频道 **@acpp** 说话（@ 出来选用户或角色都行），自动开一个子区，agent 在子区里干活
@@ -37,7 +38,7 @@ func guideMD(b Binding) string {
 
 ## 常用命令
 %s`,
-		b.Repo, b.Branch, guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault(),
+		b.Repo, branchLine(b), guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault(),
 		guideDBScope(b), commandsLine())
 }
 

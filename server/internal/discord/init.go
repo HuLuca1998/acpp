@@ -277,8 +277,8 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 	})
 }
 
-// offerBranches 现查远端分支：只有一个（或查不动）就直接按默认分支开工，
-// 多个则把回执卡编辑成分支下拉，等下一次点击。
+// offerBranches 现查远端分支，让用户选**基础分支**（频道的工作分支从它切
+// 出来，见 ensureWorktree）。只有一个（或查不动）就按默认分支继续。
 func (s *Service) offerBranches(ctx context.Context, token string, ev interactionEvent, in initInput) {
 	appID := s.appID()
 	lctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -321,21 +321,23 @@ func (s *Service) offerBranches(ctx context.Context, token string, ev interactio
 	}
 	sel := selectComponent("br:"+id, opts, false)
 	sel["type"] = 3 // 消息上的下拉只有 String Select，radio 是 modal 的东西
-	sel["placeholder"] = "选择分支…"
+	sel["placeholder"] = "选择基础分支…"
 	delete(sel, "required")
 
 	s.editOriginal(token, appID, ev.Token, map[string]any{
 		"embeds": []map[string]any{{
-			"title":       "选择分支",
-			"description": fmt.Sprintf("**%s** 有 %d 个分支。15 分钟内有效，过期请重新 /init。", in.repo, len(branches)),
-			"color":       colorBlurbe,
+			"title": "选择基础分支",
+			"description": fmt.Sprintf(
+				"**%s** 有 %d 个分支。频道会从选中的这条切一条自己的工作分支——直接在 pre/prod 上干活提交推不上去。\n15 分钟内有效，过期请重新 /init。",
+				in.repo, len(branches)),
+			"color": colorBlurbe,
 		}},
 		"components":       []map[string]any{{"type": 1, "components": []map[string]any{sel}}},
 		"allowed_mentions": noMentions(),
 	})
 }
 
-// branchPicked 收分支下拉的选择：卡片原地改成进行中，然后照常收尾。
+// branchPicked 收基础分支的选择：卡片原地改成进行中，然后进入选库那一步。
 func (s *Service) branchPicked(ctx context.Context, token string, ev interactionEvent) {
 	id := strings.TrimPrefix(ev.Data.CustomID, "br:")
 	s.mu.Lock()
@@ -359,7 +361,7 @@ func (s *Service) branchPicked(ctx context.Context, token string, ev interaction
 	err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
 		"embeds": []map[string]any{{
 			"title":       "⏳ 正在准备工作区…",
-			"description": fmt.Sprintf("**%s** · 分支 **%s**", in.repo, label),
+			"description": fmt.Sprintf("**%s** · 基于 **%s**", in.repo, label),
 			"color":       colorBlurbe,
 		}},
 		"components":       []map[string]any{},
@@ -416,7 +418,7 @@ func (s *Service) offerDataSource(ctx context.Context, token string, ev interact
 		"embeds": []map[string]any{{
 			"title": "选择数据库",
 			"description": fmt.Sprintf(
-				"**%s** @ %s\n选中之后，这个频道的 AI 只看得见这一条连接——同项目别的环境列都列不出来。\n15 分钟内有效。",
+				"**%s**（基于 %s）\n选中之后，这个频道的 AI 只看得见这一条连接——同项目别的环境列都列不出来。\n15 分钟内有效。",
 				in.repo, branch),
 			"color": colorBlurbe,
 		}},
@@ -462,15 +464,38 @@ func (s *Service) dbPicked(ctx context.Context, token string, ev interactionEven
 // 最新摘要（频道侧唯一常驻信息面），ephemeral 回执给一句结论后阅后即焚。
 func (s *Service) finishInit(ctx context.Context, token string, ev interactionEvent, in initInput) {
 	appID := s.appID()
-	// 工作目录是「项目目录下这个分支的工作树」（adr-018）：一个仓库一份 git
-	// 数据，一个分支一棵树。branch 为空表示默认分支，由 ensureWorktree 解析出
-	// 真名回填——绑定里存真实分支名，展示与 /status 就不用再猜「默认」是谁。
-	home := repoHome(s.effectiveWorkRoot(s.store.config()), in.repo)
-	branch := in.branch
-	if branch == "" {
-		branch = in.defaultBranch
+	// 频道名是展示锦上添花，也是自动分支名的素材，查不到不挡流程。
+	channelName := ""
+	var ch struct {
+		Name string `json:"name"`
 	}
-	tree, err := ensureWorktree(ctx, in.cloneURL, home, branch)
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	if err := botREST(cctx, token, "GET", "/channels/"+ev.ChannelID, nil, &ch); err == nil {
+		channelName = ch.Name
+	}
+	cancel()
+	// old 是上一次的绑定：CardMessageID 要继承（清历史遗留的置顶卡），
+	// 工作分支也要尽量复用。
+	old, _ := s.store.config().binding(ev.ChannelID)
+
+	// 工作目录是「项目目录下这个频道自己那条分支的工作树」（adr-018）：一个
+	// 仓库一份 git 数据，一个分支一棵树。频道不直接工作在选中的分支上——
+	// 那条是 base，pre/prod 这类有保护规则，提交推不上去。
+	home := repoHome(s.effectiveWorkRoot(s.store.config()), in.repo)
+	base := in.branch
+	if base == "" {
+		base = in.defaultBranch
+	}
+	// 重绑（换模型/换库）复用上次那条工作分支，别每次 /init 都换一条新的；
+	// 换了仓库或换了 base 就重新生成。
+	reuse := ""
+	if old.Repo == in.repo && old.Base == base {
+		reuse = old.Branch
+	}
+	tree, err := ensureWorktree(ctx, worktreeSpec{
+		CloneURL: in.cloneURL, Home: home,
+		Branch: reuse, NameHint: channelName, Base: base,
+	})
 	if err != nil {
 		s.editOriginal(token, appID, ev.Token, map[string]any{
 			"embeds": []map[string]any{{
@@ -484,24 +509,10 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		return
 	}
 
-	// 频道名是展示锦上添花，查不到不挡流程。
-	channelName := ""
-	var ch struct {
-		Name string `json:"name"`
-	}
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	if err := botREST(cctx, token, "GET", "/channels/"+ev.ChannelID, nil, &ch); err == nil {
-		channelName = ch.Name
-	}
-	cancel()
-
-	// CardMessageID 只为清掉历史遗留的置顶卡（卡已退役），继承后交给
-	// syncChannelCard 收尾。
-	old, _ := s.store.config().binding(ev.ChannelID)
 	now := time.Now()
 	binding := Binding{
 		ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
-		Repo: in.repo, CloneURL: in.cloneURL, Branch: tree.Branch, Workdir: tree.Dir,
+		Repo: in.repo, CloneURL: in.cloneURL, Branch: tree.Branch, Base: tree.Base, Workdir: tree.Dir,
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
 		Effort: in.effort, Access: in.access,
 		DataSourceID: in.dbID, DataSourceRef: in.dbRef,

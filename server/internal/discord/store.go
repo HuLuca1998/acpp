@@ -45,9 +45,12 @@ type Binding struct {
 	// Repo 是规范化的 `<组织>/<仓库>`；CloneURL 是实际交给 git 的地址。
 	Repo     string `json:"repo"`
 	CloneURL string `json:"cloneUrl"`
-	// Branch 空串表示默认分支；指定分支的克隆落在 `<仓库>@<分支>` 目录，
-	// 与默认分支的克隆互不打扰（多个频道可能共享同一仓库）。
-	Branch  string `json:"branch,omitempty"`
+	// Branch 是这个频道**自己的**工作分支（`discord/<频道名>`，自动生成、
+	// 保证不重名）。频道从不直接工作在 Base 上——pre/prod 这类分支多半有
+	// 保护规则，agent 提交推不上去（adr-018）。
+	Branch string `json:"branch,omitempty"`
+	// Base 是工作分支切出来的基础分支，也是 /git 里差距的对比基准。
+	Base    string `json:"base,omitempty"`
 	Workdir string `json:"workdir"`
 	// Agent/Model 对齐内置工具的探测缓存（claude/codex 与其模型 id）；
 	// Effort 是统一思考深度五档，空串表示用 agent 默认。

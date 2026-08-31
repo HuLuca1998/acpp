@@ -44,47 +44,88 @@ func TestResolveRepo(t *testing.T) {
 	}
 }
 
+// 契约：一个仓库只克隆一份 bare git 数据（.repo），频道工作在**自己**的
+// 分支上（从 base 切出、自动命名且不重名），每条分支一棵 .worktree 树。
+// 直接用 base 不行——pre/prod 那类分支有保护规则，agent 提交推不上去。
 func TestEnsureWorktree(t *testing.T) {
 	src := seedRepo(t)
 	home := filepath.Join(t.TempDir(), "org", "app")
 	ctx := context.Background()
 
-	first, err := ensureWorktree(ctx, src, home, "")
+	first, err := ensureWorktree(ctx, worktreeSpec{CloneURL: src, Home: home, NameHint: "pp-prod", Base: "dev"})
 	if err != nil {
-		t.Fatalf("默认分支建树: %v", err)
+		t.Fatalf("建树: %v", err)
 	}
-	dir, branch := first.Dir, first.Branch
+	if first.Branch != "discord/pp-prod" {
+		t.Errorf("自动分支名 = %q, want discord/pp-prod", first.Branch)
+	}
+	if first.Base != "dev" {
+		t.Errorf("base = %q, want dev", first.Base)
+	}
 	if first.Reused {
 		t.Error("首次建树不该报复用")
-	}
-	if branch == "" {
-		t.Error("默认分支名应被解析出来回填")
 	}
 	if _, err := os.Stat(filepath.Join(home, gitDirName, "HEAD")); err != nil {
 		t.Errorf("bare git 数据应在 %s: %v", gitDirName, err)
 	}
-	if dir != filepath.Join(home, worktreeDirName, branch) {
-		t.Errorf("工作树落点 = %q", dir)
+	// 新分支的内容来自 base（dev 分支的 who.txt 写着 dev）。
+	if body, err := os.ReadFile(filepath.Join(first.Dir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != "dev" {
+		t.Errorf("工作树内容 = %q, err=%v（应等于 base 的内容）", body, err)
 	}
-	if body, err := os.ReadFile(filepath.Join(dir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != branch {
-		t.Errorf("默认分支的树内容 = %q, err=%v", body, err)
+	if cur, err := currentBranch(ctx, first.Dir); err != nil || cur != "discord/pp-prod" {
+		t.Errorf("检出的分支 = %q, err=%v", cur, err)
 	}
 
-	devTree, err := ensureWorktree(ctx, src, home, "dev")
+	// 另一个频道：分支名与目录都不能撞上。
+	second, err := ensureWorktree(ctx, worktreeSpec{CloneURL: src, Home: home, NameHint: "pp-pre", Base: "dev"})
 	if err != nil {
-		t.Fatalf("dev 建树: %v", err)
+		t.Fatalf("第二个频道建树: %v", err)
 	}
-	devDir := devTree.Dir
-	if devTree.Branch != "dev" || devDir == dir {
-		t.Fatalf("dev 应是独立的树: branch=%q dir=%q", devTree.Branch, devDir)
-	}
-	if body, err := os.ReadFile(filepath.Join(devDir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != "dev" {
-		t.Errorf("dev 树内容 = %q, err=%v", body, err)
+	if second.Branch == first.Branch || second.Dir == first.Dir {
+		t.Fatalf("两个频道撞了: %+v / %+v", first, second)
 	}
 
-	again, err := ensureWorktree(ctx, src, home, "dev")
-	if err != nil || !again.Reused || again.Dir != devDir {
-		t.Errorf("同分支再绑应复用同一棵树: %+v err=%v", again, err)
+	// 重绑：把上次那条分支传回来就该复用同一棵树，不新建。
+	again, err := ensureWorktree(ctx, worktreeSpec{
+		CloneURL: src, Home: home, Branch: first.Branch, NameHint: "pp-prod", Base: "dev",
+	})
+	if err != nil || !again.Reused || again.Dir != first.Dir {
+		t.Errorf("重绑应复用同一棵树: %+v err=%v", again, err)
+	}
+}
+
+// 契约：自动生成的分支名不能撞上远端已有的分支——撞上就可能落到受保护
+// 分支或别人的分支上。
+func TestUniqueBranchNameAvoidsRemote(t *testing.T) {
+	src := seedRepo(t)
+	gitRun(t, src, "branch", "discord/pp-prod")
+	home := filepath.Join(t.TempDir(), "org", "app")
+
+	res, err := ensureWorktree(context.Background(), worktreeSpec{
+		CloneURL: src, Home: home, NameHint: "pp-prod", Base: "dev",
+	})
+	if err != nil {
+		t.Fatalf("建树: %v", err)
+	}
+	if res.Branch != "discord/pp-prod-2" {
+		t.Errorf("分支名 = %q, want discord/pp-prod-2（远端已占用原名）", res.Branch)
+	}
+}
+
+// 契约：频道名里的空格、大小写、斜杠都要压成合法好用的分支名段。
+func TestSafeBranchSegment(t *testing.T) {
+	cases := map[string]string{
+		"pp-prod": "pp-prod",
+		"PP Prod": "pp-prod",
+		"生产环境":    "channel",
+		"":        "channel",
+		"a/b:c":   "a-b-c",
+		"...":     "channel",
+	}
+	for in, want := range cases {
+		if got := safeBranchSegment(in); got != want {
+			t.Errorf("safeBranchSegment(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
@@ -108,7 +149,7 @@ func TestEnsureWorktreeRetiresLegacyClone(t *testing.T) {
 		}
 	}
 
-	res, err := ensureWorktree(ctx, src, home, "dev")
+	res, err := ensureWorktree(ctx, worktreeSpec{CloneURL: src, Home: home, NameHint: "ch", Base: "dev"})
 	if err != nil {
 		t.Fatalf("ensureWorktree: %v", err)
 	}
@@ -172,7 +213,7 @@ func TestReadGitStatus(t *testing.T) {
 	gitRun(t, dir, "add", ".")
 	gitRun(t, dir, "commit", "--quiet", "-m", "add gone")
 
-	clean, err := readGitStatus(ctx, dir)
+	clean, err := readGitStatus(ctx, dir, "")
 	if err != nil {
 		t.Fatalf("readGitStatus: %v", err)
 	}
@@ -193,7 +234,7 @@ func TestReadGitStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, err := readGitStatus(ctx, dir)
+	st, err := readGitStatus(ctx, dir, "")
 	if err != nil {
 		t.Fatalf("readGitStatus: %v", err)
 	}

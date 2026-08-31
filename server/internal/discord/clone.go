@@ -117,18 +117,44 @@ type worktreeResult struct {
 	Dir string
 	// Branch 是它检出的分支（传空时解析出的默认分支真名）。
 	Branch string
+	// Base 是这条工作分支切出来的基础分支（展示与 /git 的对比基准）。
+	Base string
 	// Reused 表示这棵树本来就在，这次只是复用。
 	Reused bool
 	// RetiredLegacy 非空时，老布局的克隆被挪到了这个路径（见 retireLegacyClone）。
 	RetiredLegacy string
 }
 
-// ensureWorktree 保证 `<home>/.worktree/<分支>` 是这个分支的一棵工作树。
+// worktreeSpec 是准备一棵工作树要的输入。
+type worktreeSpec struct {
+	CloneURL string
+	// Home 是项目目录（`<workRoot>/<组织>/<仓库>`）。
+	Home string
+	// Branch 是频道自己的工作分支。空串＝自动生成一条不重名的；重绑时把
+	// 上次那条传进来即可复用（不会每次 /init 都换一条新分支）。
+	Branch string
+	// NameHint 是自动生成分支名的素材（用频道名）。
+	NameHint string
+	// Base 是新分支切出来的基础分支，空串表示仓库默认分支。
+	Base string
+}
+
+// ensureWorktree 保证 `<home>/.worktree/<目录>` 是这个频道工作分支的一棵树。
 //
-// branch 传空表示默认分支：克隆之后从 HEAD 现读出来，因此落盘的绑定里
-// 存的永远是真实分支名，展示与 /status 不用再猜「默认」是哪个。
-func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (worktreeResult, error) {
+// 频道**永远工作在自己的分支上**，绝不直接用 base：pre / prod / live 这类
+// 分支多半有保护规则，agent 干完活提交推不上去，整条链就断在最后一步。
+// base 只是起点；分支名与目录名都由这里生成，且保证不与任何已有分支/已有
+// 工作树重名（adr-018）。
+//
+// 三种建树情形，取舍都在「别弄丢已有的提交」上：
+//
+//   - 本地已有这条分支（这个频道之前建过）：直接检出，**不**对齐 origin
+//     ——上面可能有还没推的提交。
+//   - 本地没有、远端有（之前推上去过）：跟踪 origin 上那条。
+//   - 都没有：从 origin/<base> 切一条新的。
+func ensureWorktree(ctx context.Context, spec worktreeSpec) (worktreeResult, error) {
 	var res worktreeResult
+	home := spec.Home
 	legacy, err := retireLegacyClone(home)
 	if err != nil {
 		return res, err
@@ -136,35 +162,32 @@ func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (worktre
 	res.RetiredLegacy = legacy
 
 	git := gitHome(home)
-	if err := ensureGitHome(ctx, cloneURL, git); err != nil {
+	if err := ensureGitHome(ctx, spec.CloneURL, git); err != nil {
 		return res, err
 	}
-	if branch == "" {
-		if branch, err = defaultBranchOf(ctx, git); err != nil {
+	base := spec.Base
+	if base == "" {
+		if base, err = defaultBranchOf(ctx, git); err != nil {
 			return res, err
 		}
 	}
-	res.Branch = branch
-	// fetch 失败不拦路：本地已有 ref 就还能建树，离线也该能干活。
+	// fetch 失败不拦路：本地已有 ref 就还能建树，离线也该能干活。放在生成
+	// 分支名之前——重名判断要拿最新的远端分支清单来比。
 	if out, ferr := runGit(ctx, fetchTimeout, git, "fetch", "--prune", "origin"); ferr != nil {
 		slog.Warn("fetch 失败，用本地已有的 ref 继续", "repo", home, "err", gitReason(out, ferr))
 	}
 
-	dir := worktreeDir(home, branch)
+	branch := spec.Branch
+	if branch == "" {
+		branch = uniqueBranchName(ctx, git, spec.NameHint)
+	}
+	res.Branch, res.Base = branch, base
+
+	dir := uniqueWorktreeDir(ctx, home, branch)
 	res.Dir = dir
-	if st, statErr := os.Stat(dir); statErr == nil {
-		if !st.IsDir() {
-			return res, fmt.Errorf("工作树落点被文件占了: %s", dir)
-		}
-		// 工作树的 .git 是文件（指回 .repo/worktrees/<名>），不是目录。
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-			return res, fmt.Errorf("目录已存在但不是工作树: %s", dir)
-		}
-		// 分支名里的 `/` 被压成 `-`，理论上两个分支可能撞到同一目录名——
-		// 复用前核一次它检出的到底是谁，别把 feat/x 的树当成 feat-x 用。
-		if cur, curErr := currentBranch(ctx, dir); curErr == nil && cur != branch {
-			return res, fmt.Errorf("目录 %s 已被分支 %s 占用，换个分支名再绑", dir, cur)
-		}
+	if _, statErr := os.Stat(dir); statErr == nil {
+		// uniqueWorktreeDir 只会把「本来就是这条分支的树」这一种情况返回成
+		// 已存在的目录，所以走到这里就是复用。
 		res.Reused = true
 		return res, nil
 	}
@@ -172,18 +195,22 @@ func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (worktre
 		return res, fmt.Errorf("建工作树目录: %w", err)
 	}
 
-	args := []string{"worktree", "add", dir, branch}
-	if hasLocalBranch(ctx, git, branch) {
-		// 本地分支是上次 clone/建树时的快照，可能落后于远端；分支没被任何
-		// 工作树占用（占用的话上面已经复用返回了），可以直接对齐到 origin。
-		if hasRemoteBranch(ctx, git, branch) {
-			if out, err := runGit(ctx, time.Minute, git, "branch", "-f", branch, "origin/"+branch); err != nil {
-				slog.Warn("对齐本地分支失败，按本地状态建树", "branch", branch, "err", gitReason(out, err))
-			}
-		}
-	} else {
-		// 本地还没有这个分支：以 origin/<分支> 为起点建一个跟踪分支。
+	var args []string
+	switch {
+	case hasLocalBranch(ctx, git, branch):
+		// 本地已经有这条分支：直接检出。**不**对齐 origin——这是频道自己的
+		// 工作分支，上面可能有还没推送的提交，强行对齐就把活丢了。
+		args = []string{"worktree", "add", dir, branch}
+	case hasRemoteBranch(ctx, git, branch):
+		// 远端有（之前推上去过）：跟踪它，接着往下干。
 		args = []string{"worktree", "add", "--track", "-b", branch, dir, "origin/" + branch}
+	default:
+		// 全新分支：从 origin/<base> 切出来。
+		start := "origin/" + base
+		if !hasRemoteBranch(ctx, git, base) {
+			start = base
+		}
+		args = []string{"worktree", "add", "-b", branch, dir, start}
 	}
 	if out, err := runGit(ctx, cloneTimeout, git, args...); err != nil {
 		_ = os.RemoveAll(dir)
@@ -191,6 +218,71 @@ func ensureWorktree(ctx context.Context, cloneURL, home, branch string) (worktre
 		return res, fmt.Errorf("git worktree add 失败: %s", gitReason(out, err))
 	}
 	return res, nil
+}
+
+// uniqueBranchName 生成一条不与任何已有分支重名的工作分支名。
+//
+// 形如 `discord/pp-prod`，撞了就 `-2`、`-3` 往下排。「已有」同时看本地与
+// 远端：远端撞上意味着可能撞到别人的分支或受保护分支，本地撞上意味着别的
+// 频道已经占着那棵树。
+func uniqueBranchName(ctx context.Context, git, hint string) string {
+	stem := "discord/" + safeBranchSegment(hint)
+	name := stem
+	for i := 2; i < 500; i++ {
+		if !hasLocalBranch(ctx, git, name) && !hasRemoteBranch(ctx, git, name) {
+			return name
+		}
+		name = fmt.Sprintf("%s-%d", stem, i)
+	}
+	return name
+}
+
+// safeBranchSegment 把频道名压成一段合法的分支名：git 的 ref 名不许有空格、
+// `~^:?*[\`、连续点与结尾的点，中文之类的多字节字符 git 收得下但命令行里
+// 太难用，一并转成 `-`。
+func safeBranchSegment(hint string) string {
+	safe := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		default:
+			return '-'
+		}
+	}, hint)
+	safe = strings.Trim(strings.ReplaceAll(safe, "--", "-"), "-.")
+	if safe == "" {
+		return "channel"
+	}
+	return trimRunes(safe, 40)
+}
+
+// uniqueWorktreeDir 给一条分支挑一个不冲突的工作树目录。
+//
+// 分支名里的 `/` 会被压成 `-`，两条不同分支因此可能落到同一个目录名上；
+// 目录已经被别的分支占着就往后排 `-2`、`-3`。已经是这条分支的树则原样返回
+// （那是复用，不是冲突）。
+func uniqueWorktreeDir(ctx context.Context, home, branch string) string {
+	stem := worktreeDir(home, branch)
+	dir := stem
+	for i := 2; i < 500; i++ {
+		cur, err := currentBranch(ctx, dir)
+		switch {
+		case os.IsNotExist(dirErr(dir)):
+			return dir
+		case err == nil && cur == branch:
+			return dir
+		}
+		dir = fmt.Sprintf("%s-%d", stem, i)
+	}
+	return dir
+}
+
+// dirErr 报告目录是否存在（把 Stat 的错误原样带出来给 os.IsNotExist 判）。
+func dirErr(dir string) error {
+	_, err := os.Stat(dir)
+	return err
 }
 
 // retireLegacyClone 给老布局的克隆让路，返回它被挪到哪（没有就返回空串）。
@@ -344,6 +436,10 @@ type gitStatus struct {
 	// Upstream 非空时 Ahead/Behind 才有意义。
 	Upstream      string
 	Ahead, Behind int
+	// Base 与它的差距：频道的工作分支多半还没推上去（没有 upstream），
+	// 这时「比 base 多几个提交、落后几个」才是有用的那把尺。
+	Base                  string
+	BaseAhead, BaseBehind int
 
 	Modified   []string
 	Added      []string
@@ -359,12 +455,24 @@ func (g gitStatus) clean() bool {
 
 // readGitStatus 读一棵工作树的改动。`--untracked-files=all` 把新目录里的
 // 文件逐个列出来——只报一个目录名，用户看不出到底多了什么。
-func readGitStatus(ctx context.Context, dir string) (gitStatus, error) {
+//
+// base 非空时顺带算一次与 origin/<base> 的差距：频道工作在自己那条还没推
+// 的分支上，跟 base 比才知道这轮干了多少。
+func readGitStatus(ctx context.Context, dir, base string) (gitStatus, error) {
 	out, err := runGit(ctx, 30*time.Second, dir, "status", "--porcelain=v1", "-b", "--untracked-files=all")
 	if err != nil {
 		return gitStatus{}, fmt.Errorf("git status 失败: %s", gitReason(out, err))
 	}
-	return parseGitStatus(out), nil
+	st := parseGitStatus(out)
+	if base != "" {
+		st.Base = base
+		// 算不出来（base 还没 fetch 过之类）就不显示，不值得为它报错。
+		if counts, err := runGit(ctx, 30*time.Second, dir,
+			"rev-list", "--left-right", "--count", "origin/"+base+"...HEAD"); err == nil {
+			fmt.Sscanf(strings.TrimSpace(counts), "%d\t%d", &st.BaseBehind, &st.BaseAhead)
+		}
+	}
+	return st, nil
 }
 
 // branchLineRe 解 `## main...origin/main [ahead 1, behind 2]` 这一行。

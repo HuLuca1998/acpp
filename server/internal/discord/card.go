@@ -17,10 +17,7 @@ import (
 
 // bindingEmbed 是绑定详情卡（/status 专用，ephemeral）。
 func bindingEmbed(b Binding, source string) map[string]any {
-	branch := b.Branch
-	if branch == "" {
-		branch = "默认"
-	}
+	branch := branchLine(b)
 	effort := b.Effort
 	if effort == "" {
 		effort = "默认"
@@ -39,7 +36,7 @@ func bindingEmbed(b Binding, source string) map[string]any {
 		"color":       colorGreen,
 		"fields": []map[string]any{
 			{"name": "仓库", "value": "`" + b.Repo + "`", "inline": true},
-			{"name": "分支", "value": "`" + branch + "`", "inline": true},
+			{"name": "工作分支", "value": branch, "inline": true},
 			{"name": "​", "value": "​", "inline": true},
 			{"name": "模型", "value": model, "inline": true},
 			{"name": "思考深度", "value": effort, "inline": true},
@@ -158,10 +155,7 @@ func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
 // topicLine 是主题摘要的唯一格式。主题是频道侧唯一常驻信息面，工作目录
 // 也带上——顶栏截断没关系，点开主题能看全文。
 func topicLine(b Binding) string {
-	branch := b.Branch
-	if branch == "" {
-		branch = "默认分支"
-	}
+	branch := branchLine(b)
 	model := b.ModelLabel
 	if model == "" {
 		model = b.Agent + " · " + b.Model
@@ -172,6 +166,20 @@ func topicLine(b Binding) string {
 	}
 	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 权限 %s · 库 %s · 目录 %s",
 		b.Repo, branch, model, effort, accessLabel(b.AccessOrDefault()), dbLine(b), b.Workdir)
+}
+
+// branchLine 是「这个频道在哪条分支上干活」的统一口径：工作分支 + 它从
+// 哪切出来的。两者都要显示——分支名是自动生成的，只报它看不出对应哪个
+// 环境；只报 base 又会让人误以为 agent 直接在 base 上提交。
+func branchLine(b Binding) string {
+	branch := b.Branch
+	if branch == "" {
+		branch = "默认分支"
+	}
+	if b.Base != "" && b.Base != b.Branch {
+		return fmt.Sprintf("`%s`（基于 `%s`）", branch, b.Base)
+	}
+	return "`" + branch + "`"
 }
 
 // dbLine 是「这个频道能查哪个库」的统一口径（主题、/status、手册、/mcps
