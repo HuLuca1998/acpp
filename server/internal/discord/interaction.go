@@ -37,6 +37,19 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 		cancel()
 	}
 
+	var dbChoicesJSON []map[string]any
+	if s.deps.DataSources != nil {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if list, err := s.deps.DataSources(cctx); err == nil {
+			for _, c := range dbChoices(list, 0) {
+				dbChoicesJSON = append(dbChoicesJSON, map[string]any{
+					"name": trimRunes(c.Label, 90), "value": c.Value,
+				})
+			}
+		}
+		cancel()
+	}
+
 	var cmds []map[string]any
 	for _, c := range slashCommands() {
 		cmd := map[string]any{"name": c.name, "description": c.desc}
@@ -53,6 +66,13 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			}
 			if c.name == "model" && len(modelChoicesJSON) > 0 {
 				opts[0]["choices"] = modelChoicesJSON
+			}
+			if c.name == "db" && len(dbChoicesJSON) > 0 {
+				for i := range opts {
+					if opts[i]["name"] == "source" {
+						opts[i]["choices"] = dbChoicesJSON
+					}
+				}
 			}
 			cmd["options"] = opts
 		}
@@ -140,7 +160,7 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 	case ev.Type == 2 && ev.Data.Name == "stop":
 		s.stopThread(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "db":
-		s.toggleDB(token, ev)
+		s.handleDBCommand(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "help":
 		s.showHelp(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "skills":
@@ -222,11 +242,34 @@ func (s *Service) setBindingOption(ctx context.Context, token string, ev interac
 		}
 		b.Access = v
 		confirm = "✅ 安全权限已切换：**" + accessLabel(v) + "**"
+	case "db":
+		v := ev.option("source")
+		id, ref := parseDBChoice(v)
+		if id == 0 && v != dbNoneValue {
+			// 手输 `<项目>/<环境>`（没走命令选项）也认一下再报错。
+			opt, ok := s.dbOptionByRef(ctx, v)
+			if !ok {
+				s.ephemeral(token, ev, "认不出这个数据源（用命令自带的选项选，或填 `<项目>/<环境>`）。")
+				return
+			}
+			id, ref = opt.ID, opt.Ref
+		}
+		b.DataSourceID, b.DataSourceRef = id, ref
+		if id == 0 {
+			confirm = "✅ 已解除数据库锁定：本频道恢复按项目过滤。"
+		} else {
+			confirm = "✅ 本频道数据库已锁定：**" + ref + "**，别的环境查不到。"
+		}
+		// 挂载在 session/new 时定死，改锁定必须让子区会话重开一次。
+		confirm += "\n-# 子区会话会重开一轮带上新挂载（上下文自动恢复）。"
 	}
 	b.UpdatedAt = time.Now()
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {
 		s.ephemeral(token, ev, "保存失败："+trimRunes(err.Error(), 200))
 		return
+	}
+	if kind == "db" {
+		s.closeChannelThreads(b.ChannelID)
 	}
 	s.ephemeral(token, ev, confirm)
 	go s.syncChannelCard(ctx, token, b)
@@ -422,7 +465,8 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 	text := "## acpp 使用指南\n" +
 		"**开始对话** — 在绑定频道 @acpp 说话（@ 出来选用户或角色都行），自动开子区；之后在子区里直接说话。\n" +
 		"**发文件** — 消息附件直接进对话：图片给模型看，文本嵌全文，大文件落盘给路径。\n" +
-		"**查数据库** — 数据库工具默认已挂载（按项目过滤）；`/db off` 卸载、`/db on` 或消息带 `@db` 再打开。\n" +
+		"**查数据库** — 数据库工具默认已挂载（频道绑了库就只查那一个，否则按项目过滤）；" +
+		"`/db off` 卸载、`/db on` 或消息带 `@db` 再打开、`/db source:<项目/环境>` 换绑。\n" +
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
 		"**常用命令** — " + commandsLine()

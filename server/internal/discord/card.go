@@ -44,6 +44,9 @@ func bindingEmbed(b Binding, source string) map[string]any {
 			{"name": "模型", "value": model, "inline": true},
 			{"name": "思考深度", "value": effort, "inline": true},
 			{"name": "安全权限", "value": accessLabel(b.AccessOrDefault()), "inline": true},
+			{"name": "数据库", "value": dbLine(b), "inline": true},
+			{"name": "​", "value": "​", "inline": true},
+			{"name": "​", "value": "​", "inline": true},
 			{"name": "工作目录", "value": "`" + b.Workdir + "`", "inline": false},
 		},
 		"footer": map[string]any{"text": "/model 模型 · /effort 深度 · /access 权限 · /init 重绑 · /status 查看"},
@@ -167,8 +170,21 @@ func topicLine(b Binding) string {
 	if effort == "" {
 		effort = "默认"
 	}
-	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 权限 %s · 目录 %s",
-		b.Repo, branch, model, effort, accessLabel(b.AccessOrDefault()), b.Workdir)
+	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 权限 %s · 库 %s · 目录 %s",
+		b.Repo, branch, model, effort, accessLabel(b.AccessOrDefault()), dbLine(b), b.Workdir)
+}
+
+// dbLine 是「这个频道能查哪个库」的统一口径（主题、/status、手册、/mcps
+// 共用一句话）。ref 是落盘的展示快照，连接被删了也还说得清原本绑的是谁。
+func dbLine(b Binding) string {
+	switch {
+	case b.DataSourceID == 0:
+		return "不锁定"
+	case b.DataSourceRef != "":
+		return b.DataSourceRef
+	default:
+		return fmt.Sprintf("#%d", b.DataSourceID)
+	}
 }
 
 // retryAfter 从 429 错误文本里抠 retry_after 秒数（botREST 的错误带响应体）。

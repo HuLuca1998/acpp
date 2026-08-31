@@ -51,14 +51,18 @@ func slashCommands() []slashCommand {
 				"type": 3, "name": "access", "description": "权限档位",
 				"required": true, "choices": accessChoicesJSON,
 			}}},
-		{name: "db", desc: "本子区的数据库工具面开关（默认挂载）", hint: "数据库开关",
+		{name: "db", desc: "数据库：子区工具面开关 + 本频道锁定哪个库", hint: "数据库",
 			options: []map[string]any{{
-				"type": 3, "name": "switch", "description": "on 挂载 / off 卸载 / status 查看",
-				"required": true, "choices": []map[string]any{
+				"type": 3, "name": "switch", "description": "on 挂载 / off 卸载（不填看状态）",
+				"required": false, "choices": []map[string]any{
 					{"name": "on", "value": "on"},
 					{"name": "off", "value": "off"},
 					{"name": "status", "value": "status"},
 				},
+			}, {
+				// choices 由 registerCommands 按当前数据源清单动态注入。
+				"type": 3, "name": "source", "description": "换绑本频道锁定的数据库（选「不锁定」解除）",
+				"required": false,
 			}}},
 		{name: "skills", desc: "列出注入对话的技能", hint: "看技能"},
 		{name: "usage", desc: "本子区的用量统计（回合 / 工具 / token）", hint: "看用量"},

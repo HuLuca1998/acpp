@@ -514,6 +514,18 @@ const discordInstructions = `# Discord 对话须知
 - 生成了图片、图表或文件要给用户看时，用 mcp__acpp-chat__send_file 把它发进对话（.html 自动渲染成长图）——只贴路径用户什么都看不到。
 - 写文件一律用你的 Write/Edit 文件工具（自动批准），不要用 cat<<EOF、echo > 这类 bash 写文件；报告图表的数据点直接手写进内联 SVG，不要跑 python/node 脚本生成——每条 bash 都要用户手工批准一次，脚本一多整个流程就在权限卡里泡着。`
 
+// discordInstructionsFor 在通用须知后追加本频道的数据库归属：一个项目的
+// prod/pre/dev 三个频道共用同一套提示词，唯一的区别就是这句「你现在对着
+// 哪个库」——工具面已经锁死了范围，这句是让模型别去猜别的环境。
+func discordInstructionsFor(b Binding) string {
+	if b.DataSourceID == 0 {
+		return discordInstructions
+	}
+	return discordInstructions + fmt.Sprintf(
+		"\n- 本频道锁定数据源 **%s**：acpp-db 里只有这一条连接，别的环境这个频道连不到——用户问到别的环境的数据就直说，不要拿手上这个库的数据顶替。",
+		dbLine(b))
+}
+
 // ---- 数据库工具面的按需开关 ----
 
 var dbToken = regexp.MustCompile(`(^|\s)@(db\b|数据库)`)
@@ -550,7 +562,34 @@ func (s *Service) setThreadDB(threadID string, on bool) bool {
 	return changed
 }
 
-// toggleDB 处理 /db：只在子区里有意义（挂载是会话级的）。
+// handleDBCommand 分派 /db：带 source 是**频道级**换绑（改这个频道锁定的
+// 库，三个环境频道各绑各的靠它），否则是**子区级**的工具面开关。
+func (s *Service) handleDBCommand(ctx context.Context, token string, ev interactionEvent) {
+	if ev.option("source") != "" {
+		s.setBindingOption(ctx, token, ev, "db")
+		return
+	}
+	s.toggleDB(token, ev)
+}
+
+// closeChannelThreads 关掉一个频道下所有子区的 acp 会话。挂载（数据库工具
+// 面与它锁定的数据源）是 session/new 的参数，改不了在跑的会话——关掉之后
+// 下一轮重开时带上新挂载，凭 acpSessionId 走 load 恢复上下文。
+func (s *Service) closeChannelThreads(channelID string) {
+	if s.acpMgr == nil {
+		return
+	}
+	for _, t := range s.store.config().Threads {
+		if t.ChannelID != channelID {
+			continue
+		}
+		if err := s.acpMgr.Close("dc:" + t.ThreadID); err != nil {
+			slog.Warn("重开子区会话失败", "thread", t.ThreadID, "err", err)
+		}
+	}
+}
+
+// toggleDB 处理 /db 的开关与状态：只在子区里有意义（挂载是会话级的）。
 func (s *Service) toggleDB(token string, ev interactionEvent) {
 	t, known := s.store.config().thread(ev.ChannelID)
 	if !known {
@@ -569,6 +608,11 @@ func (s *Service) toggleDB(token string, ev interactionEvent) {
 		if t.DBOff {
 			state = "关"
 		}
-		s.ephemeral(token, ev, "本子区数据库工具面："+state+"。/db off 卸载、/db on 或消息带 @db 打开。")
+		scope := "不锁定（按项目过滤）"
+		if b, ok := s.bindingForCommand(s.store.config(), ev.ChannelID); ok && b.DataSourceID != 0 {
+			scope = dbLine(b)
+		}
+		s.ephemeral(token, ev, "本子区数据库工具面："+state+"；本频道锁定的库："+scope+
+			"。\n-# /db off 卸载、/db on 或消息带 @db 打开、/db source:… 换绑。")
 	}
 }

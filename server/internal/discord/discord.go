@@ -41,6 +41,20 @@ type RepoOption struct {
 	CloneURL string `json:"cloneUrl"`
 }
 
+// DataSourcesFunc 由装配层提供：可绑定的数据库连接清单（只给启用中的）。
+// /init 表单的数据库项与 /db 的换绑选项都从这来；取不到不挡流程——那一项
+// 消失，频道就是不锁定。
+type DataSourcesFunc func(ctx context.Context) ([]DBOption, error)
+
+// DBOption 是数据库选择的一项。Ref 是数据源的对外标识 `<项目>/<环境>`
+// （pp-game/prod），Database 是它锁定的那个库。
+type DBOption struct {
+	ID       uint   `json:"id"`
+	Ref      string `json:"ref"`
+	Database string `json:"database"`
+	ReadOnly bool   `json:"readOnly"`
+}
+
 // Deps 是装配层注入的全部外部依赖，discord 包因此不认识其他业务包
 // （acp 是叶子协议客户端，与 gitrepo 同性质，直接用）。
 type Deps struct {
@@ -49,6 +63,8 @@ type Deps struct {
 	DefaultWorkRoot func() string
 	Catalog         CatalogFunc
 	Repos           ReposFunc
+	// DataSources 是可绑定的数据库连接清单（/init 的数据库项、/db 换绑）。
+	DataSources DataSourcesFunc
 	// AgentRuntime 返回内置工具的启动方式（命令/参数/环境），子区对话
 	// 拉起 acp 子进程用。nil 时对话面整体停用（@ 提及不响应）。
 	AgentRuntime func(ctx context.Context, agent string) (acp.Runtime, error)

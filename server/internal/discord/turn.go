@@ -157,7 +157,7 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 		ResumeACPSessionID: resume,
 		MCPServers:         mcpServers,
 		MetaExtra:          metaExtra,
-		InstructionsExtra:  discordInstructions,
+		InstructionsExtra:  discordInstructionsFor(b),
 	})
 	if err != nil {
 		return nil, false, err

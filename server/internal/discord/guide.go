@@ -23,7 +23,7 @@ func guideMD(b Binding) string {
 
 ## 对话里能做什么
 - **发文件**：消息附件直接进对话——图片给模型看，文本嵌入全文，大文件落盘引用
-- **查数据库**：数据库工具默认已挂载（按本频道仓库归属的项目过滤）；`+"`/db off`"+` 可卸载
+- **查数据库**：数据库工具默认已挂载（%s）；`+"`/db off`"+` 可卸载
 - **要报告**：说「写一份 xx 报告并打开」，报告渲染成整页长图直接出现在子区
 - **要图表 / 文件**：agent 生成的图片、图表、文件会直接发进对话（HTML 自动渲染成图）
 - **排队与编辑**：回合进行中发的消息标 ⏳ 排队、下一轮自动带上；还标着 ⏳ 的消息可以编辑
@@ -34,7 +34,18 @@ func guideMD(b Binding) string {
 
 ## 常用命令
 %s`,
-		b.Repo, b.Branch, guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault(), commandsLine())
+		b.Repo, b.Branch, guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault(),
+		guideDBScope(b), commandsLine())
+}
+
+// guideDBScope 说明这个频道的数据库能看到什么：锁定了就点名那一条连接
+// （一个项目的几个环境频道各绑各的库，这句话是频道之间唯一的区别），
+// 没锁定就是老口径的项目过滤。
+func guideDBScope(b Binding) string {
+	if b.DataSourceID != 0 {
+		return "本频道锁定 " + dbLine(b) + "，别的环境查不到"
+	}
+	return "按本频道仓库归属的项目过滤"
 }
 
 // guideModel 是手册头部的模型描述。ModelLabel 来自 /init 表单时自带

@@ -175,6 +175,24 @@ func run() error {
 			}
 			return out, nil
 		},
+		// 数据库连接清单：/init 的「数据库」项与 /db 换绑用。只给启用中的
+		// ——停用的连接本来就不该出现在任何工具面里。
+		DataSources: func(ctx context.Context) ([]discord.DBOption, error) {
+			list, _, err := datasourceService.List(ctx, 1, 200, "")
+			if err != nil {
+				return nil, err
+			}
+			out := make([]discord.DBOption, 0, len(list))
+			for _, d := range list {
+				if d.Disabled {
+					continue
+				}
+				out = append(out, discord.DBOption{
+					ID: d.ID, Ref: d.Ref, Database: d.Database, ReadOnly: d.ReadOnly,
+				})
+			}
+			return out, nil
+		},
 		// 工具面与网页会话同源：数据库按项目有条件挂（datasource），
 		// 报告无条件挂（report），凭证都走非会话通道。单面失败只降级。
 		Mounts: func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID uint, onReport func(rel, title string)) ([]any, map[string]any, error) {

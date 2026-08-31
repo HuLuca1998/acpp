@@ -89,16 +89,23 @@ func (s *Service) showMCPs(token string, ev interactionEvent) {
 		s.ephemeral(token, ev, "在对话子区里用 /mcps 查看挂载的工具面。")
 		return
 	}
+	cfg := s.store.config()
 	dbOn := false
-	if t, ok := s.store.config().thread(ev.ChannelID); ok {
+	var bind Binding
+	if t, ok := cfg.thread(ev.ChannelID); ok {
 		dbOn = !t.DBOff
+		bind, _ = cfg.binding(t.ChannelID)
 	}
 	var b strings.Builder
 	b.WriteString("## 🔌 本子区的 MCP 工具面\n")
 	b.WriteString("- **acpp-chat** — `send_file`：把文件直接发进对话（HTML 自动渲染成长图）\n")
 	b.WriteString("- **acpp-report** — `report_open`：把写好的 HTML 报告以长图发进子区\n")
 	if dbOn {
-		b.WriteString("- **acpp-db** — `db_sources` `db_tables` `db_schema` `db_query`（可写数据源另有 `db_execute`）：按项目过滤的数据库工具\n")
+		scope := "按项目过滤"
+		if bind.DataSourceID != 0 {
+			scope = "锁定 " + dbLine(bind)
+		}
+		b.WriteString("- **acpp-db** — `db_sources` `db_tables` `db_schema` `db_query`（可写数据源另有 `db_execute`）：" + scope + "\n")
 	} else {
 		b.WriteString("- ~~acpp-db~~ — 已被 /db off 卸载。`/db on` 或消息带 `@db` 重新挂上\n")
 	}

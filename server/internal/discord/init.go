@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -38,6 +39,15 @@ func (s *Service) openInitModal(ctx context.Context, token string, ev interactio
 		}
 	}
 
+	var dbs []DBOption
+	if s.deps.DataSources != nil {
+		if list, err := s.deps.DataSources(cctx); err != nil {
+			slog.Warn("取数据源清单失败，/init 少一项数据库", "err", err)
+		} else {
+			dbs = list
+		}
+	}
+
 	current, _ := s.store.config().binding(ev.ChannelID)
 	customInput := map[string]any{
 		"type": 4, "custom_id": "repo_custom", "style": 1, "required": len(repos) == 0,
@@ -68,6 +78,14 @@ func (s *Service) openInitModal(ctx context.Context, token string, ev interactio
 		map[string]any{"type": 18, "label": "思考深度", "component": selectComponent("effort", effortChoices(), true)},
 		map[string]any{"type": 18, "label": "安全权限", "component": selectComponent("access", accessChoices(), true)},
 	)
+	// 数据库：一个项目的 prod/pre/dev 三个频道各绑各的库，绑了之后这个频道
+	// 的 AI 连别的环境的连接都列不出来（adr-018）。没配数据源就不出这一项。
+	if len(dbs) > 0 {
+		comps = append(comps, map[string]any{
+			"type": 18, "label": "数据库", "description": "锁定本频道能查的库；不锁定＝项目下全部环境",
+			"component": selectComponent("db", dbChoices(dbs, current.DataSourceID), true),
+		})
+	}
 
 	data := map[string]any{
 		"custom_id":  "init",
@@ -108,6 +126,80 @@ func repoChoices(repos []RepoOption) []choice {
 		out = out[:25]
 	}
 	return out
+}
+
+// dbChoices 是数据库选项：`<项目>/<环境>` 打头，描述里带库名与读写状态。
+// 当前已绑的排最前（重绑时一眼能看到原来选的是谁），「不锁定」兜底在最后。
+// value 编码 `<id>|<ref>`，提交时拆回——ref 一起带上，落盘的展示快照就不用
+// 再查一次库。
+func dbChoices(dbs []DBOption, current uint) []choice {
+	var out []choice
+	for _, d := range dbs {
+		mode := "可写"
+		if d.ReadOnly {
+			mode = "只读"
+		}
+		label := d.Ref
+		if d.ID == current {
+			label += "（当前）"
+		}
+		c := choice{
+			Label:       label,
+			Value:       fmt.Sprintf("%d|%s", d.ID, d.Ref),
+			Description: d.Database + " · " + mode,
+		}
+		if d.ID == current {
+			out = append([]choice{c}, out...)
+			continue
+		}
+		out = append(out, c)
+	}
+	out = append(out, choice{
+		Label: "不锁定", Value: dbNoneValue,
+		Description: "本频道所在项目的数据源全部可见（老口径）",
+	})
+	if len(out) > 25 {
+		out = out[:25]
+	}
+	return out
+}
+
+// dbOptionByRef 按 `<项目>/<环境>` 在当前清单里找一条数据源——给手输
+// （而不是从命令选项里选）的 /db source 兜底。
+func (s *Service) dbOptionByRef(ctx context.Context, ref string) (DBOption, bool) {
+	ref = strings.TrimSpace(ref)
+	if s.deps.DataSources == nil || ref == "" {
+		return DBOption{}, false
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	list, err := s.deps.DataSources(cctx)
+	if err != nil {
+		slog.Warn("取数据源清单失败", "err", err)
+		return DBOption{}, false
+	}
+	for _, d := range list {
+		if strings.EqualFold(d.Ref, ref) {
+			return d, true
+		}
+	}
+	return DBOption{}, false
+}
+
+// dbNoneValue 是「不锁定」那一项的 value（不是数据源 id）。
+const dbNoneValue = "none"
+
+// parseDBChoice 拆 `<id>|<ref>`；「不锁定」与认不出的输入都归零值。
+func parseDBChoice(v string) (uint, string) {
+	idStr, ref, ok := strings.Cut(v, "|")
+	if !ok {
+		return 0, ""
+	}
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil || id == 0 {
+		return 0, ""
+	}
+	return uint(id), ref
 }
 
 // effortChoices 是统一思考深度五档 + 默认（值 default，落盘转空串）。
@@ -193,9 +285,11 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 		return
 	}
 
+	dbID, dbRef := parseDBChoice(firstAnswer(answers, "db"))
 	go s.offerBranches(ctx, token, ev, initInput{
 		repo: name, cloneURL: cloneURL,
 		agent: agent, modelID: modelID, effort: effort, access: firstAnswer(answers, "access"),
+		dbID: dbID, dbRef: dbRef,
 	})
 }
 
@@ -340,6 +434,7 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		Repo: in.repo, CloneURL: in.cloneURL, Branch: branch, Workdir: workdir,
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
 		Effort: in.effort, Access: in.access,
+		DataSourceID: in.dbID, DataSourceRef: in.dbRef,
 		CardMessageID: old.CardMessageID, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
@@ -386,6 +481,9 @@ type pendingInit struct {
 
 type initInput struct {
 	repo, cloneURL, agent, modelID, effort, access string
+	// dbID/dbRef 是锁定的数据源（0 表示不锁定，维持项目全量可见）。
+	dbID  uint
+	dbRef string
 	// branch 空 = 默认分支；defaultBranch 用于把「选了默认」归一成空。
 	branch, defaultBranch string
 }
