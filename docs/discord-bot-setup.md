@@ -38,6 +38,25 @@ dev 后端（48080）与 app 后端（48090）**必须用不同的 bot**：Disco
      Reactions、Manage Channels（写频道主题要用）**。
 4. 用生成的 Install Link 打开、选服务器、授权——bot 出现在成员列表（离线）。
 
+## 正式 bot「ACPP」的现状（2026-08-31 已创建）
+
+app 用的正式 bot 已按本手册创建并配置完毕：
+
+- 应用名 **ACPP**（bot 用户 ACPP#8707），APP ID `1543829571319758888`
+- 头像已设（docs/assets/discord-bot-avatar.png）、描述已填
+- **MESSAGE CONTENT INTENT 已开**；**公共机器人已关**（仅所有者可安装，
+  相应地安装链接设为 None）
+- 私密 bot 用下面的 OAuth URL 邀请进服务器（owner 登录状态下打开、
+  选服务器、授权）：
+
+  ```
+  https://discord.com/oauth2/authorize?client_id=1543829571319758888&scope=bot+applications.commands&permissions=326417640528
+  ```
+
+  权限整数 326417640528 = 手册前文那 11 项之和。
+- **token 未生成**：Developer Portal → ACPP → Bot → Reset Token，自己
+  复制填进 app 设置页（凭证不经任何中间人）。
+
 ## 配进 acpp
 
 设置页 → Discord 分区：打开启用、粘贴 token、保存。状态变「已连接」即上线
