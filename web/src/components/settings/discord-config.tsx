@@ -6,6 +6,7 @@ import { CopyIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import type { DiscordInfo } from "@/types/acp"
 import { DiscordIcon } from "@/components/agent-icon"
 import { DirPicker } from "@/components/dir-picker/dir-picker"
@@ -283,10 +284,11 @@ export function DiscordConfigCard() {
                     size="sm"
                     className="shrink-0"
                     onClick={() => {
-                      navigator.clipboard
-                        .writeText(info.inviteUrl ?? "")
-                        .then(() => toast.success(t("common.copied")))
-                        .catch(() => toast.error(t("common.copyFailed")))
+                      void copyText(info.inviteUrl ?? "").then((ok) =>
+                        ok
+                          ? toast.success(t("common.copied"))
+                          : toast.error(t("common.copyFailed"))
+                      )
                     }}
                   >
                     <CopyIcon data-icon="inline-start" />
