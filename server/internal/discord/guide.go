@@ -33,8 +33,8 @@ func guideMD(b Binding) string {
 ⏳ 已排队 · ✅ 已进对话；📋 计划卡与 🔧 工具卡实时刷新；回合结束回复末尾有小结（耗时 · 工具 · 改动文件 · token）
 
 ## 常用命令
-`+"`/help`"+` 用法速览 · `+"`/status`"+` 看绑定 · `+"`/model` `/effort` `/access`"+` 调模型与权限 · `+"`/db`"+` 数据库开关 · `+"`/stop`"+` 中止本轮 · `+"`/unbind`"+` 解绑 · `+"`/init`"+` 重新绑定`,
-		b.Repo, b.Branch, guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault())
+%s`,
+		b.Repo, b.Branch, guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault(), commandsLine())
 }
 
 // guideModel 是手册头部的模型描述。ModelLabel 来自 /init 表单时自带

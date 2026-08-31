@@ -627,3 +627,34 @@ func TestResolveInWorkdir(t *testing.T) {
 		}
 	}
 }
+
+// 命令表是注册/手册//help 的唯一事实源——这条测试保证表本身完整，
+// 以及派生的清单一行真的覆盖了每条命令（文档漂移的自动对账）。
+func TestSlashCommandTable(t *testing.T) {
+	cmds := slashCommands()
+	if len(cmds) < 12 {
+		t.Fatalf("命令表只有 %d 条，疑似被误删", len(cmds))
+	}
+	line := commandsLine()
+	seen := map[string]bool{}
+	for _, c := range cmds {
+		if c.name == "" || c.desc == "" || c.hint == "" {
+			t.Errorf("命令 %q 的 desc/hint 不完整（desc=%q hint=%q）", c.name, c.desc, c.hint)
+		}
+		if len(c.desc) > 100 {
+			t.Errorf("/%s 的描述超过 Discord 100 字符上限", c.name)
+		}
+		if seen[c.name] {
+			t.Errorf("命令 %q 重复", c.name)
+		}
+		seen[c.name] = true
+		if !strings.Contains(line, "`/"+c.name+"`") {
+			t.Errorf("commandsLine 里缺 /%s", c.name)
+		}
+	}
+	// 手册正文也要包含命令清单（guideMD 经 commandsLine 渲染）。
+	md := guideMD(Binding{Repo: "o/r", Branch: "main", Agent: "claude"})
+	if !strings.Contains(md, "`/mcps`") || !strings.Contains(md, "`/usage`") {
+		t.Errorf("频道手册没有带上完整命令清单：\n%s", md)
+	}
+}

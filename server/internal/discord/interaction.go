@@ -20,9 +20,9 @@ const (
 )
 
 // registerCommands 注册 guild 级斜杠命令（即时生效；global 有传播延迟）。
-// PUT 语义是全量覆盖，幂等，每次连接对每个 guild 执行一遍。/model 的
-// 选项 choices 来自 catalog 快照——模型清单变了要重连（或重启）才刷新，
-// 换来的是原生下拉体验（不用弹表单）。
+// 命令定义的唯一事实源是 commands.go 的 slashCommands 表；这里只做两件
+// 事：把表翻译成注册载荷，以及给 /model 注入 catalog 快照的 choices
+// （模型清单变了要重连或重启才刷新，换来原生下拉体验）。
 func (s *Service) registerCommands(ctx context.Context, token, appID, guildID string) {
 	var modelChoicesJSON []map[string]any
 	if s.deps.Catalog != nil {
@@ -36,90 +36,27 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 		}
 		cancel()
 	}
-	modelOption := map[string]any{
-		"type": 3, "name": "model", "description": "要切换到的模型", "required": true,
-	}
-	if len(modelChoicesJSON) > 0 {
-		modelOption["choices"] = modelChoicesJSON
-	}
-	var effortChoicesJSON []map[string]any
-	for _, c := range effortChoices() {
-		effortChoicesJSON = append(effortChoicesJSON, map[string]any{
-			"name": c.Label, "value": c.Value,
-		})
-	}
-	var accessChoicesJSON []map[string]any
-	for _, c := range accessChoices() {
-		accessChoicesJSON = append(accessChoicesJSON, map[string]any{
-			"name": c.Label + "——" + c.Description, "value": c.Value,
-		})
-	}
-	cmds := []map[string]any{
-		{
-			"name":        "init",
-			"description": "把这个频道绑定到一个 git 仓库工作区",
-		},
-		{
-			"name":        "model",
-			"description": "切换这个频道用的模型",
-			"options":     []map[string]any{modelOption},
-		},
-		{
-			"name":        "effort",
-			"description": "切换这个频道的思考深度",
-			"options": []map[string]any{{
-				"type": 3, "name": "effort", "description": "思考深度档位",
-				"required": true, "choices": effortChoicesJSON,
-			}},
-		},
-		{
-			"name":        "access",
-			"description": "切换这个频道的安全权限档",
-			"options": []map[string]any{{
-				"type": 3, "name": "access", "description": "权限档位",
-				"required": true, "choices": accessChoicesJSON,
-			}},
-		},
-		{
-			"name":        "status",
-			"description": "查看这个频道的工作区绑定",
-		},
-		{
-			"name":        "unbind",
-			"description": "解绑这个频道的工作区（磁盘克隆保留）",
-		},
-		{
-			"name":        "stop",
-			"description": "中止子区里正在跑的回合",
-		},
-		{
-			"name":        "help",
-			"description": "acpp 使用指南",
-		},
-		{
-			"name":        "skills",
-			"description": "列出注入对话的技能",
-		},
-		{
-			"name":        "usage",
-			"description": "本子区的用量统计（回合 / 工具 / token）",
-		},
-		{
-			"name":        "mcps",
-			"description": "本子区挂载的 MCP 工具面",
-		},
-		{
-			"name":        "db",
-			"description": "本子区的数据库工具面开关（默认关，防止没必要的查询）",
-			"options": []map[string]any{{
-				"type": 3, "name": "switch", "description": "on 挂载 / off 卸载 / status 查看",
-				"required": true, "choices": []map[string]any{
-					{"name": "on", "value": "on"},
-					{"name": "off", "value": "off"},
-					{"name": "status", "value": "status"},
-				},
-			}},
-		},
+
+	var cmds []map[string]any
+	for _, c := range slashCommands() {
+		cmd := map[string]any{"name": c.name, "description": c.desc}
+		if len(c.options) > 0 {
+			// 拷一份再动：slashCommands 每次调用现构造，但 /model 的
+			// choices 按 guild 可能不同（catalog 时点），不改共享结构。
+			opts := make([]map[string]any, len(c.options))
+			for i, o := range c.options {
+				opt := make(map[string]any, len(o)+1)
+				for k, v := range o {
+					opt[k] = v
+				}
+				opts[i] = opt
+			}
+			if c.name == "model" && len(modelChoicesJSON) > 0 {
+				opts[0]["choices"] = modelChoicesJSON
+			}
+			cmd["options"] = opts
+		}
+		cmds = append(cmds, cmd)
 	}
 	err := botREST(ctx, token, "PUT",
 		fmt.Sprintf("/applications/%s/guilds/%s/commands", appID, guildID), cmds, nil)
@@ -488,6 +425,6 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 		"**查数据库** — 数据库工具默认已挂载（按项目过滤）；`/db off` 卸载、`/db on` 或消息带 `@db` 再打开。\n" +
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
-		"**常用命令** — `/model` `/effort` `/access` 调模型与权限档；`/status` 看绑定；`/stop` 中止本轮；`/unbind` 解绑；`/init` 绑定频道。"
+		"**常用命令** — " + commandsLine()
 	s.ephemeralKeep(token, ev, text)
 }
