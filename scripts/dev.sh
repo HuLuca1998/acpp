@@ -36,6 +36,8 @@ seed_dev_data() {
       cp "$src/acp.db" "$DEV_DATA_DIR/acp.db"
     fi
   fi
+  # 固定配置（标题模型、自定义数据目录等）一并带上。
+  [ -f "$src/config.json" ] && cp "$src/config.json" "$DEV_DATA_DIR/config.json"
   # 技能库与分发目录：-a 保留符号链接（skillpack 里的启用链接是相对路径）。
   [ -d "$src/skills" ] && cp -a "$src/skills" "$DEV_DATA_DIR/skills"
   [ -d "$src/skillpack" ] && cp -a "$src/skillpack" "$DEV_DATA_DIR/skillpack"

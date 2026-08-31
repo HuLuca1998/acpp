@@ -361,7 +361,7 @@ func (s *Service) unreact(ctx context.Context, token, channelID, msgID, emoji st
 // 轮末把正文分段发回子区。
 func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID string, tc *threadChat, input string, atts []attachment) {
 	key := "dc:" + threadID
-	sess, err := s.openChatSession(ctx, key, b, threadID, tc)
+	sess, fresh, err := s.openChatSession(ctx, key, b, threadID, tc)
 	if err != nil {
 		s.say(ctx, token, threadID, "❌ 会话启动失败\n-# "+trimRunes(err.Error(), 400))
 		return
@@ -392,6 +392,14 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	}()
 
 	blocks := attBlocks
+	// 全新上下文 + 子区已有历史 = 挂载变更后的强制重开（load 装不上新
+	// 挂载，只能 new）：把子区历史摘录注进开场，对话不断片。
+	if fresh {
+		if hist := s.threadHistory(ctx, token, threadID); hist != "" {
+			blocks = append([]acp.ContentBlock{{Type: "text",
+				Text: "（上下文衔接·系统注入）这个子区此前已有对话，你的会话刚重新开始。以下是历史摘录，衔接着回答，不要重复自我介绍：\n\n" + hist}}, blocks...)
+		}
+	}
 	if input != "" {
 		blocks = append(blocks, acp.ContentBlock{Type: "text", Text: input})
 	}
@@ -443,13 +451,13 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 
 // openChatSession 打开（或复用）子区的 acp 会话，OnEvent 绑定到该子区的
 // 运行态；新拿到的 acpSessionId 落盘供重启后恢复。
-func (s *Service) openChatSession(ctx context.Context, key string, b Binding, threadID string, tc *threadChat) (*acp.Session, error) {
+func (s *Service) openChatSession(ctx context.Context, key string, b Binding, threadID string, tc *threadChat) (*acp.Session, bool, error) {
 	if sess, ok := s.acpMgr.Get(key); ok {
-		return sess, nil
+		return sess, false, nil
 	}
 	rt, err := s.deps.AgentRuntime(ctx, b.Agent)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	resume := ""
 	if t, ok := s.store.config().thread(threadID); ok {
@@ -494,7 +502,7 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 		InstructionsExtra:  discordInstructions,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if id := sess.ACPSessionID(); id != "" && id != resume {
 		if _, err := s.store.update(func(c *Config) {
@@ -506,7 +514,9 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 			slog.Warn("acpSessionId 落盘失败", "err", err)
 		}
 	}
-	return sess, nil
+	// fresh = 这是一条全新上下文（没有恢复到旧 thread）：要么本来就是
+	// 新子区，要么挂载变更强制走了 new——后者需要历史衔接。
+	return sess, resume == "" || sess.ACPSessionID() != resume, nil
 }
 
 // applyBindingSettings 把绑定的模型/思考深度/权限档拨到会话上。
@@ -736,13 +746,17 @@ func stripDBToken(text string) string {
 	return strings.TrimSpace(dbToken.ReplaceAllString(text, "$1"))
 }
 
-// setThreadDB 落盘子区的数据库开关并关掉现有会话——挂载是 session/new
-// 参数，改不了在跑的会话；关掉后下一轮凭 acpSessionId 无感恢复上下文。
+// setThreadDB 落盘子区的数据库开关并重开会话。挂载是 session/new 参数；
+// **不能走 session/load**——claude 恢复会话时不装 _meta 里新的 MCP 挂载
+// （真机实锤：/db on 后 load 恢复，工具面没出现；昨天 @db 生效是因为
+// load 恰好失败回退到了 new）。所以这里连 acpSessionId 一起清掉，强制
+// 下一轮 session/new；上下文靠子区历史注入衔接（见 threadHistory）。
 func (s *Service) setThreadDB(threadID string, on bool) bool {
 	changed := false
 	if _, err := s.store.update(func(c *Config) {
 		if t, ok := c.thread(threadID); ok && t.DBEnabled != on {
 			t.DBEnabled = on
+			t.ACPSessionID = ""
 			c.upsertThread(t)
 			changed = true
 		}
@@ -781,7 +795,7 @@ func (s *Service) toggleDB(token string, ev interactionEvent) {
 	case "on":
 		s.setThreadDB(ev.ChannelID, true)
 		s.markDBManual(ev.ChannelID)
-		s.ephemeral(token, ev, "🗄️ 数据库工具面已挂载，下一轮生效。消息里带 @db 也能直接开。")
+		s.ephemeral(token, ev, "🗄️ 数据库工具面已挂载，下一轮生效（对话上下文会带着历史摘录重新开始）。")
 	case "off":
 		s.setThreadDB(ev.ChannelID, false)
 		s.markDBManual(ev.ChannelID)
@@ -861,4 +875,41 @@ func (s *Service) handleMessageEdit(d json.RawMessage) {
 			return
 		}
 	}
+}
+
+// threadHistory 从 Discord 拉子区最近的对话摘录（挂载变更强制重开会话
+// 后的上下文衔接）。Discord 本身就是对话记录的正源，够用；工具调用细节
+// 拿不回来，衔接的是「聊到哪了」不是完整状态。
+func (s *Service) threadHistory(ctx context.Context, token, threadID string) string {
+	var msgs []struct {
+		Content string `json:"content"`
+		Author  struct {
+			Username string `json:"username"`
+			Bot      bool   `json:"bot"`
+		} `json:"author"`
+	}
+	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	if err := botREST(cctx, token, "GET", "/channels/"+threadID+"/messages?limit=25", nil, &msgs); err != nil {
+		slog.Warn("拉子区历史失败", "err", err)
+		return ""
+	}
+	if len(msgs) < 2 {
+		return ""
+	}
+	// 接口给的是最新在前，倒过来按时间正序拼；卡片消息（无正文）跳过。
+	var b strings.Builder
+	for i := len(msgs) - 1; i >= 0; i-- {
+		m := msgs[i]
+		text := strings.TrimSpace(m.Content)
+		if text == "" {
+			continue
+		}
+		who := m.Author.Username
+		if m.Author.Bot {
+			who = "你（assistant）"
+		}
+		b.WriteString(who + "：" + trimRunes(text, 600) + "\n")
+	}
+	return trimRunes(b.String(), 6000)
 }
