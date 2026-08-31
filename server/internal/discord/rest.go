@@ -65,9 +65,31 @@ func noMentions() map[string]any {
 	return map[string]any{"parse": []string{}}
 }
 
-// botRESTFile 以 multipart 发一条带单个附件的消息（报告长图用）。
-// payload 是常规消息 JSON（attachments 里要预登记 id 0 的文件名）。
+// outFile 是一条出站消息里的一个附件。
+type outFile struct {
+	name string
+	data []byte
+}
+
+// botRESTFile 发一条带单个附件的消息。
 func botRESTFile(ctx context.Context, token, channelID string, payload map[string]any, filename string, data []byte) error {
+	return botRESTFiles(ctx, token, channelID, payload, []outFile{{name: filename, data: data}})
+}
+
+// botRESTFiles 以 multipart 发一条带若干附件的消息（报告长图 + 原文件、
+// send_file 的批量发送都走这里）。attachments 的预登记由这里按 files 顺序
+// 补进 payload——调用方手写那段 id/filename 对照表只会写错。
+// Discord 单条消息最多 10 个附件、合计 25MB，分批由调用方负责。
+func botRESTFiles(ctx context.Context, token, channelID string, payload map[string]any, files []outFile) error {
+	if len(files) == 0 {
+		return fmt.Errorf("没有要发送的附件")
+	}
+	atts := make([]map[string]any, 0, len(files))
+	for i, f := range files {
+		atts = append(atts, map[string]any{"id": i, "filename": f.name})
+	}
+	payload["attachments"] = atts
+
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 	pj, err := json.Marshal(payload)
@@ -77,12 +99,14 @@ func botRESTFile(ctx context.Context, token, channelID string, payload map[strin
 	if err := w.WriteField("payload_json", string(pj)); err != nil {
 		return err
 	}
-	part, err := w.CreateFormFile("files[0]", filename)
-	if err != nil {
-		return err
-	}
-	if _, err := part.Write(data); err != nil {
-		return err
+	for i, f := range files {
+		part, err := w.CreateFormFile(fmt.Sprintf("files[%d]", i), f.name)
+		if err != nil {
+			return err
+		}
+		if _, err := part.Write(f.data); err != nil {
+			return err
+		}
 	}
 	if err := w.Close(); err != nil {
 		return err

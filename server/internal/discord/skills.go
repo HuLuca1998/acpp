@@ -101,8 +101,8 @@ func (s *Service) showMCPs(token string, ev interactionEvent) {
 	}
 	var b strings.Builder
 	b.WriteString("## 🔌 本子区的 MCP 工具面\n")
-	b.WriteString("- **acpp-chat** — `send_file`：把文件直接发进对话（HTML 自动渲染成长图）\n")
-	b.WriteString("- **acpp-report** — `report_open`：把写好的 HTML 报告以长图发进子区\n")
+	b.WriteString("- **acpp-chat** — `send_file`：把工作目录里的文件当附件发进对话（HTML 另附整页长图）\n")
+	b.WriteString("- **acpp-report** — `report_open`：把写好的 HTML 报告以长图 + 原文件发进子区\n")
 	if dbOn {
 		scope := "按项目过滤"
 		if bind.DataSourceID != 0 {

@@ -250,7 +250,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | POST | `/api/mcp/report/{token}` | 会话的报告 MCP 端点（agent 回连，同一套 token）。工具 `report_open` 把 agent 写好的单文件 HTML 报告在用户工作区打开；只收路径不收全文，且限死会话工作目录内的 `.html` |
-| POST | `/api/mcp/discord/{token}` | discord 子区自家工具面端点（agent 回连，内存凭证）。工具 `send_file` 把工作目录内的文件发进当前子区：`.html` 自动渲染成整页长图，图片原样发，其余当附件 |
+| POST | `/api/mcp/discord/{token}` | discord 子区自家工具面端点（agent 回连，内存凭证）。工具 `send_file` 把工作目录内的文件**作为附件**发进当前子区（`paths` 一次最多 10 个）：`.html` 默认发原文件 + 整页长图两个附件（`preview:false` 只发原文件），其余原样上传。单条消息 10 附件 / 24MB 上限由后端分批 |
 | GET | `/api/tools/servers` | 工具台：当前上下文（`?cwd=`）下的 MCP 工具面——工具名、给模型看的描述原文、参数 JSON Schema、只读/破坏性注解，外加这个面会不会真的挂给 agent（数据源为空就不挂） |
 | POST | `/api/tools/inspect` | 工具台试运行与自定义请求（`{cwd, request}`，request 是**原样的** JSON-RPC 消息）：走与 agent 完全相同的协议路径，回完整响应与耗时；通知类消息回 `accepted:true`（协议上就没有响应） |
 | GET | `/api/tools/calls` | 调用记录（`?server=&tool=&source=&errorsOnly=1` + 分页，时间倒序） |

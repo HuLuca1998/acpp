@@ -658,3 +658,75 @@ func TestSlashCommandTable(t *testing.T) {
 		t.Error("手册应告诉用户在输入框打 / 看全部命令")
 	}
 }
+
+// send_file 的核心契约：文件本体一定作为附件发出去。.html 早先只发长图，
+// 用户点名要过原文件——「把 xxx.html 发上来」要的是那个文件，不是它的
+// 截图，所以原文件在任何分支（含渲染失败）里都不能丢。
+
+func TestPrepareOutFiles(t *testing.T) {
+	dir := t.TempDir()
+	work, _ := filepath.EvalSymlinks(dir)
+	if err := os.WriteFile(filepath.Join(work, "chart.png"), []byte("png-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	html := "<html><head><title>t</title></head><body><h1>报告</h1></body></html>"
+	if err := os.WriteFile(filepath.Join(work, "报告.html"), []byte(html), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := prepareOutFiles(context.Background(), work, "chart.png", true)
+	if err != nil || len(got) != 1 || got[0].name != "chart.png" || string(got[0].data) != "png-bytes" {
+		t.Fatalf("非 HTML 应原样发一个附件，得到 %+v（err=%v）", names(got), err)
+	}
+
+	got, err = prepareOutFiles(context.Background(), work, "报告.html", false)
+	if err != nil || len(got) != 1 || got[0].name != "报告.html" || string(got[0].data) != html {
+		t.Fatalf("preview=false 应只发原 HTML，得到 %v（err=%v）", names(got), err)
+	}
+
+	// preview=true：有 Chrome 时长图排第一（Discord 只把首个附件渲染成
+	// 预览大图），没 Chrome 时降级只剩原文件——两种情况下原文件都在。
+	got, err = prepareOutFiles(context.Background(), work, "报告.html", true)
+	if err != nil {
+		t.Fatalf("preview=true 不该失败（渲染不了要降级）：%v", err)
+	}
+	if got[len(got)-1].name != "报告.html" || string(got[len(got)-1].data) != html {
+		t.Fatalf("原 HTML 必须在附件里，得到 %v", names(got))
+	}
+	if len(got) == 2 && got[0].name != "报告.png" {
+		t.Errorf("长图应排在原文件之前并按报告名命名，得到 %v", names(got))
+	}
+
+	if _, err := prepareOutFiles(context.Background(), work, "../evil.html", true); err == nil {
+		t.Error("越界路径应被拒")
+	}
+}
+
+func names(files []outFile) []string {
+	var out []string
+	for _, f := range files {
+		out = append(out, f.name)
+	}
+	return out
+}
+
+func TestBatchFiles(t *testing.T) {
+	small := make([]outFile, 11)
+	for i := range small {
+		small[i] = outFile{name: "f.txt", data: []byte("x")}
+	}
+	if got := batchFiles(small); len(got) != 2 || len(got[0]) != 10 || len(got[1]) != 1 {
+		t.Errorf("11 个小文件应切成 10+1 批，得到 %d 批", len(got))
+	}
+
+	big := []outFile{
+		{name: "a.bin", data: make([]byte, 20<<20)},
+		{name: "b.bin", data: make([]byte, 20<<20)},
+	}
+	if got := batchFiles(big); len(got) != 2 {
+		t.Errorf("两个 20MB 合计超过单条上限，应分两批，得到 %d 批", len(got))
+	}
+	if got := batchFiles(nil); got != nil {
+		t.Errorf("空清单应得到空批次，得到 %v", got)
+	}
+}

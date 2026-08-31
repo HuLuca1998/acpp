@@ -17,14 +17,16 @@ import (
 // 给一个跳浏览器的链接（本机点开即回环地址，owner 判定零摩擦）。
 
 // reportOpened 是 report_open 的回调（经 Deps.Mounts 注册）：往子区发卡，
-// 然后异步把报告渲染成整页长图直接发进子区。不放预览链接——链接指向
-// 本机后端，频道里的用户多半不在同一局域网，点不开的按钮比没有更糟
-// （用户拍板：直接给图片就行）。
+// 然后异步把报告的**长图与原 HTML 文件**一起发进子区。不放预览链接——
+// 链接指向本机后端，频道里的用户多半不在同一局域网，点不开的按钮比没有
+// 更糟（用户拍板：直接把东西发上来）。两个附件各有各的用处：长图是手机
+// 上划一下就能看完的那份，HTML 是能存档、能转发、能双击用浏览器打开
+// （带交互与主题）的那份，缺哪个都得让用户再要一次。
 func (s *Service) reportOpened(token, threadID string, b Binding, rel, title string) {
 	cardID := s.postCard(token, threadID, map[string]any{
-		"flags": 1 << 15, "components": reportCard(title, rel, "长图生成中…"),
+		"flags": 1 << 15, "components": reportCard(title, rel, "文件准备中…"),
 	})
-	go s.postReportImage(token, threadID, b, rel, title, cardID)
+	go s.postReportFiles(token, threadID, b, rel, title, cardID)
 }
 
 // reportCard 拼报告卡。status 非空时跟在路径后面（生成中/失败提示），
@@ -53,42 +55,67 @@ func (s *Service) patchReportCard(ctx context.Context, token, threadID, cardID, 
 	}
 }
 
-// reportImageMax 是长图直发的体积上限（Discord 免费档附件 25MB，留余量）。
-const reportImageMax = 24 << 20
+// reportAttachMax 是一条消息里所有附件的合计上限（Discord 免费档 25MB，
+// 留余量）。
+const reportAttachMax = 24 << 20
 
-// postReportImage 把报告渲染成整页 PNG 发进子区（带归属小字，免得图
-// 和报告卡之间插了别的消息后看不出是谁的）。
-func (s *Service) postReportImage(token, threadID string, b Binding, rel, title, cardID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+// postReportFiles 把报告的长图与原 HTML 一起发进子区（带归属小字，免得
+// 图和报告卡之间插了别的消息后看不出是谁的）。
+//
+// 预算按「HTML 先占」算：长图渲染得靠本机 Chrome，可能失败也可能很大，
+// 而原文件是一定拿得到的那份，挤掉它去发一张图是本末倒置。发送顺序仍是
+// 图在前——Discord 会把第一个附件渲染成预览大图。
+func (s *Service) postReportFiles(token, threadID string, b Binding, rel, title, cardID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	abs, err := s.ReportPath(b.ChannelID, rel)
 	if err != nil {
-		slog.Warn("报告长图：路径解析失败", "rel", rel, "err", err)
-		s.patchReportCard(ctx, token, threadID, cardID, title, rel, "长图生成失败")
+		slog.Warn("报告附件：路径解析失败", "rel", rel, "err", err)
+		s.patchReportCard(ctx, token, threadID, cardID, title, rel, "文件发送失败")
 		return
 	}
-	png, err := webshot.Capture(ctx, "file://"+abs, 1100)
-	if err != nil {
-		slog.Warn("报告长图：渲染失败", "rel", rel, "err", err)
-		s.patchReportCard(ctx, token, threadID, cardID, title, rel, "长图生成失败（本机需要 Chrome）")
+
+	base := filepath.Base(abs)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	budget := reportAttachMax
+	var files []outFile
+	var notes []string
+
+	if html, err := os.ReadFile(abs); err != nil {
+		slog.Warn("报告附件：读原文件失败", "rel", rel, "err", err)
+		notes = append(notes, "原文件读取失败")
+	} else if len(html) > budget {
+		notes = append(notes, "原文件太大发不了")
+	} else {
+		files = append(files, outFile{name: base, data: html})
+		budget -= len(html)
+	}
+
+	switch png, err := webshot.Capture(ctx, "file://"+abs, 1100); {
+	case err != nil:
+		slog.Warn("报告附件：渲染失败", "rel", rel, "err", err)
+		notes = append(notes, "长图生成失败（本机需要 Chrome）")
+	case len(png) > budget:
+		slog.Warn("报告附件：长图超出上限，不发", "bytes", len(png))
+		notes = append(notes, "报告太长，长图放不下")
+	default:
+		files = append([]outFile{{name: stem + ".png", data: png}}, files...)
+	}
+
+	if len(files) == 0 {
+		s.patchReportCard(ctx, token, threadID, cardID, title, rel, strings.Join(notes, " · "))
 		return
 	}
-	if len(png) > reportImageMax {
-		slog.Warn("报告长图：超出附件上限，不发", "bytes", len(png))
-		s.patchReportCard(ctx, token, threadID, cardID, title, rel, "报告太大，长图放不下")
-		return
-	}
-	err = botRESTFile(ctx, token, threadID, map[string]any{
+	err = botRESTFiles(ctx, token, threadID, map[string]any{
 		"content":          "-# 📊 《" + trimRunes(title, 80) + "》",
-		"attachments":      []map[string]any{{"id": 0, "filename": "report.png"}},
 		"allowed_mentions": noMentions(),
-	}, "report.png", png)
+	}, files)
 	if err != nil {
-		slog.Warn("报告长图：发送失败", "err", err)
-		s.patchReportCard(ctx, token, threadID, cardID, title, rel, "长图发送失败")
+		slog.Warn("报告附件：发送失败", "err", err)
+		s.patchReportCard(ctx, token, threadID, cardID, title, rel, "文件发送失败")
 		return
 	}
-	s.patchReportCard(ctx, token, threadID, cardID, title, rel, "")
+	s.patchReportCard(ctx, token, threadID, cardID, title, rel, strings.Join(notes, " · "))
 }
 
 // ReportPath 把预览请求解析成一个确认落在绑定工作目录内的 .html 绝对
