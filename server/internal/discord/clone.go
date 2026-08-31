@@ -285,6 +285,40 @@ func dirErr(dir string) error {
 	return err
 }
 
+// worktreeSalvage 判断一棵工作树能不能安全删掉，keep=true 时 why 说明为什么
+// 要留。判定从严：读不出状态、算不出与 base 的差距，一律当作「有东西」——
+// 解绑是个日常动作，误删别人几小时的活远比多占几百兆磁盘严重。
+func worktreeSalvage(ctx context.Context, dir, base string) (keep bool, why string) {
+	st, err := readGitStatus(ctx, dir, base)
+	switch {
+	case err != nil:
+		return true, "读不出工作树状态"
+	case !st.clean():
+		return true, "还有未提交的改动"
+	case base == "" || st.Base == "":
+		return true, "算不出与 base 的差距"
+	case st.BaseAhead > 0:
+		return true, fmt.Sprintf("有 %d 个提交还没合回 %s", st.BaseAhead, base)
+	}
+	return false, ""
+}
+
+// removeWorktree 删掉一棵工作树连同它那条分支。只在 worktreeSalvage 说可以
+// 时调用：这里**不加** --force，git 自己再把一道关——有改动它会拒绝删。
+func removeWorktree(ctx context.Context, home, dir, branch string) error {
+	git := gitHome(home)
+	if out, err := runGit(ctx, time.Minute, git, "worktree", "remove", dir); err != nil {
+		return fmt.Errorf("git worktree remove: %s", gitReason(out, err))
+	}
+	// 分支是为这个频道生成的，树没了也没人用。删不掉不算失败（可能被别处
+	// 引用），树已经清掉了，留个日志即可。
+	if out, err := runGit(ctx, 30*time.Second, git, "branch", "-D", branch); err != nil {
+		slog.Warn("删工作分支失败（工作树已清理）", "branch", branch, "err", gitReason(out, err))
+	}
+	_, _ = runGit(ctx, 30*time.Second, git, "worktree", "prune")
+	return nil
+}
+
 // retireLegacyClone 给老布局的克隆让路，返回它被挪到哪（没有就返回空串）。
 //
 // 老布局把默认分支的克隆直接放在 `<组织>/<仓库>`——正好是新布局的项目
@@ -465,10 +499,11 @@ func readGitStatus(ctx context.Context, dir, base string) (gitStatus, error) {
 	}
 	st := parseGitStatus(out)
 	if base != "" {
-		st.Base = base
-		// 算不出来（base 还没 fetch 过之类）就不显示，不值得为它报错。
+		// 算不出来（base 还没 fetch 过之类）就把 Base 留空——展示会跳过那
+		// 一行，解绑清理也据此判断「不知道有没有没合回去的提交」，宁可留着。
 		if counts, err := runGit(ctx, 30*time.Second, dir,
 			"rev-list", "--left-right", "--count", "origin/"+base+"...HEAD"); err == nil {
+			st.Base = base
 			fmt.Sscanf(strings.TrimSpace(counts), "%d\t%d", &st.BaseBehind, &st.BaseAhead)
 		}
 	}

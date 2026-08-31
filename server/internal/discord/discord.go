@@ -352,6 +352,8 @@ func (s *Service) handleEvent(ctx context.Context, token, t string, d json.RawMe
 			}
 		}
 		s.mu.Unlock()
+	case "CHANNEL_DELETE", "THREAD_DELETE":
+		s.handleChannelDelete(ctx, d)
 	case "MESSAGE_CREATE":
 		s.handleMessage(ctx, token, d)
 	case "MESSAGE_UPDATE":

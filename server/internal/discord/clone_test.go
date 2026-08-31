@@ -129,6 +129,61 @@ func TestSafeBranchSegment(t *testing.T) {
 	}
 }
 
+// 契约：解绑清理从严。有未提交的改动、或有还没合回 base 的提交，工作树就
+// 必须留着——误删几小时的活远比多占几百兆磁盘严重；两样都没有才连树带分支
+// 删掉（那时它就是一份能从 base 随时重建的副本）。
+func TestWorktreeSalvageAndRemove(t *testing.T) {
+	src := seedRepo(t)
+	home := filepath.Join(t.TempDir(), "org", "app")
+	ctx := context.Background()
+
+	res, err := ensureWorktree(ctx, worktreeSpec{CloneURL: src, Home: home, NameHint: "ch", Base: "dev"})
+	if err != nil {
+		t.Fatalf("建树: %v", err)
+	}
+
+	// 刚建出来：干净、与 base 一致 → 可以删。
+	if keep, why := worktreeSalvage(ctx, res.Dir, res.Base); keep {
+		t.Fatalf("刚建的树应可清理，却说要留：%s", why)
+	}
+
+	// 有未提交的改动 → 必须留。
+	if err := os.WriteFile(filepath.Join(res.Dir, "wip.txt"), []byte("half done\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if keep, why := worktreeSalvage(ctx, res.Dir, res.Base); !keep || why == "" {
+		t.Errorf("有未提交改动应保留，got keep=%v why=%q", keep, why)
+	}
+
+	// 提交之后（领先 base）→ 仍要留。
+	gitRun(t, res.Dir, "add", ".")
+	gitRun(t, res.Dir, "commit", "--quiet", "-m", "wip")
+	keep, why := worktreeSalvage(ctx, res.Dir, res.Base)
+	if !keep || !strings.Contains(why, "提交") {
+		t.Errorf("有没合回 base 的提交应保留，got keep=%v why=%q", keep, why)
+	}
+
+	// 算不出与 base 的差距（base 名字不对）也保留——宁可留着。
+	if keep, _ := worktreeSalvage(ctx, res.Dir, "no-such-base"); !keep {
+		t.Error("算不出差距时应保留")
+	}
+
+	// 退回与 base 一致 → 可以删，且真的删干净。
+	gitRun(t, res.Dir, "reset", "--hard", "--quiet", "origin/dev")
+	if keep, why := worktreeSalvage(ctx, res.Dir, res.Base); keep {
+		t.Fatalf("回到 base 后应可清理，却说要留：%s", why)
+	}
+	if err := removeWorktree(ctx, home, res.Dir, res.Branch); err != nil {
+		t.Fatalf("removeWorktree: %v", err)
+	}
+	if _, err := os.Stat(res.Dir); !os.IsNotExist(err) {
+		t.Errorf("工作树目录应已删除: %v", err)
+	}
+	if hasLocalBranch(ctx, gitHome(home), res.Branch) {
+		t.Errorf("工作分支 %s 应已删除", res.Branch)
+	}
+}
+
 // 契约：老布局的克隆占着新布局的项目目录时，要**整体挪开**再建新工作树
 // ——里面可能有没推送的活，还有 git status 看不见的 .gitignore 文件
 // （上传件、.env、构建产物），删掉就找不回来了。

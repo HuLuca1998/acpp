@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 )
@@ -309,12 +310,73 @@ func (s *Service) unbindChannel(ctx context.Context, token string, ev interactio
 		s.ephemeral(token, ev, "这个频道本来就没绑定工作区。")
 		return
 	}
+	// 先收会话再改配置：子区的 acp 进程还占着这个工作目录，删树之前必须
+	// 让它退出，否则 git worktree remove 会被正在跑的进程绊住。
+	s.closeChannelThreads(ev.ChannelID)
 	if _, err := s.store.update(func(c *Config) { c.removeBinding(ev.ChannelID) }); err != nil {
 		s.ephemeral(token, ev, "解绑失败："+trimRunes(err.Error(), 200))
 		return
 	}
-	s.ephemeral(token, ev, fmt.Sprintf("✅ 已解绑 **%s**。工作树保留在 `%s`，重新绑定用 /init。", b.Repo, b.Workdir))
+	s.ephemeral(token, ev, fmt.Sprintf("✅ 已解绑 **%s**。%s重新绑定用 /init。", b.Repo, s.retireWorkdir(ctx, b)))
 	go s.cleanupChannelCard(ctx, token, b)
+}
+
+// retireWorkdir 是解绑后对工作树的处置，返回给用户看的那句话。
+//
+// 规则只有一条：**有活就留着**。没有未提交的改动、也没有还没合回 base 的
+// 提交，才连树带分支删掉——那种情况下它就是一份能随时从 base 重建的副本，
+// 留着只是占地方。判定见 worktreeSalvage，从严。
+func (s *Service) retireWorkdir(ctx context.Context, b Binding) string {
+	if b.Workdir == "" {
+		return ""
+	}
+	if _, err := os.Stat(b.Workdir); err != nil {
+		return "工作树已不在磁盘上。"
+	}
+	if keep, why := worktreeSalvage(ctx, b.Workdir, b.Base); keep {
+		return fmt.Sprintf("工作树保留在 `%s`（%s）。", b.Workdir, why)
+	}
+	home := repoHome(s.effectiveWorkRoot(s.store.config()), b.Repo)
+	if err := removeWorktree(ctx, home, b.Workdir, b.Branch); err != nil {
+		slog.Warn("清理工作树失败", "dir", b.Workdir, "err", err)
+		return fmt.Sprintf("工作树保留在 `%s`（清理失败）。", b.Workdir)
+	}
+	return fmt.Sprintf("工作树干净且没有未合回 %s 的提交，已连同分支 `%s` 清理。", b.Base, b.Branch)
+}
+
+// handleChannelDelete 处理频道/子区被删除：绑定与子区记录跟着走。
+//
+// 不清理的话就会留下指向不存在频道的绑定记录——后续每一步（改配置、发消息、
+// 起会话）都会对着空气操作。工作树按解绑同一套规则处置（有活就留）。
+func (s *Service) handleChannelDelete(ctx context.Context, raw json.RawMessage) {
+	var ch struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &ch); err != nil || ch.ID == "" {
+		return
+	}
+	cfg := s.store.config()
+	if _, ok := cfg.thread(ch.ID); ok {
+		if s.acpMgr != nil {
+			if err := s.acpMgr.Close("dc:" + ch.ID); err != nil {
+				slog.Warn("关子区会话失败", "thread", ch.ID, "err", err)
+			}
+		}
+		if _, err := s.store.update(func(c *Config) { c.removeThread(ch.ID) }); err != nil {
+			slog.Warn("清子区记录失败", "thread", ch.ID, "err", err)
+		}
+		return
+	}
+	b, ok := cfg.binding(ch.ID)
+	if !ok {
+		return
+	}
+	s.closeChannelThreads(ch.ID)
+	if _, err := s.store.update(func(c *Config) { c.removeBinding(ch.ID) }); err != nil {
+		slog.Warn("频道已删除但解绑落盘失败", "channel", ch.ID, "err", err)
+		return
+	}
+	slog.Info("频道已删除，自动解绑", "channel", ch.ID, "repo", b.Repo, "工作树", s.retireWorkdir(ctx, b))
 }
 
 // modelLabel 反查展示名；catalog 拿不到就退回原 id。

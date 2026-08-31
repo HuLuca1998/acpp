@@ -191,7 +191,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/discord` | discord 频道工作区总览（adr-016，bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)，owner 专属）：`{config:{enabled,tokenSet,workRoot}, status:{running,connected,botUser,guilds…}, bindings, catalog}`；token 永不回传 |
 | PUT | `/api/discord/config` | 存 discord 配置（`{enabled?, botToken?, workRoot?}`，token 空串=清除），gateway 即时起停 |
 | PUT | `/api/discord/bindings/{channelId}` | 改频道绑定的模型/思考深度（换仓库、换绑数据库走频道里的 `/init` 与 `/db source`） |
-| DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（磁盘上的工作树保留） |
+| DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（工作树有未提交/未合回 base 的东西才保留，否则连分支一起清理） |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录；`?files=1` 连文件、`?hidden=1` 含隐藏项；条目带大小与修改时间），供选择器导航 |
 | GET | `/api/fs/places` | 选择器侧边栏的默认位置（家目录/桌面/文稿/下载/工作区；租户只有自己的 root） |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |

@@ -141,7 +141,9 @@ func (s *Service) showGitStatus(ctx context.Context, token string, ev interactio
 		branch = "游离 HEAD"
 	}
 	w.WriteString("分支 `" + branch + "`")
-	if st.Upstream != "" {
+	// 新分支是从 origin/<base> 切的，upstream 就是它——这时下面那行「基于
+	// base」已经把话说完了，不再重复一遍。
+	if st.Upstream != "" && st.Upstream != "origin/"+st.Base {
 		w.WriteString(" · 对比 `" + st.Upstream + "`")
 		switch {
 		case st.Ahead > 0 && st.Behind > 0:
@@ -158,11 +160,11 @@ func (s *Service) showGitStatus(ctx context.Context, token string, ev interactio
 		fmt.Fprintf(&w, "\n基于 `%s`", st.Base)
 		switch {
 		case st.BaseAhead > 0 && st.BaseBehind > 0:
-			fmt.Fprintf(&w, "：多 %d 个提交、少 %d 个（base 有新东西，考虑合过来）", st.BaseAhead, st.BaseBehind)
+			fmt.Fprintf(&w, "：本分支多 %d 个提交，base 上另有 %d 个新提交（可以合过来）", st.BaseAhead, st.BaseBehind)
 		case st.BaseAhead > 0:
-			fmt.Fprintf(&w, "：多 %d 个提交", st.BaseAhead)
+			fmt.Fprintf(&w, "：本分支多 %d 个提交（还没合回去）", st.BaseAhead)
 		case st.BaseBehind > 0:
-			fmt.Fprintf(&w, "：落后 %d 个提交", st.BaseBehind)
+			fmt.Fprintf(&w, "：base 上有 %d 个新提交（可以合过来）", st.BaseBehind)
 		default:
 			w.WriteString("：一致")
 		}

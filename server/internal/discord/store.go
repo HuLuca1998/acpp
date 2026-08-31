@@ -196,6 +196,17 @@ func (c *Config) removeBinding(channelID string) bool {
 	return false
 }
 
+// removeThread 删掉一条子区记录；报告是否真的删了东西。
+func (c *Config) removeThread(threadID string) bool {
+	for i := range c.Threads {
+		if c.Threads[i].ThreadID == threadID {
+			c.Threads = append(c.Threads[:i], c.Threads[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 // thread 按子区 id 查记录。
 func (c Config) thread(threadID string) (Thread, bool) {
 	for _, t := range c.Threads {

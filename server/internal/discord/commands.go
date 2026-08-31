@@ -69,7 +69,7 @@ func slashCommands() []slashCommand {
 		{name: "usage", desc: "本子区的用量统计（回合 / 工具 / token）", hint: "看用量"},
 		{name: "mcps", desc: "本子区挂载的 MCP 工具面", hint: "看工具面"},
 		{name: "stop", desc: "中止子区里正在跑的回合", hint: "中止本轮"},
-		{name: "unbind", desc: "解绑这个频道的工作区（磁盘克隆保留）", hint: "解绑"},
+		{name: "unbind", desc: "解绑这个频道的工作区（没干完的活会保留）", hint: "解绑"},
 	}
 }
 
