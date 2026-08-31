@@ -659,11 +659,11 @@ func TestSlashCommandTable(t *testing.T) {
 	}
 }
 
-// send_file 的核心契约：文件本体一定作为附件发出去。.html 早先只发长图，
-// 用户点名要过原文件——「把 xxx.html 发上来」要的是那个文件，不是它的
-// 截图，所以原文件在任何分支（含渲染失败）里都不能丢。
+// 交付面的核心契约：形态可以选，但东西一定得到用户手上。auto 让 .html
+// 走外链（渲染后的页面才是报告的价值），别的文件直接发原件；用户点名要
+// 文件时 as=file 必须发出原样的那一份。
 
-func TestPrepareOutFiles(t *testing.T) {
+func TestDeliverOneModes(t *testing.T) {
 	dir := t.TempDir()
 	work, _ := filepath.EvalSymlinks(dir)
 	if err := os.WriteFile(filepath.Join(work, "chart.png"), []byte("png-bytes"), 0o644); err != nil {
@@ -673,41 +673,37 @@ func TestPrepareOutFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, "报告.html"), []byte(html), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	s := &Service{}
 
-	got, err := prepareOutFiles(context.Background(), work, "chart.png", true)
-	if err != nil || len(got) != 1 || got[0].name != "chart.png" || string(got[0].data) != "png-bytes" {
-		t.Fatalf("非 HTML 应原样发一个附件，得到 %+v（err=%v）", names(got), err)
-	}
-
-	got, err = prepareOutFiles(context.Background(), work, "报告.html", false)
-	if err != nil || len(got) != 1 || got[0].name != "报告.html" || string(got[0].data) != html {
-		t.Fatalf("preview=false 应只发原 HTML，得到 %v（err=%v）", names(got), err)
+	// 非 HTML 的 auto = 原文件附件，一个字节都不该变。
+	got, err := s.deliverOne(context.Background(), "t1", work, "chart.png", deliverAuto, 0)
+	if err != nil || len(got.files) != 1 || got.files[0].name != "chart.png" ||
+		string(got.files[0].data) != "png-bytes" || got.link != nil {
+		t.Fatalf("非 HTML 的 auto 应原样发附件，得到 %+v（err=%v）", got, err)
 	}
 
-	// preview=true：有 Chrome 时长图排第一（Discord 只把首个附件渲染成
-	// 预览大图），没 Chrome 时降级只剩原文件——两种情况下原文件都在。
-	got, err = prepareOutFiles(context.Background(), work, "报告.html", true)
-	if err != nil {
-		t.Fatalf("preview=true 不该失败（渲染不了要降级）：%v", err)
-	}
-	if got[len(got)-1].name != "报告.html" || string(got[len(got)-1].data) != html {
-		t.Fatalf("原 HTML 必须在附件里，得到 %v", names(got))
-	}
-	if len(got) == 2 && got[0].name != "报告.png" {
-		t.Errorf("长图应排在原文件之前并按报告名命名，得到 %v", names(got))
+	// 用户点名要文件：HTML 也必须发原件，不能替换成截图或链接。
+	got, err = s.deliverOne(context.Background(), "t1", work, "报告.html", deliverFile, 0)
+	if err != nil || len(got.files) != 1 || got.files[0].name != "报告.html" ||
+		string(got.files[0].data) != html || got.link != nil {
+		t.Fatalf("as=file 应发原 HTML，得到 %+v（err=%v）", got, err)
 	}
 
-	if _, err := prepareOutFiles(context.Background(), work, "../evil.html", true); err == nil {
+	// 长图：有 Chrome 才有得比，没有就该报错而不是悄悄发别的东西。
+	got, err = s.deliverOne(context.Background(), "t1", work, "报告.html", deliverImage, 0)
+	switch {
+	case err != nil:
+		t.Logf("本机渲染不了长图（%v），跳过长图断言", err)
+	case len(got.files) != 1 || got.files[0].name != "报告.png":
+		t.Errorf("as=image 应发一张与报告同名的 png，得到 %v", got.files)
+	}
+
+	if _, err := s.deliverOne(context.Background(), "t1", work, "chart.png", deliverImage, 0); err == nil {
+		t.Error("非 HTML 渲染不成长图，应该报错")
+	}
+	if _, err := s.deliverOne(context.Background(), "t1", work, "../evil.html", deliverAuto, 0); err == nil {
 		t.Error("越界路径应被拒")
 	}
-}
-
-func names(files []outFile) []string {
-	var out []string
-	for _, f := range files {
-		out = append(out, f.name)
-	}
-	return out
 }
 
 func TestBatchFiles(t *testing.T) {

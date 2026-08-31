@@ -133,3 +133,47 @@ func botRESTFiles(ctx context.Context, token, channelID string, payload map[stri
 	}
 	return nil
 }
+
+// maxAttachPerMsg 是 Discord 单条消息的附件个数上限。
+const maxAttachPerMsg = 10
+
+// sendAttachMax 是一条消息里所有附件的合计上限（免费档 25MB，留余量）。
+const sendAttachMax = 24 << 20
+
+// batchFiles 按 Discord 单条消息的上限（10 个附件、合计 24MB）把附件切成
+// 若干批。单个文件超限在上游已经拦掉，这里只管怎么装箱。
+func batchFiles(files []outFile) [][]outFile {
+	var batches [][]outFile
+	var cur []outFile
+	size := 0
+	for _, f := range files {
+		if len(cur) == maxAttachPerMsg || (len(cur) > 0 && size+len(f.data) > sendAttachMax) {
+			batches = append(batches, cur)
+			cur, size = nil, 0
+		}
+		cur = append(cur, f)
+		size += len(f.data)
+	}
+	if len(cur) > 0 {
+		batches = append(batches, cur)
+	}
+	return batches
+}
+
+// postAttachments 把一批附件发进子区，超出单条上限的分多条发。分多条时只
+// 有第一条带说明文字——同一句说明重复三遍比不说更吵。
+func (s *Service) postAttachments(ctx context.Context, token, channelID, content string, files []outFile) error {
+	for i, batch := range batchFiles(files) {
+		payload := map[string]any{"allowed_mentions": noMentions()}
+		if i == 0 && content != "" {
+			payload["content"] = content
+		}
+		cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		err := botRESTFiles(cctx, token, channelID, payload, batch)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

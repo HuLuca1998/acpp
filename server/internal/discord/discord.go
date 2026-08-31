@@ -208,6 +208,7 @@ func (s *Service) Start(ctx context.Context) {
 	if s.acpMgr != nil {
 		go s.reapIdle(ctx)
 	}
+	s.startLinkCleanup(ctx)
 }
 
 // Close 停掉 gateway 并回收全部 acp 子进程（进程退出时用；幂等）。

@@ -157,6 +157,12 @@ func v2Section(content string, button map[string]any) map[string]any {
 	}
 }
 
+// v2LinkButton 是跳外链的按钮（style 5）。它不带 custom_id——平台不会
+// 为它回 interaction，所以不需要登记进 isAskComponent。
+func v2LinkButton(label, url string) map[string]any {
+	return map[string]any{"type": 2, "style": 5, "label": label, "url": url}
+}
+
 // v2Container 把内容包进带色条的容器（消息顶层组件）。
 func v2Container(color int, inner []map[string]any) []map[string]any {
 	return []map[string]any{{"type": 17, "accent_color": color, "components": inner}}
