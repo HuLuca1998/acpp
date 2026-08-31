@@ -44,11 +44,12 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 	srv := mcp.Server{
 		Name: mcpServerName,
 		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
-			// cwd 级凭证（discord 子区）优先：不落库，sessionID 记 0
-			//（与工具台人工试运行同一语义，见 model.MCPCall）。
-			if _, dir, ok := s.peerTok.Lookup(token); ok {
+			// 非会话凭证（discord 子区）优先：不落库，sessionID 记 0
+			//（与工具台人工试运行同一语义，见 model.MCPCall）。凭证上带着
+			// 作用域——频道锁定了哪条数据源，这枚凭证就只看得见哪条。
+			if _, dir, only, ok := s.peerTok.Lookup(token); ok {
 				cwd = dir
-				return s.toolsForCwd(ctx, dir)
+				return s.toolsForScope(ctx, Scope{Cwd: dir, Only: only})
 			}
 			if s.sessions == nil {
 				return nil, fmt.Errorf("datasource mcp not wired")
@@ -58,7 +59,7 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 				return nil, err
 			}
 			sessionID, cwd = id, dir
-			return s.toolsForCwd(ctx, dir)
+			return s.toolsForScope(ctx, Scope{Cwd: dir})
 		},
 		OnCall: func(ctx context.Context, rec mcp.Call) {
 			s.record(ctx, rec, sessionID, cwd, model.MCPSourceAgent)
@@ -72,7 +73,7 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 // 走的是与 agent 完全相同的那条 toolsForCwd：页面上看到的工具集、描述与
 // 参数，就是模型此刻看到的那一份。两边各算一次的话，页面迟早会骗人。
 func (s *Service) InspectTools(ctx context.Context, cwd string) ([]mcp.Declaration, error) {
-	tools, err := s.toolsForCwd(ctx, cwd)
+	tools, err := s.toolsForScope(ctx, Scope{Cwd: cwd})
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (s *Service) InspectMCP(ctx context.Context, cwd string, raw []byte) (any, 
 	srv := mcp.Server{
 		Name: mcpServerName,
 		Resolve: func(ctx context.Context, _ string) ([]mcp.Tool, error) {
-			return s.toolsForCwd(ctx, cwd)
+			return s.toolsForScope(ctx, Scope{Cwd: cwd})
 		},
 		OnCall: func(ctx context.Context, rec mcp.Call) {
 			s.record(ctx, rec, 0, cwd, model.MCPSourceManual)
@@ -99,12 +100,12 @@ func (s *Service) InspectMCP(ctx context.Context, cwd string, raw []byte) (any, 
 	return srv.Serve(ctx, "", raw)
 }
 
-// toolsForCwd 算出一条工作目录下可用的工具集。
+// toolsForScope 算出一个作用域下可用的工具集。
 //
 // 执行工具只在**存在可写数据源**时才出现在清单里：全是只读连接的项目，
 // 模型连这个工具都看不到，也就不会去试。
-func (s *Service) toolsForCwd(ctx context.Context, cwd string) ([]mcp.Tool, error) {
-	sources, err := s.ForCwd(ctx, cwd, true)
+func (s *Service) toolsForScope(ctx context.Context, sc Scope) ([]mcp.Tool, error) {
+	sources, err := s.ForScope(ctx, sc, true)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (s *Service) toolsForCwd(ctx context.Context, cwd string) ([]mcp.Tool, erro
 			break
 		}
 	}
-	return s.tools(cwd, writable), nil
+	return s.tools(sc, writable), nil
 }
 
 // record 把一次工具调用交给观测端。没挂观测就什么都不做。
@@ -136,13 +137,13 @@ func (s *Service) record(ctx context.Context, rec mcp.Call, sessionID uint, cwd,
 	})
 }
 
-// tools 构造这条会话可用的工具集。cwd 决定项目，项目决定数据源；
-// writable 决定要不要挂执行工具。
-func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
+// tools 构造这条会话可用的工具集。作用域决定看得见哪些数据源（cwd 定
+// 项目，Only 定锁死的那一条）；writable 决定要不要挂执行工具。
+func (s *Service) tools(sc Scope, writable bool) []mcp.Tool {
 	// 每个工具都现取数据源而不是闭包捕获一份：配置页刚改完的连接，
 	// 下一次调用就该生效，不该等会话重开。
 	sources := func(ctx context.Context) ([]model.DataSource, error) {
-		return s.ForCwd(ctx, cwd, true)
+		return s.ForScope(ctx, sc, true)
 	}
 	pick := func(ctx context.Context, ref string) (*model.DataSource, error) {
 		list, err := sources(ctx)

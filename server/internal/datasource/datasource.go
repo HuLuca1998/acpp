@@ -60,8 +60,9 @@ type Service struct {
 	calls         Calls
 	// mcpBase 是 agent 回连的 MCP 端点前缀（http://127.0.0.1:<port>/api/mcp/db/）。
 	mcpBase string
-	// peerTok 是非会话调用方（discord 子区）的回连凭证（key 用 cwd——
-	// 这个工具面按目录算工具集，同目录天然共享）。
+	// peerTok 是非会话调用方（discord 子区）的回连凭证。key 用调用方自己的
+	// key 而不是 cwd：两个频道可能绑同一分支（cwd 相同）却锁着不同的数据源，
+	// 按 cwd 发凭证会让它们互相踢掉对方的作用域。
 	peerTok mcp.PeerTokens
 }
 
@@ -152,28 +153,48 @@ func (s *Service) List(ctx context.Context, page, pageSize int, orderBy string) 
 	return out, total, nil
 }
 
-// ForCwd 返回某个工作目录所属项目下的数据源——会话侧的**唯一**取数入口。
+// ForCwd 返回某个工作目录所属项目下的数据源。ForScope 的薄封装，留给
+// 没有锁定诉求的调用方（网页会话、工具台）。
+func (s *Service) ForCwd(ctx context.Context, cwd string, onlyEnabled bool) ([]model.DataSource, error) {
+	return s.ForScope(ctx, Scope{Cwd: cwd}, onlyEnabled)
+}
+
+// ForScope 按作用域取数据源——会话侧的**唯一**取数入口（见 scope.go）。
 // onlyEnabled 为 true 时跳过停用的（挂给 AI 的工具面用）。
 //
 // 推不出项目、或该项目没配数据源，都返回空列表而不是错误：调用方
 // （MCP 工具面、斜杠命令）拿到空就该说「这个项目没有可用数据源」，
 // 那是正常状态不是故障。
-func (s *Service) ForCwd(ctx context.Context, cwd string, onlyEnabled bool) ([]model.DataSource, error) {
-	names := projectCandidates(cwd, s.workspaceRoot())
+func (s *Service) ForScope(ctx context.Context, sc Scope, onlyEnabled bool) ([]model.DataSource, error) {
+	q := s.db.WithContext(ctx)
+	if onlyEnabled {
+		q = q.Where("disabled = ?", false)
+	}
+
+	if sc.Only > 0 {
+		// 锁定到一条时**跳过项目推断**：显式绑定比从路径猜可靠得多，
+		// 频道绑定的意义正是免掉那份猜。查不到（被删或被停用）返回空——
+		// 降级方向只能是「更少」，绝不能悄悄回退成整个项目都可见。
+		var out []model.DataSource
+		if err := q.Where("id = ?", sc.Only).Limit(1).Find(&out).Error; err != nil {
+			return nil, fmt.Errorf("load pinned datasource: %w", err)
+		}
+		for i := range out {
+			decorate(&out[i])
+		}
+		return out, nil
+	}
+
+	names := projectCandidates(sc.Cwd, s.workspaceRoot())
 	if len(names) == 0 {
 		return nil, nil
 	}
-
 	lowered := make([]string, len(names))
 	for i, n := range names {
 		lowered[i] = strings.ToLower(n)
 	}
-	q := s.db.WithContext(ctx).Where("LOWER(project) IN ?", lowered)
-	if onlyEnabled {
-		q = q.Where("disabled = ?", false)
-	}
 	var out []model.DataSource
-	if err := q.Order("env").Find(&out).Error; err != nil {
+	if err := q.Where("LOWER(project) IN ?", lowered).Order("env").Find(&out).Error; err != nil {
 		return nil, fmt.Errorf("list datasources for cwd: %w", err)
 	}
 	for i := range out {

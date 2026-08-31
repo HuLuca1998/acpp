@@ -53,7 +53,7 @@ func (s *Service) HandleMCP(ctx context.Context, token string, raw []byte) (any,
 		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
 			// 非会话凭证（discord 子区）优先：打开事件走挂载时登记的
 			// 回调，观测记录 sessionID 记 0（非会话发起语义）。
-			if key, dir, ok := s.peerTok.Lookup(token); ok {
+			if key, dir, _, ok := s.peerTok.Lookup(token); ok {
 				cwd = dir
 				return s.tools(dir, func(rel, title string) {
 					if f, ok := s.peerOpen.Load(key); ok && f != nil {

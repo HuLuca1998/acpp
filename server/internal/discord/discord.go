@@ -62,8 +62,9 @@ type Deps struct {
 	// 配了数据源才有。key 是子区会话键（回连凭证与报告回调按它路由）；
 	// agent 产出报告并调用 report_open 时 onReport 会被回调（rel 相对
 	// cwd）。nil 表示两个工具面都不接。
-	// withDB 为真才挂数据库工具面（子区默认关，/db 或 @db 按需开）。
-	Mounts func(ctx context.Context, key, cwd, flavor string, withDB bool, onReport func(rel, title string)) (mcpServers []any, metaExtra map[string]any, err error)
+	// withDB 为真才挂数据库工具面（子区默认开，/db off 显式关）；
+	// dbSourceID 非零时把可见数据源锁死到那一条（频道绑定的环境）。
+	Mounts func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID uint, onReport func(rel, title string)) (mcpServers []any, metaExtra map[string]any, err error)
 }
 
 // AgentOption 是一个内置工具的可选项集合。

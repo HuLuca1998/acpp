@@ -27,7 +27,7 @@ func (s *Service) chatMounts(threadID string, b Binding) (servers []any, meta ma
 	if s.deps.MCPBase == "" {
 		return nil, nil, nil
 	}
-	token, err := s.chatTok.Issue(threadID, b.Workdir)
+	token, err := s.chatTok.Issue(threadID, b.Workdir, 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,7 +52,7 @@ func (s *Service) HandleChatMCP(ctx context.Context, token string, raw []byte) (
 	srv := mcp.Server{
 		Name: chatServerName,
 		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
-			threadID, cwd, ok := s.chatTok.Lookup(token)
+			threadID, cwd, _, ok := s.chatTok.Lookup(token)
 			if !ok {
 				return nil, fmt.Errorf("凭证无效（会话可能已重启）")
 			}

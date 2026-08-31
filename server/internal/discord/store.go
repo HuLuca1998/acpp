@@ -58,6 +58,14 @@ type Binding struct {
 	// Access 是统一权限档（safe/auto-edit/full，对齐 acp.AccessLevel）；
 	// 空串按 auto-edit 兜底（老绑定没这字段）。
 	Access string `json:"access,omitempty"`
+	// DataSourceID 非零表示这个频道**锁定**了一条数据库连接（/init 选的
+	// 环境）：子区的数据库工具面只看得见它，别的环境连列都列不出来。
+	// 一个项目三个环境频道各绑各的库，靠的就是这个字段（adr-018）。
+	// 为零时维持老口径——项目下的数据源全部可见。
+	DataSourceID uint `json:"dataSourceId,omitempty"`
+	// DataSourceRef 是 `<项目>/<环境>` 的展示快照：连接被删掉之后，主题与
+	// /status 仍能说清这个频道原本绑的是谁（否则只剩一个数字 id）。
+	DataSourceRef string `json:"dataSourceRef,omitempty"`
 	// CardMessageID 是早期版本置顶身份卡的遗留（卡已退役，频道侧常驻
 	// 信息面只有主题）；非空时下次同步会把卡删掉并清空此字段。
 	CardMessageID string `json:"cardMessageId,omitempty"`

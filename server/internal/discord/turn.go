@@ -132,7 +132,7 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 			withDB = !t.DBOff
 		}
 		var mErr error
-		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, key, b.Workdir, b.Agent, withDB, func(rel, title string) {
+		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, key, b.Workdir, b.Agent, withDB, b.DataSourceID, func(rel, title string) {
 			s.reportOpened(token, threadID, b, rel, title)
 		})
 		if mErr != nil {

@@ -31,7 +31,7 @@ func (s *Service) Reference(ctx context.Context, cwd string, refs []string) ([]s
 	if len(refs) == 0 {
 		return nil, nil
 	}
-	sources, err := s.ForCwd(ctx, cwd, true)
+	sources, err := s.ForScope(ctx, Scope{Cwd: cwd}, true)
 	if err != nil {
 		return nil, err
 	}

@@ -43,7 +43,7 @@ func (s *Service) MountsForPeer(ctx context.Context, key, cwd, flavor string, on
 	if strings.TrimSpace(cwd) == "" {
 		return nil, nil, nil
 	}
-	token, err := s.peerTok.Issue(key, cwd)
+	token, err := s.peerTok.Issue(key, cwd, 0)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -146,6 +146,78 @@ func TestService_ForCwd_ProjectIsolation(t *testing.T) {
 	}
 }
 
+// 契约：Scope.Only 锁定后只看得见那一条——同项目的别的环境也列不出来
+// （discord 三个环境频道各绑各的库，靠的就是这条）；被停用或被删掉时
+// 降级成空，绝不回退成「整个项目都可见」。
+func TestService_ForScope_Pinned(t *testing.T) {
+	root := t.TempDir()
+	svc := testService(t, root)
+	ctx := context.Background()
+
+	pw := "secret"
+	var dev, pre *model.DataSource
+	for _, in := range []Input{
+		{Project: "pp-game", Env: "dev", Host: "10.0.0.1", User: "root", Password: &pw, Database: "pp_dev"},
+		{Project: "pp-game", Env: "pre", Host: "10.0.0.3", User: "root", Password: &pw, Database: "pp_pre"},
+		{Project: "pp-game", Env: "prod", Host: "10.0.0.9", User: "root", Password: &pw, Database: "pp_prod"},
+	} {
+		created, err := svc.Create(ctx, in)
+		if err != nil {
+			t.Fatalf("create %s/%s: %v", in.Project, in.Env, err)
+		}
+		switch in.Env {
+		case "dev":
+			dev = created
+		case "pre":
+			pre = created
+		}
+	}
+
+	cwd := filepath.Join(root, "pp-game")
+	got, err := svc.ForScope(ctx, Scope{Cwd: cwd, Only: pre.ID}, true)
+	if err != nil {
+		t.Fatalf("ForScope pinned: %v", err)
+	}
+	if want := []string{"pp-game/pre"}; !reflect.DeepEqual(refsOf(got), want) {
+		t.Fatalf("锁定后 = %v, want %v", refsOf(got), want)
+	}
+
+	// 锁定不依赖项目推断：推不出项目的目录照样拿得到那一条（显式绑定
+	// 本来就比从路径猜可靠）。
+	outside, err := svc.ForScope(ctx, Scope{Cwd: root, Only: dev.ID}, true)
+	if err != nil {
+		t.Fatalf("ForScope outside: %v", err)
+	}
+	if want := []string{"pp-game/dev"}; !reflect.DeepEqual(refsOf(outside), want) {
+		t.Fatalf("推不出项目时锁定 = %v, want %v", refsOf(outside), want)
+	}
+
+	// 停用之后降级成空，而不是回退到整个项目。
+	if _, err := svc.Update(ctx, dev.ID, Input{Project: "pp-game", Env: "dev", Host: "10.0.0.1",
+		User: "root", Database: "pp_dev", Disabled: ptr(true)}); err != nil {
+		t.Fatalf("停用 dev: %v", err)
+	}
+	disabled, err := svc.ForScope(ctx, Scope{Cwd: cwd, Only: dev.ID}, true)
+	if err != nil {
+		t.Fatalf("ForScope disabled: %v", err)
+	}
+	if len(disabled) != 0 {
+		t.Fatalf("锁定的连接被停用应取不到，实际 %v", refsOf(disabled))
+	}
+
+	// 连接被删掉同理：空，不是「全部」。
+	if err := svc.Delete(ctx, pre.ID); err != nil {
+		t.Fatalf("删 pre: %v", err)
+	}
+	gone, err := svc.ForScope(ctx, Scope{Cwd: cwd, Only: pre.ID}, true)
+	if err != nil {
+		t.Fatalf("ForScope gone: %v", err)
+	}
+	if len(gone) != 0 {
+		t.Fatalf("锁定的连接被删应取不到，实际 %v", refsOf(gone))
+	}
+}
+
 // 契约：ref 可以写全（项目/环境）、只写环境，或在唯一候选时省略；
 // 认不出来时错误里要带上可用清单，模型才知道下一步填什么。
 func TestResolve(t *testing.T) {

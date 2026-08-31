@@ -42,19 +42,22 @@ func (s *Service) MountsFor(ctx context.Context, sessionID uint, cwd, flavor str
 	return servers, meta, nil
 }
 
-// MountsForCwd 为一个纯工作目录上下文算挂载——给没有会话记录的调用方
-// （discord 子区对话）用。工具面、项目过滤与会话那条完全同源，差别只在
-// 回连凭证：绑到 cwd 而不是会话 id，存内存（mcp.PeerTokens），进程重启即失效，
-// 挂载方每次开会话都会现领，不需要落库。
-func (s *Service) MountsForCwd(ctx context.Context, cwd, flavor string) ([]any, map[string]any, error) {
+// MountsForPeer 为一个没有会话记录的调用方（discord 子区对话）算挂载。
+// 工具面与会话那条完全同源，差别有两处：
+//
+//   - 回连凭证绑 (调用方 key, cwd, 锁定的数据源) 而不是会话 id，存内存
+//     （mcp.PeerTokens），进程重启即失效，挂载方每次开会话都会现领。
+//   - only 非零时可见范围锁死到那一条数据源（频道绑定的环境），项目过滤
+//     不再参与——AI 因此连别的环境的连接都列不出来。
+func (s *Service) MountsForPeer(ctx context.Context, key, cwd, flavor string, only uint) ([]any, map[string]any, error) {
 	if strings.TrimSpace(cwd) == "" {
 		return nil, nil, nil
 	}
-	sources, err := s.ForCwd(ctx, cwd, true)
+	sources, err := s.ForScope(ctx, Scope{Cwd: cwd, Only: only}, true)
 	if err != nil || len(sources) == 0 {
 		return nil, nil, err
 	}
-	token, err := s.peerTok.Issue(cwd, cwd)
+	token, err := s.peerTok.Issue(key, cwd, only)
 	if err != nil {
 		return nil, nil, err
 	}
