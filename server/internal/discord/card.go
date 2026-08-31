@@ -83,7 +83,27 @@ func (s *Service) syncChannelCard(ctx context.Context, token string, b Binding) 
 			slog.Warn("清身份卡 id 失败", "err", err)
 		}
 	}
+	s.syncGuide(ctx, token, b)
 	s.syncTopic(ctx, token, b)
+}
+
+// syncGuide 把置顶手册编辑成最新内容（消息 PATCH，不重发——重发会把置顶
+// 和阅读位置都打乱）。
+//
+// 手册里带着绑定信息（在哪条分支上干活、锁定了哪个库），绑定一变它就过期；
+// 手册文案本身改了也一样——不跟着更新的话，频道里就一直躺着上一版。
+func (s *Service) syncGuide(ctx context.Context, token string, b Binding) {
+	if b.GuideMessageID == "" {
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "PATCH",
+		fmt.Sprintf("/channels/%s/messages/%s", b.ChannelID, b.GuideMessageID),
+		map[string]any{"content": guideMD(b), "allowed_mentions": noMentions()}, nil)
+	if err != nil {
+		slog.Warn("更新频道手册失败", "channel", b.ChannelID, "err", err)
+	}
 }
 
 // retireCard 删掉一张历史遗留的置顶身份卡（删除消息连带解除置顶）。
