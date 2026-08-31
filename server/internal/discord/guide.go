@@ -15,7 +15,7 @@ import (
 func guideMD(b Binding) string {
 	return fmt.Sprintf(`# 🤖 acpp 使用手册
 
-本频道已绑定仓库 **%s** @ %s（%s · %s · 思考深度 %s · 权限 %s）。
+本频道已绑定仓库 **%s** @ %s（%s · 思考深度 %s · 权限 %s）。
 
 ## 开始对话
 - 在本频道 **@acpp** 说话（@ 出来选用户或角色都行），自动开一个子区，agent 在子区里干活
@@ -34,7 +34,16 @@ func guideMD(b Binding) string {
 
 ## 常用命令
 `+"`/help`"+` 用法速览 · `+"`/status`"+` 看绑定 · `+"`/model` `/effort` `/access`"+` 调模型与权限 · `+"`/db`"+` 数据库开关 · `+"`/stop`"+` 中止本轮 · `+"`/unbind`"+` 解绑 · `+"`/init`"+` 重新绑定`,
-		b.Repo, b.Branch, b.Agent, orDefault(b.ModelLabel, b.Model), orDefault(b.Effort, "默认"), b.AccessOrDefault())
+		b.Repo, b.Branch, guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault())
+}
+
+// guideModel 是手册头部的模型描述。ModelLabel 来自 /init 表单时自带
+// agent 前缀（「claude · Default」），别再拼一次 agent（会重复）。
+func guideModel(b Binding) string {
+	if b.ModelLabel != "" {
+		return b.ModelLabel
+	}
+	return b.Agent + " · " + orDefault(b.Model, "默认模型")
 }
 
 // publishGuide 发布（或更新）频道手册：删旧发新、置顶、落盘消息 id。
