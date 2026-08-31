@@ -17,6 +17,9 @@ const (
 	// defaultMaxRows 是单条语句返回的行数上限。给人看的面板翻不了几千行，
 	// 给 AI 看更要克制——一次 select * 就能把上下文塞满。
 	defaultMaxRows = 500
+	// stmtQueryTimeout 是单条查询语句的硬超时（写语句不受限，见
+	// runStatement；整次调用另有 conn.go 的 queryTimeout=60s 总闸）。
+	stmtQueryTimeout = 30 * time.Second
 	// maxRowsHard 是谁都突破不了的硬顶。调用方能调小不能调大：一条
 	// `select * from 大表` 在千万行的表上能把库的连接、网络和本进程内存
 	// 一起拖垮，而那从来不是任何人真正想要的结果。
@@ -114,17 +117,22 @@ func runStatement(ctx context.Context, db *sql.DB, stmt string, maxRows int) Sta
 		// 取消而不是只 break，是因为 rows.Close() 会先把剩余结果读干净；
 		// 一条命中千万行的 select 光是「读完再丢掉」就够把网络和内存占满。
 		// cancel 让驱动真的中断这次查询。
-		queryCtx, cancelQuery := context.WithCancel(ctx)
+		//
+		// 查询另设硬超时：行数护栏挡不住「返回很少但扫全表」的慢查询
+		//（无索引 where、笛卡尔 join），那种连接挂在库上才是真把库拖垮
+		// 的方式。写语句不设——DDL/批量修复本来就可能要跑很久，且已有
+		// 权限门槛。
+		queryCtx, cancelQuery := context.WithTimeout(ctx, stmtQueryTimeout)
 		defer cancelQuery()
 
 		rows, err := db.QueryContext(queryCtx, stmt)
 		if err != nil {
-			res.Error = err.Error()
+			res.Error = queryErrText(queryCtx, err)
 			return res
 		}
 		defer rows.Close()
 		if err := scanRows(rows, &res, maxRows); err != nil {
-			res.Error = err.Error()
+			res.Error = queryErrText(queryCtx, err)
 		}
 		if res.Truncated {
 			cancelQuery()
@@ -232,4 +240,13 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// queryErrText 把超时错误翻译成可行动的提示——「context deadline exceeded」
+// 对模型没有指导意义，它需要知道该收窄条件而不是原样重试。
+func queryErrText(ctx context.Context, err error) string {
+	if ctx.Err() == context.DeadlineExceeded {
+		return fmt.Sprintf("查询超过 %s 被中止——语句太重（可能在扫全表）。加 WHERE 收窄范围、给条件列建索引，或改用 COUNT/聚合。", stmtQueryTimeout)
+	}
+	return err.Error()
 }
