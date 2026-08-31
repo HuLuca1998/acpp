@@ -177,6 +177,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.handleAskModal(token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):
 		s.branchPicked(ctx, token, ev)
+	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "db:"):
+		s.dbPicked(ctx, token, ev)
 	case ev.Type == 3 && isAskComponent(ev.Data.CustomID):
 		s.handleAskComponent(token, ev)
 	}

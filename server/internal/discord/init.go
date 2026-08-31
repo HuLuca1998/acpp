@@ -39,15 +39,6 @@ func (s *Service) openInitModal(ctx context.Context, token string, ev interactio
 		}
 	}
 
-	var dbs []DBOption
-	if s.deps.DataSources != nil {
-		if list, err := s.deps.DataSources(cctx); err != nil {
-			slog.Warn("取数据源清单失败，/init 少一项数据库", "err", err)
-		} else {
-			dbs = list
-		}
-	}
-
 	current, _ := s.store.config().binding(ev.ChannelID)
 	customInput := map[string]any{
 		"type": 4, "custom_id": "repo_custom", "style": 1, "required": len(repos) == 0,
@@ -78,14 +69,9 @@ func (s *Service) openInitModal(ctx context.Context, token string, ev interactio
 		map[string]any{"type": 18, "label": "思考深度", "component": selectComponent("effort", effortChoices(), true)},
 		map[string]any{"type": 18, "label": "安全权限", "component": selectComponent("access", accessChoices(), true)},
 	)
-	// 数据库：一个项目的 prod/pre/dev 三个频道各绑各的库，绑了之后这个频道
-	// 的 AI 连别的环境的连接都列不出来（adr-018）。没配数据源就不出这一项。
-	if len(dbs) > 0 {
-		comps = append(comps, map[string]any{
-			"type": 18, "label": "数据库", "description": "锁定本频道能查的库；不锁定＝项目下全部环境",
-			"component": selectComponent("db", dbChoices(dbs, current.DataSourceID), true),
-		})
-	}
+	// 表单到此为止：modal 最多 5 个组件（多一个就是 400
+	// BASE_TYPE_MAX_LENGTH，实测），所以「数据库」挪到了分支之后的一步，
+	// 见 offerDataSource。
 
 	data := map[string]any{
 		"custom_id":  "init",
@@ -285,11 +271,9 @@ func (s *Service) submitInit(ctx context.Context, token string, ev interactionEv
 		return
 	}
 
-	dbID, dbRef := parseDBChoice(firstAnswer(answers, "db"))
 	go s.offerBranches(ctx, token, ev, initInput{
 		repo: name, cloneURL: cloneURL,
 		agent: agent, modelID: modelID, effort: effort, access: firstAnswer(answers, "access"),
-		dbID: dbID, dbRef: dbRef,
 	})
 }
 
@@ -305,13 +289,13 @@ func (s *Service) offerBranches(ctx context.Context, token string, ev interactio
 		if err != nil {
 			slog.Warn("查分支失败，按默认分支继续", "repo", in.repo, "err", err)
 		}
-		s.finishInit(ctx, token, ev, in)
+		s.offerDataSource(ctx, token, ev, in)
 		return
 	}
 
 	id, perr := randomID()
 	if perr != nil {
-		s.finishInit(ctx, token, ev, in)
+		s.offerDataSource(ctx, token, ev, in)
 		return
 	}
 	s.mu.Lock()
@@ -385,6 +369,92 @@ func (s *Service) branchPicked(ctx context.Context, token string, ev interaction
 		slog.Error("分支选择改卡失败", "err", err)
 	}
 	// 收尾仍编辑最初 /init 的回执（同一条消息，用建卡那次的 token）。
+	go s.offerDataSource(ctx, token, p.ev, in)
+}
+
+// offerDataSource 是绑定的最后一步：选这个频道锁定哪个库。
+//
+// 它不在 /init 表单里，是因为 modal 最多放 5 个组件（第 6 个直接 400
+// BASE_TYPE_MAX_LENGTH，真机实测），仓库/自定义仓库/模型/深度/权限已经占满。
+// 没配数据源就跳过这一步，直接开工。
+func (s *Service) offerDataSource(ctx context.Context, token string, ev interactionEvent, in initInput) {
+	var dbs []DBOption
+	if s.deps.DataSources != nil {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		list, err := s.deps.DataSources(cctx)
+		cancel()
+		if err != nil {
+			slog.Warn("取数据源清单失败，跳过锁定这一步", "err", err)
+		} else {
+			dbs = list
+		}
+	}
+	if len(dbs) == 0 {
+		s.finishInit(ctx, token, ev, in)
+		return
+	}
+	id, perr := randomID()
+	if perr != nil {
+		s.finishInit(ctx, token, ev, in)
+		return
+	}
+	s.mu.Lock()
+	s.pending[id] = pendingInit{in: in, ev: ev, created: time.Now()}
+	s.mu.Unlock()
+
+	current, _ := s.store.config().binding(ev.ChannelID)
+	sel := selectComponent("db:"+id, dbChoices(dbs, current.DataSourceID), false)
+	sel["type"] = 3 // 消息上的下拉只有 String Select
+	sel["placeholder"] = "选择这个频道能查的库…"
+	delete(sel, "required")
+
+	branch := in.branch
+	if branch == "" {
+		branch = in.defaultBranch + "（默认）"
+	}
+	s.editOriginal(token, s.appID(), ev.Token, map[string]any{
+		"embeds": []map[string]any{{
+			"title": "选择数据库",
+			"description": fmt.Sprintf(
+				"**%s** @ %s\n选中之后，这个频道的 AI 只看得见这一条连接——同项目别的环境列都列不出来。\n15 分钟内有效。",
+				in.repo, branch),
+			"color": colorBlurbe,
+		}},
+		"components":       []map[string]any{{"type": 1, "components": []map[string]any{sel}}},
+		"allowed_mentions": noMentions(),
+	})
+}
+
+// dbPicked 收数据库下拉的选择，然后进入真正的收尾（克隆/建树/落绑定）。
+func (s *Service) dbPicked(ctx context.Context, token string, ev interactionEvent) {
+	id := strings.TrimPrefix(ev.Data.CustomID, "db:")
+	s.mu.Lock()
+	p, ok := s.pending[id]
+	delete(s.pending, id)
+	s.mu.Unlock()
+	if !ok || len(ev.Data.Values) == 0 {
+		s.ephemeral(token, ev, "这张卡过期了（或已处理过），重新 /init 一次。")
+		return
+	}
+	in := p.in
+	in.dbID, in.dbRef = parseDBChoice(ev.Data.Values[0])
+
+	label := in.dbRef
+	if in.dbID == 0 {
+		label = "不锁定（项目下全部环境）"
+	}
+	err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
+		"embeds": []map[string]any{{
+			"title":       "⏳ 正在准备工作区…",
+			"description": fmt.Sprintf("**%s** · 数据库 **%s**", in.repo, label),
+			"color":       colorBlurbe,
+		}},
+		"components":       []map[string]any{},
+		"allowed_mentions": noMentions(),
+	})
+	if err != nil {
+		slog.Error("数据库选择改卡失败", "err", err)
+	}
 	go s.finishInit(ctx, token, p.ev, in)
 }
 
