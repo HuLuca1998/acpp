@@ -108,7 +108,7 @@ func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,
-		map[string]any{"topic": trimRunes(topic, 1000)}, nil)
+		map[string]any{"topic": trimRunes(topic, topicLimit)}, nil)
 	if err == nil {
 		return
 	}
@@ -145,41 +145,81 @@ func (s *Service) syncTopic(ctx context.Context, token string, b Binding) {
 		rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer rcancel()
 		err := botREST(rctx, token, "PATCH", "/channels/"+fresh.ChannelID,
-			map[string]any{"topic": trimRunes(topicLine(fresh), 1000)}, nil)
+			map[string]any{"topic": trimRunes(topicLine(fresh), topicLimit)}, nil)
 		if err != nil {
 			slog.Warn("频道主题重写仍失败", "err", err)
 		}
 	}()
 }
 
-// topicLine 是主题摘要的唯一格式。主题是频道侧唯一常驻信息面，工作目录
-// 也带上——顶栏截断没关系，点开主题能看全文。
+// topicLimit 是写进频道主题的字符上限。平台的硬上限是 1024，这里留一截
+// 余量：手册那段是固定的，能变长的只有仓库名、分支名和工作目录，超长时
+// 宁可把目录掐短（shortPath）也不能让末尾的手册被平台截掉。
+const topicLimit = 1000
+
+// shortPath 把过长的路径掐成 `…/尾部`：工作树名比一长串前缀有用得多。
+func shortPath(p string, max int) string {
+	r := []rune(p)
+	if len(r) <= max {
+		return p
+	}
+	return "…" + string(r[len(r)-max+1:])
+}
+
+// topicLine 渲染频道主题：频道侧常驻的**绑定信息面**，一行一条。用法说明
+// 不放这里——那是置顶手册的活，两份重复只会漂移。
+//
+// 三条硬约束：
+//
+//   - 主题上限 1024 字符，这里压在 topicLimit 以内；能变长的只有仓库名、
+//     分支名和工作目录，各自有配额，超长掐目录（TestTopicLineFits 盯着）。
+//   - **主题不渲染 markdown**——反引号、星号都会原样显示（真机实测），
+//     排版只用换行与空行。
+//   - 开头必须留一个换行：频道欢迎页把主题直接接在「这是 #xxx 频道的
+//     起点。」后面，不空一行首行就跟那句话挤在一起（真机实测）。
 func topicLine(b Binding) string {
-	branch := branchLine(b)
 	model := b.ModelLabel
 	if model == "" {
 		model = b.Agent + " · " + b.Model
 	}
-	effort := b.Effort
-	if effort == "" {
-		effort = "默认"
+	var w strings.Builder
+	w.WriteString("\n项目\n")
+	fmt.Fprintf(&w, "仓库：%s\n", trimRunes(b.Repo, 60))
+	fmt.Fprintf(&w, "分支：%s\n", trimRunes(branchLine(b), 80))
+	fmt.Fprintf(&w, "目录：%s\n", shortPath(b.Workdir, 120))
+	w.WriteString("提交都落在上面这条分支上，base 分支不受影响\n\n")
+
+	fmt.Fprintf(&w, "模型：%s\n", trimRunes(model, 50))
+	fmt.Fprintf(&w, "思考深度：%s\n", trimRunes(orDefault(b.Effort, "默认"), 20))
+	fmt.Fprintf(&w, "权限：%s\n", accessLabel(b.AccessOrDefault()))
+	fmt.Fprintf(&w, "数据库：%s", trimRunes(dbTopicLine(b), 70))
+	return w.String()
+}
+
+// dbTopicLine 是主题里的数据库那行：锁定了就把「别的环境查不到」说明白，
+// 这是三个环境频道之间唯一的实质差别。
+func dbTopicLine(b Binding) string {
+	if b.DataSourceID == 0 {
+		return "不锁定（本项目的数据源都可见）"
 	}
-	return fmt.Sprintf("acpp 工作区：%s @ %s · %s · 思考深度 %s · 权限 %s · 库 %s · 目录 %s",
-		b.Repo, branch, model, effort, accessLabel(b.AccessOrDefault()), dbLine(b), b.Workdir)
+	return dbLine(b) + " — 只有这一个，别的环境查不到"
 }
 
 // branchLine 是「这个频道在哪条分支上干活」的统一口径：工作分支 + 它从
 // 哪切出来的。两者都要显示——分支名是自动生成的，只报它看不出对应哪个
 // 环境；只报 base 又会让人误以为 agent 直接在 base 上提交。
+//
+// 不带反引号：主题不渲染 markdown，写了就是多两个字符的噪声；/status 的
+// 卡片里要代码样式的话由那边自己包。
 func branchLine(b Binding) string {
 	branch := b.Branch
 	if branch == "" {
 		branch = "默认分支"
 	}
 	if b.Base != "" && b.Base != b.Branch {
-		return fmt.Sprintf("`%s`（基于 `%s`）", branch, b.Base)
+		return fmt.Sprintf("%s（基于 %s）", branch, b.Base)
 	}
-	return "`" + branch + "`"
+	return branch
 }
 
 // dbLine 是「这个频道能查哪个库」的统一口径（主题、/status、手册、/mcps

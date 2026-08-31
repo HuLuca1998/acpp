@@ -37,9 +37,9 @@ func guideMD(b Binding) string {
 ⏳ 已排队 · ✅ 已进对话；📋 计划卡与 🔧 工具卡实时刷新；回合结束回复末尾有小结（耗时 · 工具 · 改动文件 · token）
 
 ## 常用命令
-%s`,
+在输入框打 `+"`/`"+` 就能看到全部命令，每条都带说明。`,
 		b.Repo, branchLine(b), guideModel(b), orDefault(b.Effort, "默认"), b.AccessOrDefault(),
-		guideDBScope(b), commandsLine())
+		guideDBScope(b))
 }
 
 // guideDBScope 说明这个频道的数据库能看到什么：锁定了就点名那一条连接

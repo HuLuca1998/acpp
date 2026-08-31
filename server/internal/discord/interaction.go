@@ -536,6 +536,6 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 		"**看改动** — `/git` 列出本频道工作树的分支、与远端的差距、改了/加了/删了哪些文件。\n" +
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
-		"**常用命令** — " + commandsLine()
+		"**命令** — 在输入框打 `/` 就能看到全部命令，每条都带说明。"
 	s.ephemeralKeep(token, ev, text)
 }

@@ -192,6 +192,48 @@ func TestParseModalSubmit(t *testing.T) {
 
 // 契约：ls-remote --symref 输出要解出默认分支与全部分支。
 
+// 契约：频道主题是频道侧唯一的常驻信息面，必须整条塞得进平台上限——
+// 超了平台会从末尾截，先没的就是手册。极端长的仓库名/分支/目录都要能扛住，
+// 靠掐短目录换手册完整。
+func TestTopicLineFits(t *testing.T) {
+	long := strings.Repeat("very-long-segment/", 12)
+	b := Binding{
+		Repo:   "ORG-WITH-A-REALLY-LONG-NAME/" + long + "repo",
+		Branch: "discord/" + long + "channel",
+		Base:   "release/" + long,
+		Workdir: "/Users/someone/acpp/discord/ORG-WITH-A-REALLY-LONG-NAME/" +
+			long + "repo/.worktree/discord-" + long + "channel",
+		Agent: "claude", Model: "claude-opus-4-6-20260514[1m]",
+		ModelLabel: "claude · Opus 4.6 (1m context window, extended)",
+		Effort:     "xhigh", Access: "auto-edit",
+		DataSourceID: 29, DataSourceRef: "some-long-project/production-environment",
+	}
+	topic := topicLine(b)
+	if n := len([]rune(topic)); n > topicLimit {
+		t.Errorf("主题 %d 字符，超了上限 %d", n, topicLimit)
+	}
+	for _, want := range []string{"项目", "仓库：", "分支：", "目录：", "模型：", "数据库：", "discord/", "production-environment"} {
+		if !strings.Contains(topic, want) {
+			t.Errorf("主题缺少 %q", want)
+		}
+	}
+	// 主题不渲染 markdown，写了格式符号只会原样显示出来。
+	if strings.ContainsAny(topic, "`*") {
+		t.Error("主题里不该出现 markdown 格式符号")
+	}
+
+	// 常规长度的绑定应当留足余量，否则改一句文案就会撞上限。
+	normal := Binding{
+		Repo: "BDBGAME2024/pp-game", Branch: "discord/pp-prod", Base: "live",
+		Workdir: "/Users/luca/acpp/discord/BDBGAME2024/pp-game/.worktree/discord-pp-prod",
+		Agent:   "claude", ModelLabel: "claude · Default", Effort: "high", Access: "auto-edit",
+		DataSourceID: 29, DataSourceRef: "pp-game/prod",
+	}
+	if n := len([]rune(topicLine(normal))); n > topicLimit/2 {
+		t.Errorf("常规主题 %d 字符，余量不足（上限 %d）", n, topicLimit)
+	}
+}
+
 // 契约：模型选项 value 编码为 agent|modelID，超 25 截断；效率清单含默认档。
 
 func TestModelChoices(t *testing.T) {
@@ -585,19 +627,19 @@ func TestResolveInWorkdir(t *testing.T) {
 	}
 }
 
-// 命令表是注册/手册//help 的唯一事实源——这条测试保证表本身完整，
-// 以及派生的清单一行真的覆盖了每条命令（文档漂移的自动对账）。
+// 命令表是命令说明的唯一事实源：desc 就是输入框里打 `/` 时看到的那句话，
+// 手册与 /help 都不再抄清单（抄一份必漂移）。这条测试盯着表本身完整、
+// 描述不超平台上限。
 
 func TestSlashCommandTable(t *testing.T) {
 	cmds := slashCommands()
 	if len(cmds) < 12 {
 		t.Fatalf("命令表只有 %d 条，疑似被误删", len(cmds))
 	}
-	line := commandsLine()
 	seen := map[string]bool{}
 	for _, c := range cmds {
-		if c.name == "" || c.desc == "" || c.hint == "" {
-			t.Errorf("命令 %q 的 desc/hint 不完整（desc=%q hint=%q）", c.name, c.desc, c.hint)
+		if c.name == "" || c.desc == "" {
+			t.Errorf("命令 %q 的描述缺失（desc=%q）", c.name, c.desc)
 		}
 		if len(c.desc) > 100 {
 			t.Errorf("/%s 的描述超过 Discord 100 字符上限", c.name)
@@ -606,13 +648,13 @@ func TestSlashCommandTable(t *testing.T) {
 			t.Errorf("命令 %q 重复", c.name)
 		}
 		seen[c.name] = true
-		if !strings.Contains(line, "`/"+c.name+"`") {
-			t.Errorf("commandsLine 里缺 /%s", c.name)
-		}
 	}
-	// 手册正文也要包含命令清单（guideMD 经 commandsLine 渲染）。
+	// 手册不再列命令，改为指路输入框——这条防止清单被人重新抄回去。
 	md := guideMD(Binding{Repo: "o/r", Branch: "main", Agent: "claude"})
-	if !strings.Contains(md, "`/mcps`") || !strings.Contains(md, "`/usage`") {
-		t.Errorf("频道手册没有带上完整命令清单：\n%s", md)
+	if strings.Contains(md, "`/mcps`") || strings.Contains(md, "`/usage`") {
+		t.Errorf("手册里又出现了命令清单（应指路输入框）：\n%s", md)
+	}
+	if !strings.Contains(md, "打 `/`") {
+		t.Error("手册应告诉用户在输入框打 / 看全部命令")
 	}
 }
