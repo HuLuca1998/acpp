@@ -254,7 +254,7 @@ func (s *Service) showStatus(token string, ev interactionEvent) {
 }
 
 // unbindChannel 处理 /unbind：撤绑定、摘置顶卡、清频道主题。磁盘上的
-// 克隆保留（里面可能有没推送的活），重新绑定就是再跑一次 /init。
+// 工作树保留（里面可能有没推送的活），重新绑定就是再跑一次 /init。
 func (s *Service) unbindChannel(ctx context.Context, token string, ev interactionEvent) {
 	cfg := s.store.config()
 	b, ok := cfg.binding(ev.ChannelID)
@@ -266,7 +266,7 @@ func (s *Service) unbindChannel(ctx context.Context, token string, ev interactio
 		s.ephemeral(token, ev, "解绑失败："+trimRunes(err.Error(), 200))
 		return
 	}
-	s.ephemeral(token, ev, fmt.Sprintf("✅ 已解绑 **%s**。克隆保留在 `%s`，重新绑定用 /init。", b.Repo, b.Workdir))
+	s.ephemeral(token, ev, fmt.Sprintf("✅ 已解绑 **%s**。工作树保留在 `%s`，重新绑定用 /init。", b.Repo, b.Workdir))
 	go s.cleanupChannelCard(ctx, token, b)
 }
 

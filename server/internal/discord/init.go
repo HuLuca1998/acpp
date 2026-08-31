@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -299,9 +298,15 @@ func (s *Service) branchPicked(ctx context.Context, token string, ev interaction
 // 最新摘要（频道侧唯一常驻信息面），ephemeral 回执给一句结论后阅后即焚。
 func (s *Service) finishInit(ctx context.Context, token string, ev interactionEvent, in initInput) {
 	appID := s.appID()
-	workdir := filepath.Join(s.effectiveWorkRoot(s.store.config()), filepath.FromSlash(workdirName(in.repo, in.branch)))
-
-	reused, err := ensureWorkdir(ctx, in.cloneURL, in.branch, workdir)
+	// 工作目录是「项目目录下这个分支的工作树」（adr-018）：一个仓库一份 git
+	// 数据，一个分支一棵树。branch 为空表示默认分支，由 ensureWorktree 解析出
+	// 真名回填——绑定里存真实分支名，展示与 /status 就不用再猜「默认」是谁。
+	home := repoHome(s.effectiveWorkRoot(s.store.config()), in.repo)
+	branch := in.branch
+	if branch == "" {
+		branch = in.defaultBranch
+	}
+	workdir, branch, reused, err := ensureWorktree(ctx, in.cloneURL, home, branch)
 	if err != nil {
 		s.editOriginal(token, appID, ev.Token, map[string]any{
 			"embeds": []map[string]any{{
@@ -332,7 +337,7 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 	now := time.Now()
 	binding := Binding{
 		ChannelID: ev.ChannelID, ChannelName: channelName, GuildID: ev.GuildID,
-		Repo: in.repo, CloneURL: in.cloneURL, Branch: in.branch, Workdir: workdir,
+		Repo: in.repo, CloneURL: in.cloneURL, Branch: branch, Workdir: workdir,
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
 		Effort: in.effort, Access: in.access,
 		CardMessageID: old.CardMessageID, CreatedAt: now, UpdatedAt: now,
@@ -349,9 +354,9 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		return
 	}
 
-	source := "已克隆"
+	source := "已建工作树"
 	if reused {
-		source = "复用已有克隆"
+		source = "复用已有工作树"
 	}
 	s.syncChannelCard(ctx, token, binding)
 	// 频道置顶使用手册：新成员第一眼能看懂怎么用。

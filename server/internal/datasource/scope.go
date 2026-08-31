@@ -46,15 +46,12 @@ func projectCandidates(cwd, workspaceRoot string) []string {
 	if root := filepath.Clean(workspaceRoot); root != "." && within(root, cwd) {
 		rel, err := filepath.Rel(root, cwd)
 		if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-			// 隔离工作区（`<仓库>/worktrees/<名字>`）归属它的主仓库——
-			// 在 worktree 里干活的会话和在主仓库里的是同一个项目。
-			if i := strings.Index(rel, string(filepath.Separator)+"worktrees"+string(filepath.Separator)); i >= 0 {
-				rel = rel[:i]
-			}
+			rel = trimWorktreeSeg(rel)
 			add(rel)
 			add(filepath.Base(rel))
-			// discord 工作区命名是 <仓库>@<分支>（同仓库多分支并存），数据源
-			// 按仓库名配——剥掉 @ 后缀再给一个候选（仓库名不含 @，安全）。
+			// 老 discord 工作区命名是 <仓库>@<分支>（新布局改成了工作树，
+			// 见 trimWorktreeSeg）——旧绑定还在磁盘上，剥掉 @ 后缀再给一个
+			// 候选（仓库名不含 @，安全）。
 			if base := filepath.Base(rel); strings.Contains(base, "@") {
 				add(base[:strings.Index(base, "@")])
 			}
@@ -62,15 +59,32 @@ func projectCandidates(cwd, workspaceRoot string) []string {
 	}
 
 	// 工作区根之外的目录（owner 可以把会话开在任意位置）：用最近的
-	// git 仓库目录名，仍然对得上「项目」这个概念。
+	// git 仓库目录名，仍然对得上「项目」这个概念。工作树的 .git 是文件，
+	// 同样会被 nearestRepo 认出来，所以这里也要剥一次工作树段——否则
+	// `<项目>/.worktree/live` 会把分支名 live 当成项目名。
 	if repo := nearestRepo(cwd); repo != "" {
-		base := filepath.Base(repo)
+		base := filepath.Base(trimWorktreeSeg(repo))
 		add(base)
 		if i := strings.Index(base, "@"); i > 0 {
 			add(base[:i])
 		}
 	}
 	return names
+}
+
+// worktreeSegs 是「工作树容器目录」的两种写法：网页会话的隔离工作区是
+// `<项目>/worktrees/<名字>`，discord 频道工作树是 `<项目>/.worktree/<分支>`。
+// 两种都归属上面那个项目——在工作树里干活的会话和在主仓库里的是同一个项目。
+var worktreeSegs = []string{"worktrees", ".worktree"}
+
+// trimWorktreeSeg 把路径截到工作树容器目录之前（不含），没有就原样返回。
+func trimWorktreeSeg(path string) string {
+	for _, seg := range worktreeSegs {
+		if i := strings.Index(path, string(filepath.Separator)+seg+string(filepath.Separator)); i >= 0 {
+			return path[:i]
+		}
+	}
+	return path
 }
 
 // nearestRepo 向上找最近的含 .git 的目录（worktree 的 .git 是文件，同样算）。

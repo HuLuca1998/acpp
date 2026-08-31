@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -198,29 +199,104 @@ func TestParseModalSubmit(t *testing.T) {
 	}
 }
 
-// 契约：已是 git 仓库的目录直接复用；存在但不是仓库的目录明确报错。
-func TestEnsureWorkdirReuse(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "org", "app")
-	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatal(err)
+// 契约：一个仓库只克隆一份 bare git 数据（.repo），每个分支一棵
+// .worktree/<分支> 工作树；同一分支再绑一次复用同一棵树，不同分支的树
+// 内容互不串（这正是「在 prod 频道问却答 live 分支代码」的根治点）。
+func TestEnsureWorktree(t *testing.T) {
+	src := seedRepo(t)
+	home := filepath.Join(t.TempDir(), "org", "app")
+	ctx := context.Background()
+
+	dir, branch, reused, err := ensureWorktree(ctx, src, home, "")
+	if err != nil {
+		t.Fatalf("默认分支建树: %v", err)
 	}
-	reused, err := ensureWorkdir(context.Background(), "https://example.com/x.git", "", dir)
-	if err != nil || !reused {
-		t.Errorf("已有克隆应复用: reused=%v err=%v", reused, err)
+	if reused {
+		t.Error("首次建树不该报复用")
+	}
+	if branch == "" {
+		t.Error("默认分支名应被解析出来回填")
+	}
+	if _, err := os.Stat(filepath.Join(home, gitDirName, "HEAD")); err != nil {
+		t.Errorf("bare git 数据应在 %s: %v", gitDirName, err)
+	}
+	if dir != filepath.Join(home, worktreeDirName, branch) {
+		t.Errorf("工作树落点 = %q", dir)
+	}
+	if body, err := os.ReadFile(filepath.Join(dir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != branch {
+		t.Errorf("默认分支的树内容 = %q, err=%v", body, err)
 	}
 
-	plain := filepath.Join(t.TempDir(), "plain")
-	if err := os.MkdirAll(plain, 0o755); err != nil {
-		t.Fatal(err)
+	devDir, devBranch, _, err := ensureWorktree(ctx, src, home, "dev")
+	if err != nil {
+		t.Fatalf("dev 建树: %v", err)
 	}
-	if _, err := ensureWorkdir(context.Background(), "https://example.com/x.git", "", plain); err == nil {
-		t.Error("非 git 目录应报错")
+	if devBranch != "dev" || devDir == dir {
+		t.Fatalf("dev 应是独立的树: branch=%q dir=%q", devBranch, devDir)
+	}
+	if body, err := os.ReadFile(filepath.Join(devDir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != "dev" {
+		t.Errorf("dev 树内容 = %q, err=%v", body, err)
+	}
+
+	again, _, reused, err := ensureWorktree(ctx, src, home, "dev")
+	if err != nil || !reused || again != devDir {
+		t.Errorf("同分支再绑应复用同一棵树: dir=%q reused=%v err=%v", again, reused, err)
 	}
 }
 
-// 契约：ls-remote --symref 输出要解出默认分支与全部分支；落点命名默认分支
-// 用 `<组织>/<仓库>`，指定分支加 @ 后缀且斜杠转安全字符。
-func TestParseLsRemoteAndWorkdirName(t *testing.T) {
+// seedRepo 造一个带两个分支的真仓库，每个分支的 who.txt 写着自己的分支名
+// （用来验证两棵树的内容不串）。返回可当 clone 源用的路径。
+func seedRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0",
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "--quiet")
+	head, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("读默认分支: %v", err)
+	}
+	def := strings.TrimSpace(string(head))
+	if err := os.WriteFile(filepath.Join(dir, "who.txt"), []byte(def+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "--quiet", "-m", "init")
+	run("checkout", "--quiet", "-b", "dev")
+	if err := os.WriteFile(filepath.Join(dir, "who.txt"), []byte("dev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("commit", "--quiet", "-am", "dev")
+	run("checkout", "--quiet", def)
+	return dir
+}
+
+// 契约：分支名要压成安全的单段目录名——斜杠转字符、`..` 不许穿越出去。
+func TestSafeBranchDir(t *testing.T) {
+	cases := map[string]string{
+		"main":       "main",
+		"feat/login": "feat-login",
+		"..":         "branch",
+		"../../etc":  "-..-etc",
+		".hidden":    "hidden",
+		"":           "branch",
+	}
+	for in, want := range cases {
+		if got := safeBranchDir(in); got != want {
+			t.Errorf("safeBranchDir(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// 契约：ls-remote --symref 输出要解出默认分支与全部分支。
+func TestParseLsRemote(t *testing.T) {
 	out := "ref: refs/heads/main\tHEAD\n" +
 		"aaaa\tHEAD\n" +
 		"aaaa\trefs/heads/main\n" +
@@ -232,13 +308,6 @@ func TestParseLsRemoteAndWorkdirName(t *testing.T) {
 	}
 	if len(branches) != 2 || branches[0] != "main" || branches[1] != "feat/login" {
 		t.Errorf("分支清单 = %v", branches)
-	}
-
-	if got := workdirName("org/app", ""); got != "org/app" {
-		t.Errorf("默认分支落点 = %q", got)
-	}
-	if got := workdirName("org/app", "feat/login"); got != "org/app@feat-login" {
-		t.Errorf("分支落点 = %q", got)
 	}
 }
 

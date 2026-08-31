@@ -39,6 +39,11 @@ func TestProjectCandidates(t *testing.T) {
 			want: []string{"acpp"},
 		},
 		{
+			name: "discord 频道工作树归属它的项目，分支名不当项目名",
+			cwd:  filepath.Join(root, "BDBGAME2024", "pp-game", ".worktree", "live"),
+			want: []string{"BDBGAME2024/pp-game", "pp-game"},
+		},
+		{
 			name: "工作区根自身不属于任何项目",
 			cwd:  root,
 			want: nil,
