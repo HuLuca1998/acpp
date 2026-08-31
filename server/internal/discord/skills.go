@@ -1,14 +1,17 @@
 package discord
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
-// /skills 与 /usage：观察面命令。技能清单直接读技能包目录（文件系统即
-// 启用状态，与会话注入同一来源）；用量是子区运行态的内存累计。
+// /skills、/usage、/mcps 与 /git：观察面命令。技能清单直接读技能包目录
+// （文件系统即启用状态，与会话注入同一来源）；用量是子区运行态的内存累计；
+// git 状态现读工作树。
 
 // showSkills 列出注入对话的技能（skillpack/skills 下的启用项）。
 func (s *Service) showSkills(token string, ev interactionEvent) {
@@ -111,4 +114,88 @@ func (s *Service) showMCPs(token string, ev interactionEvent) {
 	}
 	b.WriteString("-# 挂载在会话建立时定死；开关数据库面会重开会话（上下文自动恢复）。")
 	s.ephemeralKeep(token, ev, b.String())
+}
+
+// showGitStatus 回本频道工作树的 git 状态：分支、与远端的差距、改动的文件
+// 分类列出。子区里执行看的是父频道那棵树（一个频道一棵，见 clone.go）。
+//
+// 现读而不是缓存：agent 随时在改文件，隔一轮就不准了。
+func (s *Service) showGitStatus(ctx context.Context, token string, ev interactionEvent) {
+	b, ok := s.bindingForCommand(s.store.config(), ev.ChannelID)
+	if !ok {
+		s.ephemeral(token, ev, "这个频道还没绑定工作区，先 /init。")
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	st, err := readGitStatus(cctx, b.Workdir)
+	if err != nil {
+		s.ephemeral(token, ev, "读 git 状态失败："+trimRunes(err.Error(), 300))
+		return
+	}
+
+	var w strings.Builder
+	w.WriteString("## 📂 " + b.Repo + " 的工作树\n")
+	branch := st.Branch
+	if branch == "" {
+		branch = "游离 HEAD"
+	}
+	w.WriteString("分支 `" + branch + "`")
+	if st.Upstream != "" {
+		w.WriteString(" · 对比 `" + st.Upstream + "`")
+		switch {
+		case st.Ahead > 0 && st.Behind > 0:
+			w.WriteString(fmt.Sprintf("：领先 %d、落后 %d", st.Ahead, st.Behind))
+		case st.Ahead > 0:
+			w.WriteString(fmt.Sprintf("：领先 %d 个提交", st.Ahead))
+		case st.Behind > 0:
+			w.WriteString(fmt.Sprintf("：落后 %d 个提交", st.Behind))
+		default:
+			w.WriteString("：同步")
+		}
+	}
+	w.WriteString("\n")
+	if st.clean() {
+		w.WriteString("\n工作树干净，没有未提交的改动。")
+		s.ephemeralKeep(token, ev, w.String())
+		return
+	}
+	for _, sec := range []struct {
+		title string
+		files []string
+	}{
+		{"⚠️ 冲突", st.Conflicted},
+		{"✏️ 修改", st.Modified},
+		{"➕ 新增", st.Added},
+		{"🗑️ 删除", st.Deleted},
+		{"↔️ 重命名", st.Renamed},
+	} {
+		w.WriteString(fileSection(sec.title, sec.files))
+	}
+	w.WriteString("-# " + b.Workdir)
+	s.ephemeralKeep(token, ev, trimRunes(w.String(), discordMsgLimit-20))
+}
+
+// gitFileLimit 是每类最多列出的文件数：Discord 单条消息 2000 字符，一次
+// 大改动能有上百个文件，列全了什么都看不清——给个数量与前几条，要细节
+// 让 agent 去说。
+const gitFileLimit = 12
+
+func fileSection(title string, files []string) string {
+	if len(files) == 0 {
+		return ""
+	}
+	var w strings.Builder
+	fmt.Fprintf(&w, "\n**%s %d**\n", title, len(files))
+	shown := files
+	if len(shown) > gitFileLimit {
+		shown = shown[:gitFileLimit]
+	}
+	for _, f := range shown {
+		w.WriteString("`" + trimRunes(f, 90) + "`\n")
+	}
+	if len(files) > len(shown) {
+		fmt.Fprintf(&w, "-# …另有 %d 个\n", len(files)-len(shown))
+	}
+	return w.String()
 }

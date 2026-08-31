@@ -287,6 +287,88 @@ func parseLsRemote(output string) (defaultBranch string, branches []string) {
 	return defaultBranch, branches
 }
 
+// gitStatus 是一棵工作树的改动摘要（/git 命令用）。
+type gitStatus struct {
+	// Branch 是当前分支；detached HEAD 时是空串。
+	Branch string
+	// Upstream 非空时 Ahead/Behind 才有意义。
+	Upstream      string
+	Ahead, Behind int
+
+	Modified   []string
+	Added      []string
+	Deleted    []string
+	Renamed    []string
+	Conflicted []string
+}
+
+// clean 报告工作树是否干净（没有任何未提交的改动）。
+func (g gitStatus) clean() bool {
+	return len(g.Modified)+len(g.Added)+len(g.Deleted)+len(g.Renamed)+len(g.Conflicted) == 0
+}
+
+// readGitStatus 读一棵工作树的改动。`--untracked-files=all` 把新目录里的
+// 文件逐个列出来——只报一个目录名，用户看不出到底多了什么。
+func readGitStatus(ctx context.Context, dir string) (gitStatus, error) {
+	out, err := runGit(ctx, 30*time.Second, dir, "status", "--porcelain=v1", "-b", "--untracked-files=all")
+	if err != nil {
+		return gitStatus{}, fmt.Errorf("git status 失败: %s", gitReason(out, err))
+	}
+	return parseGitStatus(out), nil
+}
+
+// branchLineRe 解 `## main...origin/main [ahead 1, behind 2]` 这一行。
+var branchLineRe = regexp.MustCompile(`^## ([^ .]+)(?:\.\.\.(\S+))?(?: \[(.+)\])?$`)
+
+// parseGitStatus 解 porcelain v1 输出。两位状态码 XY：X 是暂存区、
+// Y 是工作区，任一为 U（或 AA/DD）即冲突。同一个文件既改又暂存只归一类，
+// 因为这里要回答的是「动了哪些文件」，不是「git 内部处于什么状态」。
+func parseGitStatus(output string) gitStatus {
+	var g gitStatus
+	for _, line := range strings.Split(output, "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "## ") {
+			m := branchLineRe.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			if m[1] != "HEAD" {
+				g.Branch = m[1]
+			}
+			g.Upstream = m[2]
+			for _, part := range strings.Split(m[3], ", ") {
+				var n int
+				if _, err := fmt.Sscanf(part, "ahead %d", &n); err == nil {
+					g.Ahead = n
+				}
+				if _, err := fmt.Sscanf(part, "behind %d", &n); err == nil {
+					g.Behind = n
+				}
+			}
+			continue
+		}
+		if len(line) < 4 {
+			continue
+		}
+		x, y, path := line[0], line[1], line[3:]
+		switch {
+		case x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D'):
+			g.Conflicted = append(g.Conflicted, path)
+		case x == 'R':
+			g.Renamed = append(g.Renamed, path)
+		case x == '?', x == 'A':
+			g.Added = append(g.Added, path)
+		case x == 'D' || y == 'D':
+			g.Deleted = append(g.Deleted, path)
+		default:
+			g.Modified = append(g.Modified, path)
+		}
+	}
+	return g
+}
+
 // tailLines 取输出末尾几行：git 的失败原因基本都在最后。
 func tailLines(output string, n int) string {
 	lines := strings.Split(strings.TrimSpace(output), "\n")

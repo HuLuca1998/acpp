@@ -64,6 +64,7 @@ func slashCommands() []slashCommand {
 				"type": 3, "name": "source", "description": "换绑本频道锁定的数据库（选「不锁定」解除）",
 				"required": false,
 			}}},
+		{name: "git", desc: "本频道工作树的 git 状态（分支与改动的文件）", hint: "看改动"},
 		{name: "skills", desc: "列出注入对话的技能", hint: "看技能"},
 		{name: "usage", desc: "本子区的用量统计（回合 / 工具 / token）", hint: "看用量"},
 		{name: "mcps", desc: "本子区挂载的 MCP 工具面", hint: "看工具面"},

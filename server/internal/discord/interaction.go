@@ -163,6 +163,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.handleDBCommand(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "help":
 		s.showHelp(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "git":
+		s.showGitStatus(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "skills":
 		s.showSkills(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "usage":
@@ -467,6 +469,7 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 		"**发文件** — 消息附件直接进对话：图片给模型看，文本嵌全文，大文件落盘给路径。\n" +
 		"**查数据库** — 数据库工具默认已挂载（频道绑了库就只查那一个，否则按项目过滤）；" +
 		"`/db off` 卸载、`/db on` 或消息带 `@db` 再打开、`/db source:<项目/环境>` 换绑。\n" +
+		"**看改动** — `/git` 列出本频道工作树的分支、与远端的差距、改了/加了/删了哪些文件。\n" +
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
 		"**常用命令** — " + commandsLine()

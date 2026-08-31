@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -249,15 +250,7 @@ func TestEnsureWorktree(t *testing.T) {
 func seedRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0",
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
+	run := func(args ...string) { gitRun(t, dir, args...) }
 	run("init", "--quiet")
 	head, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
@@ -276,6 +269,87 @@ func seedRepo(t *testing.T) string {
 	run("commit", "--quiet", "-am", "dev")
 	run("checkout", "--quiet", def)
 	return dir
+}
+
+// gitRun 在 dir 里跑一条 git（测试用，作者身份写死，免得依赖机器配置）。
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0",
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// 契约：/git 要如实分出改了什么、加了什么、删了什么，并报出当前分支。
+// 这是用户在频道里判断「agent 到底动了哪些文件」的唯一入口，分错类比不报
+// 更糟。
+func TestReadGitStatus(t *testing.T) {
+	dir := seedRepo(t)
+	ctx := context.Background()
+
+	if err := os.WriteFile(filepath.Join(dir, "gone.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "--quiet", "-m", "add gone")
+
+	clean, err := readGitStatus(ctx, dir)
+	if err != nil {
+		t.Fatalf("readGitStatus: %v", err)
+	}
+	if !clean.clean() {
+		t.Fatalf("刚提交完应是干净的，实际 %+v", clean)
+	}
+	if clean.Branch == "" {
+		t.Error("应报出当前分支")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "who.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fresh.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := readGitStatus(ctx, dir)
+	if err != nil {
+		t.Fatalf("readGitStatus: %v", err)
+	}
+	if st.clean() {
+		t.Fatal("有改动却报干净")
+	}
+	if !reflect.DeepEqual(st.Modified, []string{"who.txt"}) {
+		t.Errorf("修改 = %v, want [who.txt]", st.Modified)
+	}
+	if !reflect.DeepEqual(st.Added, []string{"fresh.txt"}) {
+		t.Errorf("新增 = %v, want [fresh.txt]", st.Added)
+	}
+	if !reflect.DeepEqual(st.Deleted, []string{"gone.txt"}) {
+		t.Errorf("删除 = %v, want [gone.txt]", st.Deleted)
+	}
+}
+
+// 契约：porcelain 的分支行要解出分支名与领先/落后的提交数——两边都要
+// 显示，用户才知道该 pull 还是该 push。
+func TestParseGitStatusBranchLine(t *testing.T) {
+	g := parseGitStatus("## live...origin/live [ahead 2, behind 5]\nR  old.go -> new.go\nUU conflict.go\n")
+	if g.Branch != "live" || g.Upstream != "origin/live" {
+		t.Errorf("分支行 = %q / %q", g.Branch, g.Upstream)
+	}
+	if g.Ahead != 2 || g.Behind != 5 {
+		t.Errorf("领先/落后 = %d/%d, want 2/5", g.Ahead, g.Behind)
+	}
+	if len(g.Renamed) != 1 || len(g.Conflicted) != 1 {
+		t.Errorf("重命名/冲突分类错: %+v", g)
+	}
+	if d := parseGitStatus("## HEAD (no branch)\n"); d.Branch != "" {
+		t.Errorf("游离 HEAD 不该报分支名，got %q", d.Branch)
+	}
 }
 
 // 契约：分支名要压成安全的单段目录名——斜杠转字符、`..` 不许穿越出去。
