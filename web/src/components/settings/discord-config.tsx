@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Link } from "react-router"
+import { CopyIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
@@ -264,6 +265,39 @@ export function DiscordConfigCard() {
                 ))}
               </div>
             )}
+            {info.inviteUrl ? (
+              <div className="mt-4 space-y-1.5">
+                <p className="text-sm font-medium">
+                  {t("discord.settings.invite")}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={info.inviteUrl}
+                    className="font-mono text-xs"
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      navigator.clipboard
+                        .writeText(info.inviteUrl ?? "")
+                        .then(() => toast.success(t("common.copied")))
+                        .catch(() => toast.error(t("common.copyFailed")))
+                    }}
+                  >
+                    <CopyIcon data-icon="inline-start" />
+                    {t("common.copy")}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("discord.settings.inviteHint")}
+                </p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

@@ -24,6 +24,8 @@ export const enDiscord = {
       error: "Connection failed",
     },
     guilds: "Servers",
+    invite: "Invite link",
+    inviteHint: "Invite the bot to more servers — client_id and permissions are pre-filled; open, pick a server, authorize.",
     noGuilds:
       "The bot isn't in any server yet — use the install link in the Discord developer portal to invite it.",
     refresh: "Refresh status",

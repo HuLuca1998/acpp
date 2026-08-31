@@ -111,7 +111,18 @@ type Info struct {
 	Status   Status        `json:"status"`
 	Bindings []Binding     `json:"bindings"`
 	Catalog  []AgentOption `json:"catalog"`
+	// InviteURL 是把这个 bot 邀进服务器的 OAuth2 授权链接（连上 gateway
+	// 拿到 appId 后才有）。权限位由后端出口径——它与功能清单耦合。
+	InviteURL string `json:"inviteUrl,omitempty"`
 }
+
+// invitePermissions 是邀请链接的权限位，与 docs/discord-bot-setup.md 的
+// 11 项清单一一对应：Manage Channels（写频道主题）、Add Reactions、
+// View Channels、Send Messages、Manage Messages（置顶手册）、Embed
+// Links、Attach Files、Read Message History、Manage Threads、Create
+// Public Threads、Send Messages in Threads。改这里必须同步手册。
+const invitePermissions = 1<<4 | 1<<6 | 1<<10 | 1<<11 | 1<<13 | 1<<14 |
+	1<<15 | 1<<16 | 1<<34 | 1<<35 | 1<<38
 
 // ConfigPatch 是配置更新入参，逐项可选。BotToken 的语义：nil 不动、
 // 空串清除、非空替换。
@@ -363,7 +374,14 @@ func (s *Service) Info(ctx context.Context) Info {
 	if bindings == nil {
 		bindings = []Binding{}
 	}
+	inviteURL := ""
+	if st.AppID != "" {
+		inviteURL = fmt.Sprintf(
+			"https://discord.com/oauth2/authorize?client_id=%s&scope=bot+applications.commands&permissions=%d",
+			st.AppID, int64(invitePermissions))
+	}
 	return Info{
+		InviteURL: inviteURL,
 		Config: ConfigView{
 			Enabled:  cfg.Enabled,
 			TokenSet: cfg.BotToken != "",

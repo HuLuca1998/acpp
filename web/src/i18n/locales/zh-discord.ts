@@ -23,6 +23,8 @@ export const zhDiscord = {
       error: "连接失败",
     },
     guilds: "所在服务器",
+    invite: "邀请链接",
+    inviteHint: "把 bot 邀进更多服务器——client_id 与权限已自动填好，打开后选服务器授权即可。",
     noGuilds:
       "bot 还没加入任何服务器——去 Discord 开发者门户用安装链接把它请进你的服务器。",
     refresh: "刷新状态",

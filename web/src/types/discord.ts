@@ -62,6 +62,8 @@ export interface DiscordInfo {
   status: DiscordStatus
   bindings: DiscordBinding[]
   catalog: DiscordAgentOption[]
+  /** 把 bot 邀进服务器的 OAuth2 链接（连上 gateway 后才有，client_id 已填好）。 */
+  inviteUrl?: string
 }
 
 /** 配置补丁：缺省不动；botToken 空串 = 清除。 */

@@ -12,6 +12,7 @@ export default {
     delete: "Delete",
     close: "Close",
     copy: "Copy",
+    copied: "Copied",
     copyFailed: "Copy failed: the browser blocked clipboard access",
     browse: "Browse…",
     retry: "Retry",
