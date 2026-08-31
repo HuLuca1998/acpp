@@ -74,6 +74,7 @@ acpp/
         ├── project/            # 工作区项目（adr-007）：git 仓库发现、克隆、gh 远端仓库清单
         ├── mcp/                # 我方 MCP server 的协议外壳（JSON-RPC + 工具分发），数据源工具面用
         ├── datasource/         # 外部 MySQL 数据源（adr-008）：连接配置、SSH 隧道、库表探查、多段执行、MCP 工具面
+        ├── discord/            # Discord 频道工作区（adr-016/017/018）：频道绑定、子区对话、工作树与数据库环境锁定
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
         │   ├── tenant.go / guard.go # 多租户：租户 CRUD 与隔离范围（Scope）
@@ -189,8 +190,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
 | GET | `/api/discord` | discord 频道工作区总览（adr-016，bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)，owner 专属）：`{config:{enabled,tokenSet,workRoot}, status:{running,connected,botUser,guilds…}, bindings, catalog}`；token 永不回传 |
 | PUT | `/api/discord/config` | 存 discord 配置（`{enabled?, botToken?, workRoot?}`，token 空串=清除），gateway 即时起停 |
-| PUT | `/api/discord/bindings/{channelId}` | 改频道绑定的模型/思考深度（换仓库走频道里重新 `/init`） |
-| DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（磁盘上的克隆保留） |
+| PUT | `/api/discord/bindings/{channelId}` | 改频道绑定的模型/思考深度（换仓库、换绑数据库走频道里的 `/init` 与 `/db source`） |
+| DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（磁盘上的工作树保留） |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录；`?files=1` 连文件、`?hidden=1` 含隐藏项；条目带大小与修改时间），供选择器导航 |
 | GET | `/api/fs/places` | 选择器侧边栏的默认位置（家目录/桌面/文稿/下载/工作区；租户只有自己的 root） |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
@@ -452,7 +453,7 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
-- **Discord 接入**：调研完成、未动工——bot 申请、软件内管理、频道 ↔ 工作目录映射、实现方案与测试策略见 [docs/discord-接入设计调研.md](docs/discord-接入设计调研.md)。
+- **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页还不能改频道锁定的数据库（走频道里的 `/db source`）。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
 - **消息流与 diff 的虚拟滚动**：现在靠 `content-visibility:auto` 让屏外内容不绘制，元素与 DOM 节点仍然全在，几千条的会话滚动仍有代价。与另两项性能遗留（`git status` 的地板耗时、局域网场景的 h2c）一起记在 [docs/性能优化-2026-08](docs/性能优化-2026-08.md) 末尾。

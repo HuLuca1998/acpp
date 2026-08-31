@@ -26,7 +26,7 @@
 | datasource | 外部 MySQL 数据源（adr-008）：连接配置（项目 + 环境两级）、SSH 隧道拨号、库表探查、多段语句执行，以及挂给会话的 MCP 工具面。连接一次性、可见性按会话 cwd 所属项目过滤。借 service 的哨兵错误与 DefaultCwd | 业务 |
 | report | 报告展示（skill html-report 的落地端）：挂给会话的 `report_open` 工具面，把 agent 写好的单文件 HTML 报告在用户工作区打开。**不存任何东西**——报告是磁盘上的文件，「哪些报告属于这条会话」的事实源是转录里的 tool_call；路径护栏限死会话 cwd 内的 .html | 业务 |
 | upload | 本机文件上传：落盘、按内容 hash 去重、列举与删除。上传件存在各自身份的家目录下，**隔离由路径本身给**——没有归属过滤这回事。借 service 的 Scope 与哨兵错误 | 业务 |
-| discord | Discord 频道工作区（adr-016/017）：gateway 长连接、/init 绑定表单、仓库克隆、配置存储（`<dataDir>/discord.json`），以及子区对话面（@bot 开子区、独立 acp 会话池、权限/提问的编号问答桥）。**与会话零耦合**：项目内只 import 叶子包 gitrepo 与 acp，业务依赖经 Deps 闭包注入，哨兵错误自带（writeError 里同义映射） | 业务 |
+| discord | Discord 频道工作区（adr-016/017/018）：gateway 长连接、/init 绑定表单、工作树布局（一仓库一份 bare `.repo` + 每分支一棵 `.worktree/<分支>`）与数据库环境锁定、配置存储（`<dataDir>/discord.json`），以及子区对话面（@bot 开子区、独立 acp 会话池、权限/提问的编号问答桥）。**与会话零耦合**：项目内只 import 叶子包 gitrepo 与 acp，业务依赖经 Deps 闭包注入，哨兵错误自带（writeError 里同义映射） | 业务 |
 | system | 系统平台面：数据目录迁移、环境体检与依赖安装、版本检查与自更新。哨兵错误借 service 的（错误映射一套） | 业务 |
 | httpapi | 路由、handler、中间件、统一响应。不碰 db，服务由 cmd/server 装配后传入 | HTTP |
 

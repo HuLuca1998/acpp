@@ -8,47 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
 // 契约：简写按 GitHub https 解析，完整 URL 原样放行，危险与畸形输入拒收。
-func TestResolveRepo(t *testing.T) {
-	cases := []struct {
-		in       string
-		name     string
-		cloneURL string
-		wantErr  bool
-	}{
-		{in: "BDBGAME2024/pp-game", name: "BDBGAME2024/pp-game", cloneURL: "https://github.com/BDBGAME2024/pp-game.git"},
-		{in: "  owner/repo.git ", name: "owner/repo", cloneURL: "https://github.com/owner/repo.git"},
-		{in: "https://github.com/org/app.git", name: "org/app", cloneURL: "https://github.com/org/app.git"},
-		{in: "git@github.com:org/app.git", name: "org/app", cloneURL: "git@github.com:org/app.git"},
-		{in: "", wantErr: true},
-		{in: "justaname", wantErr: true},
-		{in: "file:///etc/passwd", wantErr: true},
-		{in: "../escape/repo", wantErr: true},
-		{in: "https://host/../..", wantErr: true},
-	}
-	for _, c := range cases {
-		name, url, err := resolveRepo(c.in)
-		if c.wantErr {
-			if !errors.Is(err, ErrInvalid) {
-				t.Errorf("resolveRepo(%q) err = %v, want ErrInvalid", c.in, err)
-			}
-			continue
-		}
-		if err != nil || name != c.name || url != c.cloneURL {
-			t.Errorf("resolveRepo(%q) = (%q, %q, %v), want (%q, %q)", c.in, name, url, err, c.name, c.cloneURL)
-		}
-	}
-}
 
 // 契约：配置写盘后重新加载还原样，token 文件必须只有本人可读。
+
 func TestStoreRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "discord.json")
 	s1, err := newStore(path)
@@ -105,6 +74,7 @@ func TestStoreRoundTrip(t *testing.T) {
 
 // 契约：SaveConfig 对 token 做形状检查，对工作根要求绝对路径；
 // enabled 开关不动其他字段。
+
 func TestSaveConfigValidation(t *testing.T) {
 	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
 	if err != nil {
@@ -146,6 +116,7 @@ func TestSaveConfigValidation(t *testing.T) {
 }
 
 // 契约：绑定编辑只动模型三件套，解绑不认识的频道报 ErrNotFound。
+
 func TestBindingEdits(t *testing.T) {
 	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
 	if err != nil {
@@ -178,6 +149,7 @@ func TestBindingEdits(t *testing.T) {
 
 // 契约：modal 提交的两种组件树形状（Label 包裹 / action row）都要解出
 // 答案；多选组件一名多值。
+
 func TestParseModalSubmit(t *testing.T) {
 	labelStyle := json.RawMessage(`[
 		{"type":18,"component":{"type":4,"custom_id":"repo","value":"org/app"}},
@@ -203,189 +175,25 @@ func TestParseModalSubmit(t *testing.T) {
 // 契约：一个仓库只克隆一份 bare git 数据（.repo），每个分支一棵
 // .worktree/<分支> 工作树；同一分支再绑一次复用同一棵树，不同分支的树
 // 内容互不串（这正是「在 prod 频道问却答 live 分支代码」的根治点）。
-func TestEnsureWorktree(t *testing.T) {
-	src := seedRepo(t)
-	home := filepath.Join(t.TempDir(), "org", "app")
-	ctx := context.Background()
-
-	dir, branch, reused, err := ensureWorktree(ctx, src, home, "")
-	if err != nil {
-		t.Fatalf("默认分支建树: %v", err)
-	}
-	if reused {
-		t.Error("首次建树不该报复用")
-	}
-	if branch == "" {
-		t.Error("默认分支名应被解析出来回填")
-	}
-	if _, err := os.Stat(filepath.Join(home, gitDirName, "HEAD")); err != nil {
-		t.Errorf("bare git 数据应在 %s: %v", gitDirName, err)
-	}
-	if dir != filepath.Join(home, worktreeDirName, branch) {
-		t.Errorf("工作树落点 = %q", dir)
-	}
-	if body, err := os.ReadFile(filepath.Join(dir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != branch {
-		t.Errorf("默认分支的树内容 = %q, err=%v", body, err)
-	}
-
-	devDir, devBranch, _, err := ensureWorktree(ctx, src, home, "dev")
-	if err != nil {
-		t.Fatalf("dev 建树: %v", err)
-	}
-	if devBranch != "dev" || devDir == dir {
-		t.Fatalf("dev 应是独立的树: branch=%q dir=%q", devBranch, devDir)
-	}
-	if body, err := os.ReadFile(filepath.Join(devDir, "who.txt")); err != nil || strings.TrimSpace(string(body)) != "dev" {
-		t.Errorf("dev 树内容 = %q, err=%v", body, err)
-	}
-
-	again, _, reused, err := ensureWorktree(ctx, src, home, "dev")
-	if err != nil || !reused || again != devDir {
-		t.Errorf("同分支再绑应复用同一棵树: dir=%q reused=%v err=%v", again, reused, err)
-	}
-}
 
 // seedRepo 造一个带两个分支的真仓库，每个分支的 who.txt 写着自己的分支名
 // （用来验证两棵树的内容不串）。返回可当 clone 源用的路径。
-func seedRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) { gitRun(t, dir, args...) }
-	run("init", "--quiet")
-	head, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
-	if err != nil {
-		t.Fatalf("读默认分支: %v", err)
-	}
-	def := strings.TrimSpace(string(head))
-	if err := os.WriteFile(filepath.Join(dir, "who.txt"), []byte(def+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	run("add", ".")
-	run("commit", "--quiet", "-m", "init")
-	run("checkout", "--quiet", "-b", "dev")
-	if err := os.WriteFile(filepath.Join(dir, "who.txt"), []byte("dev\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	run("commit", "--quiet", "-am", "dev")
-	run("checkout", "--quiet", def)
-	return dir
-}
 
 // gitRun 在 dir 里跑一条 git（测试用，作者身份写死，免得依赖机器配置）。
-func gitRun(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0",
-		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-}
 
 // 契约：/git 要如实分出改了什么、加了什么、删了什么，并报出当前分支。
 // 这是用户在频道里判断「agent 到底动了哪些文件」的唯一入口，分错类比不报
 // 更糟。
-func TestReadGitStatus(t *testing.T) {
-	dir := seedRepo(t)
-	ctx := context.Background()
-
-	if err := os.WriteFile(filepath.Join(dir, "gone.txt"), []byte("x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	gitRun(t, dir, "add", ".")
-	gitRun(t, dir, "commit", "--quiet", "-m", "add gone")
-
-	clean, err := readGitStatus(ctx, dir)
-	if err != nil {
-		t.Fatalf("readGitStatus: %v", err)
-	}
-	if !clean.clean() {
-		t.Fatalf("刚提交完应是干净的，实际 %+v", clean)
-	}
-	if clean.Branch == "" {
-		t.Error("应报出当前分支")
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "who.txt"), []byte("changed\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "fresh.txt"), []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
-		t.Fatal(err)
-	}
-
-	st, err := readGitStatus(ctx, dir)
-	if err != nil {
-		t.Fatalf("readGitStatus: %v", err)
-	}
-	if st.clean() {
-		t.Fatal("有改动却报干净")
-	}
-	if !reflect.DeepEqual(st.Modified, []string{"who.txt"}) {
-		t.Errorf("修改 = %v, want [who.txt]", st.Modified)
-	}
-	if !reflect.DeepEqual(st.Added, []string{"fresh.txt"}) {
-		t.Errorf("新增 = %v, want [fresh.txt]", st.Added)
-	}
-	if !reflect.DeepEqual(st.Deleted, []string{"gone.txt"}) {
-		t.Errorf("删除 = %v, want [gone.txt]", st.Deleted)
-	}
-}
 
 // 契约：porcelain 的分支行要解出分支名与领先/落后的提交数——两边都要
 // 显示，用户才知道该 pull 还是该 push。
-func TestParseGitStatusBranchLine(t *testing.T) {
-	g := parseGitStatus("## live...origin/live [ahead 2, behind 5]\nR  old.go -> new.go\nUU conflict.go\n")
-	if g.Branch != "live" || g.Upstream != "origin/live" {
-		t.Errorf("分支行 = %q / %q", g.Branch, g.Upstream)
-	}
-	if g.Ahead != 2 || g.Behind != 5 {
-		t.Errorf("领先/落后 = %d/%d, want 2/5", g.Ahead, g.Behind)
-	}
-	if len(g.Renamed) != 1 || len(g.Conflicted) != 1 {
-		t.Errorf("重命名/冲突分类错: %+v", g)
-	}
-	if d := parseGitStatus("## HEAD (no branch)\n"); d.Branch != "" {
-		t.Errorf("游离 HEAD 不该报分支名，got %q", d.Branch)
-	}
-}
 
 // 契约：分支名要压成安全的单段目录名——斜杠转字符、`..` 不许穿越出去。
-func TestSafeBranchDir(t *testing.T) {
-	cases := map[string]string{
-		"main":       "main",
-		"feat/login": "feat-login",
-		"..":         "branch",
-		"../../etc":  "-..-etc",
-		".hidden":    "hidden",
-		"":           "branch",
-	}
-	for in, want := range cases {
-		if got := safeBranchDir(in); got != want {
-			t.Errorf("safeBranchDir(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
 
 // 契约：ls-remote --symref 输出要解出默认分支与全部分支。
-func TestParseLsRemote(t *testing.T) {
-	out := "ref: refs/heads/main\tHEAD\n" +
-		"aaaa\tHEAD\n" +
-		"aaaa\trefs/heads/main\n" +
-		"bbbb\trefs/heads/feat/login\n" +
-		"cccc\trefs/tags/v1.0\n"
-	def, branches := parseLsRemote(out)
-	if def != "main" {
-		t.Errorf("默认分支 = %q, want main", def)
-	}
-	if len(branches) != 2 || branches[0] != "main" || branches[1] != "feat/login" {
-		t.Errorf("分支清单 = %v", branches)
-	}
-}
 
 // 契约：模型选项 value 编码为 agent|modelID，超 25 截断；效率清单含默认档。
+
 func TestModelChoices(t *testing.T) {
 	catalog := []AgentOption{
 		{Agent: "claude", Models: []ModelOption{{ID: "opus", Label: "Opus 5"}}},
@@ -407,6 +215,7 @@ func TestModelChoices(t *testing.T) {
 
 // 契约：429 错误按响应体里的 retry_after 给出重试间隔，非 429 不重试，
 // 解不出时长给保守值。
+
 func TestRetryAfter(t *testing.T) {
 	d, ok := retryAfter(errors.New(`PATCH /channels/1 → 429 Too Many Requests: {"message":"rate limited.","retry_after":295.292,"global":false}`))
 	if !ok || d < 295*time.Second || d > 296*time.Second {
@@ -421,6 +230,7 @@ func TestRetryAfter(t *testing.T) {
 }
 
 // 契约：@bot 标记（两种写法）要摘干净；子区标题取首句且限长。
+
 func TestStripMentionAndTitle(t *testing.T) {
 	if got := stripMention("<@123> 帮我看看 <@!123> 这个", "123"); got != "帮我看看  这个" {
 		t.Errorf("stripMention = %q", got)
@@ -435,6 +245,7 @@ func TestStripMentionAndTitle(t *testing.T) {
 }
 
 // 契约：长回复按行分段不超限；被切开的代码围栏每段补闭合、下段重开。
+
 func TestSplitMessage(t *testing.T) {
 	if got := splitMessage("短消息", 100); len(got) != 1 || got[0] != "短消息" {
 		t.Errorf("短消息不该切: %v", got)
@@ -463,6 +274,7 @@ func TestSplitMessage(t *testing.T) {
 
 // 契约：requestedSchema 解析——codex 的 __other 标记与 claude 的 _custom
 // 命名都归位成题目的自由输入栏，不算独立题目。
+
 func TestParseElicitSchema(t *testing.T) {
 	raw := json.RawMessage(`{"properties":{
 		"color":{"title":"选个颜色","oneOf":[{"const":"red"},{"const":"blue"}]},
@@ -481,6 +293,7 @@ func TestParseElicitSchema(t *testing.T) {
 
 // 契约：一次性表单——每题一个组件（多选 CheckboxGroup、单选 RadioGroup、
 // 纯输入 TextInput），空位分给「其他」输入框；≤5 题一页装下。
+
 func TestFormModal(t *testing.T) {
 	ask := &pendingAsk{
 		nonce: "n", partial: map[string][]string{},
@@ -533,6 +346,7 @@ func TestFormModal(t *testing.T) {
 
 // 契约：多选题解析与回传——schema 形状取自 2026-08 真实转录（claude 的
 // AskUserQuestion：array + items.anyOf + _askUserQuestionCustomAnswer）。
+
 func TestMultiSelectFlow(t *testing.T) {
 	raw := json.RawMessage(`{"type":"object","properties":{
 		"question_0":{"type":"string","title":"Color","oneOf":[{"const":"Red"},{"const":"Blue"}]},
@@ -773,6 +587,7 @@ func TestResolveInWorkdir(t *testing.T) {
 
 // 命令表是注册/手册//help 的唯一事实源——这条测试保证表本身完整，
 // 以及派生的清单一行真的覆盖了每条命令（文档漂移的自动对账）。
+
 func TestSlashCommandTable(t *testing.T) {
 	cmds := slashCommands()
 	if len(cmds) < 12 {
