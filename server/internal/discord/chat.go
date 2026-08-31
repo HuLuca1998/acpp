@@ -46,6 +46,10 @@ type threadChat struct {
 	toolRendered string
 	// touched 收本回合 edit 类工具动过的文件（回合小结报个数）。
 	touched map[string]struct{}
+	// stat* 是本子区自服务启动以来的累计（内存态，/usage 显示用）。
+	statTurns  int
+	statTools  int
+	statTokens int
 	// lastUser 是最近一位发起输入的用户 id——权限/提问卡 @ 它，让
 	// 走开的人收到手机推送（无人值守场景的核心闭环）。
 	lastUser string
@@ -404,6 +408,11 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	tc.ask = nil
 	toolCount := len(tc.toolLog)
 	touched := len(tc.touched)
+	tc.statTurns++
+	tc.statTools += toolCount
+	if result.Usage != nil {
+		tc.statTokens += result.Usage.TotalTokens
+	}
 	tc.mu.Unlock()
 
 	s.finalizeToolCard(token, threadID, tc)
@@ -719,7 +728,7 @@ func hasDBToken(text string) bool { return dbToken.MatchString(text) }
 // dbIntent 识别「这条消息在说数据库」的意图词——比 @db 令牌宽、比常挂
 // 精准：漏挂的代价是 AI 没工具只能编数据（真实报障），误挂的代价只是
 // 工具清单多五条描述。词表刻意保守，单字「表」「库」不算。
-var dbIntent = regexp.MustCompile(`数据库|数据源|数据表|表结构|建表|查库|库里|\bSQL\b|\bsql\b`)
+var dbIntent = regexp.MustCompile(`数据库|数据源|数据表|表结构|建表|查库|库里|\s库\s|\s库$|\s表\s|\s表的|\bSQL\b|\bsql\b`)
 
 func hasDBIntent(text string) bool { return dbIntent.MatchString(text) }
 

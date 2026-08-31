@@ -97,6 +97,14 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"description": "acpp 使用指南",
 		},
 		{
+			"name":        "skills",
+			"description": "列出注入对话的技能",
+		},
+		{
+			"name":        "usage",
+			"description": "本子区的用量统计（回合 / 工具 / token）",
+		},
+		{
 			"name":        "db",
 			"description": "本子区的数据库工具面开关（默认关，防止没必要的查询）",
 			"options": []map[string]any{{
@@ -194,6 +202,10 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.toggleDB(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "help":
 		s.showHelp(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "skills":
+		s.showSkills(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "usage":
+		s.showUsage(token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):
@@ -452,6 +464,16 @@ func trimRunes(s string, n int) string {
 	return string(runes[:n-1]) + "…"
 }
 
+// ephemeralKeep 发一条**不自动删**的 ephemeral（说明书/清单类要留着看，
+// 与一分钟即焚的操作回执 ephemeral 相对）。
+func (s *Service) ephemeralKeep(token string, ev interactionEvent, text string) {
+	if err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+		"content": text, "flags": 1 << 6, "allowed_mentions": noMentions(),
+	}); err != nil {
+		slog.Error("ephemeral 回复失败", "err", err)
+	}
+}
+
 // showHelp 是 /help：只有本人可见，不自动删——说明书要留着慢慢看。
 func (s *Service) showHelp(token string, ev interactionEvent) {
 	text := "## acpp 使用指南\n" +
@@ -461,9 +483,5 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
 		"**常用命令** — `/model` `/effort` `/access` 调模型与权限档；`/status` 看绑定；`/stop` 中止本轮；`/unbind` 解绑；`/init` 绑定频道。"
-	if err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
-		"content": text, "flags": 1 << 6, "allowed_mentions": noMentions(),
-	}); err != nil {
-		slog.Error("help 回复失败", "err", err)
-	}
+	s.ephemeralKeep(token, ev, text)
 }
