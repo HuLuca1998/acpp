@@ -205,3 +205,14 @@ func TestService_Create_Validation(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestProjectCandidatesBranchSuffix(t *testing.T) {
+	got := projectCandidates("/root/ws/discord/ORG/pp-game@main", "/root/ws")
+	want := map[string]bool{}
+	for _, n := range got {
+		want[n] = true
+	}
+	if !want["pp-game"] {
+		t.Errorf("带 @分支 后缀的 workdir 应给出裸仓库名候选，got %v", got)
+	}
+}

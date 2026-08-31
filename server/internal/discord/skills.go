@@ -91,7 +91,7 @@ func (s *Service) showMCPs(token string, ev interactionEvent) {
 	}
 	dbOn := false
 	if t, ok := s.store.config().thread(ev.ChannelID); ok {
-		dbOn = t.DBEnabled
+		dbOn = !t.DBOff
 	}
 	var b strings.Builder
 	b.WriteString("## 🔌 本子区的 MCP 工具面\n")
@@ -100,8 +100,8 @@ func (s *Service) showMCPs(token string, ev interactionEvent) {
 	if dbOn {
 		b.WriteString("- **acpp-db** — `db_sources` `db_tables` `db_schema` `db_query`（可写数据源另有 `db_execute`）：按项目过滤的数据库工具\n")
 	} else {
-		b.WriteString("- ~~acpp-db~~ — 未挂载。消息带 `@db`、用 `/db on`，或直接提「数据库/表结构/SQL」都会挂上\n")
+		b.WriteString("- ~~acpp-db~~ — 已被 /db off 卸载。`/db on` 或消息带 `@db` 重新挂上\n")
 	}
-	b.WriteString("-# 挂载在会话建立时定死；开关数据库面会带着历史摘录重开会话。")
+	b.WriteString("-# 挂载在会话建立时定死；开关数据库面会重开会话（上下文自动恢复）。")
 	s.ephemeralKeep(token, ev, b.String())
 }

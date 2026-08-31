@@ -198,7 +198,6 @@ func (s *Service) threadBinding(ctx context.Context, token string, cfg Config, c
 // startThread 处理主频道的 @bot：以那条消息开子区，问题作为第一轮输入。
 func (s *Service) startThread(ctx context.Context, token string, b Binding, ev messageEvent) {
 	text := stripMention(ev.Content, s.botID())
-	withDB := hasDBToken(text) || hasDBIntent(text)
 	if hasDBToken(text) {
 		text = stripDBToken(text)
 	}
@@ -218,8 +217,7 @@ func (s *Service) startThread(ctx context.Context, token string, b Binding, ev m
 		return
 	}
 	if _, err := s.store.update(func(c *Config) {
-		c.upsertThread(Thread{ThreadID: th.ID, ChannelID: b.ChannelID, Title: threadTitle(text),
-			DBEnabled: withDB, CreatedAt: time.Now()})
+		c.upsertThread(Thread{ThreadID: th.ID, ChannelID: b.ChannelID, Title: threadTitle(text), CreatedAt: time.Now()})
 	}); err != nil {
 		slog.Warn("子区记录落盘失败", "err", err)
 	}
@@ -253,16 +251,11 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 		s.say(ctx, token, ev.ChannelID, "-# 斜杠命令要从输入框弹出的菜单里选（输入 / 会弹出来）。")
 		return
 	}
-	// 消息里带 @db 令牌 = 引用数据库：当场挂载工具面（重开会话带上，
-	// 上下文经 acpSessionId 恢复），令牌本身不进 prompt。意图词也自动
-	// 挂——用户显式 /db 拨过的子区除外（显式决定比推断高一级）。
+	// 消息里带 @db 令牌 = 显式要数据库（默认本来就挂，这条只救
+	// /db off 过的子区）：令牌本身不进 prompt。
 	if hasDBToken(text) {
 		text = stripDBToken(text)
 		s.setThreadDB(ev.ChannelID, true)
-	} else if hasDBIntent(text) {
-		if t, ok := s.store.config().thread(ev.ChannelID); ok && !t.DBManual && !t.DBEnabled {
-			s.setThreadDB(ev.ChannelID, true)
-		}
 	}
 	s.enqueue(ctx, token, b, ev.ChannelID, queuedMsg{text: text, atts: ev.Attachments, msgID: ev.ID, author: ev.Author.ID})
 }
@@ -469,9 +462,9 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 	var mcpServers []any
 	var metaExtra map[string]any
 	if s.deps.Mounts != nil {
-		withDB := false
+		withDB := true
 		if t, ok := s.store.config().thread(threadID); ok {
-			withDB = t.DBEnabled
+			withDB = !t.DBOff
 		}
 		var mErr error
 		mcpServers, metaExtra, mErr = s.deps.Mounts(ctx, key, b.Workdir, b.Agent, withDB, func(rel, title string) {
@@ -735,28 +728,21 @@ var dbToken = regexp.MustCompile(`(^|\s)@(db\b|数据库)`)
 
 func hasDBToken(text string) bool { return dbToken.MatchString(text) }
 
-// dbIntent 识别「这条消息在说数据库」的意图词——比 @db 令牌宽、比常挂
-// 精准：漏挂的代价是 AI 没工具只能编数据（真实报障），误挂的代价只是
-// 工具清单多五条描述。词表刻意保守，单字「表」「库」不算。
-var dbIntent = regexp.MustCompile(`数据库|数据源|数据表|表结构|建表|查库|库里|\s库\s|\s库$|\s表\s|\s表的|\bSQL\b|\bsql\b`)
-
-func hasDBIntent(text string) bool { return dbIntent.MatchString(text) }
-
 func stripDBToken(text string) string {
 	return strings.TrimSpace(dbToken.ReplaceAllString(text, "$1"))
 }
 
-// setThreadDB 落盘子区的数据库开关并重开会话。挂载是 session/new 参数；
-// **不能走 session/load**——claude 恢复会话时不装 _meta 里新的 MCP 挂载
-// （真机实锤：/db on 后 load 恢复，工具面没出现；昨天 @db 生效是因为
-// load 恰好失败回退到了 new）。所以这里连 acpSessionId 一起清掉，强制
-// 下一轮 session/new；上下文靠子区历史注入衔接（见 threadHistory）。
+// setThreadDB 落盘子区的数据库开关并关掉现有会话——挂载是 session/new
+// 与 session/load 的参数，改不了在跑的会话；关掉后下一轮重开时带上新
+// 挂载（load 凭 acpSessionId 恢复上下文，load 失败回退 new 时有
+// threadHistory 历史衔接兜底）。曾误判「load 不装新挂载」在这里清过
+// acpSessionId——真凶后来查明是 workdir 的 @分支 后缀让项目过滤落空
+// （datasource projectCandidates 已修），不再白丢上下文。
 func (s *Service) setThreadDB(threadID string, on bool) bool {
 	changed := false
 	if _, err := s.store.update(func(c *Config) {
-		if t, ok := c.thread(threadID); ok && t.DBEnabled != on {
-			t.DBEnabled = on
-			t.ACPSessionID = ""
+		if t, ok := c.thread(threadID); ok && t.DBOff != !on {
+			t.DBOff = !on
 			c.upsertThread(t)
 			changed = true
 		}
@@ -772,18 +758,6 @@ func (s *Service) setThreadDB(threadID string, on bool) bool {
 	return changed
 }
 
-// markDBManual 记下「用户显式拨过开关」——此后意图词推断闭嘴。
-func (s *Service) markDBManual(threadID string) {
-	if _, err := s.store.update(func(c *Config) {
-		if t, ok := c.thread(threadID); ok && !t.DBManual {
-			t.DBManual = true
-			c.upsertThread(t)
-		}
-	}); err != nil {
-		slog.Warn("DBManual 落盘失败", "err", err)
-	}
-}
-
 // toggleDB 处理 /db：只在子区里有意义（挂载是会话级的）。
 func (s *Service) toggleDB(token string, ev interactionEvent) {
 	t, known := s.store.config().thread(ev.ChannelID)
@@ -794,18 +768,16 @@ func (s *Service) toggleDB(token string, ev interactionEvent) {
 	switch ev.option("switch") {
 	case "on":
 		s.setThreadDB(ev.ChannelID, true)
-		s.markDBManual(ev.ChannelID)
-		s.ephemeral(token, ev, "🗄️ 数据库工具面已挂载，下一轮生效（对话上下文会带着历史摘录重新开始）。")
+		s.ephemeral(token, ev, "🗄️ 数据库工具面已挂载，下一轮生效。")
 	case "off":
 		s.setThreadDB(ev.ChannelID, false)
-		s.markDBManual(ev.ChannelID)
-		s.ephemeral(token, ev, "数据库工具面已卸载，下一轮生效（这个子区不再按意图词自动挂载）。")
+		s.ephemeral(token, ev, "数据库工具面已卸载，下一轮生效；/db on 或消息带 @db 再打开。")
 	default:
-		state := "关（默认）"
-		if t.DBEnabled {
-			state = "开"
+		state := "开（默认）"
+		if t.DBOff {
+			state = "关"
 		}
-		s.ephemeral(token, ev, "本子区数据库工具面："+state+"。/db on 挂载、/db off 卸载，消息里带 @db 一步开启。")
+		s.ephemeral(token, ev, "本子区数据库工具面："+state+"。/db off 卸载、/db on 或消息带 @db 打开。")
 	}
 }
 

@@ -627,20 +627,3 @@ func TestResolveInWorkdir(t *testing.T) {
 		}
 	}
 }
-
-func TestDBIntent(t *testing.T) {
-	cases := map[string]bool{
-		"把 pre 库 b_game_rounds 表的数据都拉出来": true,
-		"看看数据库有什么":                       true,
-		"表结构给我":                          true,
-		"帮我写一条 SQL":                      true,
-		"这个仓库是做什么的":                      false,
-		"日程表排一下":                         false,
-		"发布一张图表给我":                       false,
-	}
-	for in, want := range cases {
-		if got := hasDBIntent(in); got != want {
-			t.Errorf("hasDBIntent(%q) = %v, 期望 %v", in, got, want)
-		}
-	}
-}

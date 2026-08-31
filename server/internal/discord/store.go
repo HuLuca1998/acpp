@@ -29,13 +29,10 @@ type Thread struct {
 	ChannelID    string `json:"channelId"`
 	ACPSessionID string `json:"acpSessionId,omitempty"`
 	Title        string `json:"title,omitempty"`
-	// DBEnabled：本子区是否挂数据库工具面。默认关——工具常挂会诱发
-	// 「平时问答也去查库」，用户拍板按需开（/db on、消息带 @db，或
-	// 消息里出现明确的数据库意图词时自动开）。
-	DBEnabled bool `json:"dbEnabled,omitempty"`
-	// DBManual：用户用 /db 显式拨过开关——之后意图词不再自动改，显式
-	// 决定比推断高一级。
-	DBManual  bool      `json:"dbManual,omitempty"`
+	// DBOff：显式关掉本子区的数据库工具面。默认是**开**——按需挂载
+	// 试过一轮（防没必要的查询），实际用下来「说数据库的事却没工具」
+	// 的挫败远多于误查，用户拍板改回默认挂载，/db off 显式关。
+	DBOff     bool      `json:"dbOff,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

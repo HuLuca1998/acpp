@@ -53,13 +53,22 @@ func projectCandidates(cwd, workspaceRoot string) []string {
 			}
 			add(rel)
 			add(filepath.Base(rel))
+			// discord 工作区命名是 <仓库>@<分支>（同仓库多分支并存），数据源
+			// 按仓库名配——剥掉 @ 后缀再给一个候选（仓库名不含 @，安全）。
+			if base := filepath.Base(rel); strings.Contains(base, "@") {
+				add(base[:strings.Index(base, "@")])
+			}
 		}
 	}
 
 	// 工作区根之外的目录（owner 可以把会话开在任意位置）：用最近的
 	// git 仓库目录名，仍然对得上「项目」这个概念。
 	if repo := nearestRepo(cwd); repo != "" {
-		add(filepath.Base(repo))
+		base := filepath.Base(repo)
+		add(base)
+		if i := strings.Index(base, "@"); i > 0 {
+			add(base[:i])
+		}
 	}
 	return names
 }
