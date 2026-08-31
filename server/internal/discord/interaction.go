@@ -105,6 +105,10 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 			"description": "本子区的用量统计（回合 / 工具 / token）",
 		},
 		{
+			"name":        "mcps",
+			"description": "本子区挂载的 MCP 工具面",
+		},
+		{
 			"name":        "db",
 			"description": "本子区的数据库工具面开关（默认关，防止没必要的查询）",
 			"options": []map[string]any{{
@@ -206,6 +210,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.showSkills(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "usage":
 		s.showUsage(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "mcps":
+		s.showMCPs(token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):

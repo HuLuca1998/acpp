@@ -80,3 +80,28 @@ func (s *Service) showUsage(token string, ev interactionEvent) {
 		"## 📊 本子区用量\n回合 **%d** · 工具调用 **%d** · token **%s**\n-# %s · 自后端本次启动起累计",
 		turns, tools, fmtTokens(tokens), state))
 }
+
+// showMCPs 列出本子区会话挂载的 MCP 工具面。状态从配置推导（挂载在
+// session/new 时定死），不去问 agent——问也问不到。
+func (s *Service) showMCPs(token string, ev interactionEvent) {
+	_, isThread := s.store.config().thread(ev.ChannelID)
+	if !isThread {
+		s.ephemeral(token, ev, "在对话子区里用 /mcps 查看挂载的工具面。")
+		return
+	}
+	dbOn := false
+	if t, ok := s.store.config().thread(ev.ChannelID); ok {
+		dbOn = t.DBEnabled
+	}
+	var b strings.Builder
+	b.WriteString("## 🔌 本子区的 MCP 工具面\n")
+	b.WriteString("- **acpp-chat** — `send_file`：把文件直接发进对话（HTML 自动渲染成长图）\n")
+	b.WriteString("- **acpp-report** — `report_open`：把写好的 HTML 报告以长图发进子区\n")
+	if dbOn {
+		b.WriteString("- **acpp-db** — `db_sources` `db_tables` `db_schema` `db_query`（可写数据源另有 `db_execute`）：按项目过滤的数据库工具\n")
+	} else {
+		b.WriteString("- ~~acpp-db~~ — 未挂载。消息带 `@db`、用 `/db on`，或直接提「数据库/表结构/SQL」都会挂上\n")
+	}
+	b.WriteString("-# 挂载在会话建立时定死；开关数据库面会带着历史摘录重开会话。")
+	s.ephemeralKeep(token, ev, b.String())
+}
