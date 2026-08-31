@@ -109,6 +109,17 @@ func Capture(ctx context.Context, url string, width int) ([]byte, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	// 静态长图没有交互：折叠块（<details>）强制展开，否则藏在里面的
+	// 内容整段看不见（真实反馈）。展开会改变页面高度，必须在量高度之前。
+	if _, err := c.call(ctx, sess, "Runtime.evaluate", map[string]any{
+		"expression": "document.querySelectorAll('details').forEach(d=>d.setAttribute('open',''))",
+	}); err == nil {
+		select {
+		case <-time.After(150 * time.Millisecond):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 
 	metrics, err := c.call(ctx, sess, "Page.getLayoutMetrics", nil)
 	if err != nil {
