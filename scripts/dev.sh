@@ -45,13 +45,16 @@ seed_dev_data() {
   # 停用——将来 app 更新出 discord 功能时不会拿同一个 token 抢线。
   if [ -f "$src/discord.json" ]; then
     cp "$src/discord.json" "$DEV_DATA_DIR/discord.json"
+    # 主目录那份不只停用，绑定与子区记录也要清——app 将来启用 discord 时
+    # 若带着 dev 的旧绑定跑起来，两个 bot 会绑同一频道双响应（真实事故）。
     python3 - "$src/discord.json" <<'PY'
 import json, sys
 path = sys.argv[1]
 cfg = json.load(open(path))
-if cfg.get("enabled"):
-    cfg["enabled"] = False
-    json.dump(cfg, open(path, "w"), ensure_ascii=False, indent=2)
+cfg["enabled"] = False
+cfg["bindings"] = []
+cfg["threads"] = []
+json.dump(cfg, open(path, "w"), ensure_ascii=False, indent=2)
 PY
   fi
 }
