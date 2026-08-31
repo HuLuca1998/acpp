@@ -18,6 +18,42 @@ WEB_PORT=45173
 LOG_DIR="${TMPDIR:-/tmp}/acpp-dev"
 mkdir -p "$LOG_DIR"
 
+# dev 数据目录与 app（~/.acpp）硬隔离：库、discord 配置、技能包全部独立，
+# dev 怎么折腾都不碰正式数据；两个后端也不会拿同一个 discord bot token
+# 抢同一条 gateway（那会消息双投）。首次运行从 ~/.acpp 播种一份。
+DEV_DATA_DIR="${ACPP_DEV_DATA_DIR:-$HOME/.acpp-dev}"
+
+seed_dev_data() {
+  [ -d "$DEV_DATA_DIR" ] && return 0
+  local src="$HOME/.acpp"
+  echo "首次运行：播种 dev 数据目录 $DEV_DATA_DIR（源 $src）"
+  mkdir -p "$DEV_DATA_DIR"
+  if [ -f "$src/acp.db" ]; then
+    # 用 sqlite 在线备份而不是 cp：app 可能正开着库，直接拷会丢 WAL 里的数据。
+    if command -v sqlite3 >/dev/null 2>&1; then
+      sqlite3 "$src/acp.db" ".backup '$DEV_DATA_DIR/acp.db'"
+    else
+      cp "$src/acp.db" "$DEV_DATA_DIR/acp.db"
+    fi
+  fi
+  # 技能库与分发目录：-a 保留符号链接（skillpack 里的启用链接是相对路径）。
+  [ -d "$src/skills" ] && cp -a "$src/skills" "$DEV_DATA_DIR/skills"
+  [ -d "$src/skillpack" ] && cp -a "$src/skillpack" "$DEV_DATA_DIR/skillpack"
+  # discord 配置带走（测试 bot 与频道绑定继续归 dev），随后把主目录那份
+  # 停用——将来 app 更新出 discord 功能时不会拿同一个 token 抢线。
+  if [ -f "$src/discord.json" ]; then
+    cp "$src/discord.json" "$DEV_DATA_DIR/discord.json"
+    python3 - "$src/discord.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+cfg = json.load(open(path))
+if cfg.get("enabled"):
+    cfg["enabled"] = False
+    json.dump(cfg, open(path, "w"), ensure_ascii=False, indent=2)
+PY
+  fi
+}
+
 kill_port() {
   local port=$1
   local pids
@@ -53,7 +89,8 @@ start_server() {
   (cd "$ROOT/server" && go build -o ../build/server/acp-server ./cmd/server)
   echo "启动后端 :${SERVER_PORT}（日志 $LOG_DIR/server.log）"
   # </dev/null 切断与调用方 stdio 的关联，否则 make dev | tail 这类管道会被挂住。
-  (cd "$ROOT/server" && ACP_DEBUG=1 nohup ../build/server/acp-server >"$LOG_DIR/server.log" 2>&1 </dev/null &)
+  seed_dev_data
+  (cd "$ROOT/server" && ACP_DEBUG=1 ACP_DATA_DIR="$DEV_DATA_DIR" nohup ../build/server/acp-server >"$LOG_DIR/server.log" 2>&1 </dev/null &)
   wait_http "http://127.0.0.1:$SERVER_PORT/api/health" "后端"
 }
 

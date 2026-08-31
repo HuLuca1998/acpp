@@ -354,6 +354,8 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		source = "复用已有克隆"
 	}
 	s.syncChannelCard(ctx, token, binding)
+	// 频道置顶使用手册：新成员第一眼能看懂怎么用。
+	s.publishGuide(ctx, token, binding)
 	s.editOriginal(token, appID, ev.Token, map[string]any{
 		"content":          fmt.Sprintf("✅ **%s** 工作区已就绪（%s）。绑定详情看频道主题，或随时 /status。", in.repo, source),
 		"embeds":           []map[string]any{},

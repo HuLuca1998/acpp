@@ -63,9 +63,11 @@ type Binding struct {
 	Access string `json:"access,omitempty"`
 	// CardMessageID 是早期版本置顶身份卡的遗留（卡已退役，频道侧常驻
 	// 信息面只有主题）；非空时下次同步会把卡删掉并清空此字段。
-	CardMessageID string    `json:"cardMessageId,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	CardMessageID string `json:"cardMessageId,omitempty"`
+	// GuideMessageID 是频道置顶使用手册的消息 id（/init 后发布，重绑更新）。
+	GuideMessageID string    `json:"guideMessageId,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // store 负责 Config 的加载与原子写回。锁只保护内存副本与文件——

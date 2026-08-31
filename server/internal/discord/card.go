@@ -54,6 +54,11 @@ func bindingEmbed(b Binding, source string) map[string]any {
 // 都是尽力而为——解绑后频道不该留任何绑定痕迹。
 func (s *Service) cleanupChannelCard(ctx context.Context, token string, b Binding) {
 	s.retireCard(ctx, token, b.ChannelID, b.CardMessageID)
+	if b.GuideMessageID != "" {
+		gctx, gcancel := context.WithTimeout(ctx, 5*time.Second)
+		_ = botREST(gctx, token, "DELETE", "/channels/"+b.ChannelID+"/messages/"+b.GuideMessageID, nil, nil)
+		gcancel()
+	}
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := botREST(cctx, token, "PATCH", "/channels/"+b.ChannelID,

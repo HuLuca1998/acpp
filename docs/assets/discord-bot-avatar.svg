@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- ACPP bot 头像：app 图标同源（气泡+提示符）+ bot 元素（天线、侧耳）。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20302A"/>
+      <stop offset="1" stop-color="#0A100D"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.48" cy="0.52" r="0.55">
+      <stop offset="0" stop-color="#22C55E" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#22C55E" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="20" flood-color="#34D399" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#halo)"/>
+  <g filter="url(#glow)" fill="none" stroke-linecap="round" stroke-linejoin="round"
+     transform="translate(512 512) scale(1.04) translate(-512 -530)">
+    <!-- 天线：杆 + 发光球 -->
+    <path d="M512 322 L512 262" stroke="#4ADE80" stroke-width="34"/>
+    <circle cx="512" cy="228" r="34" fill="#D1FAE5" stroke="none"/>
+    <!-- 侧耳 -->
+    <path d="M262 420 L262 520" stroke="#4ADE80" stroke-width="38"/>
+    <path d="M762 420 L762 520" stroke="#4ADE80" stroke-width="38"/>
+    <!-- 机器人头（气泡） + 尾巴 -->
+    <rect x="307" y="328" width="410" height="287" rx="92" stroke="#4ADE80" stroke-width="46"/>
+    <path d="M394 614 L353 707 L476 614" stroke="#4ADE80" stroke-width="46"/>
+    <!-- 提示符 ❯_ -->
+    <path d="M415 410 L481 471 L415 533" stroke="#D1FAE5" stroke-width="41"/>
+    <rect x="522" y="512" width="87" height="41" rx="20.5" fill="#D1FAE5" stroke="none"/>
+  </g>
+</svg>
