@@ -215,8 +215,10 @@ func (s *Service) tools(cwd string, writable bool) []mcp.Tool {
 		Annotations: &mcp.Annotations{ReadOnlyHint: true},
 		Description: "在数据源上查询数据（只能跑 SELECT / SHOW / DESC / EXPLAIN 一类语句，" +
 			"写语句会被拒绝——改数据用 db_execute）。可一次提交多条语句（分号分隔，" +
-			"按序执行、遇错即停）。结果默认最多 " + itoa(defaultMaxRows) +
-			" 行——要总量用 COUNT(*)，不要靠翻页硬取。",
+			"按序执行、遇错即停）。**逐步查询**：对业务表先 COUNT(*) 估规模，" +
+			"SELECT 明细必须带 WHERE 或 LIMIT；结果默认最多 " + itoa(defaultMaxRows) +
+			" 行、硬顶 " + itoa(maxRowsHard) + " 行，超出会截断并提示——收到截断提示就收窄条件、" +
+			"不要原样重试；单条查询超 30 秒会被中止。要总量用 COUNT(*)，要统计用聚合，不要拉明细自己算。",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
