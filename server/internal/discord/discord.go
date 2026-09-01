@@ -193,6 +193,9 @@ type Service struct {
 	chanKind map[string]string
 	// botRoles 缓存 bot 在各 guild 的集成角色 id（@角色也算 @bot）。
 	botRoles map[string]string
+	// unboundHinted 记下「在这个没绑定的频道里已经提示过怎么开始」的时刻，
+	// 防止 bot 变成复读机——同一个频道里连着 @ 几次，回一次就够了。
+	unboundHinted map[string]time.Time
 	// chatTok 是自家 acpp-chat 工具面（send_file）的回连凭证。
 	chatTok mcp.PeerTokens
 }
@@ -205,7 +208,8 @@ func New(path string, deps Deps) (*Service, error) {
 	}
 	s := &Service{store: st, deps: deps, registered: map[string]bool{},
 		pending: map[string]pendingInit{}, topicRetry: map[string]bool{},
-		chats: map[string]*threadChat{}, chanKind: map[string]string{}, botRoles: map[string]string{}}
+		chats: map[string]*threadChat{}, chanKind: map[string]string{}, botRoles: map[string]string{},
+		unboundHinted: map[string]time.Time{}}
 	if deps.AgentRuntime != nil {
 		// 子区对话的会话池：无人值守场景给宽松的轮超时，上限收紧——
 		// discord 的并发子区不会太多，别让它抢网页会话的资源。

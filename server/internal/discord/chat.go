@@ -115,32 +115,75 @@ func (s *Service) handleMessage(ctx context.Context, token string, d json.RawMes
 		// 绑定主频道：认 @bot（bot 用户或它的集成角色），也认 @db 令牌
 		// ——「@db 查一下」的意图明明白白是在叫 bot，静默忽略只会让人
 		// 以为 bot 挂了（真实报障：「为什么我发的消息 ai 不回复」）。
-		mentioned := false
-		for _, m := range ev.Mentions {
-			if m.ID == botID {
-				mentioned = true
-				break
-			}
-		}
-		if !mentioned && len(ev.MentionRoles) > 0 {
-			role := s.botRoleIn(ctx, token, ev.GuildID)
-			for _, r := range ev.MentionRoles {
-				if r != "" && r == role {
-					mentioned = true
-					break
-				}
-			}
-		}
-		if !mentioned && hasDBToken(ev.Content) {
-			mentioned = true
-		}
-		if mentioned {
+		if s.mentionsBot(ctx, token, ev, botID) || hasDBToken(ev.Content) {
 			go s.startThread(ctx, token, b, ev)
 		}
 		return
 	}
 	if b, ok := s.threadBinding(ctx, token, cfg, ev.ChannelID); ok {
 		go s.threadInput(ctx, token, b, ev)
+		return
+	}
+	// 既不是绑定频道、也不属于任何绑定频道的子区。被 @ 到还一声不吭的话，
+	// 人只会以为 bot 挂了——同一个报障已经出现过一次（见上面那段注释），
+	// 那次只修了「绑定频道里的 @db」，没覆盖「压根没绑定的频道」。
+	if s.mentionsBot(ctx, token, ev, botID) {
+		go s.hintUnbound(ctx, token, ev)
+	}
+}
+
+// mentionsBot 判断这条消息有没有 @ 到 bot：直接 @ 用户，或 @ 它在这个
+// guild 里的集成角色（自动补全里两者并排，选到角色的概率一半一半）。
+func (s *Service) mentionsBot(ctx context.Context, token string, ev messageEvent, botID string) bool {
+	for _, m := range ev.Mentions {
+		if m.ID == botID {
+			return true
+		}
+	}
+	if len(ev.MentionRoles) == 0 {
+		return false
+	}
+	role := s.botRoleIn(ctx, token, ev.GuildID)
+	for _, r := range ev.MentionRoles {
+		if r != "" && r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// unboundHintTTL 是同一个未绑定频道两次提示之间的最短间隔。
+// 一次说清就够了，连着 @ 几次不该收到几条一样的回复。
+const unboundHintTTL = 30 * time.Minute
+
+// hintUnbound 在没绑定的频道里回一句「怎么开始」。
+func (s *Service) hintUnbound(ctx context.Context, token string, ev messageEvent) {
+	s.chatMu.Lock()
+	last, seen := s.unboundHinted[ev.ChannelID]
+	fresh := seen && time.Since(last) < unboundHintTTL
+	if !fresh {
+		s.unboundHinted[ev.ChannelID] = time.Now()
+	}
+	s.chatMu.Unlock()
+	if fresh {
+		return
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "POST", "/channels/"+ev.ChannelID+"/messages", map[string]any{
+		"embeds": []map[string]any{{
+			"title": "这个频道还没绑定工作区",
+			"description": "用 `/init` 绑一个仓库：选仓库 → base 分支 → 数据库 → 服务器，" +
+				"之后在这里 @ 我就会开子区干活。\n\n" +
+				"（已经绑过的频道走错了？`/status` 看当前绑定。）",
+			"color": colorBlurbe,
+		}},
+		"message_reference": map[string]any{"message_id": ev.ID, "fail_if_not_exists": false},
+		"allowed_mentions":  noMentions(),
+	}, nil)
+	if err != nil {
+		slog.Warn("未绑定频道的提示发送失败", "channel", ev.ChannelID, "err", err)
 	}
 }
 

@@ -49,6 +49,12 @@ func slashCommands() []slashCommand {
 				"type": 3, "name": "access", "description": "权限档位",
 				"required": true, "choices": accessChoicesJSON,
 			}}},
+		{name: "server", desc: "换这个频道锁定的服务器（选「不锁定」解除）",
+			options: []map[string]any{{
+				// choices 由 registerCommands 按当前服务器清单动态注入。
+				"type": 3, "name": "name", "description": "换绑本频道锁定的服务器",
+				"required": false,
+			}}},
 		{name: "db", desc: "换这个频道锁定的库，或开关本子区的数据库工具",
 			options: []map[string]any{{
 				"type": 3, "name": "switch", "description": "on 挂载 / off 卸载（不填看状态）",

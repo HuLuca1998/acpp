@@ -113,7 +113,15 @@ func (s *Service) showMCPs(token string, ev interactionEvent) {
 	} else {
 		b.WriteString("- ~~acpp-db~~ — 已被 /db off 卸载。`/db on` 或消息带 `@db` 重新挂上\n")
 	}
-	b.WriteString("-# 挂载在会话建立时定死；开关数据库面会重开会话（上下文自动恢复）。")
+	// 服务器面（adr-019）：配了机器就挂，没有开关；锁定与否是频道绑定的事。
+	srvScope := "全部启用的机器"
+	if bind.ServerID != 0 {
+		srvScope = "锁定 " + serverLine(bind)
+	}
+	b.WriteString("- **acpp-server** — `server_hosts` `server_info` `server_ls` `server_read` `server_grep`" +
+		" `docker_ps` `docker_logs` `docker_inspect` `docker_stats` `server_ps` `server_ports` `server_journal`" +
+		"（全只读）：" + srvScope + "\n")
+	b.WriteString("-# 挂载在会话建立时定死；开关数据库面、换绑数据库或服务器都会重开会话（上下文自动恢复）。")
 	s.ephemeralKeep(token, ev, b.String())
 }
 

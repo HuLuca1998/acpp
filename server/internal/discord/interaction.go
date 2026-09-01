@@ -54,6 +54,19 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 		cancel()
 	}
 
+	var serverChoicesJSON []map[string]any
+	if s.deps.Servers != nil {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if list, err := s.deps.Servers(cctx); err == nil {
+			for _, c := range serverChoices(list, 0) {
+				serverChoicesJSON = append(serverChoicesJSON, map[string]any{
+					"name": trimRunes(c.Label, 90), "value": c.Value,
+				})
+			}
+		}
+		cancel()
+	}
+
 	var cmds []map[string]any
 	for _, c := range slashCommands() {
 		cmd := map[string]any{"name": c.name, "description": c.desc}
@@ -77,6 +90,9 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 						opts[i]["choices"] = dbChoicesJSON
 					}
 				}
+			}
+			if c.name == "server" && len(serverChoicesJSON) > 0 {
+				opts[0]["choices"] = serverChoicesJSON
 			}
 			cmd["options"] = opts
 		}
@@ -169,6 +185,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.stopThread(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "db":
 		s.handleDBCommand(ctx, token, ev)
+	case ev.Type == 2 && ev.Data.Name == "server":
+		s.setBindingOption(ctx, token, ev, "server")
 	case ev.Type == 2 && ev.Data.Name == "help":
 		s.showHelp(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "git":
@@ -375,13 +393,34 @@ func (s *Service) setBindingOption(ctx context.Context, token string, ev interac
 		}
 		// 挂载在 session/new 时定死，改锁定必须让子区会话重开一次。
 		confirm += "\n-# 子区会话会重开一轮带上新挂载（上下文自动恢复）。"
+	case "server":
+		v := ev.option("name")
+		id, name := parseServerChoice(v)
+		if id == 0 && v != dbNoneValue {
+			// 手输名字（没走命令选项）也认一下再报错。
+			opt, ok := s.serverOptionByName(ctx, v)
+			if !ok {
+				s.ephemeral(token, ev, "认不出这台服务器（用命令自带的选项选，或填服务器页里的名字）。")
+				return
+			}
+			id, name = opt.ID, opt.Name
+		}
+		b.ServerID, b.ServerName = id, name
+		if id == 0 {
+			confirm = "✅ 已解除服务器锁定：本频道能看到全部启用的机器。"
+		} else {
+			confirm = "✅ 本频道服务器已锁定：**" + name + "**，别的机器看不到。"
+		}
+		confirm += "\n-# 子区会话会重开一轮带上新挂载（上下文自动恢复）。"
 	}
 	b.UpdatedAt = time.Now()
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(b) }); err != nil {
 		s.ephemeral(token, ev, "保存失败："+trimRunes(err.Error(), 200))
 		return
 	}
-	if kind == "db" {
+	// 数据库与服务器都决定工具面的挂载，而挂载在 session/new 时定死——
+	// 改了就得让子区会话重开一次，否则 AI 手上还是旧的那套。
+	if kind == "db" || kind == "server" {
 		s.closeChannelThreads(b.ChannelID)
 	}
 	s.ephemeral(token, ev, confirm)

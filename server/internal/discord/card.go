@@ -42,11 +42,11 @@ func bindingEmbed(b Binding, source string) map[string]any {
 			{"name": "思考深度", "value": effort, "inline": true},
 			{"name": "安全权限", "value": accessLabel(b.AccessOrDefault()), "inline": true},
 			{"name": "数据库", "value": dbLine(b), "inline": true},
-			{"name": "​", "value": "​", "inline": true},
+			{"name": "服务器", "value": serverLine(b), "inline": true},
 			{"name": "​", "value": "​", "inline": true},
 			{"name": "工作目录", "value": "`" + b.Workdir + "`", "inline": false},
 		},
-		"footer": map[string]any{"text": "/model 模型 · /effort 深度 · /access 权限 · /init 重绑 · /status 查看"},
+		"footer": map[string]any{"text": "/model 模型 · /effort 深度 · /access 权限 · /db 换库 · /server 换机器 · /init 重绑"},
 	}
 }
 

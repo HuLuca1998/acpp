@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 频道锁定一台服务器（adr-019）相关的契约。单独成文件是因为主测试文件
@@ -127,5 +128,42 @@ func TestServerChoices(t *testing.T) {
 	}
 	if id, _ := parseServerChoice(dbNoneValue); id != 0 {
 		t.Errorf("不锁定应解成 0，得到 %d", id)
+	}
+}
+
+// 契约：未绑定频道被 @ 到时的提示要节流——同一个频道连着 @ 几次，
+// 回一次就够了，否则 bot 成了复读机。
+func TestHintUnbound_Throttled(t *testing.T) {
+	s, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 直接验证节流状态机（真发消息要 REST，那是 e2e 的事）。
+	const ch = "c1"
+	mark := func() bool {
+		s.chatMu.Lock()
+		defer s.chatMu.Unlock()
+		last, seen := s.unboundHinted[ch]
+		if seen && time.Since(last) < unboundHintTTL {
+			return false
+		}
+		s.unboundHinted[ch] = time.Now()
+		return true
+	}
+
+	if !mark() {
+		t.Fatal("第一次应当提示")
+	}
+	if mark() {
+		t.Error("紧接着的第二次不该再提示")
+	}
+
+	// 过了窗口就该再提示一次——用户隔了半小时回来，多半是真忘了。
+	s.chatMu.Lock()
+	s.unboundHinted[ch] = time.Now().Add(-unboundHintTTL - time.Minute)
+	s.chatMu.Unlock()
+	if !mark() {
+		t.Error("超过 TTL 后应当重新提示")
 	}
 }

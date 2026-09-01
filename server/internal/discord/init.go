@@ -172,7 +172,29 @@ func (s *Service) dbOptionByRef(ctx context.Context, ref string) (DBOption, bool
 	return DBOption{}, false
 }
 
-// dbNoneValue 是「不锁定」那一项的 value（不是数据源 id）。
+// serverOptionByName 按名字在当前清单里找一台服务器——给手输（而不是从
+// 命令选项里选）的 /server 兜底。
+func (s *Service) serverOptionByName(ctx context.Context, name string) (ServerOption, bool) {
+	name = strings.TrimSpace(name)
+	if s.deps.Servers == nil || name == "" {
+		return ServerOption{}, false
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	list, err := s.deps.Servers(cctx)
+	if err != nil {
+		slog.Warn("取服务器清单失败", "err", err)
+		return ServerOption{}, false
+	}
+	for _, h := range list {
+		if strings.EqualFold(h.Name, name) {
+			return h, true
+		}
+	}
+	return ServerOption{}, false
+}
+
+// dbNoneValue 是「不锁定」那一项的 value（不是数据源 id，服务器那边共用）。
 const dbNoneValue = "none"
 
 // serverChoices 是服务器选项：名字打头，描述里给地址与用途备注。
