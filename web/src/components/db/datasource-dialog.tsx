@@ -8,7 +8,8 @@ import type {
   DataSource,
   DataSourceInput,
   DbDatabase,
-  SSHAuth,
+  Server,
+  ServerInput,
 } from "@/types/acp"
 import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
@@ -36,17 +37,14 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
-import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { UriDialog } from "@/components/db/uri-dialog"
+import { ServerDialog } from "@/components/servers/server-dialog"
+import { TestResult, type TestState } from "@/components/connection-test"
+import { useAsyncData } from "@/hooks/use-async-data"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
-import {
-  CheckCircle2Icon,
-  CopyIcon,
-  FolderOpenIcon,
-  XCircleIcon,
-} from "lucide-react"
+import { CopyIcon, PlusIcon } from "lucide-react"
 
 /** URI 里带 SSH 却没带私钥路径时的缺省——本机约定私钥放这。 */
 const DEFAULT_SSH_KEY_PATH = "~/.ssh/key"
@@ -121,12 +119,6 @@ export function DataSourceDialog({
   )
 }
 
-type TestState =
-  | { status: "idle" }
-  | { status: "running" }
-  | { status: "ok"; version?: string }
-  | { status: "failed"; error: string }
-
 function DataSourceForm({
   source,
   projects,
@@ -150,13 +142,7 @@ function DataSourceForm({
     params: source?.params ?? "",
     note: source?.note ?? "",
     sshEnabled: source?.sshEnabled ?? false,
-    sshHost: source?.sshHost ?? "",
-    sshPort: source?.sshPort ?? 22,
-    sshUser: source?.sshUser ?? "",
-    sshAuth: source?.sshAuth ?? "password",
-    sshPassword: "",
-    sshKeyPath: source?.sshKeyPath ?? "",
-    sshPassphrase: "",
+    serverId: source?.serverId ?? 0,
     readOnly: source?.readOnly ?? true,
     disabled: source?.disabled ?? false,
   }))
@@ -166,7 +152,22 @@ function DataSourceForm({
   const [test, setTest] = useState<TestState>({ status: "idle" })
   const [sshTest, setSSHTest] = useState<TestState>({ status: "idle" })
   const [uriOpen, setUriOpen] = useState(false)
-  const [keyPickerOpen, setKeyPickerOpen] = useState(false)
+  // 服务器清单：跳板机从这里选（adr-019）。新建一台之后 bump 一下重新拉，
+  // 免得刚建好的那台要关掉对话框才看得见。
+  const [serversVersion, setServersVersion] = useState(0)
+  const { data: servers } = useAsyncData(
+    () =>
+      api.servers
+        .list()
+        .then((res) => res.items.filter((srv) => !srv.disabled))
+        .catch(() => [] as Server[]),
+    [serversVersion]
+  )
+  const [serverDialogOpen, setServerDialogOpen] = useState(false)
+  // URI 里带着跳板机信息时的线索：它描述的机器未必已经配过，所以不直接
+  // 填进表单，而是提示用户照它新建一台（按主机名去猜某条已存记录，猜错
+  // 就连到别的机器上去了）。
+  const [sshHint, setSSHHint] = useState<ServerInput | null>(null)
 
   const set = <K extends keyof DataSourceInput>(
     key: K,
@@ -415,130 +416,71 @@ function DataSourceForm({
             {form.sshEnabled ? (
               <>
                 <p className="text-xs text-muted-foreground">
-                  {t("db.sshHint")}
+                  {t("server.pickHint")}
                 </p>
-                <div className="grid grid-cols-[1fr_7rem] gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="ds-ssh-host">
-                      {t("db.sshHost")}
-                    </FieldLabel>
-                    <Input
-                      id="ds-ssh-host"
-                      value={form.sshHost}
-                      onChange={(e) => set("sshHost", e.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="ds-ssh-port">
-                      {t("db.sshPort")}
-                    </FieldLabel>
-                    <Input
-                      id="ds-ssh-port"
-                      type="number"
-                      value={form.sshPort}
-                      onChange={(e) => set("sshPort", Number(e.target.value))}
-                    />
-                  </Field>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Field>
-                    <FieldLabel htmlFor="ds-ssh-user">
-                      {t("db.sshUser")}
-                    </FieldLabel>
-                    <Input
-                      id="ds-ssh-user"
-                      value={form.sshUser}
-                      onChange={(e) => set("sshUser", e.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="ds-ssh-auth">
-                      {t("db.sshAuth")}
-                    </FieldLabel>
+                {/* 跳板机是服务器页的一条记录（adr-019）：同一台机器既是
+                    这条隧道的入口，也是 AI 观察的对象，配一次两边都用。 */}
+                <Field>
+                  <FieldLabel htmlFor="ds-server">
+                    {t("server.pickForTunnel")}
+                  </FieldLabel>
+                  <div className="flex items-center gap-2">
                     <Select
-                      value={form.sshAuth}
-                      onValueChange={(v) => set("sshAuth", v as SSHAuth)}
+                      value={form.serverId ? String(form.serverId) : ""}
+                      onValueChange={(v) => set("serverId", Number(v))}
                     >
-                      <SelectTrigger id="ds-ssh-auth">
-                        <SelectValue />
+                      <SelectTrigger id="ds-server" className="flex-1">
+                        <SelectValue
+                          placeholder={
+                            servers && servers.length === 0
+                              ? t("server.pickEmpty")
+                              : t("server.pickPlaceholder")
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="password">
-                          {t("db.sshAuthPassword")}
-                        </SelectItem>
-                        <SelectItem value="key">
-                          {t("db.sshAuthKey")}
-                        </SelectItem>
-                        <SelectItem value="both">
-                          {t("db.sshAuthBoth")}
-                        </SelectItem>
+                        {(servers ?? []).map((srv: Server) => (
+                          <SelectItem key={srv.id} value={String(srv.id)}>
+                            <span className="font-mono">{srv.name}</span>
+                            <span className="ml-2 text-muted-foreground">
+                              {srv.user}@{srv.host}:{srv.port}
+                            </span>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                  </Field>
-                </div>
+                    <Hint label={t("server.pickCreate")} align="end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label={t("server.pickCreate")}
+                        onClick={() => setServerDialogOpen(true)}
+                      >
+                        <PlusIcon />
+                      </Button>
+                    </Hint>
+                  </div>
+                </Field>
 
-                {form.sshAuth !== "key" ? (
-                  <Field>
-                    <FieldLabel htmlFor="ds-ssh-password">
-                      {t("db.sshPassword")}
-                    </FieldLabel>
-                    <Input
-                      id="ds-ssh-password"
-                      type="password"
-                      autoComplete="off"
-                      value={form.sshPassword}
-                      placeholder={
-                        source?.hasSSHPassword ? t("db.passwordKeep") : ""
-                      }
-                      onChange={(e) => set("sshPassword", e.target.value)}
-                    />
-                  </Field>
-                ) : null}
-
-                {form.sshAuth !== "password" ? (
-                  <>
-                    <Field>
-                      <FieldLabel htmlFor="ds-ssh-key">
-                        {t("db.sshKeyPath")}
-                      </FieldLabel>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id="ds-ssh-key"
-                          className="flex-1 font-mono"
-                          value={form.sshKeyPath}
-                          placeholder={t("db.sshKeyPathPlaceholder")}
-                          onChange={(e) => set("sshKeyPath", e.target.value)}
-                        />
-                        <Hint label={t("db.sshKeyBrowse")} align="end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            aria-label={t("db.sshKeyBrowse")}
-                            onClick={() => setKeyPickerOpen(true)}
-                          >
-                            <FolderOpenIcon />
-                          </Button>
-                        </Hint>
-                      </div>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="ds-ssh-passphrase">
-                        {t("db.sshPassphrase")}
-                      </FieldLabel>
-                      <Input
-                        id="ds-ssh-passphrase"
-                        type="password"
-                        autoComplete="off"
-                        value={form.sshPassphrase}
-                        placeholder={
-                          source?.hasSSHPassphrase ? t("db.passwordKeep") : ""
-                        }
-                        onChange={(e) => set("sshPassphrase", e.target.value)}
-                      />
-                    </Field>
-                  </>
+                {/* 从 URI 导进来的跳板机：一键照它建一台，省去回头手抄。 */}
+                {sshHint ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2">
+                    <span className="min-w-0 truncate text-xs text-muted-foreground">
+                      {t("db.uriSSHHint", {
+                        host: `${sshHint.user}@${sshHint.host}:${sshHint.port}`,
+                      })}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setServerDialogOpen(true)}
+                    >
+                      {t("server.pickCreate")}
+                    </Button>
+                  </div>
                 ) : null}
 
                 <div className="flex items-center gap-2">
@@ -546,7 +488,7 @@ function DataSourceForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={sshTest.status === "running"}
+                    disabled={sshTest.status === "running" || !form.serverId}
                     onClick={handleTestSSH}
                   >
                     {sshTest.status === "running" ? <Spinner /> : null}
@@ -650,37 +592,30 @@ function DataSourceForm({
         sourceId={source?.id ?? 0}
         onOpenChange={setUriOpen}
         onImport={(parsed) => {
-          // Navicat 的 URI 通常不带私钥路径：带 SSH 却没路径时补上本机
-          // 缺省，免得每次导入都手填一遍。
-          setForm((prev) => {
-            const next = { ...prev, ...parsed }
-            if (next.sshEnabled && !next.sshKeyPath) {
-              next.sshKeyPath = DEFAULT_SSH_KEY_PATH
-            }
-            return next
-          })
+          const { sshHint: hint, ...fields } = parsed
+          setForm((prev) => ({ ...prev, ...fields }))
+          // Navicat 的 URI 通常不带私钥路径，补上本机缺省，免得每次导入
+          // 都手填一遍。跳板机本身不进表单——它是服务器页的记录。
+          setSSHHint(
+            hint
+              ? { ...hint, keyPath: hint.keyPath || DEFAULT_SSH_KEY_PATH }
+              : null
+          )
           setTest({ status: "idle" })
           setSSHTest({ status: "idle" })
         }}
       />
 
-      {/* 私钥文件选择：已填路径就从它所在目录起步，否则直达 ~/.ssh
-          （目录本身是隐藏项、从家目录导航根本看不见它）。 */}
-      <DirPicker
-        open={keyPickerOpen}
-        onOpenChange={setKeyPickerOpen}
-        mode="file"
-        initialPath={
-          (form.sshKeyPath ?? "").includes("/")
-            ? (form.sshKeyPath ?? "").slice(
-                0,
-                (form.sshKeyPath ?? "").lastIndexOf("/")
-              ) || "~/.ssh"
-            : "~/.ssh"
-        }
-        onSelect={(path) => {
-          set("sshKeyPath", path)
-          setKeyPickerOpen(false)
+      {/* 新建跳板机：建完自动选中它——用户点这个按钮就是为了用它。 */}
+      <ServerDialog
+        open={serverDialogOpen}
+        onOpenChange={setServerDialogOpen}
+        server={null}
+        prefill={sshHint}
+        onSaved={(saved) => {
+          setServersVersion((v) => v + 1)
+          set("serverId", saved.id)
+          setSSHHint(null)
         }}
       />
     </form>
@@ -762,35 +697,3 @@ function DatabasePicker({
   )
 }
 
-function TestResult({
-  state,
-  variant = "mysql",
-}: {
-  state: TestState
-  /** ssh 档只测到跳板机，成功文案不能说成「MySQL 连接成功」。 */
-  variant?: "mysql" | "ssh"
-}) {
-  const { t } = useTranslation()
-  if (state.status === "ok") {
-    return (
-      <p className="flex items-center gap-1.5 text-xs text-success">
-        <CheckCircle2Icon className="size-3.5 shrink-0" />
-        {variant === "ssh"
-          ? t("db.sshTestOk", { version: state.version ?? "" })
-          : t("db.testOk", { version: state.version ?? "" })}
-      </p>
-    )
-  }
-  if (state.status === "failed") {
-    return (
-      <p className="flex items-start gap-1.5 text-xs text-destructive">
-        <XCircleIcon className="mt-0.5 size-3.5 shrink-0" />
-        <span className="min-w-0 break-all">
-          {t("db.testFailed")}
-          {state.error ? `：${state.error}` : null}
-        </span>
-      </p>
-    )
-  }
-  return null
-}

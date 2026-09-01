@@ -26,6 +26,7 @@ import { groupSessionsByCwd } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   DatabaseIcon,
+  HardDriveIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
   ScrollTextIcon,
@@ -104,6 +105,11 @@ export function AppSidebar({
               title: t("nav.databases"),
               url: "/databases",
               icon: <DatabaseIcon />,
+            },
+            {
+              title: t("nav.servers"),
+              url: "/servers",
+              icon: <HardDriveIcon />,
             },
             { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
             {

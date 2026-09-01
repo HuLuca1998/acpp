@@ -74,10 +74,10 @@ while IFS= read -r d; do
 done <<<"$(sed 's|/[^/]*$||' <<<"$SRC_NO_TEST" | sort -u)"
 
 # ---- 检查 3：禁止模式 -----------------------------------------------------
-# 3a. api.ts 之外的裸 fetch(（后端请求必须走 lib/api.ts）
+# 3a. api 客户端之外的裸 fetch(（后端请求必须走 lib/api/）
 hits=$(grep -rn --include='*.ts' --include='*.tsx' -E '(^|[^.a-zA-Z])fetch\(' web/src \
-  | grep -v 'web/src/lib/api.ts' || true)
-[ -n "$hits" ] && while IFS= read -r h; do fail "裸 fetch（必须走 lib/api.ts）：$h"; done <<<"$hits"
+  | grep -v 'web/src/lib/api/' || true)
+[ -n "$hits" ] && while IFS= read -r h; do fail "裸 fetch（必须走 lib/api/）：$h"; done <<<"$hits"
 
 # 3b. 原生 confirm / alert（必须用 AlertDialog / sonner）
 hits=$(grep -rn --include='*.ts' --include='*.tsx' -E 'window\.(confirm|alert)\(' web/src || true)

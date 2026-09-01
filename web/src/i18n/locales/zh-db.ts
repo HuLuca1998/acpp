@@ -18,6 +18,7 @@ export const zhDb = {
   uriHasPassword:
     "这两条链接包含密码明文——它本身就是凭证，别往聊天窗口或文档里贴。",
   uriSaveFirst: "先保存这条连接，再来导出链接。",
+  uriSSHHint: "这条 URI 带着跳板机 {{host}}——照它新建一台服务器，或在上面选一台已有的。",
   uriButton: "URI",
   refTitle: "引用数据库",
   refHint:

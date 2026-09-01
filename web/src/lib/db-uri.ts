@@ -1,4 +1,4 @@
-import type { DataSourceInput, SSHAuth } from "@/types/acp"
+import type { DataSourceInput, ServerInput, SSHAuth } from "@/types/acp"
 
 /**
  * 连接 URI 的**解析**——一条链接换一整套连接参数，省掉逐字段手敲。
@@ -21,8 +21,17 @@ import type { DataSourceInput, SSHAuth } from "@/types/acp"
  * `<PASSWORD>` 占位符当成「没给密码」，免得把它当真值填进表单。
  */
 
-/** 解析结果：能填进表单的字段（没出现在 URI 里的字段不返回）。 */
-export type ParsedUri = Partial<DataSourceInput>
+/**
+ * 解析结果：能填进表单的字段（没出现在 URI 里的字段不返回）。
+ *
+ * 跳板机信息单独放在 `sshHint` 而不是摊进表单：数据源本身只存一个
+ * `serverId`（adr-019），跳板机是服务器页的记录。一条外面来的 URI 描述的
+ * 机器未必已经配过，所以这里只把它原样带出来，由对话框问用户要不要照它
+ * 新建一台——直接按主机名去猜某条已存记录，猜错就连到别的机器上去了。
+ */
+export type ParsedUri = Partial<DataSourceInput> & {
+  sshHint?: ServerInput
+}
 
 const SSH_AUTHS: SSHAuth[] = ["password", "key", "both"]
 
@@ -74,19 +83,20 @@ function parseNavicatUri(text: string): ParsedUri | null {
   if (database) out.database = database
 
   if (isTrue(get("Conn.UseSSH"))) {
-    out.sshEnabled = true
-    out.sshHost = get("Conn.SSH.Host") ?? ""
+    const sshHost = get("Conn.SSH.Host") ?? ""
     const sshPort = Number(get("Conn.SSH.Port"))
-    if (sshPort > 0) out.sshPort = sshPort
-    const sshUser = get("Conn.SSH.Username")
-    if (sshUser) out.sshUser = sshUser
-    out.sshAuth = navicatAuth(get("Conn.SSH.AuthenticationMethod"))
-    const keyPath = get("Conn.SSH.PrivateKey") || get("Conn.SSH.PrivateKeyPath")
-    if (keyPath) out.sshKeyPath = keyPath
-    const sshPassword = realSecret(get("Conn.SSH.Password"))
-    if (sshPassword) out.sshPassword = sshPassword
-    const passphrase = realSecret(get("Conn.SSH.Passphrase"))
-    if (passphrase) out.sshPassphrase = passphrase
+    out.sshEnabled = true
+    out.sshHint = {
+      name: sshHost,
+      host: sshHost,
+      port: sshPort > 0 ? sshPort : 22,
+      user: get("Conn.SSH.Username") ?? "root",
+      auth: navicatAuth(get("Conn.SSH.AuthenticationMethod")),
+      keyPath:
+        get("Conn.SSH.PrivateKey") || get("Conn.SSH.PrivateKeyPath") || "",
+      password: realSecret(get("Conn.SSH.Password")),
+      passphrase: realSecret(get("Conn.SSH.Passphrase")),
+    }
   }
 
   // 连接名拆成项目/环境：`dmit-dev` → dmit / dev。拆不开就整个当项目，
@@ -131,16 +141,18 @@ function parseStandardUri(raw: string): ParsedUri | null {
 
   const sshHost = params.get("sshHost") || params.get("ssh_host")
   if (sshHost) {
-    out.sshEnabled = true
-    out.sshHost = sshHost
     const sshPort = Number(params.get("sshPort") || params.get("ssh_port"))
-    if (sshPort > 0) out.sshPort = sshPort
-    const sshUser = params.get("sshUser") || params.get("ssh_user")
-    if (sshUser) out.sshUser = sshUser
     const sshAuth = (params.get("sshAuth") || params.get("ssh_auth")) as SSHAuth
-    if (SSH_AUTHS.includes(sshAuth)) out.sshAuth = sshAuth
-    const keyPath = params.get("sshKeyPath") || params.get("ssh_key_path")
-    if (keyPath) out.sshKeyPath = keyPath
+    out.sshEnabled = true
+    out.sshHint = {
+      name: sshHost,
+      host: sshHost,
+      port: sshPort > 0 ? sshPort : 22,
+      user: params.get("sshUser") || params.get("ssh_user") || "root",
+      auth: SSH_AUTHS.includes(sshAuth) ? sshAuth : "password",
+      keyPath:
+        params.get("sshKeyPath") || params.get("ssh_key_path") || "",
+    }
   }
 
   // 其余参数原样进「连接参数」——tls、charset 这些驱动自己认得。

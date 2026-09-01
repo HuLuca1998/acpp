@@ -1,9 +1,6 @@
-// 数据库数据源（adr-008）的领域类型。
+// 数据库数据源（adr-008）的领域类型。SSH 跳板的配置在 ./server（adr-019）。
 // 与 server/internal/model/datasource.go 及 internal/datasource 的返回形状对齐；
 // 从 ./acp 一并转出，调用方仍统一 import "@/types/acp"。
-
-/** SSH 隧道的验证方式，照 Navicat 的三选一。 */
-export type SSHAuth = "password" | "key" | "both"
 
 /**
  * 一个 MySQL 数据源。身份是「项目 + 环境」两级，`ref` 是派生的
@@ -22,18 +19,16 @@ export interface DataSource {
   database: string
   params: string
   note: string
+  /** 开启后经 serverId 指向的那台机器拨到 host:port（adr-019）。 */
   sshEnabled: boolean
-  sshHost: string
-  sshPort: number
-  sshUser: string
-  sshAuth: SSHAuth
-  sshKeyPath: string
+  /** 充当跳板的服务器 id，0 表示没选。 */
+  serverId: number
+  /** 跳板机名字的展示快照，省得为显示一个名字再拉一次服务器列表。 */
+  serverName?: string
   /** 只读连接：软件层拒绝写语句，AI 侧连执行工具都不挂。 */
   readOnly: boolean
   disabled: boolean
   hasPassword: boolean
-  hasSSHPassword: boolean
-  hasSSHPassphrase: boolean
   createdAt: string
   updatedAt: string
 }
@@ -53,13 +48,7 @@ export interface DataSourceInput {
   params?: string
   note?: string
   sshEnabled?: boolean
-  sshHost?: string
-  sshPort?: number
-  sshUser?: string
-  sshAuth?: SSHAuth
-  sshPassword?: string
-  sshKeyPath?: string
-  sshPassphrase?: string
+  serverId?: number
   readOnly?: boolean
   disabled?: boolean
 }

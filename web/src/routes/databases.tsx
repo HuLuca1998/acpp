@@ -226,10 +226,9 @@ export function Databases() {
 function addressOf(source: DataSource): string {
   const target = `${source.host}:${source.port}`
   if (!source.sshEnabled) return target
-  const jump = source.sshUser
-    ? `${source.sshUser}@${source.sshHost}`
-    : source.sshHost
-  return `${jump}:${source.sshPort} → ${target}`
+  // 跳板机的地址在服务器页维护，这里只显示它的名字——名字本来就是为了
+  // 一眼认出是哪台机器而起的。
+  return `${source.serverName ?? "?"} → ${target}`
 }
 
 /**

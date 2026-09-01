@@ -1,4 +1,6 @@
 import { zhWorkspace } from "./zh-workspace"
+import { zhSettings } from "./zh-settings"
+import { zhServer } from "./zh-server"
 import { zhNotify } from "./zh-notify"
 import { zhDb } from "./zh-db"
 import { zhDiscord } from "./zh-discord"
@@ -34,6 +36,7 @@ export default {
     skills: "技能",
     sessions: "会话",
     databases: "数据库",
+    servers: "服务器",
     tools: "工具",
     logs: "日志",
     discord: "Discord",
@@ -146,6 +149,7 @@ export default {
     remove: "删掉这个传过的文件",
   },
   db: zhDb,
+  server: zhServer,
   discord: zhDiscord,
   skills: {
     title: "技能",
@@ -516,149 +520,7 @@ export default {
     backToSessions: "返回会话列表",
     openFailed: "无法连接 agent",
   },
-  settingsPage: {
-    notifications: {
-      title: "系统通知",
-      description:
-        "agent 停下来等你决策、答完一轮或出错时，发一条 macOS 通知。",
-      authorized: "已授权",
-      provisional: "临时授权",
-      denied: "已拒绝",
-      notDetermined: "尚未授权",
-      unknown: "状态未知",
-      recheck: "重新检查",
-      enable: "开启通知",
-      openSettings: "打开系统设置",
-      deniedTitle: "通知已被拒绝",
-      deniedDesc:
-        "系统只允许弹一次授权框，拒绝之后应用自己再也弹不出来了——只能到系统设置里手动打开。",
-      notInApps: "应用不在「应用程序」目录，通知拿不到授权",
-      notInAppsDesc:
-        "放在别处时请求授权会直接失败、连系统弹窗都不出现。把 ACPP 拖进「应用程序」再重新打开即可。当前位置：",
-    },
-    desktopLaunch: {
-      title: "启动方式",
-      description: "只在 macOS 桌面应用里可用——改的是这台机器的登录项。",
-      openAtLogin: "开机启动",
-      openAtLoginHint:
-        "登录系统后自动运行 ACPP。也可在「系统设置 › 通用 › 登录项」里关掉。",
-      startMinimized: "开机最小化",
-      startMinimizedHint:
-        "开机时只驻留菜单栏，不弹窗口也不占 Dock。服务照常启动，从菜单栏图标打开即用。",
-      failed:
-        "系统拒绝了这次变更：{{reason}}。未签名或不在「应用程序」文件夹里的 app 常会被拒。",
-    },
-    workspace: {
-      title: "工作区根目录",
-      description:
-        "agent 干活的地方：新建会话的默认工作目录，也是每位局域网访客各自目录的父目录。与上面的数据目录分开——数据目录装的是数据库与转录，不该被 agent 当工作区写。改动立刻生效，只影响之后新建的会话与访客。",
-      current: "当前",
-      targetPlaceholder: "/Users/you/acpp",
-      saved: "工作区根目录已更新",
-    },
-    titleModel: {
-      title: "会话标题生成",
-      description:
-        "用本机模型把会话标题从「首句截断」换成真正的概括。claude 与 codex 的自动标题都长在各自命令行里，ACP 通道取不到，所以这件事交给本机的小模型做——它不占 agent 的额度，也不进会话上下文。",
-      enabledLabel: "启用",
-      enabledHint: "关闭时标题仍取首句的前 15 个字",
-      endpointLabel: "ollama 地址",
-      endpointHint: "本机 ollama 的服务地址；改完点到别处会重新拉取模型清单",
-      modelLabel: "模型",
-      modelPlaceholder: "选一个模型",
-      modelHint:
-        "起标题是很轻的活，模型越小越快——9b 级别在 Apple Silicon 上通常不到一秒",
-      modelsFailed: "拉不到模型清单，确认 ollama 已经启动",
-      test: "试生成",
-      save: "保存",
-      saved: "标题模型配置已更新",
-      preview: "生成结果：",
-    },
-    menu: {
-      notify: "通知",
-      system: "系统",
-      env: "环境",
-      claude: "Claude",
-      codex: "Codex",
-      ollama: "Ollama",
-      discord: "Discord",
-      about: "关于与更新",
-    },
-    about: {
-      updateTitle: "版本更新",
-      newVersion: "新版本 v{{version}}",
-      check: "检查更新",
-      checkedAt: "上次检查 {{time}}",
-      neverChecked: "尚未检查",
-      autoCheckHint: "后台每天自动检查一次",
-      noNotes: "这一版没有写更新说明。",
-      moreVersions: "另有 {{count}} 个更早的版本未列出",
-      upToDate: "当前已是最新版本。",
-      apply: "立即更新并重启",
-      applying: "正在下载安装…",
-      devHint: "一键更新仅桌面版支持；开发态请 git pull 后重启。",
-      busyTitle: "有会话正在生成回复",
-      busyDescription:
-        "{{count}} 个会话正在等 AI 回复。现在更新会重启应用并中断它们——正在生成的这轮拿不到结果，历史里会标记为中断。建议等它们跑完再更新。",
-      busyConfirm: "仍要更新",
-    },
-    env: {
-      connTitle: "连接测试",
-      connDescription: "真实拉起一次 agent，验证命令、依赖与登录态整条链。",
-      test: "测试连接",
-      connOk: "连接正常 · {{count}} 个可用模型",
-      depsTitle: "依赖体检",
-      depsDescription:
-        "按安装链排序：Homebrew → Node.js/npm → CLI 与 ACP 适配器。缺失项可一键安装。",
-      recheck: "重新检测",
-      missing: "未安装",
-      bundledHint: "随 Node.js 一起提供",
-      install: "安装",
-      installing: "安装中…",
-      installDone: "{{name}} 安装完成",
-      installFailed: "{{name}} 安装失败",
-      needFirst: "需先安装 {{name}}",
-      brewManualHint:
-        "Homebrew 需要在终端手动安装（过程会要求输入密码），复制命令后粘贴到终端执行：",
-      copy: "复制命令",
-      copied: "已复制",
-      pathLabel: "后端 PATH",
-      deps: {
-        brew: "Homebrew",
-        node: "Node.js",
-        npm: "npm",
-        "claude-agent-acp": "claude-agent-acp（ACP 适配器）",
-        claude: "Claude Code CLI",
-        "codex-acp": "codex-acp（ACP 适配器）",
-        codex: "Codex CLI",
-      },
-    },
-    tool: {
-      commandHint: "启动命令与参数。保存后自动重新探测能力清单。",
-      commandPlaceholder: "命令，如 claude-agent-acp",
-      argsPlaceholder: "参数，空格分隔",
-      save: "保存",
-      saved: "已保存，正在重新探测",
-      missing: "内置工具记录缺失，重启后端会自动补建。",
-    },
-    system: {
-      title: "数据目录",
-      description:
-        "数据库与会话转录的存放位置。默认 ~/.acpp，首次启动自动创建；旧版 server/data 的存量数据会自动迁入。",
-      current: "当前目录",
-      default: "默认",
-      pendingTitle: "已迁移到新目录，重启后端后生效",
-      targetPlaceholder: "新数据目录的绝对路径",
-      browse: "浏览",
-      migrate: "迁移",
-      confirmTitle: "迁移数据目录？",
-      confirmBody:
-        "将把数据库快照与全部会话转录拷贝到 {{dir}}。旧数据保留在原目录不会删除；新目录在重启后端后生效。",
-      confirmAction: "拷贝并迁移",
-      cancel: "取消",
-      done: "迁移完成，重启后端后生效",
-    },
-  },
+  settingsPage: zhSettings,
   tools: {
     title: "工具",
     description:

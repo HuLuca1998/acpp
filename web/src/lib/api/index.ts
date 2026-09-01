@@ -3,16 +3,12 @@ import type {
   CatalogInput,
   CloneTask,
   DataSource,
-  DataSourceInput,
-  DataSourceTest,
-  DataSourceUri,
   DiscordBinding,
   DiscordBindingPatch,
   DiscordConfigPatch,
   DiscordInfo,
   DbDatabase,
   DbTable,
-  DbTableDetail,
   DirEntry,
   DirListing,
   FsPlace,
@@ -49,7 +45,6 @@ import type {
   SkillScriptRunResult,
   SkillUpdateInput,
   SkillUsage,
-  SqlExecResult,
   SystemInfo,
   TitleModelConfig,
   OllamaModel,
@@ -64,36 +59,12 @@ import type {
   McpToolStat,
 } from "@/types/acp"
 
-/** 开发环境走 vite proxy，生产环境同源。可用 VITE_API_BASE 覆盖。 */
-const BASE = import.meta.env.VITE_API_BASE ?? "/api"
+import { ApiError, BASE, pageQuery, request } from "./core"
 
-export class ApiError extends Error {
-  status: number
+// ApiError 曾经定义在这里，调用方遍布各页——原地转出，免得为了一次
+// 文件拆分去改几十处 import。
+export { ApiError }
 
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = "ApiError"
-    this.status = status
-  }
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    ...init,
-  })
-
-  const body = await res.json().catch(() => null)
-
-  if (!res.ok) {
-    throw new ApiError(res.status, body?.error ?? res.statusText)
-  }
-
-  return body?.data as T
-}
 
 /**
  * 工作区数据面的作用域 API：普通会话与编排主会话的端点形状完全一致，
@@ -323,24 +294,7 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
 /** 工作区作用域 API 的类型（面板与 provider 消费）。 */
 export type WorkspaceScopeApi = ReturnType<typeof workspaceScopeApi>
 
-/**
- * 分页 + 排序的查询串。六个列表端点共用同一套协议（AGENTS.md §2），
- * 各写一遍必然会有漏掉排序参数的那一个。
- *
- * 空值一律不落进 URL：`0` 对 page/pageSize/agentId 都不是合法取值，
- * 当成「没给」处理。
- */
-function pageQuery(
-  params?: Record<string, string | number | undefined>
-): string {
-  const qs = new URLSearchParams()
-  for (const [key, value] of Object.entries(params ?? {})) {
-    if (value === undefined || value === "" || value === 0) continue
-    qs.set(key, String(value))
-  }
-  const s = qs.toString()
-  return s ? `?${s}` : ""
-}
+import { connectionsApi } from "./connections"
 
 export const api = {
   health: () =>
@@ -701,64 +655,7 @@ export const api = {
       }),
   },
 
-  /**
-   * 数据库数据源（adr-008）。管理面是全量的（owner 专属）；会话面在
-   * sessions.datasources 下，只给当前项目的那几条——两个入口刻意分开，
-   * 免得在会话里误用别的项目的连接。
-   */
-  datasources: {
-    list: (params?: Partial<PageQuery>) =>
-      request<Paged<DataSource>>(`/datasources${pageQuery(params)}`),
-    /** 配置页选库用：列出这组连接参数能看到的全部库（连接还没绑定库）。 */
-    probeDatabases: (input: DataSourceInput & { id?: number }) =>
-      request<DbDatabase[]>("/datasources/probe-databases", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    /** SSH 页签单独测隧道，不碰 MySQL；失败形状同 test。 */
-    probeSSH: (input: DataSourceInput & { id?: number }) =>
-      request<DataSourceTest>("/datasources/probe-ssh", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    get: (id: number) => request<DataSource>(`/datasources/${id}`),
-    create: (input: DataSourceInput) =>
-      request<DataSource>("/datasources", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    update: (id: number, input: DataSourceInput) =>
-      request<DataSource>(`/datasources/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
-    remove: (id: number) =>
-      request<null>(`/datasources/${id}`, { method: "DELETE" }),
-    /** 拨一次真连接确认配置可用，失败不抛异常而是返回 ok:false + 原话。 */
-    test: (id: number) =>
-      request<DataSourceTest>(`/datasources/${id}/test`, { method: "POST" }),
-    /** 导出连接 URI（Navicat 与通用两种写法，**含密码**）。 */
-    uri: (id: number) => request<DataSourceUri>(`/datasources/${id}/uri`),
-    databases: (id: number) =>
-      request<DbDatabase[]>(`/datasources/${id}/databases`),
-    tables: (id: number, database: string) =>
-      request<DbTable[]>(
-        `/datasources/${id}/tables?database=${encodeURIComponent(database)}`
-      ),
-    schema: (id: number, database: string, table: string) =>
-      request<DbTableDetail>(
-        `/datasources/${id}/schema?database=${encodeURIComponent(database)}&table=${encodeURIComponent(table)}`
-      ),
-    /** 执行一段 SQL，可含多条语句（按顺序执行、遇错即停）。 */
-    query: (
-      id: number,
-      input: { database?: string; sql: string; maxRows?: number }
-    ) =>
-      request<SqlExecResult>(`/datasources/${id}/query`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-  },
+  ...connectionsApi,
 
   /**
    * 工具台：我方 MCP server 暴露给 agent 的那套工具，摊开给人看与试。

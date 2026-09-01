@@ -4,9 +4,8 @@ import { toast } from "sonner"
 
 import { copyText } from "@/lib/clipboard"
 import { api } from "@/lib/api"
-import { parseDbUri } from "@/lib/db-uri"
+import { parseDbUri, type ParsedUri } from "@/lib/db-uri"
 import { useAsyncData } from "@/hooks/use-async-data"
-import type { DataSourceInput } from "@/types/acp"
 import { Hint } from "@/components/hint"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,7 +44,7 @@ export function UriDialog({
   sourceId: number
   onOpenChange: (open: boolean) => void
   /** 导入成功后把解析到的字段合进表单。 */
-  onImport: (parsed: Partial<DataSourceInput>) => void
+  onImport: (parsed: ParsedUri) => void
 }) {
   const { t } = useTranslation()
   const [text, setText] = useState("")

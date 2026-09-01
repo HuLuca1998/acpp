@@ -1,0 +1,52 @@
+// Server page copy (adr-019). Split out for the same reason as en-db:
+// the main locale file is at its line limit, so split by domain.
+export const enServer = {
+  title: "Servers",
+  description:
+    "Add a machine and the AI can read its files, containers and load — no more sshing in yourself to see how a deploy actually went. Datasource SSH tunnels use these records too.",
+  add: "New server",
+  edit: "Edit server",
+  name: "Name",
+  namePlaceholder: "pp-game-live",
+  nameHint: "This is what the AI passes to its tools; no spaces or slashes",
+  host: "Host",
+  port: "Port",
+  user: "Username",
+  auth: "Authentication",
+  authPassword: "Password",
+  authKey: "Public key",
+  authBoth: "Password and key",
+  password: "Password",
+  passwordKeep: "Leave blank to keep current",
+  keyPath: "Private key path",
+  keyPathPlaceholder: "Leave blank to use ssh-agent",
+  keyBrowse: "Choose private key",
+  passphrase: "Passphrase",
+  note: "Note",
+  notePlaceholder: "pp-game production, project at /srv/pp-game-live",
+  noteHint:
+    "**Shown to the AI**: say what this machine is for and where the project lives — it saves several rounds of guessing",
+  disabled: "Disabled",
+  disabledHint: "Disabled servers are not exposed to the AI; still editable here",
+  enabled: "Enabled",
+  test: "Test connection",
+  empty: "No servers configured",
+  emptyHint: "Add a machine and the AI can observe it.",
+  deleteTitle: "Delete server",
+  deleteConfirm: "Delete \u201c{{name}}\u201d?",
+  deleteInUse: "A datasource still uses it as a tunnel host; change that first",
+  deleted: "Deleted",
+  saved: "Saved",
+  loadFailed: "Failed to load",
+  knownHosts:
+    "The host fingerprint is recorded in ~/.ssh/known_hosts on first connect. A changed fingerprint is refused outright \u2014 that is the one real man-in-the-middle signal, so there is no skip switch.",
+  scopeWarning:
+    "Once configured, the AI can read any path on this machine \u2014 there is no per-project isolation. To narrow it down, give it a restricted SSH account.",
+  pickForTunnel: "Tunnel host",
+  pickPlaceholder: "Choose a server\u2026",
+  pickEmpty: "No servers configured",
+  pickCreate: "New server",
+  pickManage: "Manage servers",
+  pickHint:
+    "The tunnel dials the host above from this machine (production databases are usually 127.0.0.1:3306).",
+} as const

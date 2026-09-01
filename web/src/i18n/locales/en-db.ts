@@ -18,6 +18,7 @@ export const enDb = {
   uriHasPassword:
     "These links contain the password in clear text — the link is a credential; don't paste it into chats or docs.",
   uriSaveFirst: "Save this connection first, then export a link.",
+  uriSSHHint: "This URI carries tunnel host {{host}} — create a server from it, or pick an existing one above.",
   uriButton: "URI",
   refTitle: "Reference a database",
   refHint:
