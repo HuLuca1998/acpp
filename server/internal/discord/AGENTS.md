@@ -24,8 +24,15 @@
   `Deps` 闭包注入——回退面 = 删本包 + 装配几行 + 配置文件。
 - 卡片色彩语言：要用户行动 = 蓝紫，过程信息 = 灰，成果/收口 = 绿，
   错误 = 红（adr-017 §11）。
-- 组件 custom_id 前缀新增时必须登记 `isAskComponent`——漏了就是
-  「该 APP 未能及时响应」（实测踩过）。
+- 组件 custom_id 前缀新增时必须登记 `isAskComponent`（问答卡那一族）或在
+  `handleInteraction` 里加一条 case——漏了就是「该 APP 未能及时响应」（实测踩过）。
+- **Components V2 的消息不能再带 `content`／`embeds` 这些老字段**，发和改都不行
+  （回 400 `MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2`）。一条消息用了
+  `flags: 1<<15`，后续 PATCH 也只能给 `components`——包括 interaction 的
+  `/webhooks/<app>/<token>/messages/@original`。真机踩过：撤销回执一直不更新，
+  卡片永远停在「确认失效？」。
+- 不可逆的按钮（撤销外链这类）**不与常用按钮同排**，并走二次确认：卡片在频道里
+  人人可点，手机上一指宽就在旁边。布局见 `linkCard`，确认见 `revokeClicked`。
 - 决策记录在 [docs/adr-016](../../../docs/adr-016-discord-频道工作区.md)
   与 [docs/adr-017](../../../docs/adr-017-discord-子区对话.md)，产品形态
   变更（默认挂载、展示统一这类）要落到 adr-017 续章。

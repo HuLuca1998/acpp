@@ -22,6 +22,7 @@ package gist
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -48,6 +49,10 @@ const (
 
 // ghTimeout 是单次 gh 调用的上限。
 const ghTimeout = 30 * time.Second
+
+// ErrGone 表示这条链接本来就不在了（撤过、过期清扫过、手动删过）。调用方
+// 该按「已经失效」处理而不是报错——用户点两次撤销按钮不该看到一句错误。
+var ErrGone = errors.New("链接已经不在了")
 
 // Input 是一次发布。TTL 为 0 表示不过期；Owner 是归属标记（discord 子区
 // id），List 与自动清理按它认领。
@@ -155,7 +160,7 @@ func Revoke(ctx context.Context, id, owner string) (Link, error) {
 	}
 	out, err := run(ctx, nil, "api", "/gists/"+id, "--jq", ".description")
 	if err != nil {
-		return Link{}, fmt.Errorf("找不到这条链接（%s）", id)
+		return Link{}, fmt.Errorf("%w（%s）", ErrGone, id)
 	}
 	desc := strings.TrimSpace(string(out))
 	if !strings.HasPrefix(desc, descPrefix) {

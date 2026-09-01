@@ -97,6 +97,11 @@ mcp__Claude_Browser__navigate { url: "https://discord.com/channels/<guildId>/<ch
 - **清空输入框**：清不掉。`execCommand('delete')` 只改 DOM，Slate 内部 state
   还留着旧内容，发出去的是旧的（真机踩过：想发长消息，实际只发出一个残留的 `a`）。
   唯一可靠的办法是**把它发出去**，或者换一个干净频道操作。刷新页面会恢复草稿，没用。
+- **子区里发消息：先把子区当独立频道打开**。子区开在右侧面板时，同一段 JS 派发
+  Enter **不生效**（消息留在输入框里，试了 keydown/keypress/keyup 全套、focus 过、
+  选择器也确认选中的是子区那个 editor）。导航到 `/channels/<guildId>/<threadId>`
+  把子区变成主视图就正常了——顺带草稿也是干净的（草稿绑在面板上）。
+  子区 id 从后端拿：`~/.acpp-dev/discord.json` 的 `threads[].threadId`。
 
 ### 4.2 斜杠命令要「点浮层选中」再发
 

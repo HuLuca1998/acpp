@@ -5,11 +5,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
+
+	"acpp/server/internal/gist"
 )
 
 // Discord 品牌色（结果卡用）。
@@ -103,6 +106,10 @@ type interactionEvent struct {
 	User struct {
 		Username string `json:"username"`
 	} `json:"user"`
+	// Message 是组件所在的那条消息（组件交互才有），改卡要用它的 id。
+	Message struct {
+		ID string `json:"id"`
+	} `json:"message"`
 	Data struct {
 		Name     string   `json:"name"`      // 命令名
 		CustomID string   `json:"custom_id"` // 组件/modal
@@ -180,8 +187,107 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.branchPicked(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "db:"):
 		s.dbPicked(ctx, token, ev)
+	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, confirmPrefix):
+		s.revokeConfirmed(ctx, token, ev)
+	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, revokePrefix):
+		s.revokeClicked(ctx, token, ev)
 	case ev.Type == 3 && isAskComponent(ev.Data.CustomID):
 		s.handleAskComponent(token, ev)
+	}
+}
+
+// 外链卡上的「立即失效」。custom_id 两个前缀对应两步：点第一下只弹一张
+// **只有本人看得见**的确认卡，点第二下才真撤。
+//
+// 为什么非要两步：撤销不可逆——链接一没，已经转发给别人的那条就永久打不
+// 开了；而卡片挂在频道里人人可点，手机上一指宽的距离就在「打开」旁边。
+// 卡片布局已经把两个按钮隔开（见 linkCard），确认卡是第二道。
+const (
+	revokePrefix  = "rv:"
+	confirmPrefix = "rvk:"
+)
+
+// revokeClicked 处理「立即失效」的第一下：弹确认卡（ephemeral）。
+func (s *Service) revokeClicked(_ context.Context, token string, ev interactionEvent) {
+	id := strings.TrimPrefix(ev.Data.CustomID, revokePrefix)
+	err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+		// 64 = 只有点的人看得见；1<<15 = Components V2。
+		"flags": 1<<6 | 1<<15,
+		"components": v2Container(colorRed, []map[string]any{
+			v2Text("### 让这条链接立即失效？"),
+			v2Text("-# 撤销后外网立刻打不开，**已经转发出去的那条也一起失效**。" +
+				"文件还在工作目录里，需要的话可以再发一条新链接。"),
+			v2Row(v2DangerButton("确认失效", confirmPrefix+id+":"+ev.Message.ID)),
+		}),
+	})
+	if err != nil {
+		slog.Warn("撤销确认卡弹出失败", "err", err)
+	}
+}
+
+// revokeConfirmed 处理确认卡上的第二下：真撤，然后把原卡换成终态。
+//
+// 先回 deferred（type 6）再干活：撤销要跑两趟 gh（查归属 + 删），秒级，
+// 而 interaction 的回调时限是 3 秒，迟到的回调平台直接丢弃。
+func (s *Service) revokeConfirmed(ctx context.Context, token string, ev interactionEvent) {
+	rest := strings.TrimPrefix(ev.Data.CustomID, confirmPrefix)
+	id, cardID, _ := strings.Cut(rest, ":")
+	if err := interactionCallback(token, ev.ID, ev.Token, 6, nil); err != nil {
+		slog.Warn("撤销 deferred 回调失败", "err", err)
+		return
+	}
+	by := ev.user()
+	go s.doRevoke(context.WithoutCancel(ctx), token, ev.ChannelID, cardID, id, by, ev.Token)
+}
+
+// doRevoke 执行撤销并收口两处显示：频道里的原卡换成「已失效」，点按钮的
+// 人收到一条只有自己看得见的结果。
+func (s *Service) doRevoke(ctx context.Context, token, channelID, cardID, id, by, interactionToken string) {
+	cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	link, err := gist.Revoke(cctx, id, channelID)
+	switch {
+	case err == nil || errors.Is(err, gist.ErrGone):
+		// 本来就不在了也是「已失效」——用户要的结果已经成立，不该看到报错。
+		title := link.Title
+		if title == "" {
+			title = "外链"
+		}
+		s.patchCard(cctx, token, channelID, cardID, revokedCard(title, " · 由 "+by+" 撤销"))
+		s.followup(cctx, interactionToken, colorGrey, "### 🔒 已失效\n-# 外网不再能打开了。")
+	default:
+		slog.Warn("撤销外链失败", "id", id, "err", err)
+		s.followup(cctx, interactionToken, colorRed, "### 撤销失败\n-# "+trimRunes(err.Error(), 300))
+	}
+}
+
+// patchCard 原地换掉一条卡片的组件（尽力而为）。
+func (s *Service) patchCard(ctx context.Context, token, channelID, messageID string, components []map[string]any) {
+	if messageID == "" {
+		return
+	}
+	err := botREST(ctx, token, "PATCH", "/channels/"+channelID+"/messages/"+messageID,
+		map[string]any{"flags": 1 << 15, "components": components}, nil)
+	if err != nil {
+		slog.Warn("卡片更新失败", "err", err)
+	}
+}
+
+// followup 改写 deferred 之后的那条 ephemeral 回复（只有点按钮的人看得见）。
+//
+// 回执必须也走 Components V2：确认卡是 V2 发的，而 V2 消息**不能再带
+// content 这类老字段**（真机实测回 400 MESSAGE_CANNOT_USE_LEGACY_FIELDS_
+// WITH_COMPONENTS_V2），结果就是卡片永远停在「确认失效？」。
+func (s *Service) followup(ctx context.Context, interactionToken string, color int, text string) {
+	appID := s.appID()
+	if appID == "" {
+		return
+	}
+	err := botREST(ctx, "", "PATCH", "/webhooks/"+appID+"/"+interactionToken+"/messages/@original",
+		map[string]any{"components": v2Container(color, []map[string]any{v2Text(text)})}, nil)
+	if err != nil {
+		slog.Warn("撤销结果回执失败", "err", err)
 	}
 }
 

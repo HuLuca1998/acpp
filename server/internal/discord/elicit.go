@@ -163,6 +163,17 @@ func v2LinkButton(label, url string) map[string]any {
 	return map[string]any{"type": 2, "style": 5, "label": label, "url": url}
 }
 
+// v2Row 是一行按钮（Action Row）。v2Section 的 accessory 只放得下一个按钮，
+// 要并排两个就用它。
+func v2Row(buttons ...map[string]any) map[string]any {
+	return map[string]any{"type": 1, "components": buttons}
+}
+
+// v2DangerButton 是红色按钮（撤销这类不可逆动作）。
+func v2DangerButton(label, customID string) map[string]any {
+	return map[string]any{"type": 2, "style": 4, "label": label, "custom_id": customID}
+}
+
 // v2Container 把内容包进带色条的容器（消息顶层组件）。
 func v2Container(color int, inner []map[string]any) []map[string]any {
 	return []map[string]any{{"type": 17, "accent_color": color, "components": inner}}

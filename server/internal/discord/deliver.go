@@ -234,18 +234,37 @@ func pngName(name string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name)) + ".png"
 }
 
-// postLinkCard 把一条外链发成卡片：标题 + 「打开」按钮 + 小字（有效期与
-// 「拿到链接的人都能看」）。那句提醒不能省——secret gist 容易被当成私有。
-func (s *Service) postLinkCard(ctx context.Context, token, threadID string, l gist.Link, caption string) {
-	title := trimRunes(orDefault(caption, l.Title), 120)
+// linkCard 拼外链卡：标题 + 「打开」按钮 + 小字（有效期与「拿到链接的人
+// 都能看」）+ 分隔线下的「立即失效」。
+//
+// 两个按钮**刻意不放同一行**：并排时手机上一指宽的距离就能把「打开」点成
+// 「失效」，而失效不可逆——链接一撤，已经发给别人的那条就永久打不开了。
+// 所以失效按钮沉到分隔线以下，再加一道二次确认（见 revokeClicked）。
+func linkCard(title string, l gist.Link) []map[string]any {
 	inner := []map[string]any{
-		v2Section("### 🔗 "+title, v2LinkButton("打开", l.ViewURL)),
+		v2Section("### 🔗 "+trimRunes(title, 120), v2LinkButton("打开", l.ViewURL)),
 		v2Text("-# " + linkFootnote(l)),
+		v2Sep(),
+		v2Row(v2DangerButton("让这条链接立即失效", revokePrefix+l.ID)),
 	}
+	return v2Container(colorGreen, inner)
+}
+
+// revokedCard 是撤销后的终态卡：链接没了，卡上就不该再留按钮。
+func revokedCard(title, by string) []map[string]any {
+	return v2Container(colorGrey, []map[string]any{
+		v2Text("### 🔒 链接已失效"),
+		v2Text("-# 《" + trimRunes(title, 100) + "》· 外网不再能打开" + by),
+	})
+}
+
+// postLinkCard 把一条外链发成卡片。
+func (s *Service) postLinkCard(ctx context.Context, token, threadID string, l gist.Link, caption string) {
+	title := orDefault(caption, l.Title)
 	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	err := botREST(cctx, token, "POST", "/channels/"+threadID+"/messages", map[string]any{
-		"flags": 1 << 15, "components": v2Container(colorGreen, inner),
+		"flags": 1 << 15, "components": linkCard(title, l),
 		"allowed_mentions": noMentions(),
 	}, nil)
 	if err != nil {
@@ -411,6 +430,10 @@ func reportCard(title, rel, status string, link *gist.Link) []map[string]any {
 		line += " · " + linkFootnote(*link)
 	}
 	inner = append(inner, v2Text(line))
+	if link != nil {
+		// 失效按钮与「打开报告」隔一条线，理由见 linkCard。
+		inner = append(inner, v2Sep(), v2Row(v2DangerButton("让这条链接立即失效", revokePrefix+link.ID)))
+	}
 	return v2Container(colorGreen, inner)
 }
 

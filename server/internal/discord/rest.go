@@ -27,7 +27,11 @@ func botREST(ctx context.Context, token, method, path string, body, out any) err
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bot "+token)
+	// token 为空是 interaction 的 webhook 端点（/webhooks/<app>/<token>/…）：
+	// 它以 URL 里的 interaction token 为凭证，带一个空的 Bot 授权头会被拒。
+	if token != "" {
+		req.Header.Set("Authorization", "Bot "+token)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "acpp (https://github.com/acpp, 0.1)")
 	client := &http.Client{Timeout: 15 * time.Second}
