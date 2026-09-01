@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -28,7 +28,7 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/             # 页面，与路由表一一对应：overview / sessions /
 │   │   │                       #   session-chat（工作区宿主，草稿态共用）/ skills / skill-detail /
-│   │   │                       #   databases / tools（MCP 工具台）/ tenants（连接）/
+│   │   │                       #   databases / servers（远程服务器）/ tools（MCP 工具台）/ tenants（连接）/
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
 │   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session /
@@ -42,6 +42,7 @@ acpp/
 │   │   │   ├── workspace/      # 工作区编排（dock/menu/provider）；panels/ 十类面板
 │   │   │   ├── projects/       # 克隆仓库对话框（gh 清单 + URL）
 │   │   │   ├── db/             # 数据库：连接对话框、库表浏览、SQL 结果表格
+│   │   │   ├── servers/        # 服务器：连接对话框、验证方式文案映射
 │   │   │   ├── tools/          # 工具台：工具清单、参数表单、响应视图、自定义请求、调用记录
 │   │   │   ├── overview/       # 概览页四张卡
 │   │   │   ├── settings/       # 设置页分区面板（内置工具 claude/codex 的配置面）
@@ -73,7 +74,9 @@ acpp/
         ├── stream/             # SSE 事件形状与广播器（会话流的叶子包）
         ├── project/            # 工作区项目（adr-007）：git 仓库发现、克隆、gh 远端仓库清单
         ├── mcp/                # 我方 MCP server 的协议外壳（JSON-RPC + 工具分发），数据源工具面用
-        ├── datasource/         # 外部 MySQL 数据源（adr-008）：连接配置、SSH 隧道、库表探查、多段执行、MCP 工具面
+        ├── sshdial/            # SSH 拨号：认证方式、known_hosts 校验（accept-new）、连接建立。数据源隧道与服务器观察共用
+        ├── remote/             # 远程服务器（adr-019）：连接配置、只读观察工具面（文件 / Docker / 主机）、老数据源 SSH 配置的一次性迁移
+        ├── datasource/         # 外部 MySQL 数据源（adr-008）：连接配置、SSH 隧道（跳板机取自 remote）、库表探查、多段执行、MCP 工具面
         ├── discord/            # Discord 频道工作区（adr-016/017/018）：频道绑定、子区对话、工作树与数据库环境锁定
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
@@ -238,11 +241,16 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/sessions/{id}/retry` | 重跑最后一条用户消息：不必重发原文，界面上不留重复气泡；claude 会话还会把 agent 侧上下文退回那条消息之前（响应 `{rewound}` 说明是否做到，codex 一律 false），见 [docs/adr-014](docs/adr-014-消息重试与上下文回退.md) |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用。**turn 进行中也能改**：界面在轮里只放开权限档与思考深度（前者是就地管住 agent 的唯一手段，后者给下一轮预约），模型/plan/fast 锁到轮末。生效时机两端不同——权限档 claude 立刻对本轮生效、codex 要等下一轮（档位是轮开始时的快照），思考深度两端一律下一轮；控件的悬停说明照实写明 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消）。卡片挂起最长 **30 分钟**（等真人点选的反向调用统一这个时限，含交互式提问；机器应答的 fs 读写仍是 1 分钟），超时按 cancelled 回给 agent，那一步工具调用随即失败 |
-| GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?…}`；密码永不下发，响应只给 `hasPassword` 标志位） |
+| GET/POST | `/api/servers` | 服务器列表 / 新建（`{name, host, port, user, auth, password?, keyPath?, passphrase?, note?}`；凭证永不下发，响应只给 `hasPassword` / `hasPassphrase` 标志位） |
+| GET/PUT/DELETE | `/api/servers/{id}` | 服务器详情 / 更新（凭证留空=不改） / 删除（被数据源当跳板机用着的不让删） |
+| POST | `/api/servers/probe` | 测一份还没保存的配置（新建对话框的按钮） |
+| POST | `/api/servers/{id}/test` | 测一条已存记录；请求体带表单内容则先合并再测，传 `{}` 表示就测这条 |
+| POST | `/api/mcp/server/{token}` | **agent 回连**：服务器观察工具面的 JSON-RPC 端点（公开，凭会话 token；不在 owner 前缀内） |
+| GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?, serverId?…}`；密码永不下发，响应只给 `hasPassword` 标志位。SSH 跳板机由 `serverId` 指向服务器表，见 adr-019） |
 | GET/PUT/DELETE | `/api/datasources/{id}` | 连接详情 / 更新（密码留空=不改） / 删除 |
 | POST | `/api/datasources/{id}/test` | 测试连接（连不上返回 200 带 `{ok:false, error}`，那是配置问题不是服务故障） |
 | POST | `/api/datasources/probe-databases` | 配置页选库：列出这组连接参数可见的库（参数走请求体，编辑时带 `id` 沿用已存密码） |
-| POST | `/api/datasources/probe-ssh` | 配置页 SSH 页签单独测隧道，不碰 MySQL（probe 模式与失败形状同上两条） |
+| POST | `/api/datasources/probe-ssh` | 配置页 SSH 页签单独测隧道，不碰 MySQL（拨的是 `serverId` 指向的那台机器） |
 | GET | `/api/datasources/{id}/databases` `/tables` `/schema` | 库清单 / 表清单（`?database=`） / 表结构（`?database=&table=`，含列、索引与建表语句） |
 | POST | `/api/datasources/{id}/query` | 执行 SQL（`{database?, sql, maxRows?}`，可含多条语句：按序执行、遇错即停，每条独立返回耗时与影响行数；行数硬顶 1000） |
 | GET | `/api/sessions/{id}/datasources` | **会话可见的**数据源：只有当前工作目录所属项目的那几条（斜杠命令数据源） |
@@ -331,12 +339,38 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 **行数护栏在我们这侧**：最多 1000 行（默认 500）。不给用户的 SQL 自动加 `LIMIT`，也不在库上设任何会话变量——你的库我们只读它、不改它的行为。实现是流式游标逐行读，读满上限就取消这次查询让驱动断开，而不是把剩下几百万行读完再丢掉。**诚实的边界**：断开后正在回传结果的查询会因写失败很快中止，但还在扫描/排序、尚未吐数据的查询 MySQL 不会察觉客户端已走，会跑完那一段——要立刻杀掉得发 `KILL QUERY`，那是在库上动手，没做。
 
-**SSH 隧道**：开启后主机/端口填的是**跳板机视角**的地址（线上库多半是 `127.0.0.1:3306`）。验证方式三选一（密码 / 公钥 / 密码和公钥），公钥留空路径则走 ssh-agent。跳板机指纹按 `~/.ssh/known_hosts` 校验，策略等价 OpenSSH 的 `accept-new`：没连过的主机首次连接自动补录指纹，指纹与记录不符则拒绝且**没有跳过开关**——那是唯一真正的中间人信号，隧道后面挂着生产库，人工核实后删掉旧记录再连。
+**SSH 隧道**：开启后主机/端口填的是**跳板机视角**的地址（线上库多半是 `127.0.0.1:3306`），跳板机本身从**服务器**页选一台（adr-019：跳板机与 AI 观察的目标本来就是同一台机器，配一次两边都用）。凭证与指纹校验的规则见下面「服务器」一节。
 
 **两个查看入口**：
 
 - 对话里 AI 的 `db_query` 有专用渲染——数据源标识、SQL、耗时、字段表头与可滚动数据，与配置页的 SQL 控制台是同一个组件（MCP 只回文本，前端按两端约定的制表符格式解析回结构化；解析不出来退回原始文本，不编造表格）。
 - 输入框里的 `/db` 是**本地斜杠命令**：前端拦截，结果浮在输入框上方，不进对话、不消耗 token、不用等 agent。`/db` 列本项目数据源，`/db dev` 列库，`/db dev mydb` 列表。
+
+## 服务器
+
+配一台机器（SSH），AI 就能读它的文件、看容器与负载——**发布之后到底怎么样**，不用再自己 ssh 上去翻（[adr-019](docs/adr-019-服务器观察能力.md)）。侧边栏「服务器」页管理，字段是名字 / 地址 / 账号 / 验证方式（密码 / 公钥 / 密码和公钥，公钥留空路径则走 ssh-agent）/ 备注。
+
+**它同时是两件事的底座**：AI 的观察目标，与数据源的拨号跳板。这两件事本来就是同一台机器——分开各存一份凭证的话，改个端口要改两处，而且没有任何一处知道它们是同一台。老数据源里的 SSH 配置在首次启动时自动搬进服务器表（幂等，共用同一台跳板的多条只建一条）。
+
+**指纹校验**：按 `~/.ssh/known_hosts`，策略等价 OpenSSH 的 `accept-new`——没连过的主机首次连接自动补录，指纹与记录不符则拒绝且**没有跳过开关**。那是唯一真正的中间人信号，后面挂着的是生产环境，人工核实后删掉旧记录再连。
+
+**AI 怎么用**：配了机器就挂 `acpp-server` 这个 MCP server（一台都没有就完全不挂），**十二个工具全部只读**：
+
+| 面 | 工具 |
+| --- | --- |
+| 主机 | `server_hosts`（有哪些机器，备注会给 AI 看）、`server_info`（系统 / 负载 / 内存 / 磁盘一次拿全）、`server_ps`、`server_ports`、`server_journal` |
+| 文件 | `server_ls`、`server_read`（看日志优先 `tail`）、`server_grep` |
+| Docker | `docker_ps`（含**重启次数**）、`docker_logs`、`docker_inspect`（compose 标签给出远程项目根目录；环境变量只列名字不列值）、`docker_stats` |
+
+工具形状对标模型已有的本地工具（`Read` 的 offset/limit、`Grep` 的 pattern/context），是同一套心智的远程版。三层护栏都在服务端：命令自身限流（`grep -m`、`head`、`tail`）、`nice` 降优先级、32KB 输出预算 + 兜底截断。所有路径与 pattern 经 shell 引用——那是这套东西唯一的注入面。
+
+**不提供任意命令通道**：给了它，上面十二个工具的护栏与输出预算就全废了，模型总会倾向最灵活的那个。AI 真需要跑任意命令时它自带 shell，那是用户在权限卡上看得见的显式选择。
+
+**不做项目隔离**（与数据源刻意不同）：一台机器上跑着多个项目是常态，按项目切会把 AI 需要的上下文一起切掉。**配置一台服务器，就等于授权 AI 观察整台机器**（含 `/root/.ssh/`、各项目的配置与密钥），这一条对租户同样成立。要收窄就给它配一个受限的 SSH 账号——**这是闸门不是边界**，与数据库那套同理：真正的边界是 SSH 账号自身的权限。
+
+**挂的只有工具，没有提示词**：什么时候该看服务器、该看哪个目录，由模型从任务与项目代码自己判断。用法手册在 skill 里按需加载（范本见 [docs/skill-server-inspect.md](docs/skill-server-inspect.md)），核心是那条铁律——**远程路径从项目代码推断**（compose 给容器名与挂载、Makefile/CI 给部署路径），工具只负责验证那些推断。
+
+**Discord**：频道可以锁定一台服务器（`/init` 选库之后那一步），锁定后子区的 AI 只看得见那一台；不锁定则全部可见。
 
 ## 工具台
 
@@ -453,7 +487,7 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
-- **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：给 AI 补上「服务发布之后是什么状态」这条通道——按项目+环境管的数据源之外，再管一份服务器（SSH），挂一组只读的文件 / Docker / 主机信息工具。设计已定稿，尚未实现；数据源的 SSH 配置将改为外键引用服务器。
+- **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：`@` 引用服务器还没做（AI 用 `server_hosts` 自己选），网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页还不能改频道锁定的数据库（走频道里的 `/db source`）。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
