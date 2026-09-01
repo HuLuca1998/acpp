@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"acpp/server/internal/model"
@@ -121,4 +123,37 @@ func (h serverHandler) writeTest(w http.ResponseWriter, r *http.Request, id uint
 		return
 	}
 	writeData(w, http.StatusOK, map[string]string{"version": banner})
+}
+
+// mcp 是 agent 回连的 JSON-RPC 端点（/api/mcp/server/{token}）。
+//
+// 与数据库那条同形：DELETE 是 http 传输的会话关闭，回 200 即可；通知类
+// 消息没有响应体，回 202。它**不在** owner 专属前缀里——agent 子进程带的
+// 是会话凭证，不是浏览器身份。
+func (h serverHandler) mcp(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+	case http.MethodDelete:
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	resp, hasResp := h.servers.HandleMCP(r.Context(), r.PathValue("token"), raw)
+	if !hasResp {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		// 连接已断（agent 放弃等待是常态），只能放弃响应。
+		return
+	}
 }

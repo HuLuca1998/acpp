@@ -12,6 +12,7 @@ import (
 	"acpp/server/internal/mcp"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
+	"acpp/server/internal/remote"
 	"acpp/server/internal/report"
 	"acpp/server/internal/service"
 )
@@ -30,6 +31,9 @@ import (
 // 这个包该按主题分包了，那是另一件事，不在本次改动里做。
 type toolsHandler struct {
 	sources *datasource.Service
+	// remotes 是服务器观察工具面（adr-019）。字段不叫 servers：
+	// 那个名字被下面列工具面的方法占了。
+	remotes *remote.Service
 	calls   *mcpcall.Service
 }
 
@@ -60,20 +64,40 @@ func (h toolsHandler) servers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	face := toolFace{
+	faces := []toolFace{{
 		Name:        datasource.ServerName,
 		Endpoint:    "/api/mcp/db/{token}",
 		Mounted:     len(sources) > 0,
 		SourceCount: len(sources),
 		Tools:       tools,
+	}}
+
+	// 服务器面不按项目过滤（adr-019）：配了机器就对所有会话挂，
+	// 所以它的 Mounted 只看「有没有启用的服务器」，与 cwd 无关。
+	if h.remotes != nil {
+		hosts, err := h.remotes.Enabled(r.Context())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		faces = append(faces, toolFace{
+			Name:        remote.ServerName,
+			Endpoint:    "/api/mcp/server/{token}",
+			Mounted:     len(hosts) > 0,
+			SourceCount: len(hosts),
+			Tools:       h.remotes.InspectTools(),
+		})
 	}
-	writeData(w, http.StatusOK, newPage([]toolFace{face}))
+	writeData(w, http.StatusOK, newPage(faces))
 }
 
 // inspectInput 是试运行与自定义请求的共同入参：Request 是**原样的**
 // JSON-RPC 消息体，前端填参数那套只是替用户把 tools/call 拼好。
 type inspectInput struct {
-	Cwd     string          `json:"cwd"`
+	Cwd string `json:"cwd"`
+	// Server 指明发给哪个工具面（工具台现在有两个）。空值按数据库那面走，
+	// 保持老前端不改也能用。
+	Server  string          `json:"server"`
 	Request json.RawMessage `json:"request"`
 }
 
@@ -98,7 +122,15 @@ func (h toolsHandler) inspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	started := time.Now()
-	resp, hasResp := h.sources.InspectMCP(r.Context(), in.Cwd, in.Request)
+	var (
+		resp    any
+		hasResp bool
+	)
+	if in.Server == remote.ServerName && h.remotes != nil {
+		resp, hasResp = h.remotes.InspectMCP(r.Context(), in.Cwd, in.Request)
+	} else {
+		resp, hasResp = h.sources.InspectMCP(r.Context(), in.Cwd, in.Request)
+	}
 	out := inspectResult{DurationMs: time.Since(started).Milliseconds(), Accepted: !hasResp}
 	if hasResp {
 		raw, err := json.Marshal(resp)

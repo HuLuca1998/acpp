@@ -121,7 +121,7 @@ func run() error {
 
 	// 服务器面（adr-019）：既是 AI 的只读观察目标，也是数据源的 SSH 跳板。
 	// 先于 datasource 构造，后者要借它取跳板机配置。
-	remoteService := remote.NewService(gdb)
+	remoteService := remote.NewService(gdb, sessionService, cfg.Addr).WithCalls(mcpCalls)
 	// 把老数据源里各存一份的 SSH 跳板配置搬进服务器表。失败不挡启动：
 	// 搬不动的那条会在真的要连时报「没有关联跳板机」，比进程起不来好定位。
 	if err := remoteService.MigrateFromDataSources(context.Background()); err != nil {
@@ -140,6 +140,8 @@ func run() error {
 		WithCalls(mcpCalls).
 		WithNotifier(chatService)
 	chatService.AddMounter(reportService)
+	// 服务器观察工具面（adr-019）：配了机器就挂，不按项目过滤。
+	chatService.AddMounter(remoteService)
 
 	// 会话标题：两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到
 	// （见 titler 包注释），所以由本机的小模型来算。配置在设置页维护，

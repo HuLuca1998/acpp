@@ -292,6 +292,10 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("DELETE /api/servers/{id}", servers.remove)
 	api.HandleFunc("POST /api/servers/{id}/test", servers.test)
 
+	// agent 回连的 MCP 端点。**不能**放进 owner 专属前缀：agent 子进程
+	// 带的是会话凭证，不是浏览器身份。
+	api.HandleFunc("/api/mcp/server/{token}", servers.mcp)
+
 	datasources := datasourceHandler{sources: svcs.DataSources, cwdOf: sessionCwd}
 	api.HandleFunc("GET /api/datasources", datasources.list)
 	api.HandleFunc("POST /api/datasources", datasources.create)
@@ -332,7 +336,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 
 	// 工具台（页面 /tools）：看工具面、人工试运行、发自定义 JSON-RPC、
 	// 回看调用记录。owner 专属，与上面那条公开的回连端点刻意分前缀。
-	tools := toolsHandler{sources: svcs.DataSources, calls: svcs.MCPCalls}
+	tools := toolsHandler{sources: svcs.DataSources, remotes: svcs.Servers, calls: svcs.MCPCalls}
 	api.HandleFunc("GET /api/tools/servers", tools.servers)
 	api.HandleFunc("POST /api/tools/inspect", tools.inspect)
 	api.HandleFunc("GET /api/tools/calls", tools.callList)

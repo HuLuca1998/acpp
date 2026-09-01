@@ -17,22 +17,61 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/mcp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
 	"acpp/server/internal/sshdial"
 )
 
-// Service 是服务器的业务面。
-type Service struct {
-	db *gorm.DB
+// Sessions 是会话侧的最小依赖：把 MCP 端点的 token 换回会话身份，以及为
+// 要挂载工具面的会话备好 token。用接口而不是直接 import 会话服务，理由与
+// datasource 一致——两个业务包因此不互相 import。
+type Sessions interface {
+	SessionByMCPToken(ctx context.Context, token string) (uint, string, error)
+	EnsureMCPToken(ctx context.Context, sessionID uint) (string, error)
 }
 
-func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
+// Calls 是调用观测的最小依赖。记录是尽力而为的旁路，所以没有返回值：
+// 观测失败不该让 AI 的工具调用跟着失败。
+type Calls interface {
+	Record(ctx context.Context, rec model.MCPCall)
+}
+
+// Service 是服务器的业务面。
+type Service struct {
+	db       *gorm.DB
+	sessions Sessions
+	calls    Calls
+	// mcpBase 是 agent 回连的 MCP 端点前缀。
+	mcpBase string
+	// peerTok 是非会话调用方（discord 子区）的回连凭证。
+	peerTok mcp.PeerTokens
+}
+
+func NewService(db *gorm.DB, sessions Sessions, addr string) *Service {
+	return &Service{db: db, sessions: sessions, mcpBase: mcpBaseURL(addr)}
+}
+
+// WithCalls 挂上调用观测。分开一个 setter 而不是塞进 NewService：
+// 记录是可选旁路，缺了服务器功能照常跑。
+func (s *Service) WithCalls(calls Calls) *Service {
+	s.calls = calls
+	return s
+}
+
+// mcpBaseURL 从监听地址推导 MCP 前缀：agent 子进程与我们同机，
+// 监听 0.0.0.0 时也走回环回连。
+func mcpBaseURL(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		port = "48080"
+	}
+	return "http://127.0.0.1:" + port + "/api/mcp/server/"
 }
 
 // Input 是新建/更新的入参。凭证类字段用指针表示「没传就不改」——

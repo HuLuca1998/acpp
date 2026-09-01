@@ -22,7 +22,7 @@ func testService(t *testing.T) (*Service, *gorm.DB) {
 	if err := gdb.AutoMigrate(&model.Server{}, &model.DataSource{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return NewService(gdb), gdb
+	return NewService(gdb, nil, "127.0.0.1:48080"), gdb
 }
 
 func ptr[T any](v T) *T { return &v }
