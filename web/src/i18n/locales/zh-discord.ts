@@ -39,6 +39,8 @@ export const zhDiscord = {
     empty: "还没有任何频道绑定",
     emptyHint: "在 Discord 频道里输入 /init，选仓库与模型即可创建。",
     channel: "频道",
+    scope: "作用域",
+    scopeAll: "不锁定",
     repo: "仓库",
     workdir: "工作目录",
     model: "模型",

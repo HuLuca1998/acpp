@@ -41,6 +41,8 @@ export const enDiscord = {
     empty: "No channel bindings yet",
     emptyHint: "Type /init in a Discord channel and pick a repo and model.",
     channel: "Channel",
+    scope: "Scope",
+    scopeAll: "Not locked",
     repo: "Repository",
     workdir: "Workdir",
     model: "Model",

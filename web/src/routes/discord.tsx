@@ -11,6 +11,18 @@ import { useAsyncData } from "@/hooks/use-async-data"
 import { DiscordIcon } from "@/components/agent-icon"
 import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
+import { Hint } from "@/components/hint"
+import { DataTable } from "@/components/data-table/data-table"
+import type { dataTableFeatures } from "@/components/data-table/data-table-features"
+import type { ColumnDef } from "@tanstack/react-table"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,14 +53,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { PencilIcon, SettingsIcon, Trash2Icon } from "lucide-react"
+  DatabaseIcon,
+  HardDriveIcon,
+  PencilIcon,
+  SettingsIcon,
+  Trash2Icon,
+} from "lucide-react"
 
 /**
  * Discord 页：频道 ↔ 仓库工作区的绑定管理（adr-016）。
@@ -103,120 +113,60 @@ export function Discord() {
     : t("discord.page.botOffline")
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          {t("discord.page.description")}
-        </p>
-        <div className="flex shrink-0 items-center gap-3">
-          <StatusDot
-            tone={info?.status.connected ? "success" : "muted"}
-            label={statusText}
+    <div className="flex flex-col gap-4 p-4 lg:p-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("nav.discord")}</CardTitle>
+          <CardDescription>{t("discord.page.description")}</CardDescription>
+          <CardAction>
+            <div className="flex items-center gap-3">
+              <StatusDot
+                tone={info?.status.connected ? "success" : "muted"}
+                label={statusText}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link to="/settings?section=discord" />}
+              >
+                <SettingsIcon data-icon="inline-start" />
+                {t("discord.page.gotoSettings")}
+              </Button>
+            </div>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={bindingColumns(t, i18n.language, setEditing, setRemoving)}
+            data={error ? null : bindings}
+            total={bindings.length}
+            page={1}
+            pageSize={bindings.length || 20}
+            sorting={[]}
+            onPage={() => {}}
+            onPageSize={() => {}}
+            onSorting={() => {}}
+            empty={
+              <ListPageStates
+                icon={<DiscordIcon className="size-6" />}
+                error={error}
+                loading={!info && !error}
+                emptyTitle={t("discord.page.empty")}
+                emptyHint={t("discord.page.emptyHint")}
+                emptyAction={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link to="/settings?section=discord" />}
+                  >
+                    {t("discord.page.gotoSettings")}
+                  </Button>
+                }
+              />
+            }
           />
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link to="/settings?section=discord" />}
-          >
-            <SettingsIcon data-icon="inline-start" />
-            {t("discord.page.gotoSettings")}
-          </Button>
-        </div>
-      </div>
-
-      {error || !info || bindings.length === 0 ? (
-        <ListPageStates
-          icon={<DiscordIcon className="size-6" />}
-          error={error}
-          loading={!info && !error}
-          emptyTitle={t("discord.page.empty")}
-          emptyHint={t("discord.page.emptyHint")}
-          emptyAction={
-            <Button
-              variant="outline"
-              size="sm"
-              render={<Link to="/settings?section=discord" />}
-            >
-              {t("discord.page.gotoSettings")}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("discord.page.channel")}</TableHead>
-                <TableHead>{t("discord.page.repo")}</TableHead>
-                <TableHead>{t("discord.page.workdir")}</TableHead>
-                <TableHead>{t("discord.page.model")}</TableHead>
-                <TableHead>{t("discord.page.effort")}</TableHead>
-                <TableHead>{t("discord.page.access")}</TableHead>
-                <TableHead>{t("discord.page.updatedAt")}</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {bindings.map((b) => (
-                <TableRow key={b.channelId}>
-                  <TableCell>
-                    <span className="font-medium">
-                      #{b.channelName || b.channelId}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {b.repo}
-                    {b.branch ? `@${b.branch}` : ""}
-                  </TableCell>
-                  <TableCell
-                    className="max-w-56 truncate font-mono text-xs text-muted-foreground"
-                    title={b.workdir}
-                  >
-                    {b.workdir}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {b.modelLabel || `${b.agent} · ${b.model}`}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {b.effort || t("discord.page.effortDefault")}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {accessLabel(b.access, t)}
-                  </TableCell>
-                  <TableCell
-                    className="text-sm text-muted-foreground tabular-nums"
-                    title={b.updatedAt}
-                  >
-                    {formatRelativeTime(b.updatedAt, i18n.language)}
-                  </TableCell>
-                  <TableCell className="w-20">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={t("discord.page.edit")}
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => setEditing(b)}
-                      >
-                        <PencilIcon />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={t("discord.page.unbind")}
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => setRemoving(b)}
-                      >
-                        <Trash2Icon />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
       {editing && info ? (
         <EditBindingDialog
@@ -273,6 +223,159 @@ function accessLabel(v: string | undefined, t: TFunction) {
 }
 
 /** 编辑绑定：模型（按 agent 分组）、思考深度与安全权限。仓库不在这改——重建工作区走频道里的 /init。 */
+
+type BindingColumn = ColumnDef<typeof dataTableFeatures, DiscordBinding, unknown>
+
+/**
+ * 绑定列表的列定义。与数据库页、服务器页同一套骨架（Card + DataTable）——
+ * 这一页此前是裸表格，风格和别处对不上。
+ *
+ * 数据库与服务器两列是这一页的重点：频道锁定了哪个库、哪台机器，正是
+ * 「这个频道的 AI 能碰到什么」的全部答案。
+ */
+function bindingColumns(
+  t: TFunction,
+  lang: string,
+  onEdit: (b: DiscordBinding) => void,
+  onRemove: (b: DiscordBinding) => void
+): BindingColumn[] {
+  return [
+    {
+      id: "channel",
+      accessorFn: (b: DiscordBinding) => b.channelName || b.channelId,
+      header: () => t("discord.page.channel"),
+      meta: { label: t("discord.page.channel") },
+      cell: ({ row }) => (
+        <span className="font-medium">
+          #{row.original.channelName || row.original.channelId}
+        </span>
+      ),
+    },
+    {
+      id: "repo",
+      accessorFn: (b: DiscordBinding) => b.repo,
+      header: () => t("discord.page.repo"),
+      meta: { label: t("discord.page.repo") },
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">
+          {row.original.repo}
+          {row.original.branch ? `@${row.original.branch}` : ""}
+        </span>
+      ),
+    },
+    {
+      id: "scope",
+      header: () => t("discord.page.scope"),
+      meta: { label: t("discord.page.scope") },
+      // 库与机器并排一格：它们是同一个问题的两半——这个频道的 AI 够得着什么。
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-0.5 text-xs">
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <DatabaseIcon className="size-3 shrink-0" />
+            <span className="truncate font-mono">
+              {row.original.dataSourceRef || t("discord.page.scopeAll")}
+            </span>
+          </span>
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <HardDriveIcon className="size-3 shrink-0" />
+            <span className="truncate font-mono">
+              {row.original.serverName || t("discord.page.scopeAll")}
+            </span>
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: "workdir",
+      accessorFn: (b: DiscordBinding) => b.workdir,
+      header: () => t("discord.page.workdir"),
+      meta: { label: t("discord.page.workdir") },
+      cell: ({ row }) => (
+        <span
+          className="line-clamp-1 max-w-[min(18rem,16vw)] font-mono text-xs text-muted-foreground"
+          title={row.original.workdir}
+        >
+          {row.original.workdir}
+        </span>
+      ),
+    },
+    {
+      id: "model",
+      accessorFn: (b: DiscordBinding) => b.modelLabel || b.model,
+      header: () => t("discord.page.model"),
+      meta: { label: t("discord.page.model") },
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.modelLabel ||
+            `${row.original.agent} · ${row.original.model}`}
+        </span>
+      ),
+    },
+    {
+      id: "effort",
+      accessorFn: (b: DiscordBinding) => b.effort,
+      header: () => t("discord.page.effort"),
+      meta: { label: t("discord.page.effort") },
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.effort || t("discord.page.effortDefault")}
+        </span>
+      ),
+    },
+    {
+      id: "access",
+      accessorFn: (b: DiscordBinding) => b.access,
+      header: () => t("discord.page.access"),
+      meta: { label: t("discord.page.access") },
+      cell: ({ row }) => (
+        <span className="text-sm">{accessLabel(row.original.access, t)}</span>
+      ),
+    },
+    {
+      id: "updated_at",
+      accessorFn: (b: DiscordBinding) => b.updatedAt,
+      header: () => t("discord.page.updatedAt"),
+      meta: {
+        label: t("discord.page.updatedAt"),
+        className: "text-muted-foreground tabular-nums",
+      },
+      cell: ({ row }) => (
+        <span title={row.original.updatedAt}>
+          {formatRelativeTime(row.original.updatedAt, lang)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => null,
+      cell: ({ row }) => (
+        <div className="flex justify-end gap-0.5">
+          <Hint label={t("discord.page.edit")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("discord.page.edit")}
+              onClick={() => onEdit(row.original)}
+            >
+              <PencilIcon />
+            </Button>
+          </Hint>
+          <Hint label={t("discord.page.unbind")} align="end">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("discord.page.unbind")}
+              onClick={() => onRemove(row.original)}
+            >
+              <Trash2Icon />
+            </Button>
+          </Hint>
+        </div>
+      ),
+    },
+  ]
+}
+
 function EditBindingDialog({
   binding,
   info,

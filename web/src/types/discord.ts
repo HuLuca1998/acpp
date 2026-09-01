@@ -42,6 +42,16 @@ export interface DiscordBinding {
   effort?: string
   /** 统一权限档 safe/auto-edit/full；空按 auto-edit 兜底。 */
   access?: string
+  /**
+   * 频道锁定的数据源（adr-018）：非零表示这个频道的 AI 只看得见这一条连接。
+   * `dataSourceRef` 是 `<项目>/<环境>` 的展示快照，连接被删掉后仍说得清
+   * 原本绑的是谁。
+   */
+  dataSourceId?: number
+  dataSourceRef?: string
+  /** 频道锁定的服务器（adr-019），语义同上。 */
+  serverId?: number
+  serverName?: string
   createdAt: string
   updatedAt: string
 }
