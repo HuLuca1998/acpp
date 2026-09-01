@@ -453,6 +453,7 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：给 AI 补上「服务发布之后是什么状态」这条通道——按项目+环境管的数据源之外，再管一份服务器（SSH），挂一组只读的文件 / Docker / 主机信息工具。设计已定稿，尚未实现；数据源的 SSH 配置将改为外键引用服务器。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页还不能改频道锁定的数据库（走频道里的 `/db source`）。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
