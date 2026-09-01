@@ -6,6 +6,7 @@ import "@/components/data-table/data-table-meta"
 import { cn } from "@/lib/utils"
 import { DataPagination } from "@/components/data-pagination"
 import { dataTableFeatures } from "@/components/data-table/data-table-features"
+import { usePinnedColumns } from "@/components/data-table/data-table-pin"
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar"
 import type {
   SortingState,
@@ -80,6 +81,17 @@ export function DataTable<TData extends RowData>({
     manualSorting: true,
   })
 
+  // 关键信息与操作按钮钉在两侧，中间的字段横向滚（meta.pin）。必须在
+  // 下面那个 early return 之前取，hooks 的调用顺序不能随数据变。
+  const headers = table.getHeaderGroups()[0]?.headers ?? []
+  const pin = usePinnedColumns(
+    headers.map((h) => ({
+      id: h.column.id,
+      pin: h.column.columnDef.meta?.pin,
+    })),
+    data !== null && data.length > 0
+  )
+
   // 没有行可画就整个让给三态壳：加载中的骨架、出错的说明、空列表的
   // 下一步 CTA 都在 ListPageStates 里（AGENTS.md 的硬规则），表格自己
   // 不该再造一套。
@@ -91,20 +103,25 @@ export function DataTable<TData extends RowData>({
     <div className="flex flex-col gap-3">
       <DataTableToolbar table={table} extra={toolbar} />
 
-      <Table>
+      <Table containerRef={pin.scrollerRef}>
         <TableHeader>
           {table.getHeaderGroups().map((group) => (
-            <TableRow key={group.id}>
-              {group.headers.map((header) => (
-                <TableHead
-                  key={header.id}
-                  className={header.column.columnDef.meta?.className}
-                >
-                  {header.isPlaceholder ? null : (
-                    <table.FlexRender header={header} />
-                  )}
-                </TableHead>
-              ))}
+            <TableRow key={group.id} ref={pin.headRowRef}>
+              {group.headers.map((header) => {
+                const meta = header.column.columnDef.meta
+                const pinned = pin.pinProps(header.column.id, meta?.pin)
+                return (
+                  <TableHead
+                    key={header.id}
+                    className={cn(meta?.className, pinned.className)}
+                    style={pinned.style}
+                  >
+                    {header.isPlaceholder ? null : (
+                      <table.FlexRender header={header} />
+                    )}
+                  </TableHead>
+                )
+              })}
             </TableRow>
           ))}
         </TableHeader>
@@ -126,14 +143,19 @@ export function DataTable<TData extends RowData>({
               )}
               onClick={onRowClick ? () => onRowClick(row.original) : undefined}
             >
-              {row.getVisibleCells().map((cell) => (
-                <TableCell
-                  key={cell.id}
-                  className={cell.column.columnDef.meta?.className}
-                >
-                  <table.FlexRender cell={cell} />
-                </TableCell>
-              ))}
+              {row.getVisibleCells().map((cell) => {
+                const meta = cell.column.columnDef.meta
+                const pinned = pin.pinProps(cell.column.id, meta?.pin)
+                return (
+                  <TableCell
+                    key={cell.id}
+                    className={cn(meta?.className, pinned.className)}
+                    style={pinned.style}
+                  >
+                    <table.FlexRender cell={cell} />
+                  </TableCell>
+                )
+              })}
             </TableRow>
           ))}
         </TableBody>

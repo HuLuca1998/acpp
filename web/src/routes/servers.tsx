@@ -174,6 +174,7 @@ function serverColumns(
       header: ({ column }) => (
         <DataTableHeader column={column} title={t("server.name")} />
       ),
+      meta: { pin: "left" },
       cell: ({ row }) => (
         <span className="font-mono font-medium">{row.original.name}</span>
       ),
@@ -246,6 +247,7 @@ function serverColumns(
     {
       id: "actions",
       header: () => null,
+      meta: { pin: "right" },
       cell: ({ row }) => (
         // 行本身可点开编辑，这两个按钮不能把点击冒泡上去。
         <div

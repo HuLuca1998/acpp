@@ -171,7 +171,7 @@ export function Tenants() {
       header: ({ column }) => (
         <DataTableHeader column={column} title={t("tenants.name")} />
       ),
-      meta: { label: t("tenants.name"), className: "font-medium" },
+      meta: { label: t("tenants.name"), className: "font-medium", pin: "left" },
       cell: ({ row }) => (
         <span className="inline-flex items-center gap-2">
           <StatusDot tone={row.original.disabled ? "muted" : "success"} />
@@ -221,7 +221,7 @@ export function Tenants() {
       id: "actions",
       enableSorting: false,
       enableHiding: false,
-      meta: { className: "w-10 text-right" },
+      meta: { className: "w-10 text-right", pin: "right" },
       cell: ({ row }) => (
         <DropdownMenu>
           <Hint label={t("tenants.actions")} align="end">

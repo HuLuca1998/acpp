@@ -224,7 +224,11 @@ function accessLabel(v: string | undefined, t: TFunction) {
 
 /** 编辑绑定：模型（按 agent 分组）、思考深度与安全权限。仓库不在这改——重建工作区走频道里的 /init。 */
 
-type BindingColumn = ColumnDef<typeof dataTableFeatures, DiscordBinding, unknown>
+type BindingColumn = ColumnDef<
+  typeof dataTableFeatures,
+  DiscordBinding,
+  unknown
+>
 
 /**
  * 绑定列表的列定义。与数据库页、服务器页同一套骨架（Card + DataTable）——
@@ -244,7 +248,7 @@ function bindingColumns(
       id: "channel",
       accessorFn: (b: DiscordBinding) => b.channelName || b.channelId,
       header: () => t("discord.page.channel"),
-      meta: { label: t("discord.page.channel") },
+      meta: { label: t("discord.page.channel"), pin: "left" },
       cell: ({ row }) => (
         <span className="font-medium">
           #{row.original.channelName || row.original.channelId}
@@ -348,6 +352,7 @@ function bindingColumns(
     {
       id: "actions",
       header: () => null,
+      meta: { pin: "right" },
       cell: ({ row }) => (
         <div className="flex justify-end gap-0.5">
           <Hint label={t("discord.page.edit")}>

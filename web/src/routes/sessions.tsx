@@ -111,6 +111,7 @@ export function Sessions() {
       meta: {
         label: t("sessions.columnId"),
         className: "w-12 tabular-nums text-muted-foreground",
+        pin: "left",
       },
       cell: ({ row }) => row.original.id,
     },
@@ -124,7 +125,11 @@ export function Sessions() {
       ),
       // max-w 与 block 缺一不可：Link 默认是 inline，truncate 在 inline 上
       // 完全不生效，长标题会撑破单元格盖住右边的列。
-      meta: { label: t("sessions.columnTitle"), className: "max-w-64" },
+      meta: {
+        label: t("sessions.columnTitle"),
+        className: "max-w-64",
+        pin: "left",
+      },
       cell: ({ row }) => (
         // 拉伸链接铺满整行：视觉上整行可点，语义仍是 <a>。
         <Link
@@ -188,9 +193,7 @@ export function Sessions() {
             {row.original.project}
           </span>
         ) : (
-          <span className="text-muted-foreground/50">
-            {t("common.none")}
-          </span>
+          <span className="text-muted-foreground/50">{t("common.none")}</span>
         ),
     },
     {
@@ -243,7 +246,7 @@ export function Sessions() {
       id: "actions",
       enableSorting: false,
       enableHiding: false,
-      meta: { className: "w-10 py-0" },
+      meta: { className: "w-10 py-0", pin: "right" },
       cell: ({ row }) => (
         <DeleteSessionButton onConfirm={() => void remove(row.original.id)} />
       ),

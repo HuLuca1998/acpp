@@ -186,8 +186,13 @@ export function Databases() {
             onRowClick={(source) =>
               setOpened((prev) => (prev?.id === source.id ? null : source))
             }
+            // 走 --row-bg 而不是直接 bg-*：固定列（项目、操作）自带不透明
+            // 底遮挡滚动内容，底色得跟这一行同源，否则展开的那行会从固定
+            // 列这里断色。
             rowClassName={(source) =>
-              opened?.id === source.id ? "bg-accent/50" : undefined
+              opened?.id === source.id
+                ? "[--row-bg:var(--accent)] bg-[var(--row-bg)]"
+                : undefined
             }
             empty={
               <ListPageStates
@@ -298,7 +303,7 @@ function sourceColumns(
       header: ({ column }) => (
         <DataTableHeader column={column} title={t("db.project")} />
       ),
-      meta: { label: t("db.project"), className: "font-medium" },
+      meta: { label: t("db.project"), className: "font-medium", pin: "left" },
       cell: ({ row }) => (
         <span className="flex items-center gap-2">
           <StatusDot tone={row.original.disabled ? "muted" : "success"} />
@@ -358,9 +363,9 @@ function sourceColumns(
       id: "actions",
       enableSorting: false,
       enableHiding: false,
-      meta: { className: "w-20 py-0" },
+      meta: { className: "w-24 py-0", pin: "right" },
       cell: ({ row }) => (
-        <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <div className="flex justify-end gap-0.5">
           <Hint label={t("db.editTitle")}>
             <Button
               variant="ghost"

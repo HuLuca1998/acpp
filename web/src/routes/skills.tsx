@@ -99,6 +99,7 @@ export function Skills() {
       meta: {
         label: t("skills.name"),
         className: "font-mono text-xs font-medium",
+        pin: "left",
       },
       cell: ({ row }) => (
         // 拉伸链接铺满整行；开关与删除在链接之上单独可点。
@@ -182,13 +183,13 @@ export function Skills() {
       id: "actions",
       enableSorting: false,
       enableHiding: false,
-      meta: { className: "w-10 text-right" },
+      meta: { className: "w-10 text-right", pin: "right" },
       cell: ({ row }) => (
         <Hint label={t("skills.deleteTitle")} align="end">
           <Button
             size="icon-sm"
             variant="ghost"
-            className="relative text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+            className="relative text-muted-foreground hover:text-destructive"
             aria-label={t("common.delete")}
             onClick={() => setDeleting(row.original)}
           >
