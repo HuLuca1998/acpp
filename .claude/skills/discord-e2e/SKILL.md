@@ -12,8 +12,15 @@ mention 解析、频道事件。这份手册是**怎么跑一轮完整测试**�
 [adr-018](../../../docs/adr-018-discord-工作树与数据库绑定.md)，包规范见
 [server/internal/discord/AGENTS.md](../../../server/internal/discord/AGENTS.md)。
 
-**两条铁律**：测试只在 dev 后端（48080）上做，不碰用户正在用的 app（48090）；
-测试频道、工作树、分支都要在结束时收干净。
+**三条铁律**：
+
+1. **只在 `Acpp-Test` 服务器里测**（guild `1539549447283806288`）。别的服务器一概
+   不碰，建频道时 guild id 写死这一个。
+2. **只碰自己这轮建的测试频道**。`#pp-game`、`#test` 这类已有频道是用户在用的
+   ——不 `/init`、不 `/unbind`、不删、也不动它们的工作树目录。踩过：清理测试
+   残留时把用户在另一个会话里绑的频道目录一起删了。
+3. 测试只在 dev 后端（48080）上做，不碰用户正在用的 app（48090）；测试频道、
+   工作树、分支结束时收干净。
 
 ## 1. 开场：三件事就位
 
@@ -53,14 +60,19 @@ mcp__Claude_Browser__preview_start  { url: "https://discord.com/app" }
 
 建频道、删频道用 REST 比点 UI 快一个数量级，也不会误触：
 
+**guild 固定是 `1539549447283806288`（Acpp-Test）**，别从别处取。频道名带个能
+一眼认出的前缀（如 `pp-`），收尾时才好确认哪些是自己建的。
+
 ```bash
+GUILD=1539549447283806288                    # Acpp-Test，写死
 # 建
-curl -s -X POST "https://discord.com/api/v10/guilds/<guildId>/channels" \
+curl -s -X POST "https://discord.com/api/v10/guilds/$GUILD/channels" \
   -H "Authorization: Bot $TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"pp-prod","type":0}' | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('name'),d.get('id'))"
 
 # 删（会触发后端的 CHANNEL_DELETE 自动解绑，这本身就是一条要测的路径）
-curl -s -X DELETE "https://discord.com/api/v10/channels/<channelId>" -H "Authorization: Bot $TOKEN"
+# 只删这轮自己建的那几个 id——删之前把 id 与建频道时记下的对上，别照名字猜
+curl -s -X DELETE "https://discord.com/api/v10/channels/<自己建的 channelId>" -H "Authorization: Bot $TOKEN"
 ```
 
 切频道用 URL 直达，比点侧边栏可靠（侧边栏 ref 会随渲染失效）：
@@ -207,8 +219,12 @@ print([t['threadId'] for t in d.get('threads',[]) if t['channelId'] not in bound
 ```
 
 测试过程中造的改动、探针提交、临时文件，**在报告结论前还原**——用户的工作树不是
-草稿纸。删工作树目录前先想清楚：里面可能有用户自己的东西（真机踩过：删掉了用户
-在另一个会话里绑的频道目录）。
+草稿纸。
+
+**删任何目录前先对账**：`discord.json` 里除了自己建的频道，还有用户在用的绑定
+（`#pp-game` 这类），它们的工作树不能碰。真机踩过一次——清理测试残留时按仓库名
+一锅端，把用户在另一个会话里绑的频道目录也删了。正确做法是按**自己建的那几个
+channelId** 反查 workdir，只删这些。
 
 ## 8. 排查表
 
