@@ -246,3 +246,33 @@ func TestService_ByName(t *testing.T) {
 		t.Fatalf("不存在的名字应返回 ErrNotFound，得到 %v", err)
 	}
 }
+
+// 契约：列表页那个「测试连接」按钮不带表单内容，空入参必须表示「就测这条」
+// 而不是「把它清空再测」。真机验证时踩到过：空 body 直接报「名称不能为空」。
+func TestService_Test_EmptyInputKeepsRecord(t *testing.T) {
+	svc, _ := testService(t)
+	ctx := context.Background()
+
+	created, err := svc.Create(ctx, Input{
+		Name: "box", Host: "127.0.0.1", Port: 1, User: "root",
+		Auth: "password", Password: ptr("pw"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// 端口 1 上没有 ssh，连接必然失败——要的是**失败的原因**：
+	// 必须是连不上，而不是校验把记录判成了空。
+	_, err = svc.Test(ctx, created.ID, Input{})
+	if err == nil {
+		t.Fatal("连不通的地址应当报错")
+	}
+	if strings.Contains(err.Error(), "不能为空") {
+		t.Fatalf("空入参不该把已存记录清空: %v", err)
+	}
+
+	// 新建路径（id=0）相反：空入参就该被校验挡住，并说清缺什么。
+	if _, err := svc.Test(ctx, 0, Input{}); err == nil || !strings.Contains(err.Error(), "不能为空") {
+		t.Fatalf("新建时的空入参应被校验挡住，得到 %v", err)
+	}
+}

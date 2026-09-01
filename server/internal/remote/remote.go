@@ -50,6 +50,17 @@ type Input struct {
 	Disabled   *bool   `json:"disabled"`
 }
 
+// blank 报告这份入参有没有实际内容。凭证类字段不算——只带一个新密码
+// 来测连接是合理用法，那时其余字段本来就该沿用已存记录。
+func (in Input) blank() bool {
+	return strings.TrimSpace(in.Name) == "" &&
+		strings.TrimSpace(in.Host) == "" &&
+		strings.TrimSpace(in.User) == "" &&
+		strings.TrimSpace(in.Auth) == "" &&
+		strings.TrimSpace(in.KeyPath) == "" &&
+		in.Port == 0
+}
+
 // List 按名字排序返回全部服务器（配置页用）。
 func (s *Service) List(ctx context.Context) ([]model.Server, error) {
 	var out []model.Server
@@ -168,8 +179,13 @@ func (s *Service) Test(ctx context.Context, id uint, in Input) (string, error) {
 		}
 		probe = *existing
 	}
-	if err := apply(&probe, in); err != nil {
-		return "", err
+	// 入参是空的表示「就测这条已存记录」——列表页那个测试按钮不带表单内容。
+	// 不加这个判断的话，apply 会拿一身空字段把已存记录覆盖掉，然后报
+	// 「名称不能为空」：明明什么都没改，测试却失败了。
+	if id == 0 || !in.blank() {
+		if err := apply(&probe, in); err != nil {
+			return "", err
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, sshdial.DefaultTimeout)
