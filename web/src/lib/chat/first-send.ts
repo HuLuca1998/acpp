@@ -82,6 +82,10 @@ export function optimisticUserMessage(
   const payload: Record<string, unknown> = { local: true }
   if (input.images?.length) payload.images = input.images
   if (input.files?.length) payload.files = input.files
+  // 两种 @ 引用也要进 payload，否则首发那一下气泡里没有芯片，
+  // 等后端推来真实消息才突然冒出来。
+  if (input.datasources?.length) payload.datasources = input.datasources
+  if (input.servers?.length) payload.servers = input.servers
   return {
     id: Date.now(),
     sessionId,

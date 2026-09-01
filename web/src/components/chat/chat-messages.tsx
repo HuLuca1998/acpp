@@ -31,6 +31,7 @@ import {
   ArrowUpIcon,
   ChevronRightIcon,
   DatabaseIcon,
+  HardDriveIcon,
   FileIcon,
   LinkIcon,
   RotateCcwIcon,
@@ -285,14 +286,16 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   if (message.role === "user") {
-    // 附件（图片 / @ 引用文件 / @ 引用数据库）由发送入参或转录重建带回
-    // payload。linkedFiles 是大文件的按需引用子集（未内嵌，agent 自行读取）；
-    // datasources 是 mysql:// 形状的数据库引用 URI。
+    // 附件（图片 / @ 引用文件 / @ 引用数据库 / @ 引用服务器）由发送入参或
+    // 转录重建带回 payload。linkedFiles 是大文件的按需引用子集（未内嵌，
+    // agent 自行读取）；datasources 是 mysql:// 形状的数据库引用 URI，
+    // servers 是 acpp-server:// 形状的服务器引用 URI。
     const payload = message.payload as {
       images?: { data: string; mimeType: string }[]
       files?: string[]
       linkedFiles?: string[]
       datasources?: string[]
+      servers?: string[]
     } | null
     const linked = new Set(payload?.linkedFiles ?? [])
     return (
@@ -342,6 +345,22 @@ export const ChatMessage = memo(function ChatMessage({
                       <DatabaseIcon className="size-3" />
                       <span className="max-w-40 truncate font-mono">
                         {uri.replace(/^mysql:\/\//, "")}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {payload?.servers?.length ? (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {payload.servers.map((uri) => (
+                    <span
+                      key={uri}
+                      title={uri}
+                      className="flex h-6 items-center gap-1 rounded-full border border-border px-2 text-xs text-muted-foreground"
+                    >
+                      <HardDriveIcon className="size-3" />
+                      <span className="max-w-40 truncate font-mono">
+                        {uri.replace(/^acpp-server:\/\//, "")}
                       </span>
                     </span>
                   ))}
