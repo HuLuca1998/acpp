@@ -255,6 +255,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/datasources/{id}/query` | 执行 SQL（`{database?, sql, maxRows?}`，可含多条语句：按序执行、遇错即停，每条独立返回耗时与影响行数；行数硬顶 1000） |
 | GET | `/api/sessions/{id}/datasources` | **会话可见的**数据源：只有当前工作目录所属项目的那几条（斜杠命令数据源） |
 | GET | `/api/sessions/{id}/datasources/{dsid}/databases` `/tables` | 同上但按会话过滤，项目之外的 id 按「不存在」处理 |
+| GET | `/api/workspace/servers` | **会话可见的**服务器（@ 引用选择器用）：不按项目过滤，租户也能取，响应不含凭证 |
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | POST | `/api/mcp/report/{token}` | 会话的报告 MCP 端点（agent 回连，同一套 token）。工具 `report_open` 把 agent 写好的单文件 HTML 报告在用户工作区打开；只收路径不收全文，且限死会话工作目录内的 `.html` |
@@ -369,6 +370,8 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 **不做项目隔离**（与数据源刻意不同）：一台机器上跑着多个项目是常态，按项目切会把 AI 需要的上下文一起切掉。**配置一台服务器，就等于授权 AI 观察整台机器**（含 `/root/.ssh/`、各项目的配置与密钥），这一条对租户同样成立。要收窄就给它配一个受限的 SSH 账号——**这是闸门不是边界**，与数据库那套同理：真正的边界是 SSH 账号自身的权限。
 
 **挂的只有工具，没有提示词**：什么时候该看服务器、该看哪个目录，由模型从任务与项目代码自己判断。用法手册在 skill 里按需加载（范本见 [docs/skill-server-inspect.md](docs/skill-server-inspect.md)），核心是那条铁律——**远程路径从项目代码推断**（compose 给容器名与挂载、Makefile/CI 给部署路径），工具只负责验证那些推断。
+
+**`@` 引用**：输入框的 @ 菜单里选一台机器交给 AI，随引用下发一段告知（`acpp-server://<名字>`）。引用只到**机器**这一级——要看哪个目录由 AI 从项目代码推断。
 
 **Discord**：频道可以锁定一台服务器（`/init` 选库之后那一步），锁定后子区的 AI 只看得见那一台；不锁定则全部可见。
 
@@ -487,7 +490,7 @@ cd web && npx shadcn@latest add <component>
 ## 尚未实现
 
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
-- **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：`@` 引用服务器还没做（AI 用 `server_hosts` 自己选），网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库。
+- **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库，服务器页没有只读浏览面板（人要看自己 ssh）。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页还不能改频道锁定的数据库（走频道里的 `/db source`）。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
