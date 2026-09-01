@@ -264,13 +264,20 @@ func TestService_Create_Validation(t *testing.T) {
 		{Project: "p", Env: "local", User: "u", Database: "d"},                                   // 缺主机
 		{Project: "p", Env: "local", Host: "h", Database: "d"},                                   // 缺用户
 		{Project: "p", Env: "local", Host: "h", User: "u"},                                       // 缺库（一条连接必须绑一个库）
-		{Project: "a/b", Env: "local", Host: "h", User: "u", Database: "d"},                      // 项目含斜杠
+		{Project: "p", Env: "a/b", Host: "h", User: "u", Database: "d"},                          // 环境含斜杠（项目可以含，环境不行）
 		{Project: "p", Env: "local", Host: "h", User: "u", Database: "d", SSHEnabled: ptr(true)}, // 开隧道但没选跳板机
 	}
 	for i, in := range bad {
 		if _, err := svc.Create(ctx, in); err == nil {
 			t.Errorf("第 %d 条非法入参应被拒绝: %+v", i, in)
 		}
+	}
+
+	// 项目名是 git 仓库的规范名，**含斜杠是常态**（`<组织>/<仓库>`）。
+	if _, err := svc.Create(ctx, Input{
+		Project: "BDBGAME2024/pp-game", Env: "pre", Host: "h", User: "u", Database: "d",
+	}); err != nil {
+		t.Errorf("含斜杠的项目名应当能存（那是仓库规范名）: %v", err)
 	}
 
 	if _, err := svc.Create(ctx, Input{Project: "p", Env: "local", Host: "h", User: "u", Database: "d"}); err != nil {

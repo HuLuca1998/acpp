@@ -489,9 +489,16 @@ func validate(src *model.DataSource) error {
 		return fmt.Errorf("%w: 主机不能为空", service.ErrInvalid)
 	case src.User == "":
 		return fmt.Errorf("%w: 用户名不能为空", service.ErrInvalid)
-	case strings.ContainsAny(src.Project, "/\\") || strings.ContainsAny(src.Env, "/\\"):
-		// `<项目>/<环境>` 是对外标识的写法，字段里再出现斜杠会让它没法解析。
-		return fmt.Errorf("%w: 项目与环境名不能包含斜杠", service.ErrInvalid)
+	case strings.ContainsAny(src.Env, "/\\"):
+		// **环境名**必须是单段：`<项目>/<环境>` 这个对外标识靠「最后一段是
+		// 环境」来切，环境里再有斜杠就切不开了。
+		//
+		// 项目名**可以**含斜杠——它是 git 仓库的规范名 `<组织>/<仓库>`
+		// （见 README「项目」一节）。引用解析改成拿已知清单做最长前缀匹配，
+		// 不再假设数据源那部分只有一两段（splitRef）。
+		return fmt.Errorf("%w: 环境名不能包含斜杠", service.ErrInvalid)
+	case strings.ContainsAny(src.Project, "\\"):
+		return fmt.Errorf("%w: 项目名不能包含反斜杠", service.ErrInvalid)
 	case src.SSHEnabled && src.ServerID == 0:
 		return fmt.Errorf("%w: 开启 SSH 隧道后必须选一台跳板机（在服务器页配置）", service.ErrInvalid)
 	}

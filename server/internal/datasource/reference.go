@@ -91,35 +91,34 @@ func splitRef(sources []model.DataSource, raw string) (*model.DataSource, string
 		return nil, "", fmt.Errorf("%w: 空的数据库引用", service.ErrInvalid)
 	}
 
-	// 先按两段找，找不到再按一段找（只给了环境名）。
-	var (
-		src  *model.DataSource
-		rest []string
-		err  error
-	)
-	if len(parts) >= 2 {
-		src, err = Resolve(sources, parts[0]+"/"+parts[1])
-		rest = parts[2:]
-	}
-	if src == nil {
-		src, err = Resolve(sources, parts[0])
-		rest = parts[1:]
-	}
-	if err != nil || src == nil {
-		if err == nil {
-			err = fmt.Errorf("%w: 没有叫 %q 的数据源", service.ErrNotFound, raw)
+	// 从最长前缀往回试：**项目名可以含斜杠**（`<组织>/<仓库>`，见 README
+	// 「项目」一节），数据源那部分因此不是固定的一两段。拿已知清单去匹配、
+	// 取能匹配上的最长那个，剩下的才是表名。
+	//
+	// 从长到短而不是从短到长：`pre/users` 里 `pre` 本身可能是个环境名，
+	// 先试短的会把 `users` 当成表——碰巧又有个叫 `pre/users` 的数据源时
+	// 就选错了。长的优先，语义上「写得越具体越算数」。
+	for n := len(parts); n >= 1; n-- {
+		src, err := Resolve(sources, strings.Join(parts[:n], "/"))
+		if err != nil || src == nil {
+			continue
 		}
-		return nil, "", err
+		rest := parts[n:]
+		var table string
+		if len(rest) > 0 {
+			// 兼容旧写法 `<项目>/<环境>/<库>/<表>`：库那一段与连接绑定的库
+			// 相同就跳过，剩下的当表名。
+			if len(rest) > 1 && strings.EqualFold(rest[0], src.Database) {
+				rest = rest[1:]
+			}
+			table = rest[0]
+		}
+		return src, table, nil
 	}
 
-	var table string
-	if len(rest) > 0 {
-		// 兼容旧写法 `<项目>/<环境>/<库>/<表>`：库那一段与连接绑定的库
-		// 相同就跳过，剩下的当表名。
-		if len(rest) > 1 && strings.EqualFold(rest[0], src.Database) {
-			rest = rest[1:]
-		}
-		table = rest[0]
+	// 一段都匹配不上：把清单给出来，比「没有叫 x 的数据源」多一句可用的信息。
+	if _, err := Resolve(sources, raw); err != nil {
+		return nil, "", err
 	}
-	return src, table, nil
+	return nil, "", fmt.Errorf("%w: 没有叫 %q 的数据源", service.ErrNotFound, raw)
 }
