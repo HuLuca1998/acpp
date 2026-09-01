@@ -192,6 +192,21 @@ func run() error {
 		},
 		// 数据库连接清单：/init 的「数据库」项与 /db 换绑用。只给启用中的
 		// ——停用的连接本来就不该出现在任何工具面里。
+		// 服务器清单：/init 的「服务器」项用。只给启用中的。
+		Servers: func(ctx context.Context) ([]discord.ServerOption, error) {
+			list, err := remoteService.Enabled(ctx)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]discord.ServerOption, 0, len(list))
+			for i := range list {
+				out = append(out, discord.ServerOption{
+					ID: list[i].ID, Name: list[i].Name,
+					Host: list[i].Host, Note: list[i].Note,
+				})
+			}
+			return out, nil
+		},
 		DataSources: func(ctx context.Context) ([]discord.DBOption, error) {
 			list, _, err := datasourceService.List(ctx, 1, 200, "")
 			if err != nil {
@@ -210,7 +225,7 @@ func run() error {
 		},
 		// 工具面与网页会话同源：数据库按项目有条件挂（datasource），
 		// 报告无条件挂（report），凭证都走非会话通道。单面失败只降级。
-		Mounts: func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID uint, onReport func(rel, title string)) ([]any, map[string]any, error) {
+		Mounts: func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID, serverID uint, onReport func(rel, title string)) ([]any, map[string]any, error) {
 			var servers []any
 			var meta map[string]any
 			if withDB {
@@ -220,6 +235,14 @@ func run() error {
 					slog.Warn("discord 数据源挂载失败", "err", err)
 					servers, meta = nil, nil
 				}
+			}
+			// 服务器观察面（adr-019）：无条件挂（配了机器才有工具），
+			// serverID 非零时锁死到频道绑定的那一台。单面失败只降级。
+			if hs, hm, err := remoteService.MountsForPeer(ctx, key, cwd, flavor, serverID); err != nil {
+				slog.Warn("discord 服务器面挂载失败", "err", err)
+			} else {
+				servers = append(servers, hs...)
+				meta = service.MergeClaudeMounts(meta, hm)
 			}
 			rs, rm, err := reportService.MountsForPeer(ctx, key, cwd, flavor, onReport)
 			if err != nil {

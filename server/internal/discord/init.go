@@ -175,6 +175,46 @@ func (s *Service) dbOptionByRef(ctx context.Context, ref string) (DBOption, bool
 // dbNoneValue 是「不锁定」那一项的 value（不是数据源 id）。
 const dbNoneValue = "none"
 
+// serverChoices 是服务器选项：名字打头，描述里给地址与用途备注。
+// 与 dbChoices 同构——当前绑定的那台排在最前并标注。
+func serverChoices(hosts []ServerOption, current uint) []choice {
+	var out []choice
+	for _, h := range hosts {
+		label := h.Name
+		if h.ID == current {
+			label += "（当前）"
+		}
+		desc := h.Host
+		if note := strings.TrimSpace(h.Note); note != "" {
+			desc += " · " + note
+		}
+		c := choice{
+			Label:       label,
+			Value:       fmt.Sprintf("%d|%s", h.ID, h.Name),
+			Description: trimRunes(desc, 90),
+		}
+		if h.ID == current {
+			out = append([]choice{c}, out...)
+			continue
+		}
+		out = append(out, c)
+	}
+	out = append(out, choice{
+		Label: "不锁定", Value: dbNoneValue,
+		Description: "全部启用的服务器都可见（老口径）",
+	})
+	if len(out) > 25 {
+		out = out[:25]
+	}
+	return out
+}
+
+// parseServerChoice 与 parseDBChoice 同形：`<id>|<名字>`，认不出按不锁定。
+func parseServerChoice(v string) (uint, string) {
+	id, name := parseDBChoice(v)
+	return id, name
+}
+
 // parseDBChoice 拆 `<id>|<ref>`；「不锁定」与认不出的输入都归零值。
 func parseDBChoice(v string) (uint, string) {
 	idStr, ref, ok := strings.Cut(v, "|")
@@ -457,6 +497,91 @@ func (s *Service) dbPicked(ctx context.Context, token string, ev interactionEven
 	if err != nil {
 		slog.Error("数据库选择改卡失败", "err", err)
 	}
+	go s.offerServer(ctx, token, p.ev, in)
+}
+
+// offerServer 是选服务器那一步（adr-019），排在选库之后。
+//
+// 与数据库同一个道理：一个项目的 prod / pre 频道各自只该看见自己那台机器。
+// 没配服务器就跳过——让用户对着空列表发呆没有意义。
+func (s *Service) offerServer(ctx context.Context, token string, ev interactionEvent, in initInput) {
+	var hosts []ServerOption
+	if s.deps.Servers != nil {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		list, err := s.deps.Servers(cctx)
+		cancel()
+		if err != nil {
+			slog.Warn("取服务器清单失败，跳过锁定这一步", "err", err)
+		} else {
+			hosts = list
+		}
+	}
+	if len(hosts) == 0 {
+		s.finishInit(ctx, token, ev, in)
+		return
+	}
+	id, perr := randomID()
+	if perr != nil {
+		s.finishInit(ctx, token, ev, in)
+		return
+	}
+	s.mu.Lock()
+	s.pending[id] = pendingInit{in: in, ev: ev, created: time.Now()}
+	s.mu.Unlock()
+
+	current, _ := s.store.config().binding(ev.ChannelID)
+	sel := selectComponent("srv:"+id, serverChoices(hosts, current.ServerID), false)
+	sel["type"] = 3
+	sel["placeholder"] = "选择这个频道能看的机器…"
+	delete(sel, "required")
+
+	dbLabel := in.dbRef
+	if in.dbID == 0 {
+		dbLabel = "不锁定"
+	}
+	s.editOriginal(token, s.appID(), ev.Token, map[string]any{
+		"embeds": []map[string]any{{
+			"title": "选择服务器",
+			"description": fmt.Sprintf(
+				"**%s** · 数据库 **%s**\n选中之后，这个频道的 AI 只看得见这一台机器——别的机器连列都列不出来。\n15 分钟内有效。",
+				in.repo, dbLabel),
+			"color": colorBlurbe,
+		}},
+		"components":       []map[string]any{{"type": 1, "components": []map[string]any{sel}}},
+		"allowed_mentions": noMentions(),
+	})
+}
+
+// serverPicked 收服务器下拉的选择，然后进入真正的收尾。
+func (s *Service) serverPicked(ctx context.Context, token string, ev interactionEvent) {
+	id := strings.TrimPrefix(ev.Data.CustomID, "srv:")
+	s.mu.Lock()
+	p, ok := s.pending[id]
+	delete(s.pending, id)
+	s.mu.Unlock()
+	if !ok || len(ev.Data.Values) == 0 {
+		s.ephemeral(token, ev, "这张卡过期了（或已处理过），重新 /init 一次。")
+		return
+	}
+	in := p.in
+	in.srvID, in.srvName = parseServerChoice(ev.Data.Values[0])
+
+	label := in.srvName
+	if in.srvID == 0 {
+		label = "不锁定（全部机器）"
+	}
+	err := interactionCallback(token, ev.ID, ev.Token, 7, map[string]any{
+		"embeds": []map[string]any{{
+			"title":       "⏳ 正在准备工作区…",
+			"description": fmt.Sprintf("**%s** · 服务器 **%s**", in.repo, label),
+			"color":       colorBlurbe,
+		}},
+		"components":       []map[string]any{},
+		"allowed_mentions": noMentions(),
+	})
+	if err != nil {
+		slog.Error("服务器选择改卡失败", "err", err)
+	}
 	go s.finishInit(ctx, token, p.ev, in)
 }
 
@@ -516,6 +641,7 @@ func (s *Service) finishInit(ctx context.Context, token string, ev interactionEv
 		Agent: in.agent, Model: in.modelID, ModelLabel: s.modelLabel(ctx, in.agent, in.modelID),
 		Effort: in.effort, Access: in.access,
 		DataSourceID: in.dbID, DataSourceRef: in.dbRef,
+		ServerID: in.srvID, ServerName: in.srvName,
 		CardMessageID: old.CardMessageID, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := s.store.update(func(c *Config) { c.upsertBinding(binding) }); err != nil {
@@ -570,6 +696,9 @@ type initInput struct {
 	// dbID/dbRef 是锁定的数据源（0 表示不锁定，维持项目全量可见）。
 	dbID  uint
 	dbRef string
+	// srvID/srvName 是锁定的服务器（0 表示不锁定，全部启用的机器都可见）。
+	srvID   uint
+	srvName string
 	// branch 空 = 默认分支；defaultBranch 用于把「选了默认」归一成空。
 	branch, defaultBranch string
 }

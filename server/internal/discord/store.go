@@ -69,6 +69,12 @@ type Binding struct {
 	// DataSourceRef 是 `<项目>/<环境>` 的展示快照：连接被删掉之后，主题与
 	// /status 仍能说清这个频道原本绑的是谁（否则只剩一个数字 id）。
 	DataSourceRef string `json:"dataSourceRef,omitempty"`
+	// ServerID 非零表示这个频道**锁定**了一台服务器（adr-019）：子区的
+	// 服务器工具面只看得见它，别的机器连列都列不出来。为零时维持
+	// 「全部启用的服务器都可见」——服务器本身不做项目隔离。
+	ServerID uint `json:"serverId,omitempty"`
+	// ServerName 是展示快照，理由同 DataSourceRef。
+	ServerName string `json:"serverName,omitempty"`
 	// CardMessageID 是早期版本置顶身份卡的遗留（卡已退役，频道侧常驻
 	// 信息面只有主题）；非空时下次同步会把卡删掉并清空此字段。
 	CardMessageID string `json:"cardMessageId,omitempty"`

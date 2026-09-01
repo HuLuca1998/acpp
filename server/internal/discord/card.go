@@ -213,7 +213,25 @@ func topicLine(b Binding) string {
 	fmt.Fprintf(&w, "思考深度：%s\n", trimRunes(orDefault(b.Effort, "默认"), 20))
 	fmt.Fprintf(&w, "权限：%s\n", accessLabel(b.AccessOrDefault()))
 	fmt.Fprintf(&w, "数据库：%s", trimRunes(dbTopicLine(b), 70))
+	// 服务器只在锁定时才写进主题：没锁定是常态（服务器不做项目隔离），
+	// 每个频道都挂一句「不锁定」只是噪声。
+	if b.ServerID != 0 {
+		fmt.Fprintf(&w, " · 服务器：%s", trimRunes(serverLine(b), 40))
+	}
 	return w.String()
+}
+
+// serverLine 是「这个频道能看哪台机器」的统一口径（主题、/status 共用）。
+// 名字是落盘的展示快照，服务器被删了也还说得清原本绑的是谁。
+func serverLine(b Binding) string {
+	switch {
+	case b.ServerID == 0:
+		return "不锁定"
+	case b.ServerName != "":
+		return b.ServerName
+	default:
+		return fmt.Sprintf("#%d", b.ServerID)
+	}
 }
 
 // dbTopicLine 是主题里的数据库那行：锁定了就把「别的环境查不到」说明白，

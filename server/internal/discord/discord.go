@@ -55,6 +55,17 @@ type DBOption struct {
 	ReadOnly bool   `json:"readOnly"`
 }
 
+// ServerOption 是一台可绑定的服务器（adr-019）：/init 的「服务器」项用。
+type ServerOption struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+	Host string `json:"host"`
+	Note string `json:"note"`
+}
+
+// ServersFunc 返回可绑定的服务器清单。
+type ServersFunc func(ctx context.Context) ([]ServerOption, error)
+
 // Deps 是装配层注入的全部外部依赖，discord 包因此不认识其他业务包
 // （acp 是叶子协议客户端，与 gitrepo 同性质，直接用）。
 type Deps struct {
@@ -65,6 +76,9 @@ type Deps struct {
 	Repos           ReposFunc
 	// DataSources 是可绑定的数据库连接清单（/init 的数据库项、/db 换绑）。
 	DataSources DataSourcesFunc
+	// Servers 是可绑定的服务器清单（/init 的服务器项）。nil 或空清单时
+	// /init 跳过那一步——一台都没配的话让用户在表单里对着空列表发呆没有意义。
+	Servers ServersFunc
 	// AgentRuntime 返回内置工具的启动方式（命令/参数/环境），子区对话
 	// 拉起 acp 子进程用。nil 时对话面整体停用（@ 提及不响应）。
 	AgentRuntime func(ctx context.Context, agent string) (acp.Runtime, error)
@@ -79,8 +93,9 @@ type Deps struct {
 	// agent 产出报告并调用 report_open 时 onReport 会被回调（rel 相对
 	// cwd）。nil 表示两个工具面都不接。
 	// withDB 为真才挂数据库工具面（子区默认开，/db off 显式关）；
-	// dbSourceID 非零时把可见数据源锁死到那一条（频道绑定的环境）。
-	Mounts func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID uint, onReport func(rel, title string)) (mcpServers []any, metaExtra map[string]any, err error)
+	// dbSourceID 非零时把可见数据源锁死到那一条（频道绑定的环境）；
+	// serverID 非零时把可见服务器锁死到那一台（频道绑定的机器）。
+	Mounts func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID, serverID uint, onReport func(rel, title string)) (mcpServers []any, metaExtra map[string]any, err error)
 }
 
 // AgentOption 是一个内置工具的可选项集合。

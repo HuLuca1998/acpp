@@ -519,12 +519,19 @@ const discordInstructions = `# Discord 对话须知
 // prod/pre/dev 三个频道共用同一套提示词，唯一的区别就是这句「你现在对着
 // 哪个库」——工具面已经锁死了范围，这句是让模型别去猜别的环境。
 func discordInstructionsFor(b Binding) string {
-	if b.DataSourceID == 0 {
-		return discordInstructions
+	out := discordInstructions
+	if b.DataSourceID != 0 {
+		out += fmt.Sprintf(
+			"\n- 本频道锁定数据源 **%s**：acpp-db 里只有这一条连接，别的环境这个频道连不到——用户问到别的环境的数据就直说，不要拿手上这个库的数据顶替。",
+			dbLine(b))
 	}
-	return discordInstructions + fmt.Sprintf(
-		"\n- 本频道锁定数据源 **%s**：acpp-db 里只有这一条连接，别的环境这个频道连不到——用户问到别的环境的数据就直说，不要拿手上这个库的数据顶替。",
-		dbLine(b))
+	// 服务器同理（adr-019）：工具面已经锁死范围，这句是让模型别去猜别的机器。
+	if b.ServerID != 0 {
+		out += fmt.Sprintf(
+			"\n- 本频道锁定服务器 **%s**：acpp-server 里只有这一台，别的机器这个频道看不到。",
+			serverLine(b))
+	}
+	return out
 }
 
 // ---- 数据库工具面的按需开关 ----
