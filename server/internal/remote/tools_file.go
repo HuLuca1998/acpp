@@ -145,10 +145,19 @@ func lsCmd(a toolArgs) string {
 				"find %s%s -mindepth 1 2>&1 | head -n %d | xargs -r ls -ldh --time-style=long-iso 2>/dev/null || find %s%s -mindepth 1 2>&1 | head -n %d",
 				path, name, limit, path, name, limit))
 		}
-		// --time-style 是 GNU 的；不认就退回默认格式（busybox）。
-		return nice(fmt.Sprintf(
-			"ls -lAh%s --time-style=long-iso %s 2>&1 | head -n %d || ls -lAh%s %s 2>&1 | head -n %d",
-			sortFlag, path, limit+1, sortFlag, path, limit+1))
+		// --time-style 是 GNU 的，busybox 不认。
+		//
+		// **不能写成 `ls --time-style … | head || ls …`**：管道的退出码取自
+		// head（永远 0），`||` 那半边就成了死代码，在 busybox 机器上表现为
+		// 一片空输出。改成先探一次能力再选命令。
+		return fmt.Sprintf(`
+if ls --time-style=long-iso /dev/null >/dev/null 2>&1; then
+  %s
+else
+  %s
+fi`,
+			nice(fmt.Sprintf("ls -lAh%s --time-style=long-iso %s 2>&1 | head -n %d", sortFlag, path, limit+1)),
+			nice(fmt.Sprintf("ls -lAh%s %s 2>&1 | head -n %d", sortFlag, path, limit+1)))
 	}
 
 	name := ""
@@ -183,16 +192,19 @@ func readCmd(a toolArgs) string {
 		body = fmt.Sprintf("head -n %d %s | nl -ba", limit, path)
 	}
 
-	return nice(fmt.Sprintf(`
+	// nice 加在脚本内部的 wc/读取上，**不能**套在整段脚本前面：
+	// `nice -n 19` 后面跟 if 语句时它拿不到命令，自己报错退出，
+	// 降优先级根本没生效（真机上验证过）。
+	return fmt.Sprintf(`
 if [ ! -e %s ]; then echo "没有这个文件：%s"; exit 0; fi
 if [ -d %s ]; then echo "这是个目录，用 server_ls 看它"; exit 0; fi
 if LC_ALL=C grep -qI . %s 2>/dev/null; then :; else echo "二进制文件，不适合读取内容"; exit 0; fi
-total=$(wc -l < %s 2>/dev/null || echo 0)
+total=$(nice -n 19 wc -l < %s 2>/dev/null || echo 0)
 size=$(ls -lh %s 2>/dev/null | awk '{print $5}')
 echo "# %s（共 ${total} 行，${size}）"
 echo
 %s
-`, path, escapeEcho(a.Path), path, path, path, path, escapeEcho(a.Path), body))
+`, path, escapeEcho(a.Path), path, path, path, path, escapeEcho(a.Path), nice(body))
 }
 
 // grepCmd 拼搜索命令。

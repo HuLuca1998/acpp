@@ -77,9 +77,9 @@ func (s *Service) mountPayload(flavor, token string) ([]any, map[string]any) {
 // 全部只读，逐个弹卡只会让人麻木地一路点「允许」。
 func allowedTools() []string {
 	names := []string{
-		"server_hosts", "server_info",
+		"server_hosts", "server_info", "server_ps", "server_ports", "server_journal",
 		"server_ls", "server_read", "server_grep",
-		"docker_ps", "docker_logs",
+		"docker_ps", "docker_logs", "docker_inspect", "docker_stats",
 	}
 	out := make([]string, len(names))
 	for i, n := range names {

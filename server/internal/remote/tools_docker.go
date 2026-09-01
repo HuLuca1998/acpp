@@ -74,7 +74,109 @@ func (s *Service) dockerTools(pick picker) []mcp.Tool {
 			}
 			return s.text(ctx, srv, logsCmd(args))
 		},
+	}, {
+		Name:        "docker_inspect",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
+		Description: "看一个容器的详细配置：**挂载**、compose 标签（含远程项目根目录）、启动命令、" +
+			"工作目录、重启策略、健康检查、退出码与 OOM 标记、网络模式。" +
+			"这是**代码与服务器之间的桥**——compose 标签里的 working_dir 直接告诉你项目在这台机器的哪个目录，" +
+			"挂载列表告诉你日志与配置被映射到了哪里，比翻目录靠谱得多。环境变量只列名字不列值。",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server":    serverArg(),
+				"container": map[string]any{"type": "string", "description": "容器名，取自 docker_ps"},
+			},
+			"required": []string{"container"},
+		},
+		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			args := parseArgs(raw)
+			srv, err := pick(ctx, args.Server)
+			if err != nil {
+				return "", err
+			}
+			if strings.TrimSpace(args.Container) == "" {
+				return "", fmt.Errorf("container 不能为空")
+			}
+			return s.text(ctx, srv, inspectCmd(args))
+		},
+	}, {
+		Name:        "docker_stats",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
+		Description: "容器此刻的资源占用：CPU%、内存用量与占比、网络与块设备 IO、进程数。" +
+			"确认「是哪个容器在吃资源」用它——server_info 只告诉你整机紧张，这里告诉你紧张在谁身上。" +
+			"要采样一两秒，比别的工具慢。",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server": serverArg(),
+				"filter": map[string]any{"type": "string", "description": "按名字子串只看这一组容器"},
+			},
+		},
+		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			args := parseArgs(raw)
+			srv, err := pick(ctx, args.Server)
+			if err != nil {
+				return "", err
+			}
+			return s.text(ctx, srv, statsCmd(args))
+		},
 	}}
+}
+
+// inspectCmd 拼容器详情。
+//
+// **环境变量只列名字不列值**：容器的 env 里躺着数据库密码、API key、
+// token——那些东西没有任何理由进入模型的上下文，而它们恰好又最容易
+// 被顺手带出去（一次 inspect 就够）。想确认某个配置项存不存在，看名字
+// 就够了；想知道值，那是人该去服务器上看的事。
+func inspectCmd(a toolArgs) string {
+	name := shellQuote(a.Container)
+	return fmt.Sprintf(`
+if ! command -v docker >/dev/null 2>&1; then echo '这台服务器上没有 docker'; exit 0; fi
+c=%s
+echo '## 基本'
+docker inspect --format '名字: {{.Name}}
+镜像: {{.Config.Image}}
+状态: {{.State.Status}}  退出码: {{.State.ExitCode}}  OOM: {{.State.OOMKilled}}
+重启: {{.RestartCount}} 次  策略: {{.HostConfig.RestartPolicy.Name}}
+启动于: {{.State.StartedAt}}
+命令: {{.Config.Cmd}}
+工作目录: {{.Config.WorkingDir}}
+网络模式: {{.HostConfig.NetworkMode}}' "$c" 2>&1
+echo
+echo '## compose 标签（项目根目录在这里）'
+docker inspect --format '{{range $k, $v := .Config.Labels}}{{if or (eq $k "com.docker.compose.project") (eq $k "com.docker.compose.project.working_dir") (eq $k "com.docker.compose.service") (eq $k "com.docker.compose.project.config_files")}}{{$k}} = {{$v}}
+{{end}}{{end}}' "$c" 2>/dev/null
+echo '## 挂载（宿主 -> 容器）'
+docker inspect --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} ({{.Mode}})
+{{end}}' "$c" 2>/dev/null | head -20
+echo '## 健康检查'
+docker inspect --format '{{if .State.Health}}状态: {{.State.Health.Status}}  连续失败: {{.State.Health.FailingStreak}}{{range $i, $l := .State.Health.Log}}
+  最近: {{$l.ExitCode}} {{$l.Output}}{{end}}{{else}}（没有配健康检查）{{end}}' "$c" 2>/dev/null | head -8
+echo
+echo '## 环境变量（只列名字——值里可能有密码与 token）'
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$c" 2>/dev/null | cut -d= -f1 | sort | head -40
+`, name)
+}
+
+// statsCmd 拼资源占用。
+//
+// --no-stream 只采一次；不加的话它会一直刷。带 filter 时用管道喂 xargs
+// 而不是把 id 塞进变量——理由同 psCmd：远端登录 shell 可能是 zsh，
+// 未加引号的变量不会被分词。
+func statsCmd(a toolArgs) string {
+	format := "--format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}'"
+
+	run := "docker stats --no-stream " + format + " 2>&1 | head -40"
+	if f := strings.TrimSpace(a.Filter); f != "" {
+		run = "docker ps --filter name=" + shellQuote(f) +
+			" -q 2>/dev/null | xargs -r docker stats --no-stream " + format + " 2>&1 | head -40"
+	}
+	return fmt.Sprintf(`
+if ! command -v docker >/dev/null 2>&1; then echo '这台服务器上没有 docker'; exit 0; fi
+%s
+`, run)
 }
 
 // psCmd 拼容器清单。

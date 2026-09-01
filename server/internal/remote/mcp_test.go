@@ -247,3 +247,94 @@ func TestCommandBuilders_QuoteAndLimit(t *testing.T) {
 		}
 	})
 }
+
+// 契约：环境变量只能给名字。容器 env 里躺着数据库密码、API key 与 token
+// ——一次 inspect 就能把它们全带进模型上下文，而想确认某个配置项在不在，
+// 看名字就够了。
+func TestInspectCmd_RedactsEnvValues(t *testing.T) {
+	cmd := inspectCmd(toolArgs{Container: "pp-server"})
+	if !strings.Contains(cmd, "cut -d= -f1") {
+		t.Errorf("环境变量必须只取名字（cut 掉等号后的值）: %s", cmd)
+	}
+	if !strings.Contains(cmd, "'pp-server'") {
+		t.Errorf("容器名没被引用: %s", cmd)
+	}
+	// compose 标签是代码与服务器之间的桥，不能漏。
+	if !strings.Contains(cmd, "com.docker.compose.project.working_dir") {
+		t.Errorf("缺 compose 的 working_dir 标签: %s", cmd)
+	}
+}
+
+// 契约：P1 的几个工具同样要有降级——不是每台机器都有 systemd、
+// 都装了 docker、都用 GNU 的 ps。
+func TestP1Commands_Degrade(t *testing.T) {
+	if !strings.Contains(journalCmd(toolArgs{}), "command -v journalctl") {
+		t.Error("没有 systemd 的机器上应给人话")
+	}
+	if !strings.Contains(statsCmd(toolArgs{}), "command -v docker") {
+		t.Error("没装 docker 的机器上应给人话")
+	}
+	if !strings.Contains(portsCmd, "netstat") {
+		t.Error("没有 ss 的老系统应退回 netstat")
+	}
+	if !strings.Contains(psHostCmd(toolArgs{}), "ps aux") {
+		t.Error("busybox 的 ps 不认 --sort，应有退路")
+	}
+}
+
+// 契约：docker_stats 的容器筛选同样不能靠 shell 分词（远端可能是 zsh）。
+func TestStatsCmd_NoWordSplitting(t *testing.T) {
+	cmd := statsCmd(toolArgs{Filter: "pp-"})
+	if !strings.Contains(cmd, "| xargs -r docker stats") {
+		t.Errorf("容器 id 要用管道喂 xargs，不能指望 shell 分词: %s", cmd)
+	}
+	if !strings.Contains(cmd, "--no-stream") {
+		t.Errorf("必须 --no-stream，否则它会一直刷: %s", cmd)
+	}
+	if !strings.Contains(cmd, "name='pp-'") {
+		t.Errorf("筛选串没被引用: %s", cmd)
+	}
+	// 不带筛选时不必绕 xargs。
+	if strings.Contains(statsCmd(toolArgs{}), "xargs") {
+		t.Error("没有筛选条件时应直接 docker stats")
+	}
+}
+
+// 契约：nice 只能跟一条实在的命令。
+//
+// 两个真机上踩过的形状：`nice -n 19 (…)` 在 zsh 里直接 parse error；
+// `nice -n 19` 后面跟 if 语句时 nice 拿不到命令，自己报错、降优先级失效。
+func TestNice_NeverPrecedesCompound(t *testing.T) {
+	cmds := map[string]string{
+		"ls":      lsCmd(toolArgs{Path: "/srv"}),
+		"read":    readCmd(toolArgs{Path: "/x", Tail: 5}),
+		"grep":    grepCmd(toolArgs{Path: "/x", Pattern: "a"}),
+		"ps":      psHostCmd(toolArgs{}),
+		"journal": journalCmd(toolArgs{}),
+		"logs":    logsCmd(toolArgs{Container: "c"}),
+	}
+	for name, cmd := range cmds {
+		for _, bad := range []string{"nice -n 19 (", "nice -n 19 if ", "nice -n 19\n"} {
+			if strings.Contains(cmd, bad) {
+				t.Errorf("%s: nice 后面跟了复合语句 %q，降优先级会失效: %s", name, bad, cmd)
+			}
+		}
+	}
+}
+
+// 契约：能力探测不能写成「管道 || 备用」——管道的退出码取自最后一环
+// （通常是 head，永远 0），`||` 那半边成了死代码，在 busybox 机器上
+// 表现为一片空输出。
+func TestFallback_NotAfterPipe(t *testing.T) {
+	for name, cmd := range map[string]string{
+		"ls": lsCmd(toolArgs{Path: "/srv"}),
+		"ps": psHostCmd(toolArgs{}),
+	} {
+		if strings.Contains(cmd, "| head -n") && strings.Contains(cmd, "|| ") {
+			t.Errorf("%s: 备用分支跟在管道之后，永远不会执行: %s", name, cmd)
+		}
+		if !strings.Contains(cmd, "if ") {
+			t.Errorf("%s: 应当先探测能力再选命令: %s", name, cmd)
+		}
+	}
+}

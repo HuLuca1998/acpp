@@ -44,7 +44,123 @@ func (s *Service) hostTools(sc Scope, pick picker) []mcp.Tool {
 			}
 			return s.text(ctx, srv, infoCmd)
 		},
+	}, {
+		Name:        "server_ps",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
+		Description: "宿主上的进程，按 CPU 或内存排序。" +
+			"**docker_stats 看不到的那些**——直接跑在宿主上的 nginx、mysql、各种 daemon 都在这里。" +
+			"整机负载高但容器都不忙时，答案通常在这。",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server": serverArg(),
+				"sort":   map[string]any{"type": "string", "enum": []string{"cpu", "mem"}, "description": "排序依据，默认 cpu"},
+				"filter": map[string]any{"type": "string", "description": "只看命令行里含这个字串的进程"},
+				"limit":  map[string]any{"type": "integer", "description": "最多几条，默认 20"},
+			},
+		},
+		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			args := parseArgs(raw)
+			srv, err := pick(ctx, args.Server)
+			if err != nil {
+				return "", err
+			}
+			return s.text(ctx, srv, psHostCmd(args))
+		},
+	}, {
+		Name:        "server_ports",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
+		Description: "在听哪些端口、分别是谁在听。" +
+			"确认「服务到底起没起」比看日志直接；也能发现只绑在回环上的内部端口（调试接口、指标端点之类）。" +
+			"端口对不上代码里写的，多半是配置没生效或者跑的是旧版本。",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"server": serverArg()},
+		},
+		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			args := parseArgs(raw)
+			srv, err := pick(ctx, args.Server)
+			if err != nil {
+				return "", err
+			}
+			return s.text(ctx, srv, portsCmd)
+		},
+	}, {
+		Name:        "server_journal",
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
+		Description: "systemd 的服务日志（journalctl）。日志的第三种去处——" +
+			"不是所有服务都跑在容器里，systemd 拉起的那些（定时任务、代理、守护进程）日志只在这。" +
+			"不给 unit 就看全局最近的记录，适合查「机器上刚发生过什么」。",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server":  serverArg(),
+				"pattern": map[string]any{"type": "string", "description": "unit 名，如 nginx.service。留空看全局"},
+				"since":   map[string]any{"type": "string", "description": "起点，如 '1 hour ago'、'today'、'2026-09-01 10:00'"},
+				"grep":    map[string]any{"type": "string", "description": "只留匹配的行"},
+				"limit":   map[string]any{"type": "integer", "description": "最多几行，默认 100"},
+			},
+		},
+		Call: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			args := parseArgs(raw)
+			srv, err := pick(ctx, args.Server)
+			if err != nil {
+				return "", err
+			}
+			return s.text(ctx, srv, journalCmd(args))
+		},
 	}}
+}
+
+// psHostCmd 拼宿主进程清单。
+//
+// 用 `ps -eo` 显式指定列而不是 `ps aux`：后者的列顺序在不同实现里不一样，
+// 而我们要按固定列排序。--sort 是 GNU procps 的，busybox 不认，退回 sort 命令。
+func psHostCmd(a toolArgs) string {
+	limit := clamp(a.Limit, 20, 100)
+	key := "-%cpu"
+	if a.Sort == "mem" {
+		key = "-%mem"
+	}
+	filter := "cat"
+	if f := strings.TrimSpace(a.Filter); f != "" {
+		filter = "grep -F -- " + shellQuote(f)
+	}
+	// **不能写成 `nice -n 19 (…)`**：nice 后面跟子 shell 括号在 zsh 里是
+	// 语法错误（真机上就是这么报的 parse error）。先探一次 --sort 能力，
+	// 再让 nice 跟一条实实在在的命令。
+	return fmt.Sprintf(`
+if ps -eo pid --sort=-%%cpu >/dev/null 2>&1; then
+  %s
+else
+  %s
+fi`,
+		nice(fmt.Sprintf("ps -eo pid,user,pcpu,pmem,etime,args --sort=%s 2>/dev/null | %s | head -n %d", key, filter, limit+1)),
+		nice(fmt.Sprintf("ps aux 2>/dev/null | %s | head -n %d", filter, limit+1)))
+}
+
+// portsCmd 列监听端口。ss 是现在的标准工具，老系统上退回 netstat。
+const portsCmd = `
+(ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo '(ss 与 netstat 都不可用)') | head -50
+`
+
+// journalCmd 拼 systemd 日志命令。
+func journalCmd(a toolArgs) string {
+	limit := clamp(a.Limit, 100, 1000)
+	cmd := fmt.Sprintf("journalctl --no-pager -n %d", limit)
+	if u := strings.TrimSpace(a.Pattern); u != "" {
+		cmd += " -u " + shellQuote(u)
+	}
+	if since := strings.TrimSpace(a.Since); since != "" {
+		cmd += " --since " + shellQuote(since)
+	}
+	if g := strings.TrimSpace(a.Grep); g != "" {
+		cmd += " | grep -E -- " + shellQuote(g)
+	}
+	return fmt.Sprintf(`
+if ! command -v journalctl >/dev/null 2>&1; then echo '这台服务器没有 systemd/journalctl'; exit 0; fi
+%s 2>&1 | tail -n %d
+`, nice(cmd), limit)
 }
 
 // infoCmd 把七八条命令拼成一次往返。分开调的话，一次「看看机器怎么样」
