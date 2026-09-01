@@ -254,6 +254,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/datasources/probe-ssh` | 配置页 SSH 页签单独测隧道，不碰 MySQL（拨的是 `serverId` 指向的那台机器） |
 | GET | `/api/datasources/{id}/databases` `/tables` `/schema` | 库清单 / 表清单（`?database=`） / 表结构（`?database=&table=`，含列、索引与建表语句） |
 | POST | `/api/datasources/{id}/query` | 执行 SQL（`{database?, sql, maxRows?}`，可含多条语句：按序执行、遇错即停，每条独立返回耗时与影响行数；行数硬顶 1000） |
+| GET | `/api/datasources/{id}/uri` | 导出连接 URI（Navicat 与通用两种写法，**含真实密码**——那条链接本身就是凭证） |
+| GET | `/api/datasources/{id}/secret` | 明文密码：密码框的「看一眼」与「复制连接」用。与 URI 导出同口径，owner 专属；会话侧的清单端点永远只给 `hasPassword` |
 | GET | `/api/sessions/{id}/datasources` | **会话可见的**数据源：只有当前工作目录所属项目的那几条（斜杠命令数据源） |
 | GET | `/api/sessions/{id}/datasources/{dsid}/databases` `/tables` | 同上但按会话过滤，项目之外的 id 按「不存在」处理 |
 | GET | `/api/workspace/servers` | **会话可见的**服务器（@ 引用选择器用）：不按项目过滤，租户也能取，响应不含凭证 |
