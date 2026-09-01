@@ -437,7 +437,15 @@ function DataSourceForm({
                               ? t("server.pickEmpty")
                               : t("server.pickPlaceholder")
                           }
-                        />
+                        >
+                          {/* Base UI 的 Value 默认显示原始 value——这里是
+                              服务器 id，得换成人认得的名字。 */}
+                          {(v) =>
+                            (servers ?? []).find(
+                              (srv: Server) => String(srv.id) === String(v)
+                            )?.name ?? String(v ?? "")
+                          }
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {(servers ?? []).map((srv: Server) => (

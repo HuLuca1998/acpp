@@ -9,6 +9,7 @@ import { api } from "@/lib/api"
 import type { Server } from "@/types/acp"
 import { Hint } from "@/components/hint"
 import { ListPageStates } from "@/components/list-page-states"
+import { authLabelKey } from "@/components/servers/auth-label"
 import { ServerDialog } from "@/components/servers/server-dialog"
 import { StatusDot } from "@/components/status-dot"
 import { usePagedData } from "@/hooks/use-paged-data"
@@ -188,13 +189,7 @@ function serverColumns(
       ),
       cell: ({ row }) => (
         <span className="text-muted-foreground">
-          {t(
-            row.original.auth === "key"
-              ? "server.authKey"
-              : row.original.auth === "both"
-                ? "server.authBoth"
-                : "server.authPassword"
-          )}
+          {t(authLabelKey(row.original.auth))}
         </span>
       ),
     },

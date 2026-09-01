@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
+import { authLabelKey } from "@/components/servers/auth-label"
 
 /**
  * 服务器的新建/编辑对话框（adr-019）。
@@ -194,7 +195,9 @@ function ServerForm({
               onValueChange={(v) => set("auth", v as SSHAuth)}
             >
               <SelectTrigger id="srv-auth">
-                <SelectValue />
+                {/* Base UI 的 Value 默认显示原始 value（会是 "key" 这种），
+                    要显示人看的名字得给它一个格式化函数。 */}
+                <SelectValue>{(v) => t(authLabelKey(String(v)))}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="password">

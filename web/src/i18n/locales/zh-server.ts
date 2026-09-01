@@ -24,7 +24,7 @@ export const zhServer = {
   passphrase: "通行短语",
   note: "备注",
   notePlaceholder: "pp-game 生产机，项目在 /srv/pp-game-live",
-  noteHint: "**会给 AI 看**：写清这台机器是干嘛的、项目在哪个目录，能省掉它好几轮摸索",
+  noteHint: "这段会给 AI 看：写清这台机器是干嘛的、项目在哪个目录，能省掉它好几轮摸索",
   disabled: "停用",
   disabledHint: "停用的服务器不挂给 AI，页面里仍可编辑",
   enabled: "启用中",

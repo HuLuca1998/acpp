@@ -25,7 +25,7 @@ export const enServer = {
   note: "Note",
   notePlaceholder: "pp-game production, project at /srv/pp-game-live",
   noteHint:
-    "**Shown to the AI**: say what this machine is for and where the project lives — it saves several rounds of guessing",
+    "Shown to the AI: say what this machine is for and where the project lives — it saves several rounds of guessing",
   disabled: "Disabled",
   disabledHint: "Disabled servers are not exposed to the AI; still editable here",
   enabled: "Enabled",
