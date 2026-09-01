@@ -19,6 +19,11 @@ export const enDb = {
     "These links contain the password in clear text — the link is a credential; don't paste it into chats or docs.",
   uriSaveFirst: "Save this connection first, then export a link.",
   uriSSHHint: "This URI carries tunnel host {{host}} — create a server from it, or pick an existing one above.",
+  copy: "Duplicate",
+  copyDesc: "Start a new one from this: host, account, password and SSH carry over; project / env / database are left blank",
+  copyTitle: "Duplicate connection",
+  copyHint: "Host, account, password and SSH carried over. Fill in the new project, environment and database — those three are deliberately blank so you cannot click straight through and end up with a duplicate of the original.",
+  copyNoPassword: "Could not fetch the password, please fill it in",
   uriButton: "URI",
   refTitle: "Reference a database",
   refHint:

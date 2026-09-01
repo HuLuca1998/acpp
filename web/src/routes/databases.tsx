@@ -15,7 +15,7 @@ import { DataTableHeader } from "@/components/data-table/data-table-header"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import type { ColumnDef } from "@tanstack/react-table"
 import { api } from "@/lib/api"
-import type { DataSource } from "@/types/acp"
+import type { DataSource, DataSourceInput } from "@/types/acp"
 
 type SourceColumn = ColumnDef<typeof dataTableFeatures, DataSource, unknown>
 import {
@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/card"
 import {
   DatabaseIcon,
+  CopyPlusIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -87,12 +88,51 @@ export function Databases() {
   )
 
   const [editing, setEditing] = useState<DataSource | null>(null)
+  const [prefill, setPrefill] = useState<DataSourceInput | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // 复制的序号：只用来让表单在「连着复制两条」时重建（key 变了）。
+  // 放 state 而不是 ref——组件体内的函数在 React Compiler 眼里可能落在
+  // render 路径上，读写 ref 与调 Date.now() 都会被拦。
+  const [copyNonce, setCopyNonce] = useState(0)
   const [deleting, setDeleting] = useState<DataSource | null>(null)
   const [opened, setOpened] = useState<DataSource | null>(null)
 
   function openEdit(source: DataSource | null) {
     setEditing(source)
+    setPrefill(null)
+    setDialogOpen(true)
+  }
+
+  /**
+   * 复制一条连接：同一台库上常常要开好几个连接（几个库、几个环境），
+   * 地址、账号、密码、SSH 全都一样，只有项目 / 环境 / 库不同。
+   *
+   * 密码得单独取——列表里没有它（响应只给 hasPassword）。取不到就照常
+   * 打开，让用户自己填：复制是个便利，不该因为拿不到密码就整个不能用。
+   */
+  async function openCopy(source: DataSource) {
+    let password = ""
+    try {
+      password = (await api.datasources.secret(source.id)).password
+    } catch {
+      toast.warning(t("db.copyNoPassword"))
+    }
+    setEditing(null)
+    setCopyNonce((n) => n + 1)
+    setPrefill({
+      project: "",
+      env: "",
+      host: source.host,
+      port: source.port,
+      user: source.user,
+      password,
+      database: "",
+      params: source.params,
+      note: source.note,
+      sshEnabled: source.sshEnabled,
+      serverId: source.serverId,
+      readOnly: source.readOnly,
+    })
     setDialogOpen(true)
   }
 
@@ -117,7 +157,7 @@ export function Databases() {
     }
   }
 
-  const columns = sourceColumns(t, openEdit, setDeleting)
+  const columns = sourceColumns(t, openEdit, openCopy, setDeleting)
 
   return (
     <div className="flex flex-col gap-4 p-4 lg:p-6">
@@ -199,6 +239,8 @@ export function Databases() {
       <DataSourceDialog
         open={dialogOpen}
         source={editing}
+        prefill={prefill}
+        prefillKey={`copy-${copyNonce}`}
         projects={projects ?? []}
         onClose={() => setDialogOpen(false)}
         onSaved={handleSaved}
@@ -246,6 +288,7 @@ function addressOf(source: DataSource): string {
 function sourceColumns(
   t: TFunction,
   onEdit: (source: DataSource) => void,
+  onCopy: (source: DataSource) => void,
   onDelete: (source: DataSource) => void
 ): SourceColumn[] {
   return [
@@ -330,6 +373,21 @@ function sourceColumns(
               }}
             >
               <PencilIcon />
+            </Button>
+          </Hint>
+          {/* 复制：同一台库上常常要开好几个连接（几个库、几个环境），
+              地址、账号、密码、SSH 全都一样，只有项目 / 环境 / 库不同。 */}
+          <Hint label={t("db.copy")} desc={t("db.copyDesc")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("db.copy")}
+              onClick={(e) => {
+                e.stopPropagation()
+                onCopy(row.original)
+              }}
+            >
+              <CopyPlusIcon />
             </Button>
           </Hint>
           <Hint label={t("db.deleteTitle")} align="end">

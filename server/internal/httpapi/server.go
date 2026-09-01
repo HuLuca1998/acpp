@@ -125,6 +125,27 @@ func (h serverHandler) writeTest(w http.ResponseWriter, r *http.Request, id uint
 	writeData(w, http.StatusOK, map[string]string{"version": banner})
 }
 
+// secret 取一台服务器的明文凭证，给密码框的「看一眼」用。
+//
+// 与数据源那条同一口径：只在 owner 专属前缀里，会话侧的清单端点
+// （下面的 visible）永远只给 Has* 标志位。
+func (h serverHandler) secret(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	srv, err := h.servers.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]string{
+		"password":   srv.Password,
+		"passphrase": srv.Passphrase,
+	})
+}
+
 // visible 是会话侧的服务器清单（@ 引用选择器用）。
 //
 // 与管理面分开一个前缀：管理面在 /api/servers 下，owner 专属（那里躺着

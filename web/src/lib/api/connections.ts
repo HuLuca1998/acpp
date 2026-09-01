@@ -49,6 +49,11 @@ export const connectionsApi = {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    /** 取明文凭证（owner 专属），密码框的「看一眼」用。 */
+    secret: (id: number) =>
+      request<{ password: string; passphrase: string }>(
+        `/servers/${id}/secret`
+      ),
     /**
      * 测一条已存的记录。传空对象表示「就测这条」；带表单内容则先合并
      * 再测——编辑到一半想验一下，不该逼用户先保存。

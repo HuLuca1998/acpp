@@ -291,6 +291,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("PUT /api/servers/{id}", servers.update)
 	api.HandleFunc("DELETE /api/servers/{id}", servers.remove)
 	api.HandleFunc("POST /api/servers/{id}/test", servers.test)
+	// 明文凭证：密码框的「看一眼」用（owner 专属前缀内）。
+	api.HandleFunc("GET /api/servers/{id}/secret", servers.secret)
 
 	// agent 回连的 MCP 端点。**不能**放进 owner 专属前缀：agent 子进程
 	// 带的是会话凭证，不是浏览器身份。

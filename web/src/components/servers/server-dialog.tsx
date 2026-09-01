@@ -6,6 +6,7 @@ import { FolderOpenIcon } from "lucide-react"
 import { api } from "@/lib/api"
 import type { Server, ServerInput, SSHAuth } from "@/types/acp"
 import { Hint } from "@/components/hint"
+import { PasswordInput } from "@/components/password-input"
 import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { TestResult, type TestState } from "@/components/connection-test"
 import { Button } from "@/components/ui/button"
@@ -215,13 +216,16 @@ function ServerForm({
             <FieldLabel htmlFor="srv-password">
               {t("server.password")}
             </FieldLabel>
-            <Input
+            <PasswordInput
               id="srv-password"
-              type="password"
-              autoComplete="off"
               value={form.password}
               placeholder={server?.hasPassword ? t("server.passwordKeep") : ""}
-              onChange={(e) => set("password", e.target.value)}
+              onChange={(v) => set("password", v)}
+              fetchStored={
+                server?.hasPassword
+                  ? async () => (await api.servers.secret(server.id)).password
+                  : undefined
+              }
             />
           </Field>
         ) : null}
@@ -255,15 +259,19 @@ function ServerForm({
               <FieldLabel htmlFor="srv-passphrase">
                 {t("server.passphrase")}
               </FieldLabel>
-              <Input
+              <PasswordInput
                 id="srv-passphrase"
-                type="password"
-                autoComplete="off"
                 value={form.passphrase}
                 placeholder={
                   server?.hasPassphrase ? t("server.passwordKeep") : ""
                 }
-                onChange={(e) => set("passphrase", e.target.value)}
+                onChange={(v) => set("passphrase", v)}
+                fetchStored={
+                  server?.hasPassphrase
+                    ? async () =>
+                        (await api.servers.secret(server.id)).passphrase
+                    : undefined
+                }
               />
             </Field>
           </>

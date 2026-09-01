@@ -19,6 +19,11 @@ export const zhDb = {
     "这两条链接包含密码明文——它本身就是凭证，别往聊天窗口或文档里贴。",
   uriSaveFirst: "先保存这条连接，再来导出链接。",
   uriSSHHint: "这条 URI 带着跳板机 {{host}}——照它新建一台服务器，或在上面选一台已有的。",
+  copy: "复制连接",
+  copyDesc: "照这条新建一条：地址、账号、密码、SSH 都带过去，项目 / 环境 / 库留空",
+  copyTitle: "复制连接",
+  copyHint: "地址、账号、密码与 SSH 已带过来。填新的项目、环境与库即可——这三样刻意留空，避免一路点保存建出一条指向原库的重复连接。",
+  copyNoPassword: "密码没取到，请手动填",
   uriButton: "URI",
   refTitle: "引用数据库",
   refHint:

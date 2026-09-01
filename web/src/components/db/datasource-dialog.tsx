@@ -85,12 +85,22 @@ function readonlyUserSQL(password: string): string {
 export function DataSourceDialog({
   open,
   source,
+  prefill,
+  prefillKey,
   projects,
   onClose,
   onSaved,
 }: {
   open: boolean
   source: DataSource | null
+  /**
+   * 新建时的预填值（「复制连接」用）。同一台库上开好几个连接时，地址、
+   * 账号、密码、SSH 都是同一套，只有项目 / 环境 / 库不同——让人再抄一遍
+   * 反而更容易抄错。`key` 里带上它的标识，连着复制两条时表单会重建。
+   */
+  prefill?: DataSourceInput | null
+  /** 复制的一次性标识：变了表单就重建，连着复制两条不会串上一次的输入。 */
+  prefillKey?: string
   /** 工作区里已有的项目名，填「项目」时给建议。 */
   projects: string[]
   onClose: () => void
@@ -102,14 +112,21 @@ export function DataSourceDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            {source ? t("db.editTitle") : t("db.addTitle")}
+            {source
+              ? t("db.editTitle")
+              : prefill
+                ? t("db.copyTitle")
+                : t("db.addTitle")}
           </DialogTitle>
-          <DialogDescription>{t("db.projectHint")}</DialogDescription>
+          <DialogDescription>
+            {prefill && !source ? t("db.copyHint") : t("db.projectHint")}
+          </DialogDescription>
         </DialogHeader>
         {open ? (
           <DataSourceForm
-            key={source?.id ?? "new"}
+            key={source?.id ?? (prefill ? prefillKey : "new")}
             source={source}
+            prefill={source ? null : (prefill ?? null)}
             projects={projects}
             onClose={onClose}
             onSaved={onSaved}
@@ -122,29 +139,33 @@ export function DataSourceDialog({
 
 function DataSourceForm({
   source,
+  prefill,
   projects,
   onClose,
   onSaved,
 }: {
   source: DataSource | null
+  prefill: DataSourceInput | null
   projects: string[]
   onClose: () => void
   onSaved: (source: DataSource) => void
 }) {
   const { t } = useTranslation()
   const [form, setForm] = useState<DataSourceInput>(() => ({
+    // 「复制连接」刻意**不带**项目 / 环境 / 库：那三样正是新连接要改的，
+    // 留着旧值会让人一路点保存、结果建出一条指向原库的重复连接。
     project: source?.project ?? "",
     env: source?.env ?? "",
-    host: source?.host ?? "127.0.0.1",
-    port: source?.port ?? 3306,
-    user: source?.user ?? "readonly",
-    password: "",
+    host: source?.host ?? prefill?.host ?? "127.0.0.1",
+    port: source?.port ?? prefill?.port ?? 3306,
+    user: source?.user ?? prefill?.user ?? "readonly",
+    password: prefill?.password ?? "",
     database: source?.database ?? "",
-    params: source?.params ?? "",
-    note: source?.note ?? "",
-    sshEnabled: source?.sshEnabled ?? false,
-    serverId: source?.serverId ?? 0,
-    readOnly: source?.readOnly ?? true,
+    params: source?.params ?? prefill?.params ?? "",
+    note: source?.note ?? prefill?.note ?? "",
+    sshEnabled: source?.sshEnabled ?? prefill?.sshEnabled ?? false,
+    serverId: source?.serverId ?? prefill?.serverId ?? 0,
+    readOnly: source?.readOnly ?? prefill?.readOnly ?? true,
     disabled: source?.disabled ?? false,
   }))
   const [saving, setSaving] = useState(false)
