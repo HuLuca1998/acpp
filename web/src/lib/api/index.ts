@@ -26,6 +26,7 @@ import type {
   OverviewStats,
   Paged,
   PageQuery,
+  Server,
   UploadedFile,
   Project,
   RemoteRepo,
@@ -656,6 +657,13 @@ export const api = {
   },
 
   ...connectionsApi,
+
+  /**
+   * 会话侧的服务器清单（@ 引用选择器用）。与 servers.list 的区别是它不在
+   * owner 专属前缀里——会话内的能力面不按身份分家（adr-010），响应也不含
+   * 任何凭证字段。
+   */
+  workspaceServers: () => request<Paged<Server>>("/workspace/servers"),
 
   /**
    * 工具台：我方 MCP server 暴露给 agent 的那套工具，摊开给人看与试。

@@ -141,7 +141,8 @@ func run() error {
 		WithNotifier(chatService)
 	chatService.AddMounter(reportService)
 	// 服务器观察工具面（adr-019）：配了机器就挂，不按项目过滤。
-	chatService.AddMounter(remoteService)
+	// SetServers 顺带把它登记成挂载源，不必再 AddMounter 一次。
+	chatService.SetServers(remoteService)
 
 	// 会话标题：两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到
 	// （见 titler 包注释），所以由本机的小模型来算。配置在设置页维护，

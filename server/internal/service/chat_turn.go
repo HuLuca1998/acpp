@@ -53,6 +53,8 @@ type SendInput struct {
 	// 现状由后端查出后同样以 resource 块嵌入。与文件引用是同一个动作，
 	// 只是内容来自库而不是磁盘。
 	DataSources []string `json:"datasources,omitempty"`
+	// Servers 是 @ 引用的服务器名（adr-019）。
+	Servers []string `json:"servers,omitempty"`
 }
 
 // Send 广播用户消息并异步跑一轮。消息本身不落库——session/prompt 请求会
@@ -129,19 +131,60 @@ func (s *ChatService) buildBlocks(ctx context.Context, cwd string, in SendInput)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(in.DataSources) == 0 {
-		return blocks, payload, nil
-	}
-	if s.sources == nil {
-		return nil, nil, fmt.Errorf("%w: 数据库能力未启用", ErrInvalid)
-	}
-	refs, err := s.sources.Reference(ctx, cwd, in.DataSources)
-	if err != nil {
-		return nil, nil, err
+	hasText := strings.TrimSpace(in.Content) != ""
+
+	if len(in.DataSources) > 0 {
+		if s.sources == nil {
+			return nil, nil, fmt.Errorf("%w: 数据库能力未启用", ErrInvalid)
+		}
+		refs, err := s.sources.Reference(ctx, cwd, in.DataSources)
+		if err != nil {
+			return nil, nil, err
+		}
+		blocks, payload = AppendDBReferences(blocks, payload, refs, hasText)
 	}
 
-	blocks, payload = AppendDBReferences(blocks, payload, refs, strings.TrimSpace(in.Content) != "")
+	if len(in.Servers) > 0 {
+		if s.servers == nil {
+			return nil, nil, fmt.Errorf("%w: 服务器能力未启用", ErrInvalid)
+		}
+		refs, err := s.servers.Reference(ctx, in.Servers)
+		if err != nil {
+			return nil, nil, err
+		}
+		blocks, payload = AppendServerReferences(blocks, payload, refs, hasText)
+	}
 	return blocks, payload, nil
+}
+
+// AppendServerReferences 把展开好的服务器引用插进内容块。
+//
+// 与 AppendDBReferences 同一套规矩（见它的注释）：**只以 resource 块下发**，
+// 绝不加裸 text 块——转录重建时所有 text 块都会被拼成用户正文，注入的说明
+// 会显示成用户自己说的话。
+func AppendServerReferences(blocks []acp.ContentBlock, payload model.JSONMap,
+	refs []ServerReference, hasText bool) ([]acp.ContentBlock, model.JSONMap) {
+	if len(refs) == 0 {
+		return blocks, payload
+	}
+	refBlocks := make([]acp.ContentBlock, 0, len(refs))
+	uris := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		refBlocks = append(refBlocks, acp.ResourceBlock(ref.URI, ref.Text))
+		uris = append(uris, ref.URI)
+	}
+
+	at := len(blocks)
+	if hasText && at > 0 {
+		at--
+	}
+	blocks = slices.Insert(blocks, at, refBlocks...)
+
+	if payload == nil {
+		payload = model.JSONMap{}
+	}
+	payload["servers"] = uris
+	return blocks, payload
 }
 
 // AppendDBReferences 把展开好的数据库引用插进内容块。普通会话与编排共用。

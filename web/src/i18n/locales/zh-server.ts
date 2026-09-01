@@ -41,6 +41,9 @@ export const zhServer = {
     "首次连接会把主机指纹记进 ~/.ssh/known_hosts；之后指纹变了会直接拒绝——那是唯一真正的中间人信号，没有跳过开关。",
   scopeWarning:
     "配好之后 AI 能读这台机器上的任意路径，不按项目隔离。要收窄范围，给它配一个受限的 SSH 账号。",
+  refServer: "服务器",
+  refTitle: "引用服务器",
+  refHint: "选一台机器交给 AI——它会明确本轮针对这台，用只读工具实际去看它的容器、日志与负载。",
   // 数据库对话框的 SSH 页签用：跳板机从这里选。
   pickForTunnel: "跳板机",
   pickPlaceholder: "选一台服务器…",

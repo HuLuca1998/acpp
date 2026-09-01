@@ -206,6 +206,7 @@ func rebuildEntries(sessionID uint, entries []wireEntry, sealed bool) []model.Me
 		var files []string
 		var linked []string
 		var datasources []string
+		var servers []string
 		for _, block := range prompt {
 			switch block.Type {
 			case "image":
@@ -221,9 +222,13 @@ func rebuildEntries(sessionID uint, entries []wireEntry, sealed bool) []model.Me
 				// URI 形状），与文件芯片分开落——键名对齐发送时临时消息
 				// 的 payload（AppendDBReferences），芯片才不会在重建后
 				// 从数据库图标变成文件图标。
-				if strings.HasPrefix(block.Resource.URI, "mysql://") {
+				switch {
+				case strings.HasPrefix(block.Resource.URI, "mysql://"):
 					datasources = append(datasources, block.Resource.URI)
-				} else {
+				case strings.HasPrefix(block.Resource.URI, ServerRefScheme):
+					// acpp-server:// 是 @ 服务器引用（adr-019），同理单独落。
+					servers = append(servers, block.Resource.URI)
+				default:
 					files = append(files, block.Resource.URI)
 				}
 			case "resource_link":
@@ -256,6 +261,9 @@ func rebuildEntries(sessionID uint, entries []wireEntry, sealed bool) []model.Me
 		}
 		if len(datasources) > 0 {
 			payload["datasources"] = datasources
+		}
+		if len(servers) > 0 {
+			payload["servers"] = servers
 		}
 		if len(payload) == 0 {
 			payload = nil

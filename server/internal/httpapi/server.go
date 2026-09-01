@@ -125,6 +125,22 @@ func (h serverHandler) writeTest(w http.ResponseWriter, r *http.Request, id uint
 	writeData(w, http.StatusOK, map[string]string{"version": banner})
 }
 
+// visible 是会话侧的服务器清单（@ 引用选择器用）。
+//
+// 与管理面分开一个前缀：管理面在 /api/servers 下，owner 专属（那里躺着
+// 凭证）；这条在 /api/workspace 下，租户也能用——会话内的能力面不按身份
+// 分家（adr-010）。响应里没有任何凭证字段，只有名字、地址与备注。
+//
+// 不按项目过滤：服务器本身就不做项目隔离（adr-019）。
+func (h serverHandler) visible(w http.ResponseWriter, r *http.Request) {
+	items, err := h.servers.Enabled(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, newPage(items))
+}
+
 // mcp 是 agent 回连的 JSON-RPC 端点（/api/mcp/server/{token}）。
 //
 // 与数据库那条同形：DELETE 是 http 传输的会话关闭，回 200 即可；通知类

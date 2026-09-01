@@ -10,6 +10,7 @@ import type { ImageAttachment } from "@/types/acp"
 import { fileToImageAttachment } from "@/lib/files"
 import { api } from "@/lib/api"
 import { DbRefPicker } from "@/components/db/db-ref-picker"
+import { ServerRefPicker } from "@/components/servers/server-ref-picker"
 import { UploadDialog } from "@/components/chat/composer/upload-dialog"
 import { DirPicker } from "@/components/dir-picker/dir-picker"
 import {
@@ -59,13 +60,18 @@ export function SessionChat() {
   const [images, setImages] = useState<ImageAttachment[]>([])
   const [files, setFiles] = useState<string[]>([])
   const [dbRefs, setDbRefs] = useState<string[]>([])
+  const [serverRefs, setServerRefs] = useState<string[]>([])
 
   // 加引用的唯一入口：@ 菜单与 /db 面板都走它，重复的不再加一遍。
   const addDbRef = useCallback((ref: string) => {
     setDbRefs((prev) => (prev.includes(ref) ? prev : [...prev, ref]))
   }, [])
   const [filePickerOpen, setFilePickerOpen] = useState(false)
+  const addServerRef = useCallback((name: string) => {
+    setServerRefs((prev) => (prev.includes(name) ? prev : [...prev, name]))
+  }, [])
   const [dbRefPickerOpen, setDbRefPickerOpen] = useState(false)
+  const [serverRefPickerOpen, setServerRefPickerOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [cwdPickerOpen, setCwdPickerOpen] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -87,10 +93,17 @@ export function SessionChat() {
       !content &&
       images.length === 0 &&
       files.length === 0 &&
-      dbRefs.length === 0
+      dbRefs.length === 0 &&
+      serverRefs.length === 0
     )
       return
-    const input = { content, images, files, datasources: dbRefs }
+    const input = {
+      content,
+      images,
+      files,
+      datasources: dbRefs,
+      servers: serverRefs,
+    }
     if (isNew) {
       if (!newSession.selected || newSession.creating) return
       // 组件跨 /sessions/new → /sessions/:id 复用不重挂，不清会残留到会话页。
@@ -98,6 +111,7 @@ export function SessionChat() {
       setImages([])
       setFiles([])
       setDbRefs([])
+      setServerRefs([])
       void newSession.start(input)
       return
     }
@@ -105,6 +119,7 @@ export function SessionChat() {
     setImages([])
     setFiles([])
     setDbRefs([])
+    setServerRefs([])
     // 一轮进行中：插话不直接发，先排队浮在输入框上方，轮次结束自动发出；
     // 排队条上可「调整方向」立即插入当前轮，或撤回回填输入框。
     if (chat.busy) {
@@ -167,9 +182,12 @@ export function SessionChat() {
         setFiles((prev) => prev.filter((_, idx) => idx !== i)),
       removeDbRef: (i: number) =>
         setDbRefs((prev) => prev.filter((_, idx) => idx !== i)),
+      removeServerRef: (i: number) =>
+        setServerRefs((prev) => prev.filter((_, idx) => idx !== i)),
       openImagePicker: () => imageInputRef.current?.click(),
       openFilePicker: () => setFilePickerOpen(true),
       openDbRefPicker: () => setDbRefPickerOpen(true),
+      openServerRefPicker: () => setServerRefPickerOpen(true),
       openUpload: () => setUploadOpen(true),
       openCwdPicker: () => setCwdPickerOpen(true),
     }),
@@ -214,6 +232,7 @@ export function SessionChat() {
       images,
       files,
       dbRefs,
+      serverRefs,
       addDbRef,
       addImages,
       draftCwd,
@@ -228,6 +247,7 @@ export function SessionChat() {
       images,
       files,
       dbRefs,
+      serverRefs,
       addDbRef,
       addImages,
       draftCwd,
@@ -348,6 +368,13 @@ export function SessionChat() {
         draftCwd={isNew ? newSession.cwd.trim() : undefined}
         onOpenChange={setDbRefPickerOpen}
         onSelect={addDbRef}
+      />
+
+      {/* 引用一台服务器（adr-019）：只到机器这一级，路径由 AI 从代码推断。 */}
+      <ServerRefPicker
+        open={serverRefPickerOpen}
+        onOpenChange={setServerRefPickerOpen}
+        onSelect={addServerRef}
       />
 
       {/* 上传本机文件：落盘之后就是一条普通的 @ 文件引用。 */}

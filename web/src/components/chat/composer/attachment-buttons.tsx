@@ -8,7 +8,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { AtSignIcon, DatabaseIcon, FileIcon, FileUpIcon } from "lucide-react"
+import {
+  AtSignIcon,
+  DatabaseIcon,
+  FileIcon,
+  FileUpIcon,
+  HardDriveIcon,
+} from "lucide-react"
 
 /**
  * composer 左下角的附件圆钮与 @ 引用菜单。会话面板与草稿态共用
@@ -52,10 +58,12 @@ export const AttachmentButton = memo(function AttachmentButton({
 export const ReferenceMenu = memo(function ReferenceMenu({
   onPickFile,
   onPickDatabase,
+  onPickServer,
   onUpload,
 }: {
   onPickFile: () => void
   onPickDatabase: () => void
+  onPickServer: () => void
   onUpload: () => void
 }) {
   const { t } = useTranslation()
@@ -86,6 +94,10 @@ export const ReferenceMenu = memo(function ReferenceMenu({
         <DropdownMenuItem onClick={onPickDatabase}>
           <DatabaseIcon />
           {t("db.refDatabase")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onPickServer}>
+          <HardDriveIcon />
+          {t("server.refServer")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onUpload}>
           <FileUpIcon />

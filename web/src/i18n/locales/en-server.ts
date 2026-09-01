@@ -49,4 +49,7 @@ export const enServer = {
   pickManage: "Manage servers",
   pickHint:
     "The tunnel dials the host above from this machine (production databases are usually 127.0.0.1:3306).",
+  refServer: "Server",
+  refTitle: "Reference a server",
+  refHint: "Hand the AI one machine — it will target this host for the turn and actually look at its containers, logs and load with read-only tools.",
 } as const

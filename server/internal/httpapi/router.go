@@ -295,6 +295,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// agent 回连的 MCP 端点。**不能**放进 owner 专属前缀：agent 子进程
 	// 带的是会话凭证，不是浏览器身份。
 	api.HandleFunc("/api/mcp/server/{token}", servers.mcp)
+	// 会话侧清单：@ 引用选择器用，租户也能取（不含凭证）。
+	api.HandleFunc("GET /api/workspace/servers", servers.visible)
 
 	datasources := datasourceHandler{sources: svcs.DataSources, cwdOf: sessionCwd}
 	api.HandleFunc("GET /api/datasources", datasources.list)

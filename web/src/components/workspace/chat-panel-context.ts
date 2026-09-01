@@ -18,9 +18,11 @@ export interface ChatPanelData {
   files: string[]
   /** @ 引用的数据库（`<项目>/<环境>[/<库>[/<表>]]`）。 */
   dbRefs: string[]
+  serverRefs: string[]
   removeImage: (index: number) => void
   removeFile: (index: number) => void
   removeDbRef: (index: number) => void
+  removeServerRef: (index: number) => void
   /** 加一条数据库引用（/db 面板与 @ 菜单共用，重复的不再加）。 */
   addDbRef: (ref: string) => void
   addImages: (picked: File[]) => void
@@ -33,6 +35,7 @@ export interface ChatPanelData {
   openImagePicker: () => void
   openFilePicker: () => void
   openDbRefPicker: () => void
+  openServerRefPicker: () => void
   /** 打开上传本机文件的对话框。 */
   openUpload: () => void
   openCwdPicker: () => void

@@ -34,6 +34,7 @@ type ChatService struct {
 	// 只允许单向，而它反过来要用 SessionService 解析 token。
 	// 可为 nil（没有数据库能力，会话照常可用）。
 	sources DataSources
+	servers Servers
 
 	// mounters 是所有要给会话挂 MCP 工具面的能力（数据源、报告……）。
 	// 单独列一份而不是只认 sources：工具面不止一种，而它们要挂进的是
@@ -138,6 +139,32 @@ type DBReference struct {
 func (s *ChatService) SetDataSources(d DataSources) {
 	s.sources = d
 	s.mounters = append(s.mounters, d)
+}
+
+// Servers 是远程服务器能力的注入口（adr-019）。
+//
+// 与 DataSources 的形状一致，差别只在 Reference **不收 cwd**：服务器不做
+// 项目隔离，一条会话看得见全部启用的机器。
+type Servers interface {
+	MountsFor(ctx context.Context, sessionID uint, cwd, flavor string) ([]any, map[string]any, error)
+	Reference(ctx context.Context, refs []string) ([]ServerReference, error)
+}
+
+// ServerRefScheme 是 @ 服务器引用的 URI 前缀。转录重建靠它把服务器芯片
+// 与文件芯片分开（见 rebuild.go），所以它是两侧共享的契约、不是字面量。
+const ServerRefScheme = "acpp-server://"
+
+// ServerReference 是一条展开后的 @ 服务器引用，形状对齐 @ 数据库引用。
+type ServerReference struct {
+	// URI 进 resource 块的 uri（`acpp-server://<名字>`）。
+	URI  string
+	Text string
+}
+
+// SetServers 装上服务器能力面。它同时是挂载源，理由同 SetDataSources。
+func (s *ChatService) SetServers(sv Servers) {
+	s.servers = sv
+	s.mounters = append(s.mounters, sv)
 }
 
 // ReportOpened 广播「一份报告已经打开」，实现 report.Notifier。

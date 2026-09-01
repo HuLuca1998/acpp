@@ -41,9 +41,11 @@ export const ChatPanel = memo(function ChatPanel() {
     images,
     files,
     dbRefs,
+    serverRefs,
     removeImage,
     removeFile,
     removeDbRef,
+    removeServerRef,
     addDbRef,
     submit,
     sendSuggestion,
@@ -52,6 +54,7 @@ export const ChatPanel = memo(function ChatPanel() {
     openImagePicker,
     openFilePicker,
     openDbRefPicker,
+    openServerRefPicker,
     openUpload,
     openCwdPicker,
     addImages,
@@ -250,9 +253,11 @@ export const ChatPanel = memo(function ChatPanel() {
             images={images}
             files={files}
             dbRefs={dbRefs}
+            serverRefs={serverRefs}
             onRemoveImage={removeImage}
             onRemoveFile={removeFile}
             onRemoveDbRef={removeDbRef}
+            onRemoveServerRef={removeServerRef}
           />
         }
         onPasteImages={
@@ -333,6 +338,7 @@ export const ChatPanel = memo(function ChatPanel() {
         <ReferenceMenu
           onPickFile={openFilePicker}
           onPickDatabase={openDbRefPicker}
+          onPickServer={openServerRefPicker}
           onUpload={openUpload}
         />
       </Composer>

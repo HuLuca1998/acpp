@@ -12,7 +12,7 @@ import {
   AttachmentMedia,
   AttachmentTitle,
 } from "@/components/ui/attachment"
-import { DatabaseIcon, FileIcon, XIcon } from "lucide-react"
+import { DatabaseIcon, HardDriveIcon, FileIcon, XIcon } from "lucide-react"
 
 /**
  * 待发送附件预览条：图片缩略图 + @ 引用的文件与数据库，各带移除按钮。
@@ -25,19 +25,28 @@ export const AttachmentTray = memo(function AttachmentTray({
   images,
   files,
   dbRefs,
+  serverRefs,
   onRemoveImage,
   onRemoveFile,
   onRemoveDbRef,
+  onRemoveServerRef,
 }: {
   images: ImageAttachment[]
   files: string[]
   dbRefs: string[]
+  serverRefs: string[]
   onRemoveImage: (index: number) => void
   onRemoveFile: (index: number) => void
   onRemoveDbRef: (index: number) => void
+  onRemoveServerRef: (index: number) => void
 }) {
   const { t } = useTranslation()
-  if (images.length === 0 && files.length === 0 && dbRefs.length === 0) {
+  if (
+    images.length === 0 &&
+    files.length === 0 &&
+    dbRefs.length === 0 &&
+    serverRefs.length === 0
+  ) {
     return null
   }
 
@@ -84,6 +93,15 @@ export const AttachmentTray = memo(function AttachmentTray({
           icon={<DatabaseIcon />}
           full={ref}
           onRemove={() => onRemoveDbRef(index)}
+        />
+      ))}
+
+      {serverRefs.map((ref, index) => (
+        <RefChip
+          key={ref}
+          icon={<HardDriveIcon />}
+          full={ref}
+          onRemove={() => onRemoveServerRef(index)}
         />
       ))}
     </AttachmentGroup>

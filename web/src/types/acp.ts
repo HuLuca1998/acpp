@@ -399,6 +399,8 @@ export interface SendInput {
   files?: string[]
   /** @ 引用的数据库：`<项目>/<环境>[/<库>[/<表>]]`，现状由后端查出后嵌入。 */
   datasources?: string[]
+  /** @ 引用的服务器名（adr-019）。 */
+  servers?: string[]
 }
 
 /**
