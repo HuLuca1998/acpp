@@ -46,19 +46,28 @@ type DataSource struct {
 	Params string `gorm:"size:512" json:"params"`
 	Note   string `gorm:"size:512" json:"note"`
 
-	// SSH 隧道：开启后先连跳板机，再从跳板机拨 MySQL——所以 Host/Port 是
-	// **跳板机视角**的地址，线上库多半填 127.0.0.1:3306。
-	SSHEnabled bool   `gorm:"not null;default:false" json:"sshEnabled"`
-	SSHHost    string `gorm:"size:256" json:"sshHost"`
-	SSHPort    int    `gorm:"not null;default:22" json:"sshPort"`
-	SSHUser    string `gorm:"size:128" json:"sshUser"`
-	// SSHAuth 是验证方式：password / key / both（照 Navicat 的三选一）。
-	// 做成显式选择而不是「填了哪个用哪个」：两种凭证都留着、但这次只想用
-	// 公钥，是很常见的诉求，靠猜实现不了。
-	SSHAuth     string `gorm:"size:16;not null;default:password" json:"sshAuth"`
-	SSHPassword string `gorm:"size:512" json:"-"`
-	// SSHKeyPath 是私钥文件路径（不把私钥内容搬进库，权限跟着文件系统走）。
-	SSHKeyPath    string `gorm:"size:512" json:"sshKeyPath"`
+	// SSHEnabled 开启后先连跳板机，再从跳板机拨 MySQL——所以 Host/Port 是
+	// **跳板机视角**的地址，线上库多半填 127.0.0.1:3306。跳板机本身由
+	// ServerID 指向服务器表（adr-019）。
+	SSHEnabled bool `gorm:"not null;default:false" json:"sshEnabled"`
+	// ServerID 是充当跳板的那台服务器。SSHEnabled 为真时必填。
+	ServerID uint `gorm:"index" json:"serverId"`
+	// Server 是跳板机的配置，由读取路径按 ServerID 填充，**不入库**。
+	//
+	// 刻意不用 GORM 关联：关联会在迁移时建外键约束，而服务器被删掉时
+	// 我们要的是「这条数据源的隧道连不上」这个明确报错，不是把数据源
+	// 一起级联删掉。拨号前没填充就是程序错误，connect 会当场说清楚。
+	Server *Server `gorm:"-" json:"-"`
+
+	// 以下 SSH* 字段已废弃（adr-019 把跳板机配置搬进了 Server 表），
+	// 保留只为两件事：启动时的一次性迁移要读它们，以及版本回滚时旧代码
+	// 还能用。**新代码一律不读不写**——删列才是不可逆的，留着无害。
+	SSHHost       string `gorm:"size:256" json:"-"`
+	SSHPort       int    `gorm:"not null;default:22" json:"-"`
+	SSHUser       string `gorm:"size:128" json:"-"`
+	SSHAuth       string `gorm:"size:16;not null;default:password" json:"-"`
+	SSHPassword   string `gorm:"size:512" json:"-"`
+	SSHKeyPath    string `gorm:"size:512" json:"-"`
 	SSHPassphrase string `gorm:"size:512" json:"-"`
 
 	// ReadOnly 决定这条连接能不能改数据：只读时软件层拒绝执行写语句
@@ -75,11 +84,11 @@ type DataSource struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `gorm:"index" json:"updatedAt"`
 
-	// 以下不入库。Ref 是 `<项目>/<环境>` 派生标识；三个 Has* 是给前端表单的
+	// 以下不入库。Ref 是 `<项目>/<环境>` 派生标识；HasPassword 是给前端表单的
 	// 「有没有配」标志位——密码本身不出 API，但界面必须能区分「没设密码」
-	// 与「设了但看不见」。
-	Ref              string `gorm:"-" json:"ref"`
-	HasPassword      bool   `gorm:"-" json:"hasPassword"`
-	HasSSHPassword   bool   `gorm:"-" json:"hasSSHPassword"`
-	HasSSHPassphrase bool   `gorm:"-" json:"hasSSHPassphrase"`
+	// 与「设了但看不见」。ServerName 是跳板机的展示快照，省得前端为了显示
+	// 一个名字再拉一次服务器列表。
+	Ref         string `gorm:"-" json:"ref"`
+	HasPassword bool   `gorm:"-" json:"hasPassword"`
+	ServerName  string `gorm:"-" json:"serverName,omitempty"`
 }

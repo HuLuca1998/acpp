@@ -65,7 +65,10 @@ func connect(ctx context.Context, src *model.DataSource, database string) (*hand
 
 	h := &handle{}
 	if src.SSHEnabled {
-		t, err := dialTunnel(ctx, src)
+		if src.Server == nil {
+			return nil, fmt.Errorf("%w: 这条数据源开着 SSH 隧道但没有关联跳板机（去数据库配置里重新选一台服务器）", service.ErrInvalid)
+		}
+		t, err := dialTunnel(ctx, src.Server)
 		if err != nil {
 			return nil, err
 		}

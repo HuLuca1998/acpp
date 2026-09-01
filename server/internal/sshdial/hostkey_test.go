@@ -1,4 +1,4 @@
-package datasource
+package sshdial
 
 import (
 	"crypto/ed25519"

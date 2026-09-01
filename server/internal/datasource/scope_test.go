@@ -263,8 +263,7 @@ func TestService_Create_Validation(t *testing.T) {
 		{Project: "p", Env: "local", Host: "h", Database: "d"},                                   // 缺用户
 		{Project: "p", Env: "local", Host: "h", User: "u"},                                       // 缺库（一条连接必须绑一个库）
 		{Project: "a/b", Env: "local", Host: "h", User: "u", Database: "d"},                      // 项目含斜杠
-		{Project: "p", Env: "local", Host: "h", User: "u", Database: "d", SSHEnabled: ptr(true)}, // 开隧道但没跳板机
-		{Project: "p", Env: "local", Host: "h", User: "u", Database: "d", SSHAuth: "magic"},      // 未知验证方式
+		{Project: "p", Env: "local", Host: "h", User: "u", Database: "d", SSHEnabled: ptr(true)}, // 开隧道但没选跳板机
 	}
 	for i, in := range bad {
 		if _, err := svc.Create(ctx, in); err == nil {

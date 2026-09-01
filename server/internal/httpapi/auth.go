@@ -132,6 +132,9 @@ func isOwnerOnly(r *http.Request) bool {
 		// 数据库连接里躺着生产库凭证，整个面（含只读的库表浏览）都是
 		// owner 的；会话侧那几条按项目过滤的另有 owner 判定。
 		strings.HasPrefix(path, "/api/datasources"),
+		// 服务器记录里躺着生产机的 SSH 凭证与私钥路径，管理面整个 owner 专属。
+		// 会话侧 AI 用的是 MCP 工具面（/api/mcp/… 前缀），不走这里。
+		strings.HasPrefix(path, "/api/servers"),
 		// 工具台能对着线上库发任意 SQL，权限等同数据库页。注意别写成
 		// /api/mcp——agent 回连端点在那个前缀下，且必须保持公开。
 		strings.HasPrefix(path, "/api/tools"),

@@ -22,6 +22,7 @@ import (
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
 	"acpp/server/internal/project"
+	"acpp/server/internal/remote"
 	"acpp/server/internal/report"
 	"acpp/server/internal/service"
 	"acpp/server/internal/stream"
@@ -117,7 +118,19 @@ func run() error {
 	// 工具调用记录：MCP 工具面每被调一次就落一条，工具台读它。
 	// 观测是旁路，datasource 只认得 Calls 接口。
 	mcpCalls := mcpcall.NewService(gdb)
-	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr).WithCalls(mcpCalls)
+
+	// 服务器面（adr-019）：既是 AI 的只读观察目标，也是数据源的 SSH 跳板。
+	// 先于 datasource 构造，后者要借它取跳板机配置。
+	remoteService := remote.NewService(gdb)
+	// 把老数据源里各存一份的 SSH 跳板配置搬进服务器表。失败不挡启动：
+	// 搬不动的那条会在真的要连时报「没有关联跳板机」，比进程起不来好定位。
+	if err := remoteService.MigrateFromDataSources(context.Background()); err != nil {
+		slog.Error("迁移 SSH 跳板配置失败（adr-019）", "err", err)
+	}
+
+	datasourceService := datasource.NewService(gdb, sessionService, cfg.Addr).
+		WithCalls(mcpCalls).
+		WithServers(remoteService)
 	chatService.SetDataSources(datasourceService)
 
 	// 报告工具面：agent 写完一份 HTML 报告后调 report_open 把它摊开给用户。
@@ -241,6 +254,7 @@ func run() error {
 		Tenants:     tenantService,
 		Projects:    projectService,
 		DataSources: datasourceService,
+		Servers:     remoteService,
 		Reports:     reportService,
 		MCPCalls:    mcpCalls,
 		Discord:     discordService,

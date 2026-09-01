@@ -13,6 +13,7 @@ import (
 	"acpp/server/internal/discord"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
+	"acpp/server/internal/remote"
 	"acpp/server/internal/report"
 	"acpp/server/internal/service"
 	"acpp/server/internal/stream"
@@ -36,7 +37,10 @@ type Services struct {
 	Tenants     *service.TenantService
 	Projects    *project.Service
 	DataSources *datasource.Service
-	Reports     *report.Service
+	// Servers 是远程服务器的配置面（adr-019）：数据源的 SSH 跳板与 AI 的
+	// 只读观察工具共用同一份记录。
+	Servers *remote.Service
+	Reports *report.Service
 	// MCPCalls 是 MCP 工具调用的观测记录，工具台读它。
 	MCPCalls *mcpcall.Service
 	// Notices 是全局通知广播口，全局事件流从这里取本人名下的通知。
@@ -279,6 +283,15 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 数据库数据源：管理面是 owner 专属（isOwnerOnly 按前缀覆盖），
 	// 会话面按 cwd 所属项目过滤——界面能看到的范围与 AI 能操作的范围
 	// 是同一个（datasource.Service.ForCwd 是唯一执行点）。
+	servers := serverHandler{servers: svcs.Servers}
+	api.HandleFunc("GET /api/servers", servers.list)
+	api.HandleFunc("POST /api/servers", servers.create)
+	api.HandleFunc("POST /api/servers/probe", servers.probe)
+	api.HandleFunc("GET /api/servers/{id}", servers.get)
+	api.HandleFunc("PUT /api/servers/{id}", servers.update)
+	api.HandleFunc("DELETE /api/servers/{id}", servers.remove)
+	api.HandleFunc("POST /api/servers/{id}/test", servers.test)
+
 	datasources := datasourceHandler{sources: svcs.DataSources, cwdOf: sessionCwd}
 	api.HandleFunc("GET /api/datasources", datasources.list)
 	api.HandleFunc("POST /api/datasources", datasources.create)

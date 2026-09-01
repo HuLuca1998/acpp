@@ -57,26 +57,29 @@ func navicatURI(src *model.DataSource) string {
 		[2]string{"Conn.Port", strconv.Itoa(port)},
 	)
 
-	if src.SSHEnabled {
-		sshPort := src.SSHPort
+	// SSH 段的来源是关联的服务器（adr-019）：没关联上就整段不写——
+	// 导一条指向不存在跳板机的 URI，比不写这段更容易误导人。
+	if src.SSHEnabled && src.Server != nil {
+		ssh := src.Server
+		sshPort := ssh.Port
 		if sshPort <= 0 {
 			sshPort = 22
 		}
 		pairs = append(pairs,
-			[2]string{"Conn.SSH.AuthenticationMethod", navicatAuthName(src.SSHAuth)},
-			[2]string{"Conn.SSH.Host", src.SSHHost},
+			[2]string{"Conn.SSH.AuthenticationMethod", navicatAuthName(ssh.Auth)},
+			[2]string{"Conn.SSH.Host", ssh.Host},
 			[2]string{"Conn.SSH.Port", strconv.Itoa(sshPort)},
-			[2]string{"Conn.SSH.Username", src.SSHUser},
+			[2]string{"Conn.SSH.Username", ssh.User},
 		)
-		if src.SSHAuth != SSHAuthKey && src.SSHPassword != "" {
-			pairs = append(pairs, [2]string{"Conn.SSH.Password", src.SSHPassword})
+		if ssh.Auth != SSHAuthKey && ssh.Password != "" {
+			pairs = append(pairs, [2]string{"Conn.SSH.Password", ssh.Password})
 		}
-		if src.SSHAuth != SSHAuthPassword {
-			if src.SSHKeyPath != "" {
-				pairs = append(pairs, [2]string{"Conn.SSH.PrivateKey", src.SSHKeyPath})
+		if ssh.Auth != SSHAuthPassword {
+			if ssh.KeyPath != "" {
+				pairs = append(pairs, [2]string{"Conn.SSH.PrivateKey", ssh.KeyPath})
 			}
-			if src.SSHPassphrase != "" {
-				pairs = append(pairs, [2]string{"Conn.SSH.Passphrase", src.SSHPassphrase})
+			if ssh.Passphrase != "" {
+				pairs = append(pairs, [2]string{"Conn.SSH.Passphrase", ssh.Passphrase})
 			}
 		}
 	}
@@ -124,19 +127,20 @@ func standardURI(src *model.DataSource) string {
 			q = parsed
 		}
 	}
-	if src.SSHEnabled && src.SSHHost != "" {
-		sshPort := src.SSHPort
+	if src.SSHEnabled && src.Server != nil {
+		ssh := src.Server
+		sshPort := ssh.Port
 		if sshPort <= 0 {
 			sshPort = 22
 		}
-		q.Set("sshHost", src.SSHHost)
+		q.Set("sshHost", ssh.Host)
 		q.Set("sshPort", strconv.Itoa(sshPort))
-		if src.SSHUser != "" {
-			q.Set("sshUser", src.SSHUser)
+		if ssh.User != "" {
+			q.Set("sshUser", ssh.User)
 		}
-		q.Set("sshAuth", firstNonEmpty(src.SSHAuth, SSHAuthPassword))
-		if src.SSHAuth != SSHAuthPassword && src.SSHKeyPath != "" {
-			q.Set("sshKeyPath", src.SSHKeyPath)
+		q.Set("sshAuth", firstNonEmpty(ssh.Auth, SSHAuthPassword))
+		if ssh.Auth != SSHAuthPassword && ssh.KeyPath != "" {
+			q.Set("sshKeyPath", ssh.KeyPath)
 		}
 	}
 	u.RawQuery = q.Encode()
