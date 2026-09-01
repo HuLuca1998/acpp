@@ -25,7 +25,9 @@ const mcpServerName = "acpp-db"
 func sourceArg() map[string]any {
 	return map[string]any{
 		"type": "string",
-		"description": "数据源，填环境名（如 dev）或 项目/环境（如 pp-game/dev）。" +
+		"description": "数据源。填环境名就够了（如 `pre`）；" +
+			"要写全就用 db_sources 列出来的完整标识（如 `BDBGAME2024/pp-game/pre`" +
+			"——项目本身是 `<组织>/<仓库>`，所以那一段带斜杠）。" +
 			"当前项目只有一个数据源时可省略。每个数据源固定对应一个库，不用也不能另外指定库。",
 	}
 }

@@ -168,6 +168,12 @@ function DataSourceForm({
     readOnly: source?.readOnly ?? prefill?.readOnly ?? true,
     disabled: source?.disabled ?? false,
   }))
+  // 填的项目在工作区里找不到：不是错误（可能还没 clone），但值得提醒——
+  // 对不上就意味着这条连接不会出现在任何会话的数据源清单里。
+  const unknownProject =
+    form.project.trim() !== "" &&
+    projects.length > 0 &&
+    !projects.some((p) => p.toLowerCase() === form.project.trim().toLowerCase())
   const [saving, setSaving] = useState(false)
   // 只读建号语句里现场生成的密码，对话框打开期间保持不变。
   const [genPassword] = useState(generatePassword)
@@ -330,6 +336,15 @@ function DataSourceForm({
                     </ComboboxList>
                   </ComboboxContent>
                 </Combobox>
+                {/* 项目名与工作区里的仓库对不上时提醒一句。
+                    **不拦**——数据库先于代码存在是常态（还没 clone 就先配好
+                    连接），但填错一个字母的后果是这条连接在所有会话里都
+                    「不存在」，而那时人只会觉得功能坏了。 */}
+                {unknownProject ? (
+                  <p className="text-xs text-warning">
+                    {t("db.projectUnknown", { name: form.project })}
+                  </p>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel htmlFor="ds-env">{t("db.env")}</FieldLabel>

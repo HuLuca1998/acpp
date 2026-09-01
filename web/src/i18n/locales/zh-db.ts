@@ -37,6 +37,7 @@ export const zhDb = {
     "按项目与环境管理 MySQL 连接。会话只看得到自己项目的数据源——AI 与斜杠命令都一样。",
   add: "新建连接",
   project: "项目",
+  projectUnknown: "工作区里还没有「{{name}}」这个项目——克隆下来之后，那里开的会话就能用上这条连接。",
   projectPlaceholder: "如：pp-game",
   projectHint: "建议与工作区里的项目目录同名，会话靠它匹配可用连接。",
   env: "环境",

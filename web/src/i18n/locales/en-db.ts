@@ -38,6 +38,7 @@ export const enDb = {
     "Manage MySQL connections by project and environment. A session only sees its own project's sources — for you and for the AI alike.",
   add: "New connection",
   project: "Project",
+  projectUnknown: "No project named \u201c{{name}}\u201d in the workspace yet — once it is cloned, sessions opened there will pick this connection up.",
   projectPlaceholder: "e.g. pp-game",
   projectHint:
     "Match your workspace project directory name; sessions use it to find their connections.",
