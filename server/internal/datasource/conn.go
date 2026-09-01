@@ -66,7 +66,15 @@ func connect(ctx context.Context, src *model.DataSource, database string) (*hand
 	h := &handle{}
 	if src.SSHEnabled {
 		if src.Server == nil {
-			return nil, fmt.Errorf("%w: 这条数据源开着 SSH 隧道但没有关联跳板机（去数据库配置里重新选一台服务器）", service.ErrInvalid)
+			// 两种成因，说反了会让人白改半天配置：
+			//   ServerID == 0 → 用户确实没选跳板机；
+			//   ServerID != 0 → 那台机器被删了，**或者**这条调用路径忘了
+			//     填充 Server（现构造的 probe 记录不走读取路径，漏过一次）。
+			if src.ServerID == 0 {
+				return nil, fmt.Errorf("%w: 这条数据源开着 SSH 隧道但没选跳板机（去数据库配置的 SSH 页签选一台服务器）", service.ErrInvalid)
+			}
+			return nil, fmt.Errorf("%w: 跳板机 #%d 取不到——它可能已被删除；若配置看着正常，那就是这条调用路径没填充跳板机（datasource.Service.finish）",
+				service.ErrInvalid, src.ServerID)
 		}
 		t, err := dialTunnel(ctx, src.Server)
 		if err != nil {

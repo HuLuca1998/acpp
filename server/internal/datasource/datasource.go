@@ -338,6 +338,10 @@ func (s *Service) ProbeDatabases(ctx context.Context, id uint, in Input) ([]Data
 			return nil, err
 		}
 	}
+	// probe 是现构造的记录，**不经过任何读取路径**，所以跳板机要在这里
+	// 自己填上——漏了的话，开着隧道的连接在「选库」这一步就报「没有关联
+	// 跳板机」，而用户明明刚在 SSH 页签里选了一台。
+	s.finish(ctx, &probe)
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

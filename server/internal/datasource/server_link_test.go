@@ -109,6 +109,56 @@ func TestService_Finish_MissingServerDegrades(t *testing.T) {
 	}
 }
 
+// 契约：**现构造的探测记录也要填上跳板机**。
+//
+// ProbeDatabases 走的是临时 probe 而不是读取路径，漏填时的症状很误导：
+// 用户刚在 SSH 页签选好跳板机，点「选择数据库」却被告知「没有关联跳板机」。
+// 真机上就是这么撞出来的。
+func TestService_ProbeDatabases_AttachesServer(t *testing.T) {
+	svc := testService(t, t.TempDir())
+	ctx := context.Background()
+	fake := &fakeServers{byID: map[uint]*model.Server{
+		7: {ID: 7, Name: "jump", Host: "127.0.0.1", Port: 1, User: "root", Auth: "password", Password: "x"},
+	}}
+	svc.WithServers(fake)
+
+	// 端口 1 上没有 ssh，拨号必然失败——要的是**失败的原因**：
+	// 必须是连不上跳板机，而不是「没有关联跳板机」。
+	_, err := svc.ProbeDatabases(ctx, 0, Input{
+		Project: "p", Env: "local", Host: "127.0.0.1", User: "root",
+		SSHEnabled: ptr(true), ServerID: ptr(uint(7)),
+	})
+	if err == nil {
+		t.Fatal("连不通的跳板机应当报错")
+	}
+	if strings.Contains(err.Error(), "没选跳板机") || strings.Contains(err.Error(), "取不到") {
+		t.Fatalf("跳板机应已被填充，报错不该是「没有关联」: %v", err)
+	}
+	if fake.calls == 0 {
+		t.Error("应当去查过服务器表")
+	}
+}
+
+// 契约：拨号前缺跳板机时，报错要能区分「用户没选」与「代码没填充」。
+// 说反了会让人白改半天配置。
+func TestConnect_MissingServerErrors(t *testing.T) {
+	ctx := context.Background()
+
+	_, err := connect(ctx, &model.DataSource{
+		Host: "127.0.0.1", User: "u", Database: "d", SSHEnabled: true,
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), "没选跳板机") {
+		t.Errorf("ServerID 为 0 时应说「没选」: %v", err)
+	}
+
+	_, err = connect(ctx, &model.DataSource{
+		Host: "127.0.0.1", User: "u", Database: "d", SSHEnabled: true, ServerID: 42,
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), "#42") {
+		t.Errorf("ServerID 非 0 却没填充时，报错要带上那个 id: %v", err)
+	}
+}
+
 // 契约：不开隧道的数据源不查服务器表，也不该因为没配服务器面而出问题。
 func TestService_Finish_SkipsWhenNoTunnel(t *testing.T) {
 	svc := testService(t, t.TempDir())
