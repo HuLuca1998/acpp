@@ -56,11 +56,16 @@ export function groupSessionsByCwd(
       Date.parse(b.sessions[0].updatedAt) - Date.parse(a.sessions[0].updatedAt)
   )
 
-  // 标签只用文件夹名，不写路径：侧边栏窄，路径一长就被截断，反而不如
-  // 一个短名 + 悬停看完整路径来得清楚。
-  return groups
-    .slice(0, maxGroups)
-    .map((group) => ({ ...group, label: baseName(group.cwd) }))
+  // 标签优先用**项目**（`<组织>/<仓库>`）：项目就是一个 git 仓库，而同名
+  // 仓库在不同组织下很常见——只显示文件夹名时侧边栏会并排出现两个 `acpp`，
+  // 看不出谁是谁。项目名带着组织，一眼就能分开。
+  //
+  // cwd 不在任何仓库里（会话可以开在任意目录）时退回文件夹名：那时它不属于
+  // 任何项目，硬凑一个组织名反而是编的。完整路径仍在悬停提示里。
+  return groups.slice(0, maxGroups).map((group) => ({
+    ...group,
+    label: group.sessions[0]?.project?.trim() || baseName(group.cwd),
+  }))
 }
 
 function baseName(path: string): string {

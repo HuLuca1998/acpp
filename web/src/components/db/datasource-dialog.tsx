@@ -12,6 +12,7 @@ import type {
   ServerInput,
 } from "@/types/acp"
 import { Hint } from "@/components/hint"
+import { PasswordInput } from "@/components/password-input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -356,13 +357,18 @@ function DataSourceForm({
                 <FieldLabel htmlFor="ds-password">
                   {t("db.password")}
                 </FieldLabel>
-                <Input
+                <PasswordInput
                   id="ds-password"
-                  type="password"
-                  autoComplete="off"
                   value={form.password}
                   placeholder={source?.hasPassword ? t("db.passwordKeep") : ""}
-                  onChange={(e) => set("password", e.target.value)}
+                  onChange={(v) => set("password", v)}
+                  // 编辑已存连接时框里是空的，点「看一眼」把它取回来——
+                  // 同一台库上再开一个连接时要照抄的就是这个值。
+                  fetchStored={
+                    source?.hasPassword
+                      ? async () => (await api.datasources.secret(source.id)).password
+                      : undefined
+                  }
                 />
               </Field>
             </div>

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -28,6 +29,7 @@ func TestProjectCandidates(t *testing.T) {
 			cwd:  filepath.Join(root, "BDBGAME2024", "pp-game"),
 			want: []string{"BDBGAME2024/pp-game", "pp-game"},
 		},
+
 		{
 			name: "项目子目录同样归属该项目",
 			cwd:  filepath.Join(root, "BDBGAME2024", "pp-game", "server", "internal"),
@@ -290,5 +292,59 @@ func TestProjectCandidatesBranchSuffix(t *testing.T) {
 	}
 	if !want["pp-game"] {
 		t.Errorf("带 @分支 后缀的 workdir 应给出裸仓库名候选，got %v", got)
+	}
+}
+
+// 契约：**项目就是一个 git 仓库**，身份取自 origin 而不是它落在哪儿。
+//
+// 同一个仓库克隆到租户目录、discord 工作树、owner 自己的目录，都该推出
+// 同一个项目名——否则同一条数据源在不同位置的会话里时有时无。
+func TestProjectCandidates_RepoIdentity(t *testing.T) {
+	root := t.TempDir()
+
+	// 两个位置，同一个远端：租户目录下的克隆，与 owner 自己那份。
+	for _, rel := range []string{
+		filepath.Join("orange", "BDBGAME2024", "pp-game"),
+		filepath.Join("mine", "pp-game-copy"),
+	} {
+		dir := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg := "[remote \"origin\"]\n\turl = git@github.com:BDBGAME2024/pp-game.git\n"
+		if err := os.WriteFile(filepath.Join(dir, ".git", "config"), []byte(cfg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got := projectCandidates(dir, root)
+		if !slices.Contains(got, "BDBGAME2024/pp-game") {
+			t.Errorf("%s 应推出仓库身份 BDBGAME2024/pp-game，得到 %v", rel, got)
+		}
+	}
+
+	// 项目子目录同样归属那个仓库，且不能冒出用路径拼出来的假项目名。
+	sub := filepath.Join(root, "orange", "BDBGAME2024", "pp-game", "server", "internal")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := projectCandidates(sub, root)
+	if !slices.Contains(got, "BDBGAME2024/pp-game") {
+		t.Errorf("子目录也该归属该仓库: %v", got)
+	}
+	if slices.Contains(got, "server/internal") {
+		t.Errorf("路径后两段不是项目名，不该出现: %v", got)
+	}
+}
+
+// 契约：没有 origin 的仓库（本地新建、还没关联远端）退回目录名——
+// 那时也没有更好的答案，而目录名至少是人给它起的。
+func TestProjectCandidates_NoRemote(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "mine", "scratch")
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := projectCandidates(dir, root)
+	if !slices.Contains(got, "scratch") {
+		t.Errorf("没有远端时应退回目录名: %v", got)
 	}
 }

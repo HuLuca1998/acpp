@@ -96,6 +96,13 @@ export const connectionsApi = {
     /** 拨一次真连接确认配置可用，失败不抛异常而是返回 ok:false + 原话。 */
     test: (id: number) =>
       request<DataSourceTest>(`/datasources/${id}/test`, { method: "POST" }),
+    /**
+     * 取明文密码（owner 专属）。只在两处用：密码框的「看一眼」，
+     * 与「复制连接」——同一台库上开几个连接时账号密码是同一套，
+     * 让人再抄一遍反而更容易抄错。
+     */
+    secret: (id: number) =>
+      request<{ password: string }>(`/datasources/${id}/secret`),
     /** 导出连接 URI（Navicat 与通用两种写法，**含密码**）。 */
     uri: (id: number) => request<DataSourceUri>(`/datasources/${id}/uri`),
     databases: (id: number) =>

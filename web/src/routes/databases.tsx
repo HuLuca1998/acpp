@@ -69,11 +69,19 @@ export function Databases() {
   } = usePagedData((params) => api.datasources.list(params))
 
   // 项目名建议来自工作区已有的仓库；拉不到不影响填写（自由输入）。
+  //
+  // 用 `repo`（git 仓库身份）而不是 `name`（磁盘位置）：同一个仓库克隆到
+  // 租户目录、discord 工作树、owner 自己的目录，位置各不相同但项目是同一个，
+  // 按位置给下拉会列出一串重复项，选中的值还匹配不上别处开的会话。
   const { data: projects } = useAsyncData(
     () =>
       api.projects
         .list()
-        .then((res) => res.items.map((p) => p.name.split("/").pop() ?? p.name))
+        .then((res) =>
+          [...new Set(res.items.map((p) => p.repo || p.name))]
+            .filter(Boolean)
+            .sort()
+        )
         .catch(() => []),
     []
   )

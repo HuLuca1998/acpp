@@ -307,6 +307,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/datasources/{id}/test", datasources.test)
 	// 连接 URI 导出（带密码，owner 专属面）。导入在前端解析，不经后端。
 	api.HandleFunc("GET /api/datasources/{id}/uri", datasources.uri)
+	// 明文密码：密码框的「看一眼」与「复制连接」用（owner 专属前缀内）。
+	api.HandleFunc("GET /api/datasources/{id}/secret", datasources.secret)
 	// 配置页选库用：唯一不受「一条连接一个库」约束的读法（那时还没绑定）。
 	api.HandleFunc("POST /api/datasources/probe-databases", datasources.probeDatabases)
 	// 配置页 SSH 页签单独测隧道：不碰 MySQL，报错就知道卡在哪层。

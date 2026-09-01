@@ -1,9 +1,10 @@
 package datasource
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
+
+	"acpp/server/internal/gitrepo"
 )
 
 // 项目归属：会话只能看见并操作**自己所在项目**的数据源。
@@ -60,7 +61,7 @@ func projectCandidates(cwd, workspaceRoot string) []string {
 	if root := filepath.Clean(workspaceRoot); root != "." && within(root, cwd) {
 		rel, err := filepath.Rel(root, cwd)
 		if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-			rel = trimWorktreeSeg(rel)
+			rel = gitrepo.TrimWorktreeSeg(rel)
 			add(rel)
 			add(filepath.Base(rel))
 			// 老 discord 工作区命名是 <仓库>@<分支>（新布局改成了工作树，
@@ -76,44 +77,22 @@ func projectCandidates(cwd, workspaceRoot string) []string {
 	// git 仓库目录名，仍然对得上「项目」这个概念。工作树的 .git 是文件，
 	// 同样会被 nearestRepo 认出来，所以这里也要剥一次工作树段——否则
 	// `<项目>/.worktree/live` 会把分支名 live 当成项目名。
-	if repo := nearestRepo(cwd); repo != "" {
-		base := filepath.Base(trimWorktreeSeg(repo))
+	if repo := gitrepo.NearestRepo(cwd); repo != "" {
+		repo = gitrepo.TrimWorktreeSeg(repo)
+		base := filepath.Base(repo)
 		add(base)
 		if i := strings.Index(base, "@"); i > 0 {
 			add(base[:i])
 		}
+		// **项目就是一个 git 仓库**：身份取自 origin 的 URL（`<组织>/<仓库>`），
+		// 与它被克隆到哪儿无关——同一个仓库在租户目录下、在 discord 工作树里、
+		// 在 owner 自己的目录里，都该匹配到同一条数据源。
+		//
+		// 这也是数据库页项目下拉给的那个值。**不能拿路径的后两段代替**：
+		// 工作区里那几层可能是租户名、分组目录，也可能压根没有组织层。
+		add(gitrepo.NameOfDir(repo))
 	}
 	return names
-}
-
-// worktreeSegs 是「工作树容器目录」的两种写法：网页会话的隔离工作区是
-// `<项目>/worktrees/<名字>`，discord 频道工作树是 `<项目>/.worktree/<分支>`。
-// 两种都归属上面那个项目——在工作树里干活的会话和在主仓库里的是同一个项目。
-var worktreeSegs = []string{"worktrees", ".worktree"}
-
-// trimWorktreeSeg 把路径截到工作树容器目录之前（不含），没有就原样返回。
-func trimWorktreeSeg(path string) string {
-	for _, seg := range worktreeSegs {
-		if i := strings.Index(path, string(filepath.Separator)+seg+string(filepath.Separator)); i >= 0 {
-			return path[:i]
-		}
-	}
-	return path
-}
-
-// nearestRepo 向上找最近的含 .git 的目录（worktree 的 .git 是文件，同样算）。
-func nearestRepo(dir string) string {
-	for i := 0; i < 64; i++ {
-		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	return ""
 }
 
 // within 判断 path 是否在 root 之内（含 root 自身）。

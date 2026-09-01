@@ -168,6 +168,32 @@ export function Sessions() {
         ] satisfies SessionColumn[])
       : []),
     {
+      id: "project",
+      accessorFn: (session: Session) => session.project ?? "",
+      // **不可排序**：项目不是数据库列，是每次列表时从 cwd 现推的
+      // （见 service.SessionView.Project）。给个排序箭头点下去却没反应，
+      // 比没有箭头更糟。
+      enableSorting: false,
+      header: () => t("sessions.project"),
+      meta: { label: t("sessions.project") },
+      // 项目就是一个 git 仓库（`<组织>/<仓库>`），与它克隆到哪儿无关——
+      // 所以同一个项目在不同位置开的会话，这一列是同一个值。
+      // 不在任何仓库里的会话留空，不拿目录名硬凑。
+      cell: ({ row }) =>
+        row.original.project ? (
+          <span
+            title={row.original.cwd}
+            className="truncate font-mono text-xs text-muted-foreground"
+          >
+            {row.original.project}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/50">
+            {t("common.none")}
+          </span>
+        ),
+    },
+    {
       id: "message_count",
       accessorFn: (session: Session) => session.messageCount,
       header: ({ column }) => (

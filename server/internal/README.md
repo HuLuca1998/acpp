@@ -13,7 +13,7 @@
 | acp | ACP 协议客户端：JSON-RPC 连接、会话池、adapter（claude/codex/generic 差异）、技能隔离注入。不 import 本项目其他包 | 叶子 |
 | config | 环境变量配置、数据目录准备与迁移、路径工具 | 叶子 |
 | sshdial | SSH 拨号：认证方式组装（密码/公钥/both，公钥留空走 ssh-agent）、known_hosts 指纹校验（accept-new 语义）、连接建立。数据源的隧道与服务器观察共用。不 import 本项目其他包，参数类错误用自带的 ErrInvalid 表达 | 叶子 |
-| gitrepo | git 仓库地址的校验（ValidCloneURL，挡 file:// 等危险传输）与 `<组织>/<仓库>` 命名推导（Name）。克隆类功能共用，不 import 本项目其他包 | 叶子 |
+| gitrepo | git 仓库的身份与地址：地址校验（ValidCloneURL，挡 file:// 等危险传输）、URL → `<组织>/<仓库>`（Name）、**目录 → 项目**（ProjectOf：往上找仓库、读 origin、剥工作树段）。**「项目就是一个 git 仓库」这条定义的执行点**，克隆、数据源归属、会话归属共用；不 import 本项目其他包 | 叶子 |
 | db | GORM 连接与 AutoMigrate | 基础 |
 | model | 数据模型（Agent / Session / Message / SkillUsage / MCPCall）与 JSON 字段类型 | 基础 |
 | transcript | 会话转录 JSONL 的追加与读取（对话内容唯一的持久化） | 叶子 |

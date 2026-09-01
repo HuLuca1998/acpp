@@ -217,6 +217,11 @@ export interface Session {
   acpSessionId: string
   title: string
   cwd: string
+  /**
+   * 这条会话属于哪个项目——**项目就是一个 git 仓库**（`<组织>/<仓库>`，
+   * 取自 origin），与它被克隆到哪儿无关。cwd 不在任何仓库里时为空。
+   */
+  project?: string
   state: SessionState
   stopReason: string
   messageCount: number
@@ -711,8 +716,17 @@ export interface Tenant {
 }
 
 /** 工作区里的一个仓库目录，名字是相对工作区根的路径（`组织/仓库`）。 */
+/**
+ * 工作区里的一个项目。
+ *
+ * 两个名字要分清：`name` 是**位置**（相对工作区根的路径，租户目录与分组
+ * 目录都在里面），`repo` 是**身份**（这个项目是哪个 git 仓库，取自 origin）。
+ * 同一个仓库克隆到几个位置就有几条 Project，但 repo 相同——**项目就是一个
+ * git 仓库，与它落在哪儿无关**。数据源的项目字段认的是 repo。
+ */
 export interface Project {
   name: string
+  repo?: string
   path: string
   remote?: string
   branch?: string

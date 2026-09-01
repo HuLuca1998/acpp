@@ -32,7 +32,7 @@
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |
 | session-activity.ts | 会话活跃态的进程内广播：会话页把「正在跑一轮」告诉侧边栏，免去为一个状态点轮询 | `markSessionActive`、`subscribeSessionActivity`、`getActiveSessions` |
-| session-groups.ts | 会话按工作目录分组（adr-007）：cwd 分桶、组内取最新、最多 5 组 × 5 条 | `groupSessionsByCwd`、`SessionGroup`、`MAX_GROUPS`                   |
+| session-groups.ts | 会话按工作目录分组（adr-007）：cwd 分桶、组内取最新、最多 5 组 × 5 条；标签用**项目**（git 仓库身份）而不是文件夹名——同名仓库在不同组织下并排时分不开 | `groupSessionsByCwd`、`SessionGroup`、`MAX_GROUPS`                   |
 | desktop.ts        | 桌面壳（macOS app）的原生通道：环境判定、启动偏好、系统通知（授权/发送/撤回），走 Electron 壳 preload 注入的消息口而非 HTTP | `isDesktop`、`desktopLaunch`、`desktopNotify`、`NotifyStatus`、`NOTIFICATION_ACTION_EVENT` |
 | notify/prefs.ts   | 通知偏好读写（localStorage）：这台设备上的这个人想不想被打扰，不跨设备同步 | `loadNotifyPrefs`、`saveNotifyPrefs`、`NotifyPrefs` |
 | notify/in-page.ts | 页内通知形式（浏览器唯一可用的手段）：标题闪烁、Web Audio 合成提示音、「用户在不在看」判定 | `flashTitle`、`stopFlashTitle`、`playChime`、`isUserWatching` |

@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/gitrepo"
 	"acpp/server/internal/model"
 )
 
@@ -49,6 +50,13 @@ type SessionView struct {
 	// 里，见 model.Tenant 的注释）。租户只看得见自己的会话，这个字段对他
 	// 恒为自己，真正用它的是 owner 的列表。
 	TenantName string `json:"tenantName,omitempty"`
+	// Project 是这条会话属于哪个项目——**项目就是一个 git 仓库**
+	// （`<组织>/<仓库>`，取自 origin），与它被克隆到哪儿无关。cwd 不在任何
+	// 仓库里时为空，那时它不属于任何项目。
+	//
+	// 不落库：cwd 是事实源，项目由它现推。会话建好之后有人改了远端或
+	// 挪了目录，下次列表就是新的答案，不会留一份对不上的旧快照。
+	Project string `json:"project,omitempty"`
 }
 
 // SessionInput 是创建会话的入参。
@@ -101,14 +109,34 @@ func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, pa
 	}
 
 	views := make([]SessionView, 0, len(sessions))
+	// 项目按 cwd 缓存：一页 50 条会话通常只落在几个工作目录上，同一个目录
+	// 没必要反复往上找 .git 再读 config。（git 分支那一项干脆不在列表里读，
+	// 见下面的注释——项目不同，它是列表与侧栏的主要分组依据。）
+	projects := map[string]string{}
 	for i := range sessions {
 		// 列表不读 git 分支：只有会话页底部的状态条用得上它（拿的是
 		// 单条 Get），而侧栏每次换路由都要拉一页 50 条——那就是每次导航
 		// 一百多次多余的磁盘读。
-		views = append(views, *s.toView(&sessions[i], false))
+		view := *s.toView(&sessions[i], false)
+		view.Project = cachedProjectOf(projects, view.Cwd)
+		views = append(views, view)
 	}
 	s.fillTenantNames(ctx, views)
 	return views, total, nil
+}
+
+// cachedProjectOf 推一个工作目录属于哪个项目，同一目录只算一次。
+func cachedProjectOf(cache map[string]string, cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return ""
+	}
+	if name, ok := cache[cwd]; ok {
+		return name
+	}
+	name := gitrepo.ProjectOf(cwd)
+	cache[cwd] = name
+	return name
 }
 
 // fillTenantNames 批量补上创建者名字（owner 的会话留空）。
@@ -188,6 +216,7 @@ func (s *SessionService) Get(ctx context.Context, scope Scope, id uint) (*Sessio
 		return nil, fmt.Errorf("get session %d: %w", id, err)
 	}
 	view := s.toView(&session, true)
+	view.Project = gitrepo.ProjectOf(view.Cwd)
 	if session.TenantID != 0 {
 		var tenant model.Tenant
 		if err := s.db.WithContext(ctx).First(&tenant, session.TenantID).Error; err == nil {

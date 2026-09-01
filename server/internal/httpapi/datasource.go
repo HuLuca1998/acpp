@@ -160,6 +160,24 @@ func (h datasourceHandler) uri(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, datasource.ExportURI(src))
 }
 
+// secret 取一条连接的明文密码。
+//
+// **这是唯一会下发密码的读端点**，只在两处用：密码框的「看一眼」按钮，
+// 与「复制连接」（同一台库上开好几个连接时，账号密码是同一套，让人再抄
+// 一遍反而更容易抄错）。
+//
+// 与 URI 导出同一口径（那条链接本来就带密码，用户拍过板）：整个
+// /api/datasources 前缀是 owner 专属，会话侧的清单端点在别的前缀下、
+// 永远只给 hasPassword 标志位。
+func (h datasourceHandler) secret(w http.ResponseWriter, r *http.Request) {
+	src, err := h.byID(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]string{"password": src.Password})
+}
+
 func (h datasourceHandler) databases(w http.ResponseWriter, r *http.Request) {
 	src, err := h.byID(r)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/gitrepo"
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
 )
@@ -34,10 +35,18 @@ var skipDirs = map[string]bool{
 	"Applications": true,
 }
 
-// Project 是工作区里的一个仓库目录。Name 是相对工作区根的路径
-// （如 `BDBGAME2024/pp-game`），它同时是显示名与前端的标识。
+// Project 是工作区里的一个仓库目录。
+//
+// 两个名字要分清：
+//   - Name 是**位置**——相对工作区根的路径（`orange/BDBGAME2024/pp-game`），
+//     前端按它做标识与增删。租户目录、分组目录都会出现在里面。
+//   - Repo 是**身份**——这个项目是哪个 git 仓库（`BDBGAME2024/pp-game`），
+//     取自 origin 的 URL。同一个仓库克隆到几个位置就有几条 Project，
+//     但 Repo 相同：**项目就是一个 git 仓库，与它落在哪儿无关**。
+//     数据源的项目字段、会话的项目归属，认的都是这个。
 type Project struct {
 	Name   string `json:"name"`
+	Repo   string `json:"repo,omitempty"`
 	Path   string `json:"path"`
 	Remote string `json:"remote,omitempty"`
 	Branch string `json:"branch,omitempty"`
@@ -180,6 +189,7 @@ func discover(root string) ([]Project, error) {
 				projects = append(projects, Project{
 					Name:      filepath.ToSlash(rel),
 					Path:      path,
+					Repo:      gitrepo.NameOfDir(path),
 					Remote:    gitRemote(path),
 					Branch:    gitBranch(path),
 					UpdatedAt: modTime(path),
