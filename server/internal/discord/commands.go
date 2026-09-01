@@ -32,7 +32,7 @@ func slashCommands() []slashCommand {
 		})
 	}
 	return []slashCommand{
-		{name: "init", desc: "绑定这个频道：选仓库、base 分支、模型和数据库"},
+		{name: "init", desc: "绑定这个频道：选仓库、base 分支、模型、数据库和服务器"},
 		{name: "help", desc: "用法速览：怎么开对话、能做什么、状态怎么看"},
 		{name: "status", desc: "看绑了什么：仓库、分支、模型、权限、数据库"},
 		{name: "model", desc: "换这个频道用的模型（claude / codex 各档）",

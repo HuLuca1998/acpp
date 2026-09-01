@@ -142,6 +142,23 @@ document.querySelector('input[type=radio][value="claude|default"]').click();
 **时序**：modal 要等它真的渲染出来再填，提前 type 会打进频道输入框（踩过）。
 先截图确认 modal 在，再填。
 
+### 4.3.5 JS 一律指定 tabId，输入文本用 beforeinput
+
+**`javascript_tool` 默认打在「当前活动标签」上**，而开过第二个标签（比如
+同时看着 acpp 前端）之后，活动标签可能已经不是 Discord 了——脚本会静默地
+跑在错的页面上，返回 `document.querySelector(...) 是 undefined` 或者干脆
+一切正常但消息没发出去。**每次调用都显式传 `tabId`**。
+
+往编辑器打字，`computer type` 有时进不去 Slate 的内部 state（发出去是空的）。
+更可靠的是直接派发 `beforeinput`：
+
+```js
+el.focus();
+el.dispatchEvent(new InputEvent('beforeinput',
+  {inputType:'insertText', data:'要发的内容', bubbles:true, cancelable:true}));
+// 然后照 4.1 派发 Enter
+```
+
 ### 4.4 @bot 用原始 mention 语法
 
 提及浮层在自动化输入下常常不弹。直接打 `<@1542460151817044071>`，Discord 客户端
@@ -187,12 +204,13 @@ until [ "$(sqlite3 "$HOME/.acpp-dev/acp.db" "select count(*) from mcp_calls wher
 
 | # | 动作 | 从哪确认 |
 | --- | --- | --- |
-| 1 | `/init`：仓库 → base 分支 → 数据库 | 绑定落盘的 branch/base/dataSourceRef；`.worktree/<分支>` 出现；`.repo` 只有一份 |
+| 1 | `/init`：仓库 → base 分支 → 数据库 → 服务器 | 绑定落盘的 branch/base/dataSourceRef/serverName；频道主题里有「服务器：」那一段；`.worktree/<分支>` 出现；`.repo` 只有一份 |
 | 2 | 第二、三个频道各绑不同 base + 不同库 | 三条分支名/目录互不相同；`.repo` 体积几乎不涨（objects 共享） |
 | 3 | 频道主题与置顶手册 | 截图：主题是绑定信息、手册是用法，两者都带当前分支与锁定的库 |
 | 4 | `/status` `/mcps` | 显示锁定的库 |
 | 5 | `/git`（干净树 / 造改动后） | 改+增+删三类分类正确；显示与 base 的差距 |
 | 6 | 子区问 AI「用 db_sources 列出数据源」 | `mcp_calls` 里只返回锁定的那一条；换个频道再问，返回的是它自己那条 |
+| 6b | 子区问「你能看到哪些服务器」（adr-019） | `mcp_calls` 的 `server_hosts` 只返回频道锁定的那一台，全局有几台不影响 |
 | 7 | `/db source:…` 换绑 | 绑定更新 + 日志有会话 exited；再问一次 AI，返回的是新库 |
 | 8 | 工作分支能提交 | 在工作树里 commit 成功，`origin/<base>` 不动 |
 | 9 | `/unbind`（干净树） | 目录、worktree 注册、分支、绑定记录全清 |
@@ -210,7 +228,8 @@ git -C $W reset --hard --quiet origin/<base>                                    
 ## 7. 收尾：必须清干净
 
 ```bash
-# ① 解绑（走 API，后端会按「有活就留」的规则处置工作树）
+# ① 解绑。注意：这个 API **只删绑定记录，不动工作树**（斜杠命令 /unbind 才
+#    走完整清理）——所以第 ④ 步要自己收工作树与分支，只收自己建的那棵。
 curl -s -X DELETE "http://127.0.0.1:48080/api/discord/bindings/<channelId>"
 # ② 删测试频道
 curl -s -X DELETE "https://discord.com/api/v10/channels/<channelId>" -H "Authorization: Bot $TOKEN"
@@ -221,6 +240,12 @@ d=json.load(open('$HOME/.acpp-dev/discord.json'))
 bound={b['channelId'] for b in d.get('bindings',[])}
 print([t['threadId'] for t in d.get('threads',[]) if t['channelId'] not in bound] or '无孤儿')
 "
+# ④ 收掉自己建的工作树与分支（解绑 API 不做这件事）。
+#    **只动自己这轮建的那棵**，按 channelId 反查 workdir，别按仓库名一锅端。
+R=~/acpp/discord/<组织>/<仓库>/.repo
+git -C "$R" worktree remove ~/acpp/discord/<组织>/<仓库>/.worktree/<自己的分支目录>
+git -C "$R" branch -D discord/<自己的频道名>
+git -C "$R" worktree list        # 核对：别人的树必须原样都在
 ```
 
 测试过程中造的改动、探针提交、临时文件，**在报告结论前还原**——用户的工作树不是
