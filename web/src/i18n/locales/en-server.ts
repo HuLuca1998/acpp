@@ -27,13 +27,15 @@ export const enServer = {
   noteHint:
     "Shown to the AI: say what this machine is for and where the project lives — it saves several rounds of guessing",
   disabled: "Disabled",
-  disabledHint: "Disabled servers are not exposed to the AI; still editable here",
+  disabledHint:
+    "Disabling only hides it from the AI; datasources that tunnel through it keep working",
   enabled: "Enabled",
   test: "Test connection",
   empty: "No servers configured",
   emptyHint: "Add a machine and the AI can observe it.",
   deleteTitle: "Delete server",
   deleteConfirm: "Delete \u201c{{name}}\u201d?",
+  usedByHint: "{{count}} datasource(s) tunnel through this machine",
   deleteInUse: "A datasource still uses it as a tunnel host; change that first",
   deleted: "Deleted",
   saved: "Saved",

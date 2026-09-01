@@ -280,14 +280,22 @@ function ServerForm({
           <p className="text-xs text-muted-foreground">{t("server.noteHint")}</p>
         </Field>
 
-        <div className="flex items-center gap-2">
-          <Switch
-            id="srv-disabled"
-            checked={form.disabled}
-            onCheckedChange={(v) => set("disabled", v)}
-          />
-          <FieldLabel htmlFor="srv-disabled">{t("server.disabled")}</FieldLabel>
-        </div>
+        <Field>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="srv-disabled"
+              checked={form.disabled}
+              onCheckedChange={(v) => set("disabled", v)}
+            />
+            <FieldLabel htmlFor="srv-disabled">
+              {t("server.disabled")}
+            </FieldLabel>
+          </div>
+          {/* 停用的语义容易被当成「整台禁用」，说清它只挡 AI 那一面。 */}
+          <p className="text-xs text-muted-foreground">
+            {t("server.disabledHint")}
+          </p>
+        </Field>
 
         <p className="text-xs text-muted-foreground">
           {t("server.knownHosts")}

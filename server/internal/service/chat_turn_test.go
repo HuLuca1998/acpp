@@ -130,6 +130,60 @@ func TestAppendDBReferences(t *testing.T) {
 	})
 }
 
+func TestAppendServerReferences(t *testing.T) {
+	base := []acp.ContentBlock{acp.TextBlock("这台机器磁盘还剩多少？")}
+
+	t.Run("引用是 resource 块且正文原样殿后", func(t *testing.T) {
+		blocks, payload := AppendServerReferences(base, nil, []ServerReference{
+			{URI: ServerRefScheme + "pp-game-live", Text: "用户引用了服务器……"},
+		}, true)
+
+		if len(blocks) != 2 {
+			t.Fatalf("blocks = %d 个，期望 2（引用 + 正文）", len(blocks))
+		}
+		if blocks[0].Type != "resource" {
+			t.Errorf("第一块应是引用内容，实际 %+v", blocks[0])
+		}
+		if blocks[1].Type != "text" || blocks[1].Text != "这台机器磁盘还剩多少？" {
+			t.Errorf("正文必须原样留在最后，实际 %+v", blocks[1])
+		}
+		// **裸 text 块是这里最要命的错**：转录重建会把所有 text 块拼进用户
+		// 正文，注入的说明就成了「用户气泡里冒出系统文案」。
+		if blocks[0].Type == "text" {
+			t.Errorf("引用不许产生裸 text 块，实际 %+v", blocks[0])
+		}
+		if uris, _ := payload["servers"].([]string); len(uris) != 1 {
+			t.Errorf("servers = %v，期望记下被引用的 URI", payload["servers"])
+		}
+	})
+
+	t.Run("没引用时不加任何东西", func(t *testing.T) {
+		blocks, payload := AppendServerReferences(base, nil, nil, true)
+		if len(blocks) != 1 || payload != nil {
+			t.Fatalf("blocks = %+v payload = %v，期望原样返回", blocks, payload)
+		}
+	})
+
+	t.Run("与数据库引用同时存在时两种 payload 都在", func(t *testing.T) {
+		blocks, payload := AppendDBReferences(base, nil, []DBReference{
+			{URI: "mysql://pp-game/pre/pp_game", Text: "库"},
+		}, true)
+		blocks, payload = AppendServerReferences(blocks, payload, []ServerReference{
+			{URI: ServerRefScheme + "box", Text: "机器"},
+		}, true)
+
+		if len(blocks) != 3 {
+			t.Fatalf("blocks = %d，期望 3（两个引用 + 正文）", len(blocks))
+		}
+		if blocks[len(blocks)-1].Type != "text" {
+			t.Errorf("正文仍要殿后，实际 %+v", blocks[len(blocks)-1])
+		}
+		if len(payload["datasources"].([]string)) != 1 || len(payload["servers"].([]string)) != 1 {
+			t.Errorf("两种引用的 payload 都要在: %+v", payload)
+		}
+	})
+}
+
 // agentTitleFixture 建一条「标题还是首句派生值」的会话现场——
 // 这正是 agent 推标题时的真实状态。
 func agentTitleFixture(t *testing.T, title string) (*ChatService, uint, *stream.Broker) {

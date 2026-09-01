@@ -3,7 +3,13 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
-import { HardDriveIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import {
+  DatabaseIcon,
+  HardDriveIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react"
 
 import { api } from "@/lib/api"
 import type { Server } from "@/types/acp"
@@ -26,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -198,11 +205,31 @@ function serverColumns(
       header: ({ column }) => (
         <DataTableHeader column={column} title={t("server.note")} />
       ),
+      // 限宽：备注常常是一整句话，不封顶会把右边的引用数、状态与操作按钮
+      // 整个挤出可视区——那几样恰恰是这张表上要动手的东西。
       cell: ({ row }) => (
-        <span className="line-clamp-1 text-muted-foreground">
+        <span
+          title={row.original.note}
+          className="line-clamp-1 max-w-[min(22rem,18vw)] text-muted-foreground"
+        >
           {row.original.note}
         </span>
       ),
+    },
+    {
+      id: "usedBy",
+      header: () => null,
+      // 被数据源当跳板机的条数。放在状态点前面：它决定了这台能不能删，
+      // 而那件事只有在点了删除被拒绝时才会被发现。
+      cell: ({ row }) =>
+        row.original.usedBy > 0 ? (
+          <Hint label={t("server.usedByHint", { count: row.original.usedBy })}>
+            <Badge variant="outline" className="gap-1 text-[11px]">
+              <DatabaseIcon className="size-3" />
+              {row.original.usedBy}
+            </Badge>
+          </Hint>
+        ) : null,
     },
     {
       id: "state",
@@ -235,11 +262,21 @@ function serverColumns(
               <PencilIcon />
             </Button>
           </Hint>
-          <Hint label={t("common.delete")} align="end">
+          {/* 被引用时直接禁用而不是点了再报错——按钮能按却必然失败，
+              是最没必要的一次往返。 */}
+          <Hint
+            label={
+              row.original.usedBy > 0
+                ? t("server.deleteInUse")
+                : t("common.delete")
+            }
+            align="end"
+          >
             <Button
               variant="ghost"
               size="icon"
               aria-label={t("common.delete")}
+              disabled={row.original.usedBy > 0}
               onClick={() => onDelete(row.original)}
             >
               <Trash2Icon />

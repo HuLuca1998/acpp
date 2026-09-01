@@ -19,6 +19,9 @@ import {
  * 后者是这个页面最有价值的一列：一个从没被 AI 调用过的工具，问题多半
  * 出在描述而不是实现上，那正是这里该暴露出来的信号。
  */
+/** 服务器观察工具面的 server 名（adr-019），与后端 remote.ServerName 对齐。 */
+const SERVER_FACE = "acpp-server"
+
 export function ToolCatalog({
   servers,
   stats,
@@ -45,7 +48,14 @@ export function ToolCatalog({
             {server.mounted ? null : (
               <Hint
                 label={t("tools.catalog.unmounted")}
-                desc={t("tools.catalog.unmountedDesc")}
+                desc={t(
+                  // 未挂载的原因按工具面分档：数据库面是「这个项目没配连接」，
+                  // 服务器面是「一台机器都没配」——服务器不按项目过滤，
+                  // 说成「这个项目没有」会让人跑去数据库页找问题。
+                  server.name === SERVER_FACE
+                    ? "tools.catalog.unmountedServerDesc"
+                    : "tools.catalog.unmountedDesc"
+                )}
               >
                 <Badge variant="outline" className="gap-1 text-[11px]">
                   <CircleSlashIcon className="size-3" />

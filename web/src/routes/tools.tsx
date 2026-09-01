@@ -72,6 +72,8 @@ export function Tools() {
     entries.find((entry) => entry.tool.name === pickedTool) ??
     entries[0] ??
     null
+  // 全都没挂才提示。只挂了一面（比如配了服务器没配数据源）是常态，
+  // 那时卡片上各自的「未挂载」徽标已经说清了是谁。
   const unmounted = faces.length > 0 && faces.every((s) => !s.mounted)
 
   return (

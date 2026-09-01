@@ -22,6 +22,8 @@ export interface Server {
   /** 用途说明，**会随工具清单给 AI 看**。 */
   note: string
   disabled: boolean
+  /** 有几条数据源把它当跳板机。>0 时不能删。 */
+  usedBy: number
   hasPassword: boolean
   hasPassphrase: boolean
   createdAt: string

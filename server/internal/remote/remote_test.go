@@ -276,3 +276,46 @@ func TestService_Test_EmptyInputKeepsRecord(t *testing.T) {
 		t.Fatalf("新建时的空入参应被校验挡住，得到 %v", err)
 	}
 }
+
+// 契约：列表要带上「被几条数据源当跳板」。看不见这个的话，人只有在点了
+// 删除、被拒绝之后才知道这台机器还被谁用着。
+func TestService_List_UsedByCount(t *testing.T) {
+	svc, gdb := testService(t)
+	ctx := context.Background()
+
+	a, _ := svc.Create(ctx, Input{Name: "a", Host: "h", User: "u", Auth: "key"})
+	if _, err := svc.Create(ctx, Input{Name: "b", Host: "h", User: "u", Auth: "key"}); err != nil {
+		t.Fatal(err)
+	}
+	// a 被两条数据源引用，b 一条都没有。
+	for i, env := range []string{"pre", "prod"} {
+		ds := model.DataSource{
+			Project: "p", Env: env, Host: "127.0.0.1", Port: 3306, User: "root",
+			Database: "d", SSHEnabled: true, ServerID: a.ID,
+		}
+		if err := gdb.Create(&ds).Error; err != nil {
+			t.Fatalf("seed %d: %v", i, err)
+		}
+	}
+	// 不走隧道的数据源不算数。
+	if err := gdb.Create(&model.DataSource{
+		Project: "p", Env: "local", Host: "127.0.0.1", Port: 3306, User: "root", Database: "d",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := svc.List(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	got := map[string]int{}
+	for _, s := range list {
+		got[s.Name] = s.UsedBy
+	}
+	if got["a"] != 2 {
+		t.Errorf("a 应被 2 条数据源引用，得到 %d", got["a"])
+	}
+	if got["b"] != 0 {
+		t.Errorf("b 不该被引用，得到 %d", got["b"])
+	}
+}

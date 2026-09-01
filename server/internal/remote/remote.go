@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 
@@ -100,7 +101,7 @@ func (in Input) blank() bool {
 		in.Port == 0
 }
 
-// List 按名字排序返回全部服务器（配置页用）。
+// List 按名字排序返回全部服务器（配置页用），并带上被引用的条数。
 func (s *Service) List(ctx context.Context) ([]model.Server, error) {
 	var out []model.Server
 	if err := s.db.WithContext(ctx).Order("name").Find(&out).Error; err != nil {
@@ -109,7 +110,37 @@ func (s *Service) List(ctx context.Context) ([]model.Server, error) {
 	for i := range out {
 		decorate(&out[i])
 	}
+	s.attachUsage(ctx, out)
 	return out, nil
+}
+
+// attachUsage 数一遍每台机器被多少条数据源当跳板。
+//
+// 一次 GROUP BY 而不是每台查一遍：服务器是个位数量级，但这条路在列表页
+// 每次刷新都会走，没必要留个 N+1 在那儿。
+func (s *Service) attachUsage(ctx context.Context, list []model.Server) {
+	if len(list) == 0 {
+		return
+	}
+	var rows []struct {
+		ServerID uint
+		N        int
+	}
+	err := s.db.WithContext(ctx).Model(&model.DataSource{}).
+		Select("server_id, COUNT(*) AS n").
+		Where("server_id > 0").Group("server_id").Scan(&rows).Error
+	if err != nil {
+		// 数不出来不该让列表页整个失败：这只是个提示性的计数。
+		slog.Warn("统计服务器被引用数失败", "err", err)
+		return
+	}
+	byID := make(map[uint]int, len(rows))
+	for _, r := range rows {
+		byID[r.ServerID] = r.N
+	}
+	for i := range list {
+		list[i].UsedBy = byID[list[i].ID]
+	}
 }
 
 // Enabled 返回启用中的服务器——挂给 AI 的工具面用。

@@ -526,12 +526,13 @@ export default {
     description:
       "这些是本软件挂给 agent 的 MCP 工具。这里看到的清单、描述与参数，就是 AI 此刻看到的那一份——可以直接试运行，复现它的调用。",
     pickProject: "选择项目",
-    pickProjectHint: "工具集随项目的数据源变——选错项目看到的是另一份工具。",
+    pickProjectHint:
+      "数据库工具集随项目的数据源变——选错项目看到的是另一份。服务器工具面不按项目分，选哪个项目都一样。",
     unmountedTitle: "这个项目下工具面不会挂给 agent",
     unmountedDesc:
-      "当前项目没有可用的数据库连接，所以 AI 那边看不到这些工具。页面里仍可试运行，但那只是你在调它们。",
+      "两个工具面都没挂给 AI：数据库面要这个项目有可用连接，服务器面要至少配一台机器。页面里仍可试运行，但那只是你在调它们。",
     emptyTitle: "没有可用的工具面",
-    emptyHint: "先在数据库页为这个项目配一条连接。",
+    emptyHint: "先在数据库页为这个项目配一条连接，或在服务器页配一台机器。",
     tabs: {
       catalog: "工具",
       calls: "调用记录",
@@ -540,6 +541,7 @@ export default {
       unmounted: "未挂载",
       unmountedShort: "未挂载",
       unmountedDesc: "当前项目没有可用数据源，AI 那边看不到这些工具",
+      unmountedServerDesc: "还没有配置服务器，AI 那边看不到这些工具（服务器不按项目分，配一台全局可用）",
       callCount: "已调用 {{count}} 次",
       errorCount: "其中 {{count}} 次失败",
     },

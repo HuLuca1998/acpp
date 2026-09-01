@@ -431,20 +431,25 @@ function DataSourceForm({
                       onValueChange={(v) => set("serverId", Number(v))}
                     >
                       <SelectTrigger id="ds-server" className="flex-1">
-                        <SelectValue
-                          placeholder={
-                            servers && servers.length === 0
-                              ? t("server.pickEmpty")
-                              : t("server.pickPlaceholder")
-                          }
-                        >
-                          {/* Base UI 的 Value 默认显示原始 value——这里是
-                              服务器 id，得换成人认得的名字。 */}
-                          {(v) =>
-                            (servers ?? []).find(
+                        {/* Base UI 的 Value 默认显示原始 value（这里是
+                            服务器 id），要换成人认得的名字就得给 children
+                            函数——**但 children 会盖掉 placeholder**，
+                            所以没选中时也得由它自己给出提示文案，
+                            否则下拉是一片空白，看不出要选什么。 */}
+                        <SelectValue>
+                          {(v) => {
+                            const picked = (servers ?? []).find(
                               (srv: Server) => String(srv.id) === String(v)
-                            )?.name ?? String(v ?? "")
-                          }
+                            )
+                            if (picked) return picked.name
+                            return (
+                              <span className="text-muted-foreground">
+                                {servers && servers.length === 0
+                                  ? t("server.pickEmpty")
+                                  : t("server.pickPlaceholder")}
+                              </span>
+                            )
+                          }}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>

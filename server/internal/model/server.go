@@ -46,4 +46,7 @@ type Server struct {
 	// 但界面必须能区分「没设」与「设了但看不见」。
 	HasPassword   bool `gorm:"-" json:"hasPassword"`
 	HasPassphrase bool `gorm:"-" json:"hasPassphrase"`
+	// UsedBy 是把它当跳板机的数据源条数。列表里显示出来，人才看得见依赖
+	// ——否则要等到点了删除、被拒绝，才知道这台机器还被谁用着。
+	UsedBy int `gorm:"-" json:"usedBy"`
 }

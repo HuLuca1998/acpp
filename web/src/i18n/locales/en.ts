@@ -556,12 +556,13 @@ export default {
       "These are the MCP tools this app exposes to the agent. The list, descriptions and parameters you see here are exactly what the AI sees right now — run them to reproduce its calls.",
     pickProject: "Select a project",
     pickProjectHint:
-      "The tool set follows the project\u2019s data sources — pick the wrong project and you are looking at a different set.",
+      "The database tool set follows the project\u2019s data sources — pick the wrong project and you are looking at a different set. The server face is not per-project; any project shows the same one.",
     unmountedTitle: "This tool face is not mounted for this project",
     unmountedDesc:
-      "There is no usable database connection for this project, so the AI cannot see these tools. You can still run them here, but only you are calling them.",
+      "Neither tool face is mounted: the database face needs a usable connection for this project, the server face needs at least one machine. You can still run them here, but only you are calling them.",
     emptyTitle: "No tool face available",
-    emptyHint: "Add a database connection for this project first.",
+    emptyHint:
+      "Add a database connection for this project, or add a server on the servers page.",
     tabs: {
       catalog: "Tools",
       calls: "Call log",
@@ -571,6 +572,8 @@ export default {
       unmountedShort: "Not mounted",
       unmountedDesc:
         "No usable data source for this project — the AI cannot see these tools",
+      unmountedServerDesc:
+        "No server configured yet — the AI cannot see these tools (servers are not per-project, one is enough)",
       callCount: "Called {{count}} times",
       errorCount: "{{count}} of them failed",
     },

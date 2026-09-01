@@ -66,13 +66,13 @@ func (s *Service) run(ctx context.Context, srv *model.Server, cmd string) (execR
 
 	client, err := sshdialDial(ctx, srv)
 	if err != nil {
-		return execResult{}, err
+		return execResult{}, whichServer(srv, err)
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return execResult{}, fmt.Errorf("开 ssh 会话失败: %w", err)
+		return execResult{}, whichServer(srv, fmt.Errorf("开 ssh 会话失败: %w", err))
 	}
 	defer session.Close()
 
@@ -88,7 +88,7 @@ func (s *Service) run(ctx context.Context, srv *model.Server, cmd string) (execR
 	case <-ctx.Done():
 		// 对端还在跑：给它一个信号再撒手，免得留一条命令在生产机上空转。
 		_ = session.Signal(ssh.SIGKILL)
-		return execResult{}, fmt.Errorf("命令超时（超过 %s）", cmdTimeout)
+		return execResult{}, whichServer(srv, fmt.Errorf("命令超时（超过 %s）", cmdTimeout))
 	case err := <-done:
 		res := execResult{
 			Out:       stdout.String(),
@@ -108,7 +108,7 @@ func (s *Service) run(ctx context.Context, srv *model.Server, cmd string) (execR
 				}
 				return res, nil
 			}
-			return execResult{}, fmt.Errorf("执行失败: %w", err)
+			return execResult{}, whichServer(srv, fmt.Errorf("执行失败: %w", err))
 		}
 		return res, nil
 	}
@@ -136,6 +136,23 @@ func (s *Service) text(ctx context.Context, srv *model.Server, cmd string) (stri
 		return "（没有输出）", nil
 	}
 	return out, nil
+}
+
+// whichServer 给错误缀上是哪台机器。
+//
+// 缺了这句，配了好几台时「ssh 握手失败: EOF」这种话对人和模型都没用——
+// 谁连不上都不知道，更别说去改哪条配置。地址也要带：名字是自己起的，
+// 排查时真正要核对的是 host:port 与账号。
+func whichServer(srv *model.Server, err error) error {
+	return fmt.Errorf("服务器 %s（%s@%s:%d）: %w",
+		srv.Name, srv.User, srv.Host, portOf(srv), err)
+}
+
+func portOf(srv *model.Server) int {
+	if srv.Port <= 0 {
+		return 22
+	}
+	return srv.Port
 }
 
 // limitWriter 在写满 n 字节后丢弃剩余内容——**服务端的活也一起省下**是靠
