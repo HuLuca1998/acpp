@@ -181,9 +181,15 @@ if ! command -v docker >/dev/null 2>&1; then echo '这台服务器上没有 dock
 
 // psCmd 拼容器清单。
 //
-// 重启次数与健康状态要 inspect 才有，而那是每容器一次调用——所以用一条
-// `docker inspect $(docker ps -q)` 批量取，再与 ps 的输出并排打印。
-// 这两样正是排障第一眼要看的，值得多这一步。
+// 重启次数要 inspect 才有，而那是每容器一次调用——所以把 id 用管道喂给
+// 一次批量 inspect，再与 ps 的输出并排打印。它正是排障第一眼要看的东西。
+//
+// **不要先把 id 存进变量再展开**（`ids=$(docker ps -q); docker inspect $ids`）：
+// 远端登录 shell 可能是 zsh，而 zsh 默认不对未加引号的变量做分词，整串带
+// 换行的 id 会被当成一个参数，报 "no such object"。真机上踩过，而且只在
+// **多个容器**时复现——单个容器时不需要分词，看着一切正常。
+//
+// 健康状态不在这里重复：ps 的 Status 列本来就带 (healthy)。
 func psCmd(a toolArgs) string {
 	psArgs := "docker ps"
 	if a.All {
@@ -203,11 +209,9 @@ echo '## 容器（名字 | 镜像 | 状态 | 端口）'
 %s %s 2>&1 | head -n 60
 echo
 echo '## 重启次数（只列非 0 的——在涨说明它起不来又被反复拉起）'
-ids=$(%s 2>/dev/null | head -n 60)
-if [ -n "$ids" ]; then
-  docker inspect --format '{{.Name}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $ids 2>/dev/null \
-    | awk '$2 != 0 || $3 != "" {print}' | head -n 40
-fi
+%s 2>/dev/null | head -n 60 \
+  | xargs -r docker inspect --format '{{.Name}} {{.RestartCount}}' 2>/dev/null \
+  | awk '$2 != 0 {print}' | head -n 40
 `, psArgs, format, ids)
 }
 

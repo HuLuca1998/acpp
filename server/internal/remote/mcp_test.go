@@ -203,6 +203,24 @@ func TestCommandBuilders_QuoteAndLimit(t *testing.T) {
 		}
 	})
 
+	// 这条曾经漏掉过：修 zsh 分词时只改了 statsCmd，psCmd 没跟上，
+	// 而当时的测试只覆盖 statsCmd，于是「以为修了」的东西带着错误的
+	// commit message 进了库。多容器时才复现，单容器看着一切正常。
+	t.Run("docker ps 取重启次数不靠 shell 分词", func(t *testing.T) {
+		cmd := psCmd(toolArgs{Filter: "pp-"})
+		if strings.Contains(cmd, "ids=$(") || strings.Contains(cmd, "$ids") {
+			t.Errorf("容器 id 不能先存进变量再展开（zsh 不分词）: %s", cmd)
+		}
+		if !strings.Contains(cmd, "| xargs -r docker inspect") {
+			t.Errorf("应当用管道喂 xargs: %s", cmd)
+		}
+		// 只列非 0 重启：健康状态在 ps 的 Status 列里已经有了，
+		// 条件里带上它会让每个健康容器都被列出来。
+		if !strings.Contains(cmd, "awk '$2 != 0 {print}'") {
+			t.Errorf("只该列非 0 重启次数: %s", cmd)
+		}
+	})
+
 	t.Run("docker 命令先探 docker 在不在", func(t *testing.T) {
 		for _, cmd := range []string{
 			psCmd(toolArgs{}),
