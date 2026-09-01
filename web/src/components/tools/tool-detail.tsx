@@ -69,6 +69,7 @@ export function ToolDetail({
     try {
       const res = await api.tools.inspect({
         cwd,
+        server: server.name,
         request: buildToolCall(tool.name, args),
       })
       setResult(res)
@@ -157,6 +158,7 @@ export function ToolDetail({
         <TabsContent value="raw" className="mt-3">
           <RawRequestPanel
             cwd={cwd}
+            server={server.name}
             tool={tool.name}
             args={args}
             onResult={(res) => {

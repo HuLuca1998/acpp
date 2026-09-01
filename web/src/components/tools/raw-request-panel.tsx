@@ -46,11 +46,14 @@ const TEMPLATES = [
 
 export function RawRequestPanel({
   cwd,
+  server,
   tool,
   args,
   onResult,
 }: {
   cwd: string
+  /** 发给哪个工具面。工具台有两面，不指明会落到默认那面报 unknown tool。 */
+  server: string
   tool: string
   args: Record<string, unknown>
   /** 结果交给上层统一渲染：一个工具只有一处结果区，不管是从哪个页签跑的。 */
@@ -70,7 +73,7 @@ export function RawRequestPanel({
     if (!valid) return
     setSending(true)
     try {
-      onResult(await api.tools.inspect({ cwd, request: parsed }))
+      onResult(await api.tools.inspect({ cwd, server, request: parsed }))
     } catch (err) {
       toast.error((err as Error).message)
     } finally {

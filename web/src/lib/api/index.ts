@@ -669,7 +669,12 @@ export const api = {
      * 发一条**原样的** JSON-RPC 消息给工具面。试运行只是替用户把
      * tools/call 的请求体拼好了——两者走同一个端点，看到的往返也一样。
      */
-    inspect: (input: { cwd?: string; request: unknown }) =>
+    /**
+     * 把一条 JSON-RPC 消息发给某个工具面。**server 必须带**：工具台现在
+     * 有两面（数据库与服务器），不指明的话请求会落到数据库那面，报
+     * `unknown tool`。
+     */
+    inspect: (input: { cwd?: string; server?: string; request: unknown }) =>
       request<McpInspectResult>("/tools/inspect", {
         method: "POST",
         body: JSON.stringify(input),
