@@ -60,6 +60,10 @@ func TestTopicLine_ServerOnlyWhenLocked(t *testing.T) {
 	if !strings.Contains(got, "服务器：pp-game-live") {
 		t.Errorf("锁定后主题要写明是哪台: %s", got)
 	}
+	// 服务器要**另起一行**：数据库那行本来就带着补语，两段挤一行读不动。
+	if !strings.Contains(got, "\n服务器：") {
+		t.Errorf("服务器应当另起一行，而不是缀在数据库后面: %q", got)
+	}
 	if n := len([]rune(got)); n > topicLimit {
 		t.Errorf("加了服务器之后主题 %d 字符，超了上限 %d", n, topicLimit)
 	}
