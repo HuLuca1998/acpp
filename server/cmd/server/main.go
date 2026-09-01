@@ -132,6 +132,11 @@ func run() error {
 		WithCalls(mcpCalls).
 		WithServers(remoteService)
 	chatService.SetDataSources(datasourceService)
+	// 把裸仓库名的项目升级成 git 仓库的规范名（`pp-game` → `BDBGAME2024/pp-game`）。
+	// 同名仓库出现在多个组织下时不猜，保持原样——裸名仍是有效候选。
+	if err := datasourceService.MigrateProjectNames(context.Background()); err != nil {
+		slog.Error("迁移数据源项目名失败", "err", err)
+	}
 
 	// 报告工具面：agent 写完一份 HTML 报告后调 report_open 把它摊开给用户。
 	// 它不存任何东西（报告是磁盘上的文件，事实源是转录里的 tool_call），
