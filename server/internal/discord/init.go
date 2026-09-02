@@ -370,33 +370,7 @@ func (s *Service) offerBranches(ctx context.Context, token string, ev interactio
 	s.pending[id] = pendingInit{in: in, ev: ev, created: time.Now()}
 	s.mu.Unlock()
 
-	var opts []choice
-	opts = append(opts, choice{Label: defaultBranch + "（默认）", Value: defaultBranch})
-	for _, b := range branches {
-		if b == defaultBranch {
-			continue
-		}
-		opts = append(opts, choice{Label: b, Value: b})
-		if len(opts) == 25 {
-			break
-		}
-	}
-	sel := selectComponent("br:"+id, opts, false)
-	sel["type"] = 3 // 消息上的下拉只有 String Select，radio 是 modal 的东西
-	sel["placeholder"] = "选择基础分支…"
-	delete(sel, "required")
-
-	s.editOriginal(token, appID, ev.Token, map[string]any{
-		"embeds": []map[string]any{{
-			"title": "选择基础分支",
-			"description": fmt.Sprintf(
-				"**%s** 有 %d 个分支。频道会从选中的这条切一条自己的工作分支——直接在 pre/prod 上干活提交推不上去。\n15 分钟内有效，过期请重新 /init。",
-				in.repo, len(branches)),
-			"color": colorBlurbe,
-		}},
-		"components":       []map[string]any{{"type": 1, "components": []map[string]any{sel}}},
-		"allowed_mentions": noMentions(),
-	})
+	s.editOriginal(token, appID, ev.Token, branchCard(in, id, defaultBranch, branches, false))
 }
 
 // branchPicked 收基础分支的选择：卡片原地改成进行中，然后进入选库那一步。
@@ -467,26 +441,7 @@ func (s *Service) offerDataSource(ctx context.Context, token string, ev interact
 	s.mu.Unlock()
 
 	current, _ := s.store.config().binding(ev.ChannelID)
-	sel := selectComponent("db:"+id, dbChoices(dbs, current.DataSourceID), false)
-	sel["type"] = 3 // 消息上的下拉只有 String Select
-	sel["placeholder"] = "选择这个频道能查的库…"
-	delete(sel, "required")
-
-	branch := in.branch
-	if branch == "" {
-		branch = in.defaultBranch + "（默认）"
-	}
-	s.editOriginal(token, s.appID(), ev.Token, map[string]any{
-		"embeds": []map[string]any{{
-			"title": "选择数据库",
-			"description": fmt.Sprintf(
-				"**%s**（基于 %s）\n选中之后，这个频道的 AI 只看得见这一条连接——同项目别的环境列都列不出来。\n15 分钟内有效。",
-				in.repo, branch),
-			"color": colorBlurbe,
-		}},
-		"components":       []map[string]any{{"type": 1, "components": []map[string]any{sel}}},
-		"allowed_mentions": noMentions(),
-	})
+	s.editOriginal(token, s.appID(), ev.Token, dbCard(in, id, dbs, current.DataSourceID, false))
 }
 
 // dbPicked 收数据库下拉的选择，然后进入真正的收尾（克隆/建树/落绑定）。
@@ -552,26 +507,7 @@ func (s *Service) offerServer(ctx context.Context, token string, ev interactionE
 	s.mu.Unlock()
 
 	current, _ := s.store.config().binding(ev.ChannelID)
-	sel := selectComponent("srv:"+id, serverChoices(hosts, current.ServerID), false)
-	sel["type"] = 3
-	sel["placeholder"] = "选择这个频道能看的机器…"
-	delete(sel, "required")
-
-	dbLabel := in.dbRef
-	if in.dbID == 0 {
-		dbLabel = "不锁定"
-	}
-	s.editOriginal(token, s.appID(), ev.Token, map[string]any{
-		"embeds": []map[string]any{{
-			"title": "选择服务器",
-			"description": fmt.Sprintf(
-				"**%s** · 数据库 **%s**\n选中之后，这个频道的 AI 只看得见这一台机器——别的机器连列都列不出来。\n15 分钟内有效。",
-				in.repo, dbLabel),
-			"color": colorBlurbe,
-		}},
-		"components":       []map[string]any{{"type": 1, "components": []map[string]any{sel}}},
-		"allowed_mentions": noMentions(),
-	})
+	s.editOriginal(token, s.appID(), ev.Token, serverCard(in, id, hosts, current.ServerID, false))
 }
 
 // serverPicked 收服务器下拉的选择，然后进入真正的收尾。

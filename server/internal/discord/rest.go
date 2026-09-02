@@ -63,6 +63,16 @@ func interactionCallback(token, interactionID, interactionToken string, kind int
 		fmt.Sprintf("/interactions/%s/%s/callback", interactionID, interactionToken), body, nil)
 }
 
+// followupEphemeral 在已经 ACK 过的 interaction 上补一条只有本人可见的
+// 消息。ACK 之后不能再 callback（10062 Unknown interaction），报错只能走
+// 这条路。
+func followupEphemeral(token, appID, interactionToken, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return botREST(ctx, token, "POST", fmt.Sprintf("/webhooks/%s/%s", appID, interactionToken),
+		map[string]any{"content": text, "flags": 1 << 6, "allowed_mentions": noMentions()}, nil)
+}
+
 // noMentions 是所有出站消息统一带的 allowed_mentions 收紧——平台默认是
 // parse-all，编辑时漏带还会重新解析（实测），所以收在这一个出口。
 func noMentions() map[string]any {

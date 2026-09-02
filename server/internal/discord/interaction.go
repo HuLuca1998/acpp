@@ -201,6 +201,12 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):
 		s.handleAskModal(token, ev)
+	// 刷新按钮与下拉同为 type 3，只能靠 custom_id 分。刷新前缀刻意不以
+	// 下拉前缀开头（"brR:" 不匹配 "br:"），两边不会互相抢。
+	case ev.Type == 3 && (strings.HasPrefix(ev.Data.CustomID, pickBranchRefresh+":") ||
+		strings.HasPrefix(ev.Data.CustomID, pickDBRefresh+":") ||
+		strings.HasPrefix(ev.Data.CustomID, pickServerRefresh+":")):
+		s.refreshPick(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "br:"):
 		s.branchPicked(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "srv:"):
