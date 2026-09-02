@@ -20,7 +20,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { useAsyncData } from "@/hooks/use-async-data"
-import { CopyIcon, DownloadIcon, RefreshCwIcon } from "lucide-react"
+import {
+  ArrowUpIcon,
+  CopyIcon,
+  DownloadIcon,
+  RefreshCwIcon,
+} from "lucide-react"
 
 /** 连接测试的目标：内置两个工具，探测即真实拉起一次 agent。 */
 const CONN_TOOLS = ["claude", "codex"] as const
@@ -38,6 +43,7 @@ export function EnvCheck() {
     setData,
   } = useAsyncData(() => api.system.env(), [])
   const [installing, setInstalling] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [failOutput, setFailOutput] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [connResults, setConnResults] = useState<
@@ -48,22 +54,36 @@ export function EnvCheck() {
     (info?.deps ?? []).filter((d) => d.installed).map((d) => d.key)
   )
 
+  /** 安装与更新是同一条命令（npm 全局安装即升级），只有文案不同。 */
   async function install(dep: EnvDependency) {
+    const updating = dep.outdated === true
     setInstalling(dep.key)
     setFailOutput(null)
     try {
       const res = await api.system.envInstall(dep.key)
       if (res.ok) {
         toast.success(
-          t("settingsPage.env.installDone", { name: depName(dep.key) })
+          updating
+            ? t("settingsPage.env.updateDone", {
+                name: depName(dep.key),
+                // outdated 为真时后端必然给了 latest，兜底只为满足类型。
+                version: dep.latest ?? "",
+              })
+            : t("settingsPage.env.installDone", { name: depName(dep.key) })
         )
       } else {
         toast.error(
-          t("settingsPage.env.installFailed", { name: depName(dep.key) })
+          t(
+            updating
+              ? "settingsPage.env.updateFailed"
+              : "settingsPage.env.installFailed",
+            { name: depName(dep.key) }
+          )
         )
         setFailOutput(res.output)
       }
-      setData(await api.system.env())
+      // 装完重查一次新版：刚更新的这项要立刻掉出「有新版」状态。
+      setData(await api.system.env(true))
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
@@ -72,7 +92,12 @@ export function EnvCheck() {
   }
 
   async function refresh() {
-    setData(await api.system.env())
+    setRefreshing(true)
+    try {
+      setData(await api.system.env(true))
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   /** 连接测试 = 探测：拉临时会话读能力，成败即连通结论。 */
@@ -202,9 +227,14 @@ export function EnvCheck() {
               size="sm"
               variant="outline"
               className="ml-auto"
+              disabled={refreshing}
               onClick={() => void refresh()}
             >
-              <RefreshCwIcon data-icon="inline-start" />
+              {refreshing ? (
+                <Spinner className="size-3.5" data-icon="inline-start" />
+              ) : (
+                <RefreshCwIcon data-icon="inline-start" />
+              )}
               {t("settingsPage.env.recheck")}
             </Button>
           </div>
@@ -218,14 +248,28 @@ export function EnvCheck() {
               key={dep.key}
               className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"
             >
-              <StatusDot tone={dep.installed ? "success" : "destructive"} />
+              <StatusDot
+                tone={
+                  !dep.installed
+                    ? "destructive"
+                    : dep.outdated
+                      ? "warning"
+                      : "success"
+                }
+              />
               <span className="w-40 shrink-0 text-sm">{depName(dep.key)}</span>
               {dep.installed ? (
-                <span
-                  className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
-                  title={dep.path}
-                >
-                  {dep.version || dep.path}
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5 font-mono text-xs text-muted-foreground">
+                  {/* 版本串可能很长（适配器会带包名前缀），截当前版本不截新版
+                      ——「有新版」正是这一行要传达的信息，不能被省略号吃掉。 */}
+                  <span className="truncate" title={dep.path}>
+                    {dep.version || dep.path}
+                  </span>
+                  {dep.outdated ? (
+                    <span className="shrink-0 text-warning">
+                      → {dep.latest}
+                    </span>
+                  ) : null}
                 </span>
               ) : (
                 <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
@@ -234,7 +278,8 @@ export function EnvCheck() {
                     : t("settingsPage.env.missing")}
                 </span>
               )}
-              {!dep.installed && dep.installKind === "auto" ? (
+              {(dep.installKind === "auto" && !dep.installed) ||
+              dep.outdated ? (
                 <Button
                   size="sm"
                   disabled={
@@ -253,12 +298,20 @@ export function EnvCheck() {
                 >
                   {installing === dep.key ? (
                     <Spinner className="size-3.5" data-icon="inline-start" />
+                  ) : dep.outdated ? (
+                    <ArrowUpIcon data-icon="inline-start" />
                   ) : (
                     <DownloadIcon data-icon="inline-start" />
                   )}
-                  {installing === dep.key
-                    ? t("settingsPage.env.installing")
-                    : t("settingsPage.env.install")}
+                  {t(
+                    dep.outdated
+                      ? installing === dep.key
+                        ? "settingsPage.env.updating"
+                        : "settingsPage.env.update"
+                      : installing === dep.key
+                        ? "settingsPage.env.installing"
+                        : "settingsPage.env.install"
+                  )}
                 </Button>
               ) : null}
             </div>

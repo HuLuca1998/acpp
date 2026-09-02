@@ -1,11 +1,9 @@
 // 设置页的文案。独立成文件的理由同 zh-db：主语言文件已到行数硬线，
 // 按域拆分，不是按语言再切一刀。
 export const zhSettings = {
-
   notifications: {
     title: "系统通知",
-    description:
-      "agent 停下来等你决策、答完一轮或出错时，发一条 macOS 通知。",
+    description: "agent 停下来等你决策、答完一轮或出错时，发一条 macOS 通知。",
     authorized: "已授权",
     provisional: "临时授权",
     denied: "已拒绝",
@@ -94,7 +92,7 @@ export const zhSettings = {
     connOk: "连接正常 · {{count}} 个可用模型",
     depsTitle: "依赖体检",
     depsDescription:
-      "按安装链排序：Homebrew → Node.js/npm → CLI 与 ACP 适配器。缺失项可一键安装。",
+      "按安装链排序：Homebrew → Node.js/npm → CLI 与 ACP 适配器。缺失项可一键安装，有新版时可一键更新。",
     recheck: "重新检测",
     missing: "未安装",
     bundledHint: "随 Node.js 一起提供",
@@ -102,6 +100,10 @@ export const zhSettings = {
     installing: "安装中…",
     installDone: "{{name}} 安装完成",
     installFailed: "{{name}} 安装失败",
+    update: "更新",
+    updating: "更新中…",
+    updateDone: "{{name}} 已更新到 {{version}}",
+    updateFailed: "{{name}} 更新失败",
     needFirst: "需先安装 {{name}}",
     brewManualHint:
       "Homebrew 需要在终端手动安装（过程会要求输入密码），复制命令后粘贴到终端执行：",

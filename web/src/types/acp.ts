@@ -61,6 +61,10 @@ export interface EnvDependency {
   installHint?: string
   /** 一键安装的前置依赖 key。 */
   requires?: string
+  /** 包管理器上的最新版本；离线、或该项不查新版（brew/node/npm）时为空。 */
+  latest?: string
+  /** 为真表示 version 落后于 latest，按钮变「更新」。 */
+  outdated?: boolean
 }
 
 /** 环境体检结果；path 是后端进程实际使用的 PATH。 */

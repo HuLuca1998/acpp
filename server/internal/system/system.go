@@ -17,6 +17,8 @@ import (
 type Service struct {
 	db  *gorm.DB
 	cfg config.Config
+	// latest 缓存依赖的最新版查询结果，见 env_latest.go。
+	latest latestChecker
 }
 
 func NewService(gdb *gorm.DB, cfg config.Config) *Service {

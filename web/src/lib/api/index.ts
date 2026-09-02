@@ -66,7 +66,6 @@ import { ApiError, BASE, pageQuery, request } from "./core"
 // 文件拆分去改几十处 import。
 export { ApiError }
 
-
 /**
  * 工作区数据面的作用域 API：普通会话与编排主会话的端点形状完全一致，
  * 只差路径前缀。面板组件经 WorkspaceProvider 拿到对应作用域实例。
@@ -364,8 +363,10 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ dataDir }),
       }),
-    /** 环境体检：依赖是否就位（brew/node/适配器/CLI）。 */
-    env: () => request<EnvInfo>("/system/env"),
+    /** 环境体检：依赖是否就位（brew/node/适配器/CLI）与有无新版。
+     *  refresh 绕过后端的最新版缓存，供「重新检测」按钮用。 */
+    env: (refresh = false) =>
+      request<EnvInfo>(`/system/env${refresh ? "?refresh=1" : ""}`),
     /** 一键安装缺失依赖；key 只认后端白名单，安装可能耗时数分钟。 */
     envInstall: (key: string) =>
       request<EnvInstallResult>("/system/env/install", {

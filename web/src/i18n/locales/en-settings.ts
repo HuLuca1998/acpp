@@ -1,7 +1,6 @@
 // Settings page的文案。独立成文件的理由同 en-db：主语言文件已到行数硬线，
 // 按域拆分，不是按语言再切一刀。
 export const enSettings = {
-
   notifications: {
     title: "System notifications",
     description:
@@ -101,7 +100,7 @@ export const enSettings = {
     connOk: "Connected · {{count}} models available",
     depsTitle: "Dependency check",
     depsDescription:
-      "Ordered by install chain: Homebrew → Node.js/npm → CLIs and ACP adapters. Missing items install with one click.",
+      "Ordered by install chain: Homebrew → Node.js/npm → CLIs and ACP adapters. Install what is missing and update what is behind, in one click.",
     recheck: "Re-check",
     missing: "Not installed",
     bundledHint: "Ships with Node.js",
@@ -109,6 +108,10 @@ export const enSettings = {
     installing: "Installing…",
     installDone: "{{name}} installed",
     installFailed: "{{name}} install failed",
+    update: "Update",
+    updating: "Updating…",
+    updateDone: "{{name}} updated to {{version}}",
+    updateFailed: "{{name}} update failed",
     needFirst: "Install {{name}} first",
     brewManualHint:
       "Homebrew must be installed manually in a terminal (it asks for your password). Copy the command and run it there:",

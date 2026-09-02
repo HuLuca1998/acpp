@@ -93,7 +93,9 @@ func (h systemHandler) withLanBase(info system.SystemInfo) systemInfoView {
 }
 
 func (h systemHandler) env(w http.ResponseWriter, r *http.Request) {
-	writeData(w, http.StatusOK, h.system.EnvCheck(r.Context()))
+	// refresh=1 是「重新检测」按钮：绕过最新版缓存，重打一次 registry。
+	refresh := r.URL.Query().Get("refresh") == "1"
+	writeData(w, http.StatusOK, h.system.EnvCheck(r.Context(), refresh))
 }
 
 func (h systemHandler) envInstall(w http.ResponseWriter, r *http.Request) {
