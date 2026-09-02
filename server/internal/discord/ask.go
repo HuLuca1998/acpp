@@ -132,9 +132,7 @@ func (s *Service) askPermission(token, threadID string, tc *threadChat, ev acp.E
 		"allowed_mentions": mentions,
 	})
 	ask.msgID = msgID
-	tc.mu.Lock()
-	tc.ask = ask
-	tc.mu.Unlock()
+	tc.putAsk(ask)
 }
 
 // askElicitation 把 agent 的提问发成逐题卡：从第一题开始，点选即翻题。
@@ -177,20 +175,49 @@ func (s *Service) askElicitation(token, threadID string, tc *threadChat, ev acp.
 		"allowed_mentions": mentions,
 	})
 	ask.msgID = msgID
-	tc.mu.Lock()
-	tc.ask = ask
-	tc.mu.Unlock()
+	tc.putAsk(ask)
 }
 
-// currentAsk 取子区当前挂起的问答；nonce 不匹配（旧卡残留组件）给 nil。
+// currentAsk 按 nonce 取挂起的问答。取不到就是这张卡已经不作数了——
+// 处理过、超时清掉、或是历史卡上的残留组件。
 func (s *Service) currentAsk(threadID, nonce string) *pendingAsk {
 	tc := s.chatState(threadID)
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if tc.ask == nil || (nonce != "" && tc.ask.nonce != nonce) {
-		return nil
+	return tc.asks[nonce]
+}
+
+// putAsk 记下一张新挂起的卡。并发的多个请求各存一份，谁也不顶谁，
+// 理由见 threadChat.asks 的注释。
+func (tc *threadChat) putAsk(ask *pendingAsk) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.asks == nil {
+		tc.asks = map[string]*pendingAsk{}
 	}
-	return tc.ask
+	tc.asks[ask.nonce] = ask
+}
+
+// askForAnswer 返回可以用「回一条消息」作答的那张卡，以及当前挂起总数。
+// **只有恰好挂着一张时才给**：消息作答靠回编号，多张卡同时挂着时那个
+// 编号指向哪一张无从判断，宁可请用户去点按钮。
+func (tc *threadChat) askForAnswer() (*pendingAsk, int) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if len(tc.asks) != 1 {
+		return nil, len(tc.asks)
+	}
+	for _, a := range tc.asks {
+		return a, 1
+	}
+	return nil, 0
+}
+
+// isIndexAnswer 判断一条消息像不像「回编号」。用来在多卡挂起时把它拦下来
+// 说明情况，而不是当成闲聊排进对话。
+func isIndexAnswer(text string) bool {
+	n, err := strconv.Atoi(strings.TrimSpace(text))
+	return err == nil && n >= 1
 }
 
 // handleAskComponent 分发问答卡上的组件点击：
@@ -366,12 +393,12 @@ func parseAnswerText(text string, q elicitQuestion) []string {
 	return picked
 }
 
-// clearAsk 清掉子区的挂起问答（只清自己那份，防并发覆盖）。
+// clearAsk 清掉一张挂起的卡（只清自己那份，别的卡照旧等着裁决）。
 func (s *Service) clearAsk(threadID string, ask *pendingAsk) {
 	tc := s.chatState(threadID)
 	tc.mu.Lock()
-	if tc.ask == ask {
-		tc.ask = nil
+	if tc.asks[ask.nonce] == ask {
+		delete(tc.asks, ask.nonce)
 	}
 	tc.mu.Unlock()
 }
@@ -397,13 +424,20 @@ func (s *Service) finalizeAskCard(token, threadID string, ask *pendingAsk, compo
 // askDone 处理 PermissionDone/ElicitationDone：问答在别处（网页/超时）
 // 收口时，把卡片改成灰终态。自己收口的场景 ask 已清，这里自然跳过。
 func (s *Service) askDone(token, threadID string, tc *threadChat, doneID string) {
+	// 别处收口报的是 permission/elicitation 的 id，得按 id 反查是哪张卡。
 	tc.mu.Lock()
-	ask := tc.ask
-	if ask == nil || ask.id != doneID {
+	var ask *pendingAsk
+	for _, a := range tc.asks {
+		if a.id == doneID {
+			ask = a
+			break
+		}
+	}
+	if ask == nil {
 		tc.mu.Unlock()
 		return
 	}
-	tc.ask = nil
+	delete(tc.asks, ask.nonce)
 	tc.mu.Unlock()
 	// 题面留住，只把状态标灰——别处处理的也得看得出当初问的是什么。
 	title := ask.title

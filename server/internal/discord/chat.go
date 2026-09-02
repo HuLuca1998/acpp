@@ -30,8 +30,13 @@ type threadChat struct {
 	running bool
 	// buf 收当前回合的 agent 正文（OnEvent 是会话级回调，回合开始前重置）。
 	buf strings.Builder
-	// ask 是挂起的权限/提问，子区的下一条消息优先当作答。
-	ask *pendingAsk
+	// asks 是**同时**挂起的权限/提问，按卡片 nonce 索引。
+	// 必须存成多份：agent 会并发发出多个权限请求（真机抓到一轮里两个
+	// request_permission 前后脚到），早先这里是单值，后到的会把先到的
+	// 静默顶掉——被顶掉那张卡还留在频道里，按钮点了只报「已失效」，
+	// 而它对应的工具调用永远等不到裁决，整轮就此卡死（后端的权限等待
+	// 没有超时出口）。
+	asks map[string]*pendingAsk
 	// planMsgID/planGen 是本回合计划卡的消息 id 与更新代号（见 plan.go）。
 	planMsgID string
 	planGen   uint64
@@ -275,15 +280,19 @@ func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev m
 		return
 	}
 	tc := s.chatState(ev.ChannelID)
-	tc.mu.Lock()
-	ask := tc.ask
-	tc.mu.Unlock()
+	ask, pending := tc.askForAnswer()
 	// 挂着问答时纯文字优先尝试当答案；不像答案的（权限卡收到非编号、
 	// 多题提问收到闲文本）落回下面照常排队，不吞不怼。
 	if ask != nil && text != "" && len(ev.Attachments) == 0 {
 		if s.answerAsk(ctx, token, ev.ChannelID, ask, ev.ID, text) {
 			return
 		}
+	} else if pending > 1 && isIndexAnswer(text) {
+		// 多张卡同时挂着时编号指不明白是哪一张，与其猜一个不如说清楚
+		// ——直接排进对话的话，agent 只会收到一个莫名其妙的数字。
+		s.say(ctx, token, ev.ChannelID, fmt.Sprintf(
+			"-# 现在有 %d 张卡等着裁决，回编号分不清指哪一张——请点卡片上的按钮。", pending))
+		return
 	}
 	// 打成纯文本的斜杠命令不进对话——把 /help 当消息发出去，agent 只会
 	// 回一句「不认识」白费一轮。裸命令词才拦，带正文的不动。
@@ -414,7 +423,7 @@ func (s *Service) stopThread(token string, ev interactionEvent) {
 	tc.mu.Lock()
 	queued := len(tc.queue)
 	tc.queue = nil
-	tc.ask = nil
+	tc.asks = nil
 	running := tc.running
 	tc.mu.Unlock()
 	if !running && queued == 0 {

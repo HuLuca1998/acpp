@@ -71,7 +71,8 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	tc.mu.Lock()
 	reply := strings.TrimSpace(tc.buf.String())
 	tc.buf.Reset()
-	tc.ask = nil
+	// 轮结束就清空所有挂起的卡：这一轮都收尾了，还没裁决的也不作数了。
+	tc.asks = nil
 	toolCount := len(tc.toolLog)
 	touched := len(tc.touched)
 	tc.statTurns++
