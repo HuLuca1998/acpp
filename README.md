@@ -532,6 +532,7 @@ cd web && npx shadcn@latest add <component>
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
 - **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库，服务器页没有只读浏览面板（人要看自己 ssh）。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页能看到频道锁定的库与机器（「作用域」列），但改仍要走频道里的 `/db source` / `/server`。
+- **定时任务**（Discord 定时报告与巡检）：设计调研完成、未动工，方案见 [docs/定时任务-设计调研.md](docs/定时任务-设计调研.md)——任务挂在频道绑定上，到点开子区跑全新会话，agent 经 `acpp-cron` 工具面自建任务。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
 - **消息流与 diff 的虚拟滚动**：现在靠 `content-visibility:auto` 让屏外内容不绘制，元素与 DOM 节点仍然全在，几千条的会话滚动仍有代价。与另两项性能遗留（`git status` 的地板耗时、局域网场景的 h2c）一起记在 [docs/性能优化-2026-08](docs/性能优化-2026-08.md) 末尾。
