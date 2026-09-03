@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -77,7 +77,8 @@ acpp/
         ├── sshdial/            # SSH 拨号：认证方式、known_hosts 校验（accept-new）、连接建立。数据源隧道与服务器观察共用
         ├── remote/             # 远程服务器（adr-019）：连接配置、只读观察工具面（文件 / Docker / 主机）、老数据源 SSH 配置的一次性迁移
         ├── datasource/         # 外部 MySQL 数据源（adr-008）：连接配置、SSH 隧道（跳板机取自 remote）、库表探查、多段执行、MCP 工具面
-        ├── discord/            # Discord 频道工作区（adr-016/017/018）：频道绑定、子区对话、工作树与数据库环境锁定
+        ├── discord/            # Discord 频道工作区（adr-016/017/018）：频道绑定、子区对话、工作树与数据库环境锁定；定时任务的运行管线与入口（adr-020）
+        ├── schedule/           # 定时任务调度核心（adr-020）：任务与运行记录存储、cron 解析、整分钟扫描、失败退避与自动停用；Runner 与 Scope 由调用方注入
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
         │   ├── tenant.go / guard.go # 多租户：租户 CRUD 与隔离范围（Scope）
@@ -194,7 +195,12 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/discord` | discord 频道工作区总览（adr-016，bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)，owner 专属）：`{config:{enabled,tokenSet,workRoot}, status:{running,connected,botUser,guilds…}, bindings, catalog}`；token 永不回传 |
 | PUT | `/api/discord/config` | 存 discord 配置（`{enabled?, botToken?, workRoot?}`，token 空串=清除），gateway 即时起停 |
 | PUT | `/api/discord/bindings/{channelId}` | 改频道绑定的模型/思考深度（换仓库、换绑数据库走频道里的 `/init` 与 `/db source`） |
-| DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（工作树有未提交/未合回 base 的东西才保留，否则连分支一起清理） |
+| DELETE | `/api/discord/bindings/{channelId}` | 解绑频道（工作树有未提交/未合回 base 的东西才保留，否则连分支一起清理）；频道名下的定时任务一并删除 |
+| GET | `/api/discord/jobs` | 定时任务清单（adr-020，owner 专属）：`scope` 是频道 id，`plan` 是计划的人话，`nextRunAt` 含失败重试，`runs` 是最近 30 次运行 |
+| POST | `/api/discord/jobs` | 新建（`{channelId, name, cron, tz?, at?, prompt}`，`cron` 与 `at` 二选一；频道必须已绑定），201 |
+| PUT | `/api/discord/jobs/{id}` | 改任务（缺省字段不动；`enabled:true` 会清掉自动停用原因与连败计数） |
+| DELETE | `/api/discord/jobs/{id}` | 删任务 |
+| POST | `/api/discord/jobs/{id}/run` | 立即跑一次（不看启用状态；正在跑时 400），202 |
 | GET | `/api/fs/dirs` | 列目录（`?path=`，空为家目录；`?files=1` 连文件、`?hidden=1` 含隐藏项；条目带大小与修改时间），供选择器导航 |
 | GET | `/api/fs/places` | 选择器侧边栏的默认位置（家目录/桌面/文稿/下载/工作区；租户只有自己的 root） |
 | POST | `/api/fs/dirs` | 在指定目录下新建单层子目录（`{path, name}`），选择器就地建目录 |
@@ -262,6 +268,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | POST | `/api/mcp/report/{token}` | 会话的报告 MCP 端点（agent 回连，同一套 token）。工具 `report_open` 把 agent 写好的单文件 HTML 报告在用户工作区打开；只收路径不收全文，且限死会话工作目录内的 `.html` |
+| POST | `/api/mcp/discord-cron/{token}` | discord 子区的定时任务工具面端点（与上一条同一枚凭证）：`cron_add` / `cron_list` / `cron_update` / `cron_remove`，投递固定为子区所属频道 |
 | POST | `/api/mcp/discord/{token}` | discord 子区自家工具面端点（agent 回连，内存凭证）。`send_file` 交付文件（`paths` 一次最多 10 个，`as` 选形态：`auto` / `file` 附件 / `link` 渲染外链 / `image` 长图，`expire` 定外链有效期，默认 7d）；`list_links` 列出本子区还有效的外链；`revoke_link` 撤销（传 id 或 `all`）。外链是 secret gist + gistpreview 渲染页，只能撤 acpp 自己发的 |
 | GET | `/api/tools/servers` | 工具台：当前上下文（`?cwd=`）下的 MCP 工具面——工具名、给模型看的描述原文、参数 JSON Schema、只读/破坏性注解，外加这个面会不会真的挂给 agent（数据源为空就不挂） |
 | POST | `/api/tools/inspect` | 工具台试运行与自定义请求（`{cwd, request}`，request 是**原样的** JSON-RPC 消息）：走与 agent 完全相同的协议路径，回完整响应与耗时；通知类消息回 `accepted:true`（协议上就没有响应） |
@@ -415,6 +422,24 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 **Discord**：频道可以锁定一台服务器（`/init` 选库之后那一步，或事后用 `/server` 换绑），锁定后子区的 AI 只看得见那一台；不锁定则全部可见。绑定信息在频道主题、`/status` 与 `/mcps` 里都看得到。
 
+## 定时任务
+
+在 Discord 频道里让 AI 定时干活（[adr-020](docs/adr-020-discord-定时任务.md)，设计取舍与 openclaw 对照见 [docs/定时任务-设计调研.md](docs/定时任务-设计调研.md)）。任务**挂在频道绑定上**：一条任务 =「频道 + cron 表达式 + 一段自包含的任务提示词」，环境（工作目录 / 模型 / 权限档 / 锁定的库与机器）全部跟随绑定运行时现读，任务只回答「什么时候、干什么」。
+
+**一次运行 = 频道里一条起始消息 + 挂在它下面的子区 + 一条全新的 acp 会话。** 起始消息扮演普通对话里用户那条 `@acpp`，往下全是现成管线：工具卡、权限卡、报告卡、`send_file`、回合小结一个都不用改；跑完起始消息编辑成一行状态与摘要（`📅 用户七日行为日报 · 09-03 10:00 · ✅ 4m12s · 🔧 15` + 回复首行），子区里是完整成果，**用户可以在子区里接着追问**（子区 ↔ acpSessionId 照旧落盘）。巡检类任务无事时整条回复只写 `NO_REPORT`：起始消息变成「✅ 无需汇报」，子区归档。
+
+**三条入口**：
+
+- **子区里对 AI 说**（主路）：「以后每天早上 10 点这样出一份发到这个频道」。子区会话挂着 `acpp-cron` 工具面（`cron_add` / `cron_list` / `cron_update` / `cron_remove`），投递目标固定为当前频道——从凭证推，不让模型填频道 id。建完子区里出一张任务卡（立即运行 / 停用 / 删除三个按钮）。`scheduled-task` 技能（范本 [docs/skill-scheduled-task.md](docs/skill-scheduled-task.md)）教它「先做一次再固化」，并给出提示词的自包含清单。
+- `/cron`：手机上看与管——`action` 选 list / run / pause / resume / runs / remove，`id` 认任务 id 或名字前缀。
+- 网页 Discord 页的「定时任务」区块：清单、新建（cron 常用预设 + 本机时区缺省）、编辑、启停、立即运行、运行记录（能跳到子区）。
+
+**无人值守契约**（注入会话提示词与每次运行的开场输入）：不提问不等待、交成品不交计划、避开要审批的操作、无事回 `NO_REPORT`、失败如实报。提问（elicitation）到达时后端直接取消；权限卡照常发在子区并 @ 任务创建者，没人点就等到轮超时算失败。开场还注入运行时事实——几点、上次运行时间与摘要——巡检类「只看自上次以来」全靠它。
+
+**调度器**（`internal/schedule`，叶子包，不认识 discord）：整分钟扫描；cron 用 `robfig/cron` 的 parser（5 段 + IANA 时区，按墙钟解释）；同任务不重入（上一轮没跑完记 `skipped`）；bot 断线或会话池满记 `ErrBusy` 一分钟后重试（池满先收掉空闲 2 分钟以上的子区会话腾位）；连续失败退避 5m → 15m → 60m，连败 5 次自动停用并在频道里 @ 创建者；重启不补跑，晚 30 分钟以内仍算准时；一次性任务（`at`）跑成功即删。存储 `<dataDir>/schedule.json`（回退面 = 删文件）。跑完即关会话释放席位，子区续聊时凭 acpSessionId `session/load` 回来。
+
+**边界**：任务按频道绑定的权限档跑——`full` 档的频道等于让定时任务无人审批地执行任意命令，这是频道级的显式选择。任务提示词是持久化的注入面，建任务的人只能是频道成员与网页 owner，任务卡与清单上永远显示创建者。一次运行是一整条 agent 会话（技能注入 + 工具调用），巡检类靠 `NO_REPORT` 省的是投递不是 token。
+
 ## 工具台
 
 侧边栏「工具」页把**我方 MCP server 暴露给 agent 的工具**摊开给人看与试。页面的立场是复现 AI 那一侧：工具集、描述、参数、往返，全部走与 agent 完全相同的那条协议路径（`datasource.InspectMCP` 与会话侧的 `HandleMCP` 共用 `toolsForCwd`），页面上看到的就是模型此刻看到的那一份。
@@ -532,7 +557,7 @@ cd web && npx shadcn@latest add <component>
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
 - **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库，服务器页没有只读浏览面板（人要看自己 ssh）。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页能看到频道锁定的库与机器（「作用域」列），但改仍要走频道里的 `/db source` / `/server`。
-- **定时任务**（Discord 定时报告与巡检）：设计调研完成、未动工，方案见 [docs/定时任务-设计调研.md](docs/定时任务-设计调研.md)——任务挂在频道绑定上，到点开子区跑全新会话，agent 经 `acpp-cron` 工具面自建任务。
+- **定时任务**（Discord，[adr-020](docs/adr-020-discord-定时任务.md)）：已落地（见上面「定时任务」一节）。剩余：一次性任务（`at`）只能在对话里让 AI 建，网页表单只做 cron；`scheduled-task` 技能与其它技能一样要放进技能库；投递只到任务所在频道，「跑在 prod 频道、发到 #alerts」待需求出现再加。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
 - **消息流与 diff 的虚拟滚动**：现在靠 `content-visibility:auto` 让屏外内容不绘制，元素与 DOM 节点仍然全在，几千条的会话滚动仍有代价。与另两项性能遗留（`git status` 的地板耗时、局域网场景的 h2c）一起记在 [docs/性能优化-2026-08](docs/性能优化-2026-08.md) 末尾。

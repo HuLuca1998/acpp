@@ -11,7 +11,8 @@
 | `commands.go` 的 `slashCommands` 表 | 每条命令干什么 | **命令说明的唯一事实源**：`desc` 就是输入框打 `/` 时显示的那句话。手册与 /help 都只指路「打 `/` 看全部命令」，不再抄清单（`TestSlashCommandTable` 反向盯着，抄回去就红） |
 | `guide.go` 的 `guideMD` | 用法（怎么开对话、能做什么、状态怎么看） | 频道置顶手册，是**消息**所以 markdown 会渲染。新增对话能力（附件/报告/工具面…）时必须顺手补一行 |
 | `card.go` 的 `topicLine` | 这个频道绑了什么（仓库/分支/目录/模型/权限/数据库） | 频道主题，**纯文本**（连反引号都原样显示，真机实测），只放绑定信息不放用法。全量覆盖写入，≤`topicLimit`；绑定一变（/model /effort /access /db、重绑）就得刷 |
-| `chat.go` 的 `discordInstructions` | agent 的行为约定 | 不是功能清单 |
+| `chat.go` 的 `discordInstructions` / `cronInstructions` | agent 的行为约定（对话 / 无人值守运行） | 不是功能清单 |
+| `toolface.go` 的 `cronAddDescription` 等 | 定时任务工具的触发词与 prompt 契约 | 与 `scheduled-task` 技能是一对：工具管「想不想得起来建」，技能管「建出来的能不能跑好」 |
 
 历史教训：加了 /skills /usage 之后注册表更新了，手册和 /help 没人记得补
 （用户点名）；/db 的注册描述在默认口径反转后还写着「默认关」。所以命令
