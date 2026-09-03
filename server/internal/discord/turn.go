@@ -20,7 +20,9 @@ import (
 // turnOutcome 是一轮跑完的观测结果：定时任务的运行管线据此判成败、
 // 提摘要；普通对话不看它。
 type turnOutcome struct {
-	reply   string
+	reply string
+	// final 是最后一次工具调用之后的那段正文（没有工具调用时等于 reply）。
+	final   string
 	err     error
 	stop    acp.StopReason
 	tools   int
@@ -84,8 +86,17 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	stopTyping()
 
 	tc.mu.Lock()
-	reply := strings.TrimSpace(tc.buf.String())
+	raw := tc.buf.String()
+	reply := strings.TrimSpace(raw)
+	// 最后一段正文（最后一次工具调用之后）：结论在这，开场白不算。
+	final := reply
+	if tc.segStart > 0 && tc.segStart <= len(raw) {
+		if seg := strings.TrimSpace(raw[tc.segStart:]); seg != "" {
+			final = seg
+		}
+	}
 	tc.buf.Reset()
+	tc.segStart = 0
 	// 轮结束就清空所有挂起的卡：这一轮都收尾了，还没裁决的也不作数了。
 	tc.asks = nil
 	toolCount := len(tc.toolLog)
@@ -101,10 +112,10 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	tc.mu.Unlock()
 
 	s.finalizeToolCard(token, threadID, tc)
-	out := turnOutcome{reply: reply, err: err, stop: result.StopReason, tools: toolCount, tokens: tokens, elapsed: time.Since(started)}
+	out := turnOutcome{reply: reply, final: final, err: err, stop: result.StopReason, tools: toolCount, tokens: tokens, elapsed: time.Since(started)}
 
 	switch {
-	case unattended && isNoReport(reply):
+	case unattended && isNoReport(final):
 		// 巡检无事：NO_REPORT 是给管线看的信号，不是给人看的正文。
 	case err != nil:
 		s.say(ctx, token, threadID, "❌ 这一轮失败了\n-# "+trimRunes(err.Error(), 400))
@@ -255,6 +266,9 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 	case acp.EventPlan:
 		go s.updatePlanCard(token, threadID, tc, ev.Entries)
 	case acp.EventToolCall:
+		tc.mu.Lock()
+		tc.segStart = tc.buf.Len()
+		tc.mu.Unlock()
 		go s.noteToolCall(token, threadID, tc, ev)
 	}
 }
@@ -459,12 +473,12 @@ func (s *Service) runJob(ctx context.Context, job schedule.Job, run schedule.Run
 	case out.stop != "" && out.stop != acp.StopEndTurn:
 		res.Status, res.Error = schedule.StatusError, "回合中止："+string(out.stop)
 		status = "❌ 中止"
-	case isNoReport(out.reply):
+	case isNoReport(out.final):
 		res.Status = schedule.StatusSilent
 		status = "✅ 无需汇报"
 	default:
 		res.Status = schedule.StatusOK
-		res.Summary = jobSummary(out.reply)
+		res.Summary = jobSummary(out.final)
 		status = "✅ " + fmtElapsed(out.elapsed)
 		if out.tools > 0 {
 			status += fmt.Sprintf(" · 🔧 %d", out.tools)

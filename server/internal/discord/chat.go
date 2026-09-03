@@ -30,6 +30,10 @@ type threadChat struct {
 	running bool
 	// buf 收当前回合的 agent 正文（OnEvent 是会话级回调，回合开始前重置）。
 	buf strings.Builder
+	// segStart 是最后一次工具调用之后正文在 buf 里的起点：agent「说一句 →
+	// 干活 → 再说一句」时，最后那一段才是结论（定时任务的摘要与 NO_REPORT
+	// 判定都看它），开场的「我先看看…」不算。
+	segStart int
 	// asks 是**同时**挂起的权限/提问，按卡片 nonce 索引。
 	// 必须存成多份：agent 会并发发出多个权限请求（真机抓到一轮里两个
 	// request_permission 前后脚到），早先这里是单值，后到的会把先到的
@@ -354,6 +358,7 @@ func (s *Service) runThread(ctx context.Context, token string, b Binding, thread
 		batch := tc.queue
 		tc.queue = nil
 		tc.buf.Reset()
+		tc.segStart = 0
 		// 计划卡按回合另起：上一回合的卡定格成历史，这一回合的计划新发。
 		tc.planMsgID = ""
 		tc.mu.Unlock()
