@@ -197,6 +197,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.showUsage(token, ev)
 	case ev.Type == 2 && ev.Data.Name == "mcps":
 		s.showMCPs(token, ev)
+	case ev.Type == 2 && ev.Data.Name == "cron":
+		s.handleCronCommand(ctx, token, ev)
 	case ev.Type == 5 && ev.Data.CustomID == "init":
 		s.submitInit(ctx, token, ev)
 	case ev.Type == 5 && strings.HasPrefix(ev.Data.CustomID, "em:"):
@@ -213,6 +215,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.serverPicked(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "db:"):
 		s.dbPicked(ctx, token, ev)
+	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, jobPrefix):
+		s.handleJobButton(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, confirmPrefix):
 		s.revokeConfirmed(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, revokePrefix):
@@ -470,6 +474,7 @@ func (s *Service) unbindChannel(ctx context.Context, token string, ev interactio
 		s.ephemeral(token, ev, "解绑失败："+trimRunes(err.Error(), 200))
 		return
 	}
+	s.dropJobs(ev.ChannelID)
 	s.ephemeral(token, ev, fmt.Sprintf("✅ 已解绑 **%s**。%s重新绑定用 /init。", b.Repo, s.retireWorkdir(ctx, b)))
 	go s.cleanupChannelCard(ctx, token, b)
 }
@@ -529,6 +534,7 @@ func (s *Service) handleChannelDelete(ctx context.Context, raw json.RawMessage) 
 		slog.Warn("频道已删除但解绑落盘失败", "channel", ch.ID, "err", err)
 		return
 	}
+	s.dropJobs(ch.ID)
 	slog.Info("频道已删除，自动解绑", "channel", ch.ID, "repo", b.Repo, "工作树", s.retireWorkdir(ctx, b))
 }
 
@@ -688,6 +694,7 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 		"`/db off` 卸载、`/db on` 或消息带 `@db` 再打开、`/db source:<项目/环境>` 换绑。\n" +
 		"**看改动** — `/git` 列出本频道工作树的分支、与远端的差距、改了/加了/删了哪些文件。\n" +
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
+		"**定时任务** — 在子区里说「以后每天早上 10 点出一份发到这个频道」，AI 会建一条定时任务；到点频道里开子区自动跑，`/cron` 看与管。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
 		"**命令** — 在输入框打 `/` 就能看到全部命令，每条都带说明。"
 	s.ephemeralKeep(token, ev, text)

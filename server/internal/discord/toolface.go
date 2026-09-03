@@ -3,12 +3,15 @@ package discord
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"acpp/server/internal/mcp"
+	"acpp/server/internal/schedule"
 )
 
 // acpp-chat 工具面：agent 把成果**交到用户手上**的出口，外加交出去之后
@@ -40,19 +43,33 @@ func (s *Service) chatMounts(threadID string, b Binding) (servers []any, meta ma
 		return nil, nil, err
 	}
 	url := strings.TrimRight(s.deps.MCPBase, "/") + "/" + token
+	// 定时任务面与交付面同一枚凭证，端点多一个 -cron 段（见 cronURL）。
+	withCron := s.sched != nil
 	if b.Agent == "claude" {
+		mcpServers := map[string]any{
+			chatServerName: map[string]any{"type": "http", "url": url},
+		}
+		allowed := chatAllowedTools()
+		if withCron {
+			mcpServers[cronServerName] = map[string]any{"type": "http", "url": cronURL(url)}
+			allowed = append(allowed, cronAllowedTools()...)
+		}
 		return nil, map[string]any{
 			"claudeCode": map[string]any{"options": map[string]any{
-				"mcpServers": map[string]any{
-					chatServerName: map[string]any{"type": "http", "url": url},
-				},
-				"allowedTools": chatAllowedTools(),
+				"mcpServers":   mcpServers,
+				"allowedTools": allowed,
 			}},
 		}, nil
 	}
-	return []any{map[string]any{
+	servers = []any{map[string]any{
 		"type": "http", "name": chatServerName, "url": url, "headers": []any{},
-	}}, nil, nil
+	}}
+	if withCron {
+		servers = append(servers, map[string]any{
+			"type": "http", "name": cronServerName, "url": cronURL(url), "headers": []any{},
+		})
+	}
+	return servers, nil, nil
 }
 
 // chatAllowedTools 是 claude 侧预批的工具名。交付是「把东西给用户」的最后
@@ -229,4 +246,292 @@ func resolveInWorkdir(workdir, rel string) (string, error) {
 		return "", fmt.Errorf("不是一个文件：%s", rel)
 	}
 	return resolved, nil
+}
+
+// ---- acpp-cron 工具面：agent 在对话里自建定时任务 ----
+//
+// 与 acpp-chat 共用同一枚回连凭证（token → 子区 → 频道），只是 server 名
+// 单列成 acpp-cron：工具台按 server 分组，模型读工具清单时也一眼分得清
+// 「交付」与「定时」两件事。投递目标固定为当前频道——从凭证推，不让模型
+// 填 channel id（openclaw 的 resolveCronCreationDelivery 同一取舍）。
+
+const cronServerName = "acpp-cron"
+
+const (
+	cronToolAdd    = "cron_add"
+	cronToolList   = "cron_list"
+	cronToolUpdate = "cron_update"
+	cronToolRemove = "cron_remove"
+)
+
+// cronURL 由交付面的回连地址推定时面的：同一 token，路径段多一个 -cron。
+func cronURL(chatURL string) string {
+	return strings.Replace(chatURL, "/api/mcp/discord/", "/api/mcp/discord-cron/", 1)
+}
+
+// cronAllowedTools 是 claude 侧预批的工具名。建任务是用户在对话里明确
+// 要的事，在这一步弹权限卡只会打断「说一句就建好」的体验。
+func cronAllowedTools() []string {
+	var out []string
+	for _, t := range []string{cronToolAdd, cronToolList, cronToolUpdate, cronToolRemove} {
+		out = append(out, "mcp__"+cronServerName+"__"+t)
+	}
+	return out
+}
+
+// 工具描述写给模型看，回答的是「什么时候该想起它」与「prompt 该写成什么样」
+// ——后者是整个功能成败的关键：任务到点在全新会话里跑，没有这次对话的
+// 任何记忆，写得像「像刚才那样」的任务第一次就会跑歪。
+const cronAddDescription = "给当前频道建一条定时任务：到点后在**全新会话**里执行 prompt，成果发到这个频道" +
+	"（频道里一条起始消息 + 挂在下面的子区，跑完用户可以在子区里追问）。" +
+	"\n什么时候用：用户说「每天 / 每周一 / 每隔 N 小时 / 以后定时 / 到点 / 固定时间发一份」" +
+	"——建任务。**绝不要用 sleep 循环、反复轮询或让用户手动提醒来冒充定时。**" +
+	"\n时间：cron 是 5 段表达式（分 时 日 月 周），按 tz 的墙钟解释，tz 缺省是本机时区。" +
+	"「每天早上 10 点」→ cron=\"0 10 * * *\"；「每两小时」→ \"0 */2 * * *\"；「每周一 9 点」→ \"0 9 * * 1\"；" +
+	"「每个工作日 18:30」→ \"30 18 * * 1-5\"。只跑一次的用 at（RFC3339 时刻）代替 cron。" +
+	"\n**prompt 是那次运行的全部上下文**：新会话没有这次对话的任何记忆。把数据来源（哪个库哪些表 / 哪台机器" +
+	"哪些日志路径）、口径（时间窗按「运行时刻」相对表述，如「过去 7 天」「自上次运行以来」；指标定义；过滤条件）、" +
+	"输出结构（先一行结论，再要点）、交付形态（报告按 html-report 写成单文件并 report_open；文件用 send_file）、" +
+	"静默条件（巡检类：没有值得汇报的内容只回 NO_REPORT）全部写进去；不要写「像刚才那样」「同上」。" +
+	"正确的做法是先在当前对话里把这件事做过一次、口径对齐了，再把**刚才实际走过的步骤**写成 prompt。" +
+	"\n建完把「什么时候、干什么、多久一次、发到哪」用一句话复述给用户确认；任务卡上有按钮可以立即运行、停用、删除。"
+
+const cronListDescription = "列出当前频道的定时任务：id、名字、时间、下次运行、上次结果。" +
+	"用户问「有哪些定时任务」「那个日报还在跑吗」「上次跑成功了吗」，或你要改 / 删任务却手上没有 id 时用。"
+
+const cronUpdateDescription = "改当前频道的一条定时任务：换时间（cron / tz / at）、改 prompt、停用或启用（enabled）。" +
+	"只传要改的字段。用户说「改成每天 9 点」「先停掉」「把周报也加上 xx 指标」时用；手上没有 id 先 cron_list。" +
+	"改 prompt 时传完整的新版本，不是补丁。"
+
+const cronRemoveDescription = "删掉当前频道的一条定时任务（不可恢复，prompt 一并没了）。" +
+	"用户明确说「删掉 / 不用了 / 取消这个定时」时用；只是暂时不跑用 cron_update 停用。"
+
+// HandleCronMCP 处理一条发到 /api/mcp/discord-cron/{token} 的 JSON-RPC 消息。
+func (s *Service) HandleCronMCP(ctx context.Context, token string, raw []byte) (any, bool) {
+	srv := mcp.Server{
+		Name: cronServerName,
+		Resolve: func(ctx context.Context, token string) ([]mcp.Tool, error) {
+			threadID, _, _, ok := s.chatTok.Lookup(token)
+			if !ok {
+				return nil, fmt.Errorf("凭证无效（会话可能已重启）")
+			}
+			return s.cronTools(threadID), nil
+		},
+	}
+	return srv.Serve(ctx, token, raw)
+}
+
+// jobScope 由子区推任务归属（频道 id）与创建者（最近说话的人）。
+func (s *Service) jobScope(threadID string) (channelID, creator string, err error) {
+	if s.sched == nil {
+		return "", "", fmt.Errorf("定时任务未启用")
+	}
+	t, ok := s.store.config().thread(threadID)
+	if !ok {
+		return "", "", fmt.Errorf("这个子区不属于任何绑定频道")
+	}
+	tc := s.chatState(threadID)
+	tc.mu.Lock()
+	creator = tc.lastUser
+	tc.mu.Unlock()
+	return t.ChannelID, creator, nil
+}
+
+// cronArgs 是 cron_add / cron_update 共用的入参形状。
+type cronArgs struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Cron    string `json:"cron"`
+	TZ      string `json:"tz"`
+	At      string `json:"at"`
+	Prompt  string `json:"prompt"`
+	Enabled *bool  `json:"enabled"`
+}
+
+func (a cronArgs) atTime() (*time.Time, error) {
+	if strings.TrimSpace(a.At) == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(a.At))
+	if err != nil {
+		return nil, fmt.Errorf("at 要是 RFC3339 时刻（如 2026-09-04T09:00:00+08:00）：%w", err)
+	}
+	return &t, nil
+}
+
+// cronTools 构造子区会话可用的定时任务工具集。
+func (s *Service) cronTools(threadID string) []mcp.Tool {
+	jobSchema := map[string]any{
+		"name":   map[string]any{"type": "string", "description": "任务名（≤80 字），起始消息与子区标题都用它"},
+		"cron":   map[string]any{"type": "string", "description": "5 段 cron 表达式（分 时 日 月 周），与 at 二选一"},
+		"tz":     map[string]any{"type": "string", "description": "IANA 时区（如 Asia/Shanghai），缺省本机时区"},
+		"at":     map[string]any{"type": "string", "description": "一次性任务的 RFC3339 时刻，与 cron 二选一；跑成功即删"},
+		"prompt": map[string]any{"type": "string", "description": "任务提示词：那次运行的全部上下文，必须自包含"},
+	}
+	updateSchema := map[string]any{"id": map[string]any{"type": "string", "description": "任务 id（cron_list 里的）"}}
+	for k, v := range jobSchema {
+		updateSchema[k] = v
+	}
+	updateSchema["enabled"] = map[string]any{"type": "boolean", "description": "false 停用、true 启用"}
+
+	return []mcp.Tool{{
+		Name:        cronToolAdd,
+		Description: cronAddDescription,
+		InputSchema: map[string]any{
+			"type": "object", "properties": jobSchema, "required": []any{"name", "prompt"},
+		},
+		Call: func(ctx context.Context, args json.RawMessage) (string, error) {
+			var in cronArgs
+			if err := decodeArgs(args, &in); err != nil {
+				return "", err
+			}
+			channelID, creator, err := s.jobScope(threadID)
+			if err != nil {
+				return "", err
+			}
+			at, err := in.atTime()
+			if err != nil {
+				return "", err
+			}
+			tz := in.TZ
+			if tz == "" {
+				tz = schedule.HostTZ()
+			}
+			job, err := s.sched.Add(schedule.Input{
+				Scope: channelID, Name: in.Name, Cron: in.Cron, TZ: tz, At: at,
+				Prompt: in.Prompt, CreatedBy: creator,
+			})
+			if err != nil {
+				return "", jobErr(err)
+			}
+			s.postJobCard(s.store.config().BotToken, threadID, job)
+			return "已创建定时任务：" + jobText(job) +
+				"\n成果会发到本频道（起始消息 + 子区）。请把「什么时候、干什么、多久一次」复述给用户确认；任务卡已发在子区，上面有立即运行 / 停用 / 删除按钮。", nil
+		},
+	}, {
+		Name:        cronToolList,
+		Description: cronListDescription,
+		Annotations: &mcp.Annotations{ReadOnlyHint: true},
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		Call: func(ctx context.Context, _ json.RawMessage) (string, error) {
+			channelID, _, err := s.jobScope(threadID)
+			if err != nil {
+				return "", err
+			}
+			jobs := s.sched.Jobs(channelID)
+			if len(jobs) == 0 {
+				return "本频道还没有定时任务。", nil
+			}
+			lines := make([]string, 0, len(jobs))
+			for _, j := range jobs {
+				lines = append(lines, "- "+jobText(j))
+			}
+			return strings.Join(lines, "\n"), nil
+		},
+	}, {
+		Name:        cronToolUpdate,
+		Description: cronUpdateDescription,
+		InputSchema: map[string]any{"type": "object", "properties": updateSchema, "required": []any{"id"}},
+		Call: func(ctx context.Context, args json.RawMessage) (string, error) {
+			var in cronArgs
+			if err := decodeArgs(args, &in); err != nil {
+				return "", err
+			}
+			channelID, _, err := s.jobScope(threadID)
+			if err != nil {
+				return "", err
+			}
+			job, ok := s.sched.Get(in.ID)
+			if !ok || job.Scope != channelID {
+				return "", fmt.Errorf("本频道没有 id 为 %s 的任务（先 cron_list）", in.ID)
+			}
+			at, err := in.atTime()
+			if err != nil {
+				return "", err
+			}
+			p := schedule.Patch{At: at, Enabled: in.Enabled}
+			if in.Name != "" {
+				p.Name = &in.Name
+			}
+			if in.Cron != "" {
+				p.Cron = &in.Cron
+			}
+			if in.TZ != "" {
+				p.TZ = &in.TZ
+			}
+			if in.Prompt != "" {
+				p.Prompt = &in.Prompt
+			}
+			job, err = s.sched.Update(in.ID, p)
+			if err != nil {
+				return "", jobErr(err)
+			}
+			s.postJobCard(s.store.config().BotToken, threadID, job)
+			return "已更新：" + jobText(job), nil
+		},
+	}, {
+		Name:        cronToolRemove,
+		Description: cronRemoveDescription,
+		Annotations: &mcp.Annotations{DestructiveHint: true},
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"id": map[string]any{"type": "string", "description": "任务 id"}},
+			"required":   []any{"id"},
+		},
+		Call: func(ctx context.Context, args json.RawMessage) (string, error) {
+			var in cronArgs
+			if err := decodeArgs(args, &in); err != nil {
+				return "", err
+			}
+			channelID, _, err := s.jobScope(threadID)
+			if err != nil {
+				return "", err
+			}
+			job, ok := s.sched.Get(in.ID)
+			if !ok || job.Scope != channelID {
+				return "", fmt.Errorf("本频道没有 id 为 %s 的任务（先 cron_list）", in.ID)
+			}
+			if err := s.sched.Remove(in.ID); err != nil {
+				return "", jobErr(err)
+			}
+			s.say(ctx, s.store.config().BotToken, threadID, "🗑 定时任务 **"+trimRunes(job.Name, 80)+"** 已删除。")
+			return "已删除定时任务「" + job.Name + "」。", nil
+		},
+	}}
+}
+
+// jobText 是一条任务给模型看的一行描述。
+func jobText(j schedule.Job) string {
+	loc := j.Location()
+	state := "启用"
+	if !j.Enabled {
+		state = "已停用"
+		if j.DisabledReason != "" {
+			state += "（" + j.DisabledReason + "）"
+		}
+	}
+	out := fmt.Sprintf("「%s」(id %s) · %s · %s", j.Name, j.ID, j.Describe(), state)
+	if j.Enabled && j.NextRunAt != nil {
+		out += " · 下次 " + j.NextRunAt.In(loc).Format("2006-01-02 15:04")
+	}
+	if j.LastRunAt != nil {
+		out += fmt.Sprintf(" · 上次 %s %s", j.LastRunAt.In(loc).Format("01-02 15:04"), jobStatusWord(j.LastStatus))
+		if j.LastSummary != "" {
+			out += "：" + trimRunes(j.LastSummary, 120)
+		}
+	}
+	return out
+}
+
+// jobErr 把 schedule 包的哨兵换成本包的（httpapi 只认识本包那套）。
+func jobErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, schedule.ErrNotFound):
+		return fmt.Errorf("%w: %v", ErrNotFound, strings.TrimPrefix(err.Error(), "schedule: "))
+	case errors.Is(err, schedule.ErrInvalid), errors.Is(err, schedule.ErrRunning):
+		return fmt.Errorf("%w: %v", ErrInvalid, strings.TrimPrefix(err.Error(), "schedule: "))
+	}
+	return err
 }

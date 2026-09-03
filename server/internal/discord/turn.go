@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,19 +11,33 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/mcp"
+	"acpp/server/internal/schedule"
 )
 
 // 本文件是子区的回合执行层：开会话（挂载工具面）、跑一轮 prompt、
 // 消费会话事件、回合小结与历史衔接。消息分发与队列在 chat.go。
 
+// turnOutcome 是一轮跑完的观测结果：定时任务的运行管线据此判成败、
+// 提摘要；普通对话不看它。
+type turnOutcome struct {
+	reply   string
+	err     error
+	stop    acp.StopReason
+	tools   int
+	tokens  int
+	elapsed time.Duration
+}
+
 // runTurn 跑一轮：确保会话（load 恢复优先）、对齐绑定设置、发 prompt、
 // 轮末把正文分段发回子区。
-func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID string, tc *threadChat, input string, atts []attachment) {
+func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID string, tc *threadChat, input string, atts []attachment) turnOutcome {
 	key := "dc:" + threadID
 	sess, fresh, err := s.openChatSession(ctx, key, b, threadID, tc)
 	if err != nil {
-		s.say(ctx, token, threadID, "❌ 会话启动失败\n-# "+trimRunes(err.Error(), 400))
-		return
+		if !errors.Is(err, acp.ErrPoolFull) {
+			s.say(ctx, token, threadID, "❌ 会话启动失败\n-# "+trimRunes(err.Error(), 400))
+		}
+		return turnOutcome{err: err}
 	}
 	// 附件先落盘再转内容块；个别失败只提示，不拦整轮。
 	attBlocks, attNotes := s.attachmentBlocks(ctx, b.Workdir, atts)
@@ -62,7 +77,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 		blocks = append(blocks, acp.ContentBlock{Type: "text", Text: input})
 	}
 	if len(blocks) == 0 {
-		return
+		return turnOutcome{}
 	}
 	started := time.Now()
 	result, err := s.acpMgr.Prompt(ctx, key, blocks)
@@ -77,14 +92,20 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	touched := len(tc.touched)
 	tc.statTurns++
 	tc.statTools += toolCount
+	tokens := 0
 	if result.Usage != nil {
-		tc.statTokens += result.Usage.TotalTokens
+		tokens = result.Usage.TotalTokens
+		tc.statTokens += tokens
 	}
+	unattended := tc.job != nil
 	tc.mu.Unlock()
 
 	s.finalizeToolCard(token, threadID, tc)
+	out := turnOutcome{reply: reply, err: err, stop: result.StopReason, tools: toolCount, tokens: tokens, elapsed: time.Since(started)}
 
 	switch {
+	case unattended && isNoReport(reply):
+		// 巡检无事：NO_REPORT 是给管线看的信号，不是给人看的正文。
 	case err != nil:
 		s.say(ctx, token, threadID, "❌ 这一轮失败了\n-# "+trimRunes(err.Error(), 400))
 	case reply == "":
@@ -106,6 +127,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 			s.say(ctx, token, threadID, seg)
 		}
 	}
+	return out
 }
 
 // openChatSession 打开（或复用）子区的 acp 会话，OnEvent 绑定到该子区的
@@ -141,6 +163,14 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 			mcpServers, metaExtra = nil, nil
 		}
 	}
+	// 定时运行的会话多一段无人值守约定（claude 走系统提示词；codex 没有
+	// 注入口，靠开场输入里的同一段）。
+	instructions := discordInstructionsFor(b)
+	tc.mu.Lock()
+	if tc.job != nil {
+		instructions += "\n\n" + cronInstructions
+	}
+	tc.mu.Unlock()
 	// 自家 acpp-chat 工具面（send_file）：agent 把文件直接发给用户的出口。
 	if cs, cm, cErr := s.chatMounts(threadID, b); cErr != nil {
 		slog.Warn("chat 工具面挂载失败，跳过", "err", cErr)
@@ -158,7 +188,7 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 		ResumeACPSessionID: resume,
 		MCPServers:         mcpServers,
 		MetaExtra:          metaExtra,
-		InstructionsExtra:  discordInstructionsFor(b),
+		InstructionsExtra:  instructions,
 	})
 	if err != nil {
 		return nil, false, err
@@ -212,6 +242,13 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 	case acp.EventPermission:
 		go s.askPermission(token, threadID, tc, ev)
 	case acp.EventElicitation:
+		tc.mu.Lock()
+		unattended := tc.job != nil
+		tc.mu.Unlock()
+		if unattended {
+			go s.declineElicitation(token, threadID, ev)
+			return
+		}
 		go s.askElicitation(token, threadID, tc, ev)
 	case acp.EventPermissionDone, acp.EventElicitationDone:
 		go s.askDone(token, threadID, tc, ev.PermissionID+ev.ElicitationID)
@@ -325,4 +362,354 @@ func (s *Service) threadHistory(ctx context.Context, token, threadID string) str
 		b.WriteString(who + "：" + trimRunes(text, 600) + "\n")
 	}
 	return trimRunes(b.String(), 6000)
+}
+
+// ---- 定时任务的运行管线（schedule.Runner）----
+//
+// 一次定时运行 = 频道里一条起始消息 + 挂在它下面的子区 + 一条全新的 acp
+// 会话。起始消息扮演的是普通对话里用户那条 @acpp：往下全是现成管线（工具
+// 卡、权限卡、报告卡、send_file、回合小结），跑完子区还能接着聊。
+// 与 openclaw 的 isolated 会话同构，多出来的一条是「可续聊」。
+
+// jobRun 是一次定时运行挂在子区运行态上的标记：有它就是无人值守。
+type jobRun struct {
+	job schedule.Job
+	run schedule.Run
+}
+
+// jobSessionIdle 是「给定时任务腾位置」的门槛：池满时把空闲超过这么久的
+// 子区会话先收掉（上下文在 agent 侧，下次说话 load 回来）。
+const jobSessionIdle = 2 * time.Minute
+
+// runJob 跑一次定时任务。资源暂不可用（bot 没连上、会话池满）报
+// schedule.ErrBusy 让调度器稍后重试；其余错误算这一次失败。
+func (s *Service) runJob(ctx context.Context, job schedule.Job, run schedule.Run) (schedule.Result, error) {
+	cfg := s.store.config()
+	b, ok := cfg.binding(job.Scope)
+	if !ok {
+		return schedule.Result{}, fmt.Errorf("频道 %s 没有绑定工作区", job.Scope)
+	}
+	if !s.connected() || cfg.BotToken == "" {
+		return schedule.Result{}, schedule.ErrBusy
+	}
+	if !s.reserveSeat() {
+		return schedule.Result{}, schedule.ErrBusy
+	}
+	token := cfg.BotToken
+	when := run.StartedAt.In(job.Location())
+	title := jobThreadTitle(job, when)
+
+	starterID, err := s.postJobStarter(ctx, token, b.ChannelID, jobHeadline(job, when, "🔄 运行中", ""))
+	if err != nil {
+		return schedule.Result{}, fmt.Errorf("发起始消息: %w", err)
+	}
+	threadID, err := s.openJobThread(ctx, token, b.ChannelID, starterID, title)
+	if err != nil {
+		s.editJobStarter(ctx, token, b.ChannelID, starterID, jobHeadline(job, when, "❌ 失败", "开子区失败："+err.Error()))
+		return schedule.Result{}, fmt.Errorf("开子区: %w", err)
+	}
+	if _, err := s.store.update(func(c *Config) {
+		c.upsertThread(Thread{ThreadID: threadID, ChannelID: b.ChannelID, Title: title, JobID: job.ID, CreatedAt: time.Now()})
+	}); err != nil {
+		slog.Warn("定时任务子区记录落盘失败", "err", err)
+	}
+	s.chatMu.Lock()
+	s.chanKind[threadID] = b.ChannelID
+	s.chatMu.Unlock()
+
+	tc := s.chatState(threadID)
+	tc.mu.Lock()
+	tc.running = true
+	tc.job = &jobRun{job: job, run: run}
+	// 权限卡 @ 任务的创建者：无人值守但不是无人能管。
+	if isSnowflake(job.CreatedBy) {
+		tc.lastUser = job.CreatedBy
+	}
+	tc.mu.Unlock()
+
+	out := s.runTurn(ctx, token, b, threadID, tc, jobPreamble(job, run, when)+job.Prompt, nil)
+
+	tc.mu.Lock()
+	tc.job = nil
+	tc.mu.Unlock()
+
+	if errors.Is(out.err, acp.ErrPoolFull) {
+		// 席位刚被抢走：撤掉起始消息与子区交给调度器稍后重试——留着的话
+		// 每次重试都在频道里多一条「失败」。
+		tc.mu.Lock()
+		tc.running = false
+		tc.mu.Unlock()
+		s.discardJobThread(ctx, token, b.ChannelID, starterID, threadID)
+		return schedule.Result{}, schedule.ErrBusy
+	}
+	// 跑完就把会话席位让出来：定时任务不该占着池子等空闲回收；子区续聊时
+	// 凭 acpSessionId load 回来（提示词也随之换回普通对话那套）。
+	if err := s.acpMgr.Close("dc:" + threadID); err != nil && !errors.Is(err, acp.ErrNoSession) {
+		slog.Warn("关定时任务会话失败", "err", err)
+	}
+	// 运行期间排进来的用户消息接着跑（队列空则只是交还执行权）。
+	go s.runThread(ctx, token, b, threadID, tc)
+
+	res := schedule.Result{Ref: threadID, Tools: out.tools, Tokens: out.tokens}
+	var status string
+	switch {
+	case out.err != nil:
+		res.Status, res.Error = schedule.StatusError, out.err.Error()
+		status = "❌ 失败"
+	case out.stop != "" && out.stop != acp.StopEndTurn:
+		res.Status, res.Error = schedule.StatusError, "回合中止："+string(out.stop)
+		status = "❌ 中止"
+	case isNoReport(out.reply):
+		res.Status = schedule.StatusSilent
+		status = "✅ 无需汇报"
+	default:
+		res.Status = schedule.StatusOK
+		res.Summary = jobSummary(out.reply)
+		status = "✅ " + fmtElapsed(out.elapsed)
+		if out.tools > 0 {
+			status += fmt.Sprintf(" · 🔧 %d", out.tools)
+		}
+	}
+	note := res.Summary
+	if res.Status == schedule.StatusError {
+		note = res.Error
+	}
+	s.editJobStarter(ctx, token, b.ChannelID, starterID, jobHeadline(job, when, status, note))
+	if res.Status == schedule.StatusSilent {
+		s.archiveThread(ctx, token, threadID)
+	}
+	return res, nil
+}
+
+// reserveSeat 确认会话池还有席位；满了先收掉空闲超过 jobSessionIdle 的
+// 子区会话腾位置，仍满则报没有。
+func (s *Service) reserveSeat() bool {
+	if s.acpMgr.OpenCount() < chatMaxSessions {
+		return true
+	}
+	for _, key := range s.acpMgr.Idle(jobSessionIdle) {
+		if err := s.acpMgr.Close(key); err != nil {
+			continue
+		}
+		if s.acpMgr.OpenCount() < chatMaxSessions {
+			return true
+		}
+	}
+	return s.acpMgr.OpenCount() < chatMaxSessions
+}
+
+// jobDisabled 是调度器自动停用任务后的通报：发在任务所在频道，@ 创建者。
+func (s *Service) jobDisabled(job schedule.Job, reason string) {
+	cfg := s.store.config()
+	if cfg.BotToken == "" {
+		return
+	}
+	text := fmt.Sprintf("⛔ 定时任务 **%s** %s。\n-# 修好原因后用 /cron resume（或网页 Discord 页）重新启用；最近几次的失败原因看 /cron runs。", job.Name, reason)
+	mentions := noMentions()
+	if isSnowflake(job.CreatedBy) {
+		text = "<@" + job.CreatedBy + "> " + text
+		mentions = map[string]any{"users": []string{job.CreatedBy}}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := botREST(ctx, cfg.BotToken, "POST", "/channels/"+job.Scope+"/messages",
+		map[string]any{"content": text, "allowed_mentions": mentions}, nil)
+	if err != nil {
+		slog.Warn("定时任务停用通报发送失败", "job", job.ID, "err", err)
+	}
+}
+
+// declineElicitation 是无人值守运行里 agent 提问时的回答：取消，并在子区
+// 留一行说明。留一张没人填的表比直接取消更糟——回合会一直挂着。
+func (s *Service) declineElicitation(token, threadID string, ev acp.Event) {
+	if err := s.acpMgr.ResolveElicitation("dc:"+threadID, ev.ElicitationID,
+		acp.ElicitationResult{Action: "cancel"}); err != nil {
+		slog.Warn("取消无人值守提问失败", "err", err)
+	}
+	s.say(context.Background(), token, threadID, "-# 🤖 无人值守运行：agent 的提问已自动取消（按约定它该自行按保守口径继续）。")
+}
+
+// postJobStarter 在频道里发这次运行的起始消息，返回消息 id。
+func (s *Service) postJobStarter(ctx context.Context, token, channelID, content string) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var msg struct {
+		ID string `json:"id"`
+	}
+	err := botREST(cctx, token, "POST", "/channels/"+channelID+"/messages",
+		map[string]any{"content": content, "allowed_mentions": noMentions()}, &msg)
+	if err != nil {
+		return "", err
+	}
+	return msg.ID, nil
+}
+
+// editJobStarter 把起始消息改成终态（状态 + 一行摘要），尽力而为。
+func (s *Service) editJobStarter(ctx context.Context, token, channelID, msgID, content string) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err := botREST(cctx, token, "PATCH", "/channels/"+channelID+"/messages/"+msgID,
+		map[string]any{"content": content, "allowed_mentions": noMentions()}, nil)
+	if err != nil {
+		slog.Warn("定时任务起始消息更新失败", "err", err)
+	}
+}
+
+// openJobThread 以起始消息开子区（与 @bot 开子区同一条 REST）。
+func (s *Service) openJobThread(ctx context.Context, token, channelID, msgID, title string) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var th struct {
+		ID string `json:"id"`
+	}
+	err := botREST(cctx, token, "POST", fmt.Sprintf("/channels/%s/messages/%s/threads", channelID, msgID),
+		map[string]any{"name": title, "auto_archive_duration": 1440}, &th)
+	if err != nil {
+		return "", err
+	}
+	if th.ID == "" {
+		return "", fmt.Errorf("平台没有返回子区 id")
+	}
+	return th.ID, nil
+}
+
+// archiveThread 归档子区（巡检无事时把它收起来，频道里只剩起始消息那一行）。
+func (s *Service) archiveThread(ctx context.Context, token, threadID string) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := botREST(cctx, token, "PATCH", "/channels/"+threadID, map[string]any{"archived": true}, nil); err != nil {
+		slog.Warn("归档定时任务子区失败", "err", err)
+	}
+}
+
+// discardJobThread 撤掉一次没跑起来的运行留下的痕迹：子区、起始消息、记录。
+func (s *Service) discardJobThread(ctx context.Context, token, channelID, msgID, threadID string) {
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := botREST(cctx, token, "DELETE", "/channels/"+threadID, nil, nil); err != nil {
+		slog.Warn("删定时任务子区失败", "err", err)
+	}
+	if err := botREST(cctx, token, "DELETE", "/channels/"+channelID+"/messages/"+msgID, nil, nil); err != nil {
+		slog.Warn("删定时任务起始消息失败", "err", err)
+	}
+	if _, err := s.store.update(func(c *Config) { c.removeThread(threadID) }); err != nil {
+		slog.Warn("清定时任务子区记录失败", "err", err)
+	}
+	s.chatMu.Lock()
+	delete(s.chats, threadID)
+	delete(s.chanKind, threadID)
+	s.chatMu.Unlock()
+}
+
+// jobPreamble 是每次运行开场的系统注入：运行时事实（几点、上次结果）+
+// 无人值守约定。agent 不知道也推不出这些，尤其是「上次运行时间」——巡检
+// 类任务的时间窗全靠它。
+func jobPreamble(job schedule.Job, run schedule.Run, when time.Time) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "（定时任务·系统注入）任务「%s」按计划于 %s 运行", job.Name, when.Format("2006-01-02 15:04 (MST)"))
+	if run.Trigger == schedule.TriggerManual {
+		b.WriteString("（由人手动触发）")
+	}
+	b.WriteString("。\n")
+	if job.LastRunAt != nil {
+		fmt.Fprintf(&b, "上次运行：%s，结果 %s", job.LastRunAt.In(job.Location()).Format("2006-01-02 15:04"), jobStatusWord(job.LastStatus))
+		if job.LastSummary != "" {
+			fmt.Fprintf(&b, "，摘要：「%s」", trimRunes(job.LastSummary, 200))
+		}
+		b.WriteString("。\n")
+	} else {
+		b.WriteString("这是本任务第一次运行。\n")
+	}
+	b.WriteString("\n" + cronInstructions + "\n\n---- 任务 ----\n")
+	return b.String()
+}
+
+// jobStatusWord 是运行状态的人话。
+func jobStatusWord(status string) string {
+	switch status {
+	case schedule.StatusOK:
+		return "成功"
+	case schedule.StatusSilent:
+		return "无需汇报"
+	case schedule.StatusError:
+		return "失败"
+	case schedule.StatusSkipped:
+		return "跳过"
+	case schedule.StatusRunning:
+		return "运行中"
+	}
+	return orDefault(status, "无")
+}
+
+// jobHeadline 是起始消息的正文：一行状态 + 可选的一行小字摘要。
+func jobHeadline(job schedule.Job, when time.Time, status, note string) string {
+	head := fmt.Sprintf("📅 **%s** · %s · %s", trimRunes(job.Name, 80), when.Format("01-02 15:04"), status)
+	if note = strings.TrimSpace(note); note != "" {
+		head += "\n-# " + trimRunes(strings.ReplaceAll(note, "\n", " "), 300)
+	}
+	return head
+}
+
+// jobThreadTitle 是运行子区的标题（平台上限 100 字符）。
+func jobThreadTitle(job schedule.Job, when time.Time) string {
+	return trimRunes(job.Name, 80) + " · " + when.Format("01-02 15:04")
+}
+
+// isNoReport 判定回复是不是「无事」信号：整条只有 NO_REPORT（允许标点与
+// 少量尾巴），照 openclaw 对 NO_REPLY 的口径。
+func isNoReport(reply string) bool {
+	r := strings.TrimSpace(reply)
+	if r == "" {
+		return false
+	}
+	up := strings.ToUpper(r)
+	if !strings.HasPrefix(up, "NO_REPORT") && !strings.HasPrefix(up, "NO REPORT") {
+		return false
+	}
+	return len([]rune(r)) <= 300
+}
+
+// jobSummary 从回复里提一行摘要给起始消息：第一行有内容的正文，剥掉标题
+// 与加粗记号。技能里要求首段写 TL;DR，所以第一行通常就是结论。
+func jobSummary(reply string) string {
+	inFence := false
+	for _, line := range strings.Split(reply, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || line == "" || strings.HasPrefix(line, "|") || strings.HasPrefix(line, "-#") {
+			continue
+		}
+		line = strings.TrimLeft(line, "#>*- ")
+		line = strings.TrimSpace(strings.ReplaceAll(line, "**", ""))
+		if line == "" {
+			continue
+		}
+		return trimRunes(line, 200)
+	}
+	return ""
+}
+
+// fmtElapsed 把耗时缩成 4m12s / 38s。
+func fmtElapsed(d time.Duration) string {
+	if d >= time.Minute {
+		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%ds", int(d.Seconds()))
+}
+
+// isSnowflake 判断一个字符串像不像 Discord 的 id（纯数字）——网页建的
+// 任务 createdBy 是 "web"，不能拿去 @。
+func isSnowflake(s string) bool {
+	if len(s) < 10 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }

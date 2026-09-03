@@ -2,11 +2,15 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"acpp/server/internal/schedule"
 )
 
 // /skills、/usage、/mcps 与 /git：观察面命令。技能清单直接读技能包目录
@@ -222,4 +226,309 @@ func fileSection(title string, files []string) string {
 		fmt.Fprintf(&w, "-# …另有 %d 个\n", len(files)-len(shown))
 	}
 	return w.String()
+}
+
+// ---- /cron 与定时任务卡 ----
+//
+// 三处入口共享 schedule 服务：子区里 agent 用 acpp-cron 工具建（主路，
+// toolface.go）、/cron 看与管、网页 Discord 页（discord.go 的公开方法）。
+// 任务卡是子区里的常驻把手：立即运行 / 停用 / 删除，不用记 id。
+
+// jobPrefix 是任务卡按钮的 custom_id 前缀：cj:<动作>:<任务 id>[:<卡片消息 id>]。
+const jobPrefix = "cj:"
+
+// handleCronCommand 分派 /cron：不带 action 看清单；其余动作按 id 或名字前缀找任务。
+func (s *Service) handleCronCommand(ctx context.Context, token string, ev interactionEvent) {
+	if s.sched == nil {
+		s.ephemeral(token, ev, "定时任务未启用（后端没配调度器）。")
+		return
+	}
+	cfg := s.store.config()
+	b, ok := s.bindingForCommand(cfg, ev.ChannelID)
+	if !ok {
+		s.ephemeral(token, ev, "这个频道没绑定工作区，先 /init。")
+		return
+	}
+	action := orDefault(ev.option("action"), "list")
+	jobs := s.sched.Jobs(b.ChannelID)
+	if action == "list" {
+		if len(jobs) == 0 {
+			s.ephemeralKeep(token, ev, "本频道还没有定时任务。\n-# 在子区里对 AI 说「以后每天早上 10 点……发到这个频道」它就会建一条；网页 Discord 页也能建。")
+			return
+		}
+		var sb strings.Builder
+		sb.WriteString("## 📅 本频道的定时任务\n")
+		for _, j := range jobs {
+			sb.WriteString(jobLine(j) + "\n")
+		}
+		sb.WriteString("-# /cron action:run|pause|resume|runs|remove id:<id 或名字前缀>")
+		s.ephemeralKeep(token, ev, sb.String())
+		return
+	}
+	job, err := findJob(jobs, ev.option("id"))
+	if err != nil {
+		s.ephemeral(token, ev, err.Error())
+		return
+	}
+	switch action {
+	case "run":
+		s.ephemeral(token, ev, s.triggerJob(job.ID))
+	case "pause", "resume":
+		on := action == "resume"
+		upd, err := s.sched.Update(job.ID, schedule.Patch{Enabled: &on})
+		if err != nil {
+			s.ephemeral(token, ev, "改不了："+trimRunes(err.Error(), 200))
+			return
+		}
+		if on {
+			s.ephemeral(token, ev, "▶️ 已启用 **"+upd.Name+"**，下次 "+nextText(upd)+"。")
+		} else {
+			s.ephemeral(token, ev, "⏸ 已停用 **"+upd.Name+"**；/cron action:resume 恢复。")
+		}
+	case "runs":
+		s.ephemeralKeep(token, ev, runsText(job))
+	case "remove":
+		if err := s.sched.Remove(job.ID); err != nil {
+			s.ephemeral(token, ev, "删不掉："+trimRunes(err.Error(), 200))
+			return
+		}
+		s.ephemeral(token, ev, "🗑 已删除 **"+job.Name+"**。")
+	default:
+		s.ephemeral(token, ev, "不认识的动作："+action)
+	}
+}
+
+// findJob 按 id 或名字前缀在清单里找唯一的一条；只有一条时可以不指定。
+func findJob(jobs []schedule.Job, ref string) (schedule.Job, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		if len(jobs) == 1 {
+			return jobs[0], nil
+		}
+		return schedule.Job{}, fmt.Errorf("本频道有 %d 条任务，用 id 参数指定一条（/cron 看清单）", len(jobs))
+	}
+	var hits []schedule.Job
+	for _, j := range jobs {
+		if j.ID == ref {
+			return j, nil
+		}
+		if strings.HasPrefix(strings.ToLower(j.Name), strings.ToLower(ref)) {
+			hits = append(hits, j)
+		}
+	}
+	switch len(hits) {
+	case 1:
+		return hits[0], nil
+	case 0:
+		return schedule.Job{}, fmt.Errorf("没有 id 或名字以「%s」开头的任务", ref)
+	}
+	return schedule.Job{}, fmt.Errorf("「%s」匹配到 %d 条任务，请用 id", ref, len(hits))
+}
+
+// triggerJob 手动触发一次，返回给人看的那句话。
+func (s *Service) triggerJob(id string) string {
+	err := s.sched.RunNow(id)
+	switch {
+	case errors.Is(err, schedule.ErrRunning):
+		return "这条任务正在运行中，等它跑完再试。"
+	case errors.Is(err, schedule.ErrNotFound):
+		return "任务已经不存在了。"
+	case err != nil:
+		return "触发失败：" + trimRunes(err.Error(), 200)
+	}
+	return "▶️ 已触发，频道里马上会出现这次运行的起始消息与子区。"
+}
+
+// nextText 是下次运行时刻的展示（任务时区）。
+func nextText(j schedule.Job) string {
+	if j.NextRunAt == nil {
+		return "—"
+	}
+	return j.NextRunAt.In(j.Location()).Format("01-02 15:04")
+}
+
+// jobLine 是清单里的一条：状态 · 名字 · 计划 · 下次 · 上次，第二行小字 id。
+func jobLine(j schedule.Job) string {
+	state := "🟢"
+	switch {
+	case j.Running:
+		state = "🔄"
+	case !j.Enabled:
+		state = "⏸"
+	}
+	line := fmt.Sprintf("%s **%s** · %s", state, j.Name, j.Describe())
+	if j.Enabled && j.NextRunAt != nil {
+		line += " · 下次 " + nextText(j)
+	}
+	if j.LastRunAt != nil {
+		line += " · 上次 " + statusMark(j.LastStatus) + " " + j.LastRunAt.In(j.Location()).Format("01-02 15:04")
+	}
+	if j.DisabledReason != "" {
+		line += " · " + j.DisabledReason
+	}
+	return line + "\n-# id `" + j.ID + "`"
+}
+
+// statusMark 是运行状态的图标。
+func statusMark(status string) string {
+	switch status {
+	case schedule.StatusOK:
+		return "✅"
+	case schedule.StatusSilent:
+		return "✅"
+	case schedule.StatusError:
+		return "❌"
+	case schedule.StatusSkipped:
+		return "⏭"
+	case schedule.StatusRunning:
+		return "🔄"
+	}
+	return "·"
+}
+
+// runsText 是最近运行记录（新的在前，最多 10 条）。
+func runsText(j schedule.Job) string {
+	if len(j.Runs) == 0 {
+		return "**" + j.Name + "** 还没跑过。"
+	}
+	var sb strings.Builder
+	sb.WriteString("## 📅 " + j.Name + " · 最近运行\n")
+	loc := j.Location()
+	n := 0
+	for i := len(j.Runs) - 1; i >= 0 && n < 10; i-- {
+		r := j.Runs[i]
+		n++
+		line := statusMark(r.Status) + " " + r.StartedAt.In(loc).Format("01-02 15:04")
+		if r.EndedAt != nil && r.Status != schedule.StatusSkipped {
+			line += " · " + fmtElapsed(r.EndedAt.Sub(r.StartedAt))
+		}
+		if r.Tools > 0 {
+			line += fmt.Sprintf(" · 🔧 %d", r.Tools)
+		}
+		if r.Trigger == schedule.TriggerManual {
+			line += " · 手动"
+		}
+		switch {
+		case r.Error != "":
+			line += "\n-# " + trimRunes(r.Error, 200)
+		case r.Summary != "":
+			line += "\n-# " + trimRunes(r.Summary, 200)
+		}
+		sb.WriteString(line + "\n")
+	}
+	return sb.String()
+}
+
+// postJobCard 往子区发（或重发）任务卡。
+func (s *Service) postJobCard(token, threadID string, job schedule.Job) {
+	if token == "" {
+		return
+	}
+	s.postCard(token, threadID, map[string]any{
+		"flags": 1 << 15, "components": jobCard(job), "allowed_mentions": noMentions(),
+	})
+}
+
+// jobCard 是任务卡：名字、计划与状态、prompt 摘录、三个把手。绿色——它是
+// 一次对话的成果（adr-017 §11 的色彩语言）。
+func jobCard(job schedule.Job) []map[string]any {
+	state := "🟢 启用"
+	toggle := v2Button("⏸ 停用", jobPrefix+"toggle:"+job.ID, 2)
+	if !job.Enabled {
+		state = "⏸ 已停用"
+		if job.DisabledReason != "" {
+			state += "（" + job.DisabledReason + "）"
+		}
+		toggle = v2Button("▶️ 启用", jobPrefix+"toggle:"+job.ID, 2)
+	}
+	meta := "-# " + job.Describe() + " · " + state
+	if job.Enabled && job.NextRunAt != nil {
+		meta += " · 下次 " + nextText(job)
+	}
+	if job.LastRunAt != nil {
+		meta += " · 上次 " + statusMark(job.LastStatus) + " " + job.LastRunAt.In(job.Location()).Format("01-02 15:04")
+	}
+	inner := []map[string]any{
+		v2Text("### 📅 定时任务《" + trimRunes(job.Name, 80) + "》"),
+		v2Text(meta),
+		v2Text(">>> " + trimRunes(job.Prompt, 600)),
+		v2Text("-# id `" + job.ID + "` · 到点在频道里开一个子区自动跑，跑完可以在子区里追问"),
+		v2Row(v2Button("▶️ 立即运行", jobPrefix+"run:"+job.ID, 1), toggle,
+			v2DangerButton("🗑 删除", jobPrefix+"rm:"+job.ID)),
+	}
+	return v2Container(colorGreen, inner)
+}
+
+// removedJobCard 是删除后的终态卡。
+func removedJobCard(name, by string) []map[string]any {
+	return v2Container(colorGrey, []map[string]any{
+		v2Text("### 🗑 定时任务已删除"),
+		v2Text("-# 《" + trimRunes(name, 80) + "》· 由 " + by + " 删除"),
+	})
+}
+
+// v2Button 是普通按钮：style 1 主色、2 次要。
+func v2Button(label, customID string, style int) map[string]any {
+	return map[string]any{"type": 2, "style": style, "label": label, "custom_id": customID}
+}
+
+// handleJobButton 处理任务卡上的按钮：cj:run / cj:toggle / cj:rm（弹确认）/ cj:rmk（真删）。
+func (s *Service) handleJobButton(ctx context.Context, token string, ev interactionEvent) {
+	rest := strings.TrimPrefix(ev.Data.CustomID, jobPrefix)
+	action, id, _ := strings.Cut(rest, ":")
+	if s.sched == nil {
+		s.ephemeral(token, ev, "定时任务未启用。")
+		return
+	}
+	switch action {
+	case "run":
+		s.ephemeral(token, ev, s.triggerJob(id))
+	case "toggle":
+		job, ok := s.sched.Get(id)
+		if !ok {
+			s.ephemeral(token, ev, "任务已经不存在了。")
+			return
+		}
+		on := !job.Enabled
+		job, err := s.sched.Update(id, schedule.Patch{Enabled: &on})
+		if err != nil {
+			s.ephemeral(token, ev, "改不了："+trimRunes(err.Error(), 200))
+			return
+		}
+		s.patchCard(ctx, token, ev.ChannelID, ev.Message.ID, jobCard(job))
+		if on {
+			s.ephemeral(token, ev, "▶️ 已启用，下次 "+nextText(job)+"。")
+		} else {
+			s.ephemeral(token, ev, "⏸ 已停用；点「启用」或 /cron action:resume 恢复。")
+		}
+	case "rm":
+		// 与外链撤销同一套两步确认：卡片挂在子区里人人可点。
+		err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+			"flags": 1<<6 | 1<<15,
+			"components": v2Container(colorRed, []map[string]any{
+				v2Text("### 删除这条定时任务？"),
+				v2Text("-# 不可恢复，任务的提示词一并没了。只是暂时不跑的话用「停用」。"),
+				v2Row(v2DangerButton("确认删除", jobPrefix+"rmk:"+id+":"+ev.Message.ID)),
+			}),
+		})
+		if err != nil {
+			slog.Warn("删除确认卡弹出失败", "err", err)
+		}
+	case "rmk":
+		jobID, cardID, _ := strings.Cut(id, ":")
+		if err := interactionCallback(token, ev.ID, ev.Token, 6, nil); err != nil {
+			slog.Warn("删除 deferred 回调失败", "err", err)
+			return
+		}
+		job, _ := s.sched.Get(jobID)
+		name := orDefault(job.Name, "（已不存在）")
+		if err := s.sched.Remove(jobID); err != nil && !errors.Is(err, schedule.ErrNotFound) {
+			s.followup(ctx, ev.Token, colorRed, "### 删除失败\n-# "+trimRunes(err.Error(), 300))
+			return
+		}
+		s.patchCard(ctx, token, ev.ChannelID, cardID, removedJobCard(name, ev.user()))
+		s.followup(ctx, ev.Token, colorGrey, "### 🗑 已删除\n-# 《"+trimRunes(name, 80)+"》不会再跑了。")
+	default:
+		s.ephemeral(token, ev, "这个按钮已失效。")
+	}
 }

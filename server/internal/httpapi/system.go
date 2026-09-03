@@ -267,3 +267,53 @@ func (h discordHandler) removeBinding(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
 }
+
+// ---- 定时任务（挂在频道绑定上）----
+
+func (h discordHandler) jobs(w http.ResponseWriter, r *http.Request) {
+	writeData(w, http.StatusOK, h.discord.Jobs())
+}
+
+func (h discordHandler) addJob(w http.ResponseWriter, r *http.Request) {
+	var in discord.JobInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	job, err := h.discord.AddJob(in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusCreated, job)
+}
+
+func (h discordHandler) updateJob(w http.ResponseWriter, r *http.Request) {
+	var in discord.JobPatch
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	job, err := h.discord.UpdateJob(r.PathValue("id"), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, job)
+}
+
+func (h discordHandler) removeJob(w http.ResponseWriter, r *http.Request) {
+	if err := h.discord.RemoveJob(r.PathValue("id")); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+func (h discordHandler) runJob(w http.ResponseWriter, r *http.Request) {
+	if err := h.discord.RunJob(r.PathValue("id")); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusAccepted, map[string]bool{"triggered": true})
+}

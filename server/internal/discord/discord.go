@@ -19,6 +19,7 @@ import (
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/mcp"
+	"acpp/server/internal/schedule"
 )
 
 // 哨兵错误自带一套（本包不依赖 service），httpapi 的 writeError 登记映射。
@@ -96,6 +97,9 @@ type Deps struct {
 	// dbSourceID 非零时把可见数据源锁死到那一条（频道绑定的环境）；
 	// serverID 非零时把可见服务器锁死到那一台（频道绑定的机器）。
 	Mounts func(ctx context.Context, key, cwd, flavor string, withDB bool, dbSourceID, serverID uint, onReport func(rel, title string)) (mcpServers []any, metaExtra map[string]any, err error)
+	// SchedulePath 是定时任务的存储文件（<dataDir>/schedule.json）。空则
+	// 定时任务整体停用（工具面不挂、命令不响应）。
+	SchedulePath string
 }
 
 // AgentOption 是一个内置工具的可选项集合。
@@ -146,6 +150,8 @@ type Info struct {
 	// InviteURL 是把这个 bot 邀进服务器的 OAuth2 授权链接（连上 gateway
 	// 拿到 appId 后才有）。权限位由后端出口径——它与功能清单耦合。
 	InviteURL string `json:"inviteUrl,omitempty"`
+	// DefaultTZ 是本机时区的 IANA 名（定时任务表单的缺省值），猜不到为空。
+	DefaultTZ string `json:"defaultTz,omitempty"`
 }
 
 // invitePermissions 是邀请链接的权限位，与 docs/discord-bot-setup.md 的
@@ -198,6 +204,9 @@ type Service struct {
 	unboundHinted map[string]time.Time
 	// chatTok 是自家 acpp-chat 工具面（send_file）的回连凭证。
 	chatTok mcp.PeerTokens
+	// sched 是定时任务的调度器（schedule 包），runner 是本包的 runJob。
+	// 对话面停用（AgentRuntime 为 nil）或没配存储路径时为 nil。
+	sched *schedule.Service
 }
 
 // New 加载配置并构建服务；gateway 由 Start 按配置决定起不起。
@@ -215,6 +224,13 @@ func New(path string, deps Deps) (*Service, error) {
 		// discord 的并发子区不会太多，别让它抢网页会话的资源。
 		s.acpMgr = acp.NewManager(chatMaxSessions, chatTurnTimeout, deps.SkillpackDir)
 	}
+	if s.acpMgr != nil && deps.SchedulePath != "" {
+		sched, err := schedule.New(deps.SchedulePath, s.runJob, schedule.Hooks{Disabled: s.jobDisabled})
+		if err != nil {
+			return nil, err
+		}
+		s.sched = sched
+	}
 	return s, nil
 }
 
@@ -227,6 +243,9 @@ func (s *Service) Start(ctx context.Context) {
 	if s.acpMgr != nil {
 		go s.reapIdle(ctx)
 	}
+	if s.sched != nil {
+		s.sched.Start(ctx)
+	}
 	s.startLinkCleanup(ctx)
 }
 
@@ -238,6 +257,9 @@ func (s *Service) Close() {
 		s.cancel = nil
 	}
 	s.mu.Unlock()
+	if s.sched != nil {
+		s.sched.Close()
+	}
 	if s.acpMgr != nil {
 		s.acpMgr.CloseAll()
 	}
@@ -420,6 +442,7 @@ func (s *Service) Info(ctx context.Context) Info {
 			st.AppID, int64(invitePermissions))
 	}
 	return Info{
+		DefaultTZ: schedule.HostTZ(),
 		InviteURL: inviteURL,
 		Config: ConfigView{
 			Enabled:  cfg.Enabled,
@@ -525,6 +548,7 @@ func (s *Service) RemoveBinding(channelID string) error {
 	if !removed {
 		return fmt.Errorf("%w: 频道 %s 没有绑定", ErrNotFound, channelID)
 	}
+	s.dropJobs(channelID)
 	// 频道侧收尾（摘置顶卡、清主题）尽力而为。
 	if existed && cfg.BotToken != "" {
 		go s.cleanupChannelCard(context.Background(), cfg.BotToken, old)
@@ -549,4 +573,103 @@ func (s *Service) effectiveWorkRoot(cfg Config) string {
 		return "acpp-discord"
 	}
 	return filepath.Join(home, "acpp", "discord")
+}
+
+// ---- 定时任务：网页管理面（schedule 服务的 discord 侧入口）----
+//
+// 任务归属是频道（Scope = channelId），环境（工作目录/模型/权限/库/机器）
+// 全部跟随频道绑定运行时现读——任务只回答「什么时候、干什么」。
+
+// JobInput 是新建任务的入参：cron 与 at 二选一。
+type JobInput struct {
+	ChannelID string     `json:"channelId"`
+	Name      string     `json:"name"`
+	Cron      string     `json:"cron"`
+	TZ        string     `json:"tz"`
+	At        *time.Time `json:"at,omitempty"`
+	Prompt    string     `json:"prompt"`
+}
+
+// JobPatch 是改任务的入参：缺省字段不动；ClearAt 把一次性改回周期。
+type JobPatch struct {
+	Name    *string    `json:"name"`
+	Cron    *string    `json:"cron"`
+	TZ      *string    `json:"tz"`
+	At      *time.Time `json:"at"`
+	ClearAt bool       `json:"clearAt"`
+	Prompt  *string    `json:"prompt"`
+	Enabled *bool      `json:"enabled"`
+}
+
+// Jobs 列全部定时任务（网页按 channelId 与绑定对上）。未启用时返回空清单。
+func (s *Service) Jobs() []schedule.Job {
+	if s.sched == nil {
+		return []schedule.Job{}
+	}
+	return s.sched.Jobs("")
+}
+
+// AddJob 新建任务：频道必须已绑定，否则到点没有工作目录可跑。
+func (s *Service) AddJob(in JobInput) (schedule.Job, error) {
+	if s.sched == nil {
+		return schedule.Job{}, fmt.Errorf("%w: 定时任务未启用", ErrInvalid)
+	}
+	if _, ok := s.store.config().binding(in.ChannelID); !ok {
+		return schedule.Job{}, fmt.Errorf("%w: 频道 %s 没有绑定工作区", ErrInvalid, in.ChannelID)
+	}
+	tz := strings.TrimSpace(in.TZ)
+	if tz == "" {
+		tz = schedule.HostTZ()
+	}
+	job, err := s.sched.Add(schedule.Input{
+		Scope: in.ChannelID, Name: in.Name, Cron: in.Cron, TZ: tz, At: in.At,
+		Prompt: in.Prompt, CreatedBy: "web",
+	})
+	return job, jobErr(err)
+}
+
+// UpdateJob 改任务。
+func (s *Service) UpdateJob(id string, p JobPatch) (schedule.Job, error) {
+	if s.sched == nil {
+		return schedule.Job{}, fmt.Errorf("%w: 定时任务未启用", ErrInvalid)
+	}
+	job, err := s.sched.Update(id, schedule.Patch{
+		Name: p.Name, Cron: p.Cron, TZ: p.TZ, At: p.At, ClearAt: p.ClearAt,
+		Prompt: p.Prompt, Enabled: p.Enabled,
+	})
+	return job, jobErr(err)
+}
+
+// RemoveJob 删任务。
+func (s *Service) RemoveJob(id string) error {
+	if s.sched == nil {
+		return fmt.Errorf("%w: 定时任务未启用", ErrInvalid)
+	}
+	return jobErr(s.sched.Remove(id))
+}
+
+// RunJob 立刻跑一次（不看启用状态）。
+func (s *Service) RunJob(id string) error {
+	if s.sched == nil {
+		return fmt.Errorf("%w: 定时任务未启用", ErrInvalid)
+	}
+	return jobErr(s.sched.RunNow(id))
+}
+
+// dropJobs 在频道解绑/被删时清掉它名下的任务——没有工作目录的任务到点
+// 只会失败五次然后自动停用，不如现在就删干净。
+func (s *Service) dropJobs(channelID string) {
+	if s.sched == nil {
+		return
+	}
+	if n := s.sched.RemoveScope(channelID); n > 0 {
+		slog.Info("频道解绑，定时任务一并删除", "channel", channelID, "count", n)
+	}
+}
+
+// connected 报告 gateway 此刻连没连上（定时任务跑之前要确认能发消息）。
+func (s *Service) connected() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.Connected
 }

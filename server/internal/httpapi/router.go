@@ -158,6 +158,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 		api.HandleFunc("PUT /api/discord/config", dc.saveConfig)
 		api.HandleFunc("PUT /api/discord/bindings/{channelId}", dc.updateBinding)
 		api.HandleFunc("DELETE /api/discord/bindings/{channelId}", dc.removeBinding)
+		// 定时任务（挂在频道绑定上）：网页管理面。
+		api.HandleFunc("GET /api/discord/jobs", dc.jobs)
+		api.HandleFunc("POST /api/discord/jobs", dc.addJob)
+		api.HandleFunc("PUT /api/discord/jobs/{id}", dc.updateJob)
+		api.HandleFunc("DELETE /api/discord/jobs/{id}", dc.removeJob)
+		api.HandleFunc("POST /api/discord/jobs/{id}/run", dc.runJob)
 	}
 
 	// 技能库：磁盘为事实源（~/.acpp/skills + skillpack 分发链接），无数据库表。
@@ -338,6 +344,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	if svcs.Discord != nil {
 		dcm := discordMCPHandler{discord: svcs.Discord}
 		api.HandleFunc("/api/mcp/discord/{token}", dcm.mcp)
+		// 定时任务工具面（acpp-cron）：同一枚凭证，另一组工具。
+		api.HandleFunc("/api/mcp/discord-cron/{token}", dcm.cronMCP)
 	}
 
 	// 工具台（页面 /tools）：看工具面、人工试运行、发自定义 JSON-RPC、

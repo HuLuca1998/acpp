@@ -16,6 +16,10 @@ var ErrBusy = errors.New("acp: session is busy with another turn")
 // ErrNoSession 表示这条会话当前没有活着的 agent 进程。
 var ErrNoSession = errors.New("acp: session not open")
 
+// ErrPoolFull 表示会话池已到上限，Open 被拒。调用方可以据此收掉空闲会话
+// 腾位置，或稍后再试。
+var ErrPoolFull = errors.New("acp: too many open sessions")
+
 // Session 是一条活着的 ACP 会话：一个 agent 子进程 + 其上的会话状态。
 type Session struct {
 	conn         *Conn

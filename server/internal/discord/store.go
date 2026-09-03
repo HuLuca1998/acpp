@@ -32,7 +32,9 @@ type Thread struct {
 	// DBOff：显式关掉本子区的数据库工具面。默认是**开**——按需挂载
 	// 试过一轮（防没必要的查询），实际用下来「说数据库的事却没工具」
 	// 的挫败远多于误查，用户拍板改回默认挂载，/db off 显式关。
-	DBOff     bool      `json:"dbOff,omitempty"`
+	DBOff bool `json:"dbOff,omitempty"`
+	// JobID 非空表示这个子区是定时任务的一次运行开出来的。
+	JobID     string    `json:"jobId,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

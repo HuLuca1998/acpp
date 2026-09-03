@@ -72,6 +72,21 @@ func slashCommands() []slashCommand {
 		{name: "skills", desc: "看注入对话的技能清单"},
 		{name: "usage", desc: "看本子区用量：回合数、工具调用、token"},
 		{name: "mcps", desc: "看本子区挂载了哪些 MCP 工具面"},
+		{name: "cron", desc: "定时任务：看清单、立即运行、停用/启用、删除、看运行记录",
+			options: []map[string]any{{
+				"type": 3, "name": "action", "description": "做什么（不填看清单）",
+				"required": false, "choices": []map[string]any{
+					{"name": "list——看本频道的定时任务", "value": "list"},
+					{"name": "run——立即跑一次", "value": "run"},
+					{"name": "pause——停用", "value": "pause"},
+					{"name": "resume——启用", "value": "resume"},
+					{"name": "runs——看最近的运行记录", "value": "runs"},
+					{"name": "remove——删除", "value": "remove"},
+				},
+			}, {
+				"type": 3, "name": "id", "description": "任务 id 或名字前缀（本频道只有一条时可不填）",
+				"required": false,
+			}}},
 		{name: "stop", desc: "中止子区里正在跑的这一轮"},
 		{name: "unbind", desc: "解绑这个频道（没提交完的活会保留在磁盘上）"},
 	}

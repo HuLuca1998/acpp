@@ -172,6 +172,8 @@ func run() error {
 		Catalog:         discordCatalog(agentService),
 		SkillpackDir:    filepath.Join(cfg.DataDir, "skillpack"),
 		MCPBase:         mcpDiscordBase(cfg.Addr),
+		// 定时任务的存储：与 discord.json 同层，回退面同样是删文件。
+		SchedulePath: filepath.Join(cfg.DataDir, "schedule.json"),
 		// 子区对话拉 acp 子进程的启动方式：按内置工具名查配置。
 		AgentRuntime: func(ctx context.Context, agent string) (acp.Runtime, error) {
 			list, err := agentService.List(ctx)

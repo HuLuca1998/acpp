@@ -115,7 +115,7 @@ func (m *Manager) Open(ctx context.Context, opts OpenOptions) (*Session, error) 
 		}
 		if len(m.sessions) >= m.max {
 			m.mu.Unlock()
-			return nil, fmt.Errorf("acp: too many open sessions (max %d), close one first", m.max)
+			return nil, fmt.Errorf("%w (max %d), close one first", ErrPoolFull, m.max)
 		}
 		opening = make(chan struct{})
 		m.opening[opts.Key] = opening
@@ -282,6 +282,13 @@ func (m *Manager) handshake(ctx context.Context, conn *Conn, sess *Session, comm
 }
 
 // Get 返回已打开的会话。
+// OpenCount 是此刻开着的会话数（含正在握手的不算）。
+func (m *Manager) OpenCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.sessions)
+}
+
 func (m *Manager) Get(key string) (*Session, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

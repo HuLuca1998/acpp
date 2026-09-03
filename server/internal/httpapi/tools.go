@@ -255,3 +255,30 @@ func (h discordMCPHandler) mcp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// cronMCP 是定时任务工具面（acpp-cron）的回连端点，凭证与交付面同一枚。
+func (h discordMCPHandler) cronMCP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+	case http.MethodDelete:
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	resp, hasResp := h.discord.HandleCronMCP(r.Context(), r.PathValue("token"), raw)
+	if !hasResp {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return
+	}
+}
