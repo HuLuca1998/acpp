@@ -89,8 +89,10 @@ type Job struct {
 	// NextRunAt 是下一次计划时刻（含失败重试）。落盘只是缓存，加载时重算。
 	NextRunAt *time.Time `json:"nextRunAt,omitempty"`
 	// Running 是运行态标记；进程重启后一律归零，末尾那条 running 记录改判中断。
-	Running bool  `json:"running,omitempty"`
-	Runs    []Run `json:"runs,omitempty"`
+	Running bool `json:"running,omitempty"`
+	// Plan 是计划的人话（Describe 的结果），只在对外视图里填，不落盘。
+	Plan string `json:"plan,omitempty"`
+	Runs []Run  `json:"runs,omitempty"`
 }
 
 // Run 是一次运行记录（最近 maxRuns 条）。
@@ -469,6 +471,7 @@ func (s *Service) Get(id string) (Job, bool) {
 func (s *Service) view(j Job) Job {
 	out := j
 	out.Runs = append([]Run(nil), j.Runs...)
+	out.Plan = j.Describe()
 	if at, ok := s.retryAt[j.ID]; ok {
 		out.NextRunAt = ptr(at)
 	}
@@ -492,8 +495,9 @@ func (s *Service) Add(in Input) (Job, error) {
 	s.mu.Lock()
 	s.jobs = append(s.jobs, j)
 	s.write()
+	out := s.view(j)
 	s.mu.Unlock()
-	return j, nil
+	return out, nil
 }
 
 // Update 改任务：只动给了的字段；启用时清掉自动停用的原因与连败计数。
@@ -624,7 +628,12 @@ func (s *Service) index(id string) int {
 // write 原子落盘（临时文件 + rename）。锁内调用；失败只记日志——内存态
 // 已经更新，下一次写盘会把它带上。
 func (s *Service) write() {
-	data, err := json.MarshalIndent(file{Jobs: s.jobs}, "", "  ")
+	jobs := make([]Job, len(s.jobs))
+	for i, j := range s.jobs {
+		j.Plan = ""
+		jobs[i] = j
+	}
+	data, err := json.MarshalIndent(file{Jobs: jobs}, "", "  ")
 	if err != nil {
 		slog.Error("定时任务序列化失败", "err", err)
 		return

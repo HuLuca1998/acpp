@@ -9,6 +9,7 @@ import type { DiscordBinding, DiscordInfo } from "@/types/acp"
 import { formatRelativeTime } from "@/lib/format"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { DiscordIcon } from "@/components/agent-icon"
+import { DiscordJobsCard } from "@/components/discord/jobs-card"
 import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
 import { Hint } from "@/components/hint"
@@ -167,6 +168,9 @@ export function Discord() {
           />
         </CardContent>
       </Card>
+
+      {/* 定时任务：挂在频道绑定上（绑定列表之下，与它同一页管）。 */}
+      {info ? <DiscordJobsCard info={info} /> : null}
 
       {editing && info ? (
         <EditBindingDialog

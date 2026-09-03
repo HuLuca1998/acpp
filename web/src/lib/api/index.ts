@@ -7,6 +7,9 @@ import type {
   DiscordBindingPatch,
   DiscordConfigPatch,
   DiscordInfo,
+  DiscordJob,
+  DiscordJobInput,
+  DiscordJobPatch,
   DbDatabase,
   DbTable,
   DirEntry,
@@ -346,6 +349,26 @@ export const api = {
     removeBinding: (channelId: string) =>
       request<{ deleted: boolean }>(`/discord/bindings/${channelId}`, {
         method: "DELETE",
+      }),
+    /** 定时任务：挂在频道绑定上，到点开子区跑全新会话。 */
+    jobs: () => request<DiscordJob[]>("/discord/jobs"),
+    addJob: (input: DiscordJobInput) =>
+      request<DiscordJob>("/discord/jobs", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    updateJob: (id: string, patch: DiscordJobPatch) =>
+      request<DiscordJob>(`/discord/jobs/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    removeJob: (id: string) =>
+      request<{ deleted: boolean }>(`/discord/jobs/${id}`, {
+        method: "DELETE",
+      }),
+    runJob: (id: string) =>
+      request<{ triggered: boolean }>(`/discord/jobs/${id}/run`, {
+        method: "POST",
       }),
   },
 
