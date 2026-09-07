@@ -104,8 +104,9 @@ type messageEvent struct {
 	// MentionRoles：@ 到角色时用户 mention 数组是空的——bot 在 guild 里有
 	// 一个同名集成角色，自动补全里排在 bot 用户旁边，选到它的概率一半一半，
 	// 必须两种都认（实测踩坑：选了角色的 @ 完全没反应）。
-	MentionRoles []string     `json:"mention_roles"`
-	Attachments  []attachment `json:"attachments"`
+	MentionRoles    []string     `json:"mention_roles"`
+	MentionEveryone bool         `json:"mention_everyone"`
+	Attachments     []attachment `json:"attachments"`
 }
 
 // handleMessage 消费一条 MESSAGE_CREATE：
@@ -162,6 +163,41 @@ func (s *Service) mentionsBot(ctx context.Context, token string, ev messageEvent
 		}
 	}
 	return false
+}
+
+// asideToOthers 判断子区里的这条消息是不是说给别人听的：@ 了某个人、某个
+// 角色或 @everyone/@here，且没有 @ bot（用户或集成角色都不算）。
+func (s *Service) asideToOthers(ctx context.Context, token string, ev messageEvent) bool {
+	if len(ev.Mentions) == 0 && len(ev.MentionRoles) == 0 && !ev.MentionEveryone {
+		return false
+	}
+	role := ""
+	if len(ev.MentionRoles) > 0 {
+		role = s.botRoleIn(ctx, token, ev.GuildID)
+	}
+	return addressesOthers(ev, s.botID(), role)
+}
+
+// addressesOthers 是 asideToOthers 的纯函数部分：有任何非 bot 的 @ 目标、
+// 且 bot 本人（或它的角色）一个都没被 @ 到，才算说给别人的。
+func addressesOthers(ev messageEvent, botID, botRole string) bool {
+	others := ev.MentionEveryone
+	for _, m := range ev.Mentions {
+		if m.ID == botID {
+			return false
+		}
+		others = true
+	}
+	for _, r := range ev.MentionRoles {
+		if r == "" {
+			continue
+		}
+		if r == botRole {
+			return false
+		}
+		others = true
+	}
+	return others
 }
 
 // unboundHintTTL 是同一个未绑定频道两次提示之间的最短间隔。
@@ -282,6 +318,12 @@ func (s *Service) startThread(ctx context.Context, token string, b Binding, ev m
 
 // threadInput 处理子区里的一条用户消息：优先喂给挂起的问答，否则排队进对话。
 func (s *Service) threadInput(ctx context.Context, token string, b Binding, ev messageEvent) {
+	// 子区里 @ 了别人却没 @ bot 的消息是人与人之间的旁白（「@同事 看下
+	// 报告」），不进对话——真机报障：bot 对这句话作了回复。要让 AI 也听见
+	// 就把 bot 一起 @ 上。
+	if s.asideToOthers(ctx, token, ev) {
+		return
+	}
 	text := strings.TrimSpace(stripMention(ev.Content, s.botID()))
 	if text == "" && len(ev.Attachments) == 0 {
 		return

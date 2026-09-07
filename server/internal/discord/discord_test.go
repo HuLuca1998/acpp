@@ -726,3 +726,40 @@ func TestBatchFiles(t *testing.T) {
 		t.Errorf("空清单应得到空批次，得到 %v", got)
 	}
 }
+
+// 契约：子区里 @ 了别人却没 @ bot 的消息是旁白，不进对话；bot（用户或
+// 集成角色）被一起 @ 到、或压根没 @ 任何人，都照常入队。
+
+func TestAddressesOthers(t *testing.T) {
+	mk := func(users []string, roles []string, everyone bool) messageEvent {
+		var ev messageEvent
+		for _, u := range users {
+			ev.Mentions = append(ev.Mentions, struct {
+				ID string `json:"id"`
+			}{ID: u})
+		}
+		ev.MentionRoles = roles
+		ev.MentionEveryone = everyone
+		return ev
+	}
+	cases := []struct {
+		name string
+		ev   messageEvent
+		want bool
+	}{
+		{"无 @ 直接说", mk(nil, nil, false), false},
+		{"只 @ 同事", mk([]string{"u1"}, nil, false), true},
+		{"@ 同事也 @ bot", mk([]string{"u1", "bot"}, nil, false), false},
+		{"只 @ bot", mk([]string{"bot"}, nil, false), false},
+		{"@ 别的角色", mk(nil, []string{"r9"}, false), true},
+		{"@ bot 角色", mk(nil, []string{"role"}, false), false},
+		{"@ 同事 + @ bot 角色", mk([]string{"u1"}, []string{"role"}, false), false},
+		{"@here", mk(nil, nil, true), true},
+		{"@here 且 @ bot", mk([]string{"bot"}, nil, true), false},
+	}
+	for _, c := range cases {
+		if got := addressesOthers(c.ev, "bot", "role"); got != c.want {
+			t.Errorf("%s: addressesOthers = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

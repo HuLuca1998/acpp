@@ -231,6 +231,7 @@ until [ "$(sqlite3 "$HOME/.acpp-dev/acp.db" "select count(*) from mcp_calls wher
 | 5 | `/git`（干净树 / 造改动后） | 改+增+删三类分类正确；显示与 base 的差距 |
 | 6 | 子区问 AI「用 db_sources 列出数据源」 | `mcp_calls` 里只返回锁定的那一条；换个频道再问，返回的是它自己那条 |
 | 6b | 子区问「你能看到哪些服务器」（adr-019） | `mcp_calls` 的 `server_hosts` 只返回频道锁定的那一台，全局有几台不影响 |
+| 6c | 子区里发「<@同事> 看下报告」（不 @ bot） | bot 不回、消息不打 ⏳；后端日志无新回合。再发「<@同事> <@bot> 一起看」应照常入队 |
 | 7 | `/db source:…` 换绑 | 绑定更新 + 日志有会话 exited；再问一次 AI，返回的是新库 |
 | 8 | 工作分支能提交 | 在工作树里 commit 成功，`origin/<base>` 不动 |
 | 9 | `/unbind`（干净树） | 目录、worktree 注册、分支、绑定记录全清 |
