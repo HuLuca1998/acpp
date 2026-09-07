@@ -70,7 +70,13 @@ export function JobDialog({
     try {
       const next = job
         ? await api.discord.updateJob(job.id, { name, cron, tz, prompt })
-        : await api.discord.addJob({ channelId: channel, name, cron, tz, prompt })
+        : await api.discord.addJob({
+            channelId: channel,
+            name,
+            cron,
+            tz,
+            prompt,
+          })
       onSaved(next, !job)
       toast.success(t("discord.jobs.saved"))
       onClose()

@@ -150,8 +150,7 @@ function parseStandardUri(raw: string): ParsedUri | null {
       port: sshPort > 0 ? sshPort : 22,
       user: params.get("sshUser") || params.get("ssh_user") || "root",
       auth: SSH_AUTHS.includes(sshAuth) ? sshAuth : "password",
-      keyPath:
-        params.get("sshKeyPath") || params.get("ssh_key_path") || "",
+      keyPath: params.get("sshKeyPath") || params.get("ssh_key_path") || "",
     }
   }
 

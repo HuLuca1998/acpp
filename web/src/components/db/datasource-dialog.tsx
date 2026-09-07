@@ -402,7 +402,8 @@ function DataSourceForm({
                   // 同一台库上再开一个连接时要照抄的就是这个值。
                   fetchStored={
                     source?.hasPassword
-                      ? async () => (await api.datasources.secret(source.id)).password
+                      ? async () =>
+                          (await api.datasources.secret(source.id)).password
                       : undefined
                   }
                 />
@@ -751,4 +752,3 @@ function DatabasePicker({
     </Field>
   )
 }
-

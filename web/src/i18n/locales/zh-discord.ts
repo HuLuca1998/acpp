@@ -24,7 +24,8 @@ export const zhDiscord = {
     },
     guilds: "所在服务器",
     invite: "邀请链接",
-    inviteHint: "把 bot 邀进更多服务器——client_id 与权限已自动填好，打开后选服务器授权即可。",
+    inviteHint:
+      "把 bot 邀进更多服务器——client_id 与权限已自动填好，打开后选服务器授权即可。",
     noGuilds:
       "bot 还没加入任何服务器——去 Discord 开发者门户用安装链接把它请进你的服务器。",
     refresh: "刷新状态",
@@ -69,7 +70,8 @@ export const zhDiscord = {
     description:
       "挂在频道绑定上：到点在频道里开一个子区、用全新会话跑任务提示词，跑完能在子区里追问。在子区里对 AI 说「以后每天早上 10 点……发到这个频道」也能建。",
     empty: "还没有定时任务",
-    emptyHint: "点「新建」，或在 Discord 子区里直接对 AI 说「以后每天早上 10 点出一份发到这个频道」。",
+    emptyHint:
+      "点「新建」，或在 Discord 子区里直接对 AI 说「以后每天早上 10 点出一份发到这个频道」。",
     add: "新建",
     name: "任务",
     channel: "频道",
@@ -88,7 +90,8 @@ export const zhDiscord = {
     triggered: "已触发，频道里马上会出现这次运行的子区",
     triggerFailed: "触发失败",
     removeTitle: "删除这条定时任务？",
-    removeDesc: "《{{name}}》不可恢复，任务提示词一并没了。只是暂时不跑的话用「停用」。",
+    removeDesc:
+      "《{{name}}》不可恢复，任务提示词一并没了。只是暂时不跑的话用「停用」。",
     removeConfirm: "删除",
     removed: "已删除",
     removeFailed: "删除失败",
@@ -96,7 +99,8 @@ export const zhDiscord = {
     saveFailed: "保存失败",
     createTitle: "新建定时任务",
     editTitle: "编辑定时任务",
-    formDesc: "任务在全新会话里跑，没有任何对话记忆——提示词要自包含：数据来源、口径、输出结构、交付形态、静默条件都写进去。",
+    formDesc:
+      "任务在全新会话里跑，没有任何对话记忆——提示词要自包含：数据来源、口径、输出结构、交付形态、静默条件都写进去。",
     fieldName: "任务名",
     namePlaceholder: "用户七日行为日报",
     fieldChannel: "投递到频道",

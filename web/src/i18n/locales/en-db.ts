@@ -18,11 +18,14 @@ export const enDb = {
   uriHasPassword:
     "These links contain the password in clear text — the link is a credential; don't paste it into chats or docs.",
   uriSaveFirst: "Save this connection first, then export a link.",
-  uriSSHHint: "This URI carries tunnel host {{host}} — create a server from it, or pick an existing one above.",
+  uriSSHHint:
+    "This URI carries tunnel host {{host}} — create a server from it, or pick an existing one above.",
   copy: "Duplicate",
-  copyDesc: "Start a new one from this: host, account, password and SSH carry over; project / env / database are left blank",
+  copyDesc:
+    "Start a new one from this: host, account, password and SSH carry over; project / env / database are left blank",
   copyTitle: "Duplicate connection",
-  copyHint: "Host, account, password and SSH carried over. Fill in the new project, environment and database — those three are deliberately blank so you cannot click straight through and end up with a duplicate of the original.",
+  copyHint:
+    "Host, account, password and SSH carried over. Fill in the new project, environment and database — those three are deliberately blank so you cannot click straight through and end up with a duplicate of the original.",
   copyNoPassword: "Could not fetch the password, please fill it in",
   uriButton: "URI",
   refTitle: "Reference a database",
@@ -38,7 +41,8 @@ export const enDb = {
     "Manage MySQL connections by project and environment. A session only sees its own project's sources — for you and for the AI alike.",
   add: "New connection",
   project: "Project",
-  projectUnknown: "No project named \u201c{{name}}\u201d in the workspace yet — once it is cloned, sessions opened there will pick this connection up.",
+  projectUnknown:
+    "No project named \u201c{{name}}\u201d in the workspace yet — once it is cloned, sessions opened there will pick this connection up.",
   projectPlaceholder: "e.g. pp-game",
   projectHint:
     "Match your workspace project directory name; sessions use it to find their connections.",

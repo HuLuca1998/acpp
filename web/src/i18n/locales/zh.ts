@@ -544,7 +544,8 @@ export default {
       unmounted: "未挂载",
       unmountedShort: "未挂载",
       unmountedDesc: "当前项目没有可用数据源，AI 那边看不到这些工具",
-      unmountedServerDesc: "还没有配置服务器，AI 那边看不到这些工具（服务器不按项目分，配一台全局可用）",
+      unmountedServerDesc:
+        "还没有配置服务器，AI 那边看不到这些工具（服务器不按项目分，配一台全局可用）",
       callCount: "已调用 {{count}} 次",
       errorCount: "其中 {{count}} 次失败",
     },

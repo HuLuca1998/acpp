@@ -24,10 +24,10 @@ export const zhServer = {
   passphrase: "通行短语",
   note: "备注",
   notePlaceholder: "pp-game 生产机，项目在 /srv/pp-game-live",
-  noteHint: "这段会给 AI 看：写清这台机器是干嘛的、项目在哪个目录，能省掉它好几轮摸索",
+  noteHint:
+    "这段会给 AI 看：写清这台机器是干嘛的、项目在哪个目录，能省掉它好几轮摸索",
   disabled: "停用",
-  disabledHint:
-    "停用只是不挂给 AI；把它当跳板机的数据源仍然照常经它拨号",
+  disabledHint: "停用只是不挂给 AI；把它当跳板机的数据源仍然照常经它拨号",
   enabled: "启用中",
   test: "测试连接",
   empty: "还没有配置服务器",
@@ -45,12 +45,14 @@ export const zhServer = {
     "配好之后 AI 能读这台机器上的任意路径，不按项目隔离。要收窄范围，给它配一个受限的 SSH 账号。",
   refServer: "服务器",
   refTitle: "引用服务器",
-  refHint: "选一台机器交给 AI——它会明确本轮针对这台，用只读工具实际去看它的容器、日志与负载。",
+  refHint:
+    "选一台机器交给 AI——它会明确本轮针对这台，用只读工具实际去看它的容器、日志与负载。",
   // 数据库对话框的 SSH 页签用：跳板机从这里选。
   pickForTunnel: "跳板机",
   pickPlaceholder: "选一台服务器…",
   pickEmpty: "还没有配置服务器",
   pickCreate: "新建服务器",
   pickManage: "去服务器页管理",
-  pickHint: "隧道经这台机器拨到上面填的主机地址（线上库多半是 127.0.0.1:3306）。",
+  pickHint:
+    "隧道经这台机器拨到上面填的主机地址（线上库多半是 127.0.0.1:3306）。",
 } as const

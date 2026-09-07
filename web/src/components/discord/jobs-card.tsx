@@ -195,7 +195,9 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
             {j.running ? (
               <StatusDot tone="warning" label={t("discord.jobs.running")} />
             ) : j.disabledReason ? (
-              <span className="text-xs text-destructive">{j.disabledReason}</span>
+              <span className="text-xs text-destructive">
+                {j.disabledReason}
+              </span>
             ) : null}
           </div>
         )
@@ -407,16 +409,23 @@ function RunsDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("discord.jobs.runsTitle", { name: job.name })}</DialogTitle>
+          <DialogTitle>
+            {t("discord.jobs.runsTitle", { name: job.name })}
+          </DialogTitle>
         </DialogHeader>
         {runs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("discord.jobs.runsEmpty")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("discord.jobs.runsEmpty")}
+          </p>
         ) : (
           <ul className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto text-sm">
             {runs.map((r) => (
               <li key={r.id} className="flex flex-col gap-0.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusDot tone={statusTone(r.status)} label={statusLabel(r.status, t)} />
+                  <StatusDot
+                    tone={statusTone(r.status)}
+                    label={statusLabel(r.status, t)}
+                  />
                   <span className="tabular-nums" title={r.startedAt}>
                     {formatDateTime(r.startedAt, i18n.language)}
                   </span>
@@ -425,17 +434,23 @@ function RunsDialog({
                       {Math.max(
                         1,
                         Math.round(
-                          (new Date(r.endedAt).getTime() - new Date(r.startedAt).getTime()) / 1000
+                          (new Date(r.endedAt).getTime() -
+                            new Date(r.startedAt).getTime()) /
+                            1000
                         )
                       )}
                       s
                     </span>
                   ) : null}
                   {r.tools ? (
-                    <span className="text-xs text-muted-foreground">🔧 {r.tools}</span>
+                    <span className="text-xs text-muted-foreground">
+                      🔧 {r.tools}
+                    </span>
                   ) : null}
                   {r.trigger === "manual" ? (
-                    <span className="text-xs text-muted-foreground">{t("discord.jobs.manual")}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t("discord.jobs.manual")}
+                    </span>
                   ) : null}
                   {r.ref && guildId ? (
                     <a
@@ -451,7 +466,9 @@ function RunsDialog({
                 {r.error || r.summary ? (
                   <span
                     className={
-                      r.error ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+                      r.error
+                        ? "text-xs text-destructive"
+                        : "text-xs text-muted-foreground"
                     }
                   >
                     {r.error || r.summary}

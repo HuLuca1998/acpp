@@ -155,7 +155,9 @@ function ServerForm({
             placeholder={t("server.namePlaceholder")}
             onChange={(e) => set("name", e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">{t("server.nameHint")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("server.nameHint")}
+          </p>
         </Field>
 
         <div className="grid grid-cols-[1fr_7rem] gap-4">
@@ -285,7 +287,9 @@ function ServerForm({
             placeholder={t("server.notePlaceholder")}
             onChange={(e) => set("note", e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">{t("server.noteHint")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("server.noteHint")}
+          </p>
         </Field>
 
         <Field>
@@ -340,8 +344,10 @@ function ServerForm({
         mode="file"
         initialPath={
           (form.keyPath ?? "").includes("/")
-            ? (form.keyPath ?? "").slice(0, (form.keyPath ?? "").lastIndexOf("/")) ||
-              "~/.ssh"
+            ? (form.keyPath ?? "").slice(
+                0,
+                (form.keyPath ?? "").lastIndexOf("/")
+              ) || "~/.ssh"
             : "~/.ssh"
         }
         onSelect={(path) => {

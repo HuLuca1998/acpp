@@ -25,7 +25,8 @@ export const enDiscord = {
     },
     guilds: "Servers",
     invite: "Invite link",
-    inviteHint: "Invite the bot to more servers — client_id and permissions are pre-filled; open, pick a server, authorize.",
+    inviteHint:
+      "Invite the bot to more servers — client_id and permissions are pre-filled; open, pick a server, authorize.",
     noGuilds:
       "The bot isn't in any server yet — use the install link in the Discord developer portal to invite it.",
     refresh: "Refresh status",
@@ -72,7 +73,8 @@ export const enDiscord = {
     description:
       "Attached to a channel binding: when due, the bot opens a thread in the channel and runs the task prompt in a fresh session; you can follow up in the thread. Telling the AI in a thread “from now on, every day at 10:00, post this here” creates one too.",
     empty: "No scheduled tasks yet",
-    emptyHint: "Click “New”, or tell the AI in a Discord thread “every day at 10:00, post a report to this channel”.",
+    emptyHint:
+      "Click “New”, or tell the AI in a Discord thread “every day at 10:00, post a report to this channel”.",
     add: "New",
     name: "Task",
     channel: "Channel",
@@ -91,7 +93,8 @@ export const enDiscord = {
     triggered: "Triggered — a run thread will appear in the channel shortly",
     triggerFailed: "Trigger failed",
     removeTitle: "Delete this scheduled task?",
-    removeDesc: "“{{name}}” cannot be recovered; its prompt goes with it. To pause temporarily, disable it instead.",
+    removeDesc:
+      "“{{name}}” cannot be recovered; its prompt goes with it. To pause temporarily, disable it instead.",
     removeConfirm: "Delete",
     removed: "Deleted",
     removeFailed: "Delete failed",
@@ -99,7 +102,8 @@ export const enDiscord = {
     saveFailed: "Save failed",
     createTitle: "New scheduled task",
     editTitle: "Edit scheduled task",
-    formDesc: "The task runs in a fresh session with no conversation memory — the prompt must be self-contained: data sources, definitions, output structure, delivery form, and when to stay silent.",
+    formDesc:
+      "The task runs in a fresh session with no conversation memory — the prompt must be self-contained: data sources, definitions, output structure, delivery form, and when to stay silent.",
     fieldName: "Name",
     namePlaceholder: "Daily user behavior report",
     fieldChannel: "Deliver to channel",

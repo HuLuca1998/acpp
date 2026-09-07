@@ -42,7 +42,8 @@ export const connectionsApi = {
         method: "PUT",
         body: JSON.stringify(input),
       }),
-    remove: (id: number) => request<null>(`/servers/${id}`, { method: "DELETE" }),
+    remove: (id: number) =>
+      request<null>(`/servers/${id}`, { method: "DELETE" }),
     /** 测一份还没保存的配置（新建对话框里的按钮）。 */
     probe: (input: ServerInput) =>
       request<{ version: string }>("/servers/probe", {
