@@ -72,6 +72,9 @@ export const zhDiscord = {
     empty: "还没有定时任务",
     emptyHint:
       "点「新建」，或在 Discord 子区里直接对 AI 说「以后每天早上 10 点出一份发到这个频道」。",
+    emptyNoBinding:
+      "定时任务挂在频道绑定上，现在还没有绑定任何频道。先在 Discord 频道里用 /init 绑定工作区，再回来建任务。",
+    gotoDiscord: "去 Discord 页",
     add: "新建",
     name: "任务",
     channel: "频道",

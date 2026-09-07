@@ -256,13 +256,16 @@ func (s *Service) handleCronCommand(ctx context.Context, token string, ev intera
 			s.ephemeralKeep(token, ev, "本频道还没有定时任务。\n-# 在子区里对 AI 说「以后每天早上 10 点……发到这个频道」它就会建一条；网页 Discord 页也能建。")
 			return
 		}
-		var sb strings.Builder
-		sb.WriteString("## 📅 本频道的定时任务\n")
+		lines := make([]string, 0, len(jobs))
 		for _, j := range jobs {
-			sb.WriteString(jobLine(j) + "\n")
+			lines = append(lines, jobLine(j))
 		}
-		sb.WriteString("-# /cron action:run|pause|resume|runs|remove id:<id 或名字前缀，remove 可逗号分隔多条> · action:clear 删光")
-		s.ephemeralKeep(token, ev, sb.String())
+		body, more := clampLines(lines, contentLimit-320)
+		if more > 0 {
+			body += fmt.Sprintf("\n-# …还有 %d 条放不下，用 id 前缀分批看（/cron action:runs id:<前缀>）", more)
+		}
+		s.ephemeralKeep(token, ev, "## 📅 本频道的定时任务\n"+body+
+			"\n-# /cron action:run|pause|resume|runs|remove id:<id 或名字前缀，remove 可逗号分隔多条> · action:clear 删光")
 		return
 	}
 	// 删除走多条通路：id 逗号分隔；clear 一次带走整批，必须二次确认。
@@ -370,7 +373,30 @@ func (s *Service) removeJobs(jobs []schedule.Job) string {
 	if running > 0 {
 		sb.WriteString(fmt.Sprintf("\n-# 其中 %d 条正在运行，这一轮会跑完并照常投递，之后不再有。", running))
 	}
-	return sb.String()
+	// 一口气删几十条时名字串会撞 Discord 的消息上限，超了宁可截尾也别让回调 400。
+	return trimRunes(sb.String(), contentLimit)
+}
+
+// contentLimit 是 Discord 单条消息 content 的上限（字符数）。ephemeral 回复走
+// 的是纯 content，超长回调直接 400，用户看到的是「该 APP 未能及时响应」。
+const contentLimit = 2000
+
+// clampLines 按行装进 limit 个字符以内，返回装下的正文与没装下的行数。
+// 清单类回复用它：任务一多与其被平台整条拒掉，不如少列几条并说明还有多少。
+func clampLines(lines []string, limit int) (string, int) {
+	var sb strings.Builder
+	n := 0
+	for i, line := range lines {
+		if sb.Len() > 0 && len([]rune(sb.String()))+len([]rune(line))+1 > limit {
+			return sb.String(), len(lines) - i
+		}
+		if n > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(line)
+		n++
+	}
+	return sb.String(), 0
 }
 
 // confirmClear 是 /cron action:clear 的第一步：弹一张只有本人看得见的确认

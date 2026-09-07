@@ -75,6 +75,9 @@ export const enDiscord = {
     empty: "No scheduled tasks yet",
     emptyHint:
       "Click “New”, or tell the AI in a Discord thread “every day at 10:00, post a report to this channel”.",
+    emptyNoBinding:
+      "Scheduled tasks hang off a channel binding and no channel is bound yet. Run /init in a Discord channel first, then come back to create one.",
+    gotoDiscord: "Open Discord page",
     add: "New",
     name: "Task",
     channel: "Channel",

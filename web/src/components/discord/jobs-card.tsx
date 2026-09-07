@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Link } from "react-router"
 import type { TFunction } from "i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -334,7 +335,23 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
               error={error}
               loading={!jobs && !error}
               emptyTitle={t("discord.jobs.empty")}
-              emptyHint={t("discord.jobs.emptyHint")}
+              // 一个频道都没绑时「新建」是禁用的，空态别再劝人点它——指路去绑定。
+              emptyHint={
+                info.bindings.length === 0
+                  ? t("discord.jobs.emptyNoBinding")
+                  : t("discord.jobs.emptyHint")
+              }
+              emptyAction={
+                info.bindings.length === 0 ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link to="/discord" />}
+                  >
+                    {t("discord.jobs.gotoDiscord")}
+                  </Button>
+                ) : undefined
+              }
             />
           }
         />

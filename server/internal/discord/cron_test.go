@@ -322,3 +322,20 @@ func TestRemoveJobsAndClear(t *testing.T) {
 		t.Error("清空按钮必须走 jobPrefix 路由")
 	}
 }
+
+// 契约：清单类回复按行装进 Discord 的 content 上限以内，装不下的报个数；
+// 单行就超限时至少装第一行（不然回复是空的）。
+
+func TestClampLines(t *testing.T) {
+	lines := []string{strings.Repeat("a", 900), strings.Repeat("b", 900), strings.Repeat("c", 900)}
+	body, more := clampLines(lines, 2000)
+	if more != 1 || !strings.HasPrefix(body, "aaa") || !strings.Contains(body, "\nbbb") || strings.Contains(body, "ccc") {
+		t.Errorf("应装下两行剩一行: more=%d len=%d", more, len(body))
+	}
+	if body, more := clampLines(lines[:1], 10); more != 0 || body == "" {
+		t.Errorf("单行超限也要装第一行: more=%d body=%q", more, body[:min(10, len(body))])
+	}
+	if body, more := clampLines(nil, 100); body != "" || more != 0 {
+		t.Error("空清单应为空")
+	}
+}
