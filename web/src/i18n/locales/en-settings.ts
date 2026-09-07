@@ -100,7 +100,7 @@ export const enSettings = {
     connOk: "Connected · {{count}} models available",
     depsTitle: "Dependency check",
     depsDescription:
-      "Ordered by install chain: Homebrew → Node.js/npm → CLIs and ACP adapters. Install what is missing and update what is behind, in one click.",
+      "Ordered by install chain: Homebrew → Node.js/npm → CLIs and ACP adapters. Everything but claude-agent-acp (which has no brew package) is versioned by Homebrew. Install what is missing and update what is behind, in one click.",
     recheck: "Re-check",
     missing: "Not installed",
     bundledHint: "Ships with Node.js",
@@ -117,6 +117,11 @@ export const enSettings = {
       "Homebrew must be installed manually in a terminal (it asks for your password). Copy the command and run it there:",
     copy: "Copy command",
     copied: "Copied",
+    npmLegacy: "old npm install",
+    migrateHint:
+      'Rows marked "old npm install" still come from a global npm install and fight Homebrew over the same command name, so nothing can be installed over them. Copy the cleanup command from that row, run it in a terminal, then hit Re-check.',
+    migrateCopy: "Copy cleanup command",
+    migrateCopied: "Copied — run it in a terminal, then hit Re-check",
     pathLabel: "Server PATH",
     deps: {
       brew: "Homebrew",

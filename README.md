@@ -94,12 +94,16 @@ acpp/
 
 ## 快速开始
 
-先装 ACP runtime（两条都支持，可各注册一个）：
+先装 ACP runtime（两条都支持，可各注册一个）。版本统一交给 Homebrew 管，
+只有 `claude-agent-acp` 在 brew 里没有对应包，走 npm：
 
 ```bash
-npm i -g @agentclientprotocol/codex-acp @agentclientprotocol/claude-agent-acp
+brew install codex-acp
+npm i -g @agentclientprotocol/claude-agent-acp
 codex login    # codex 复用本机登录态；claude 复用 Claude Code 登录态
 ```
+
+装好之后这几项的安装与升级都能在 **设置 → 环境** 里一键完成。
 
 ```bash
 make install
@@ -184,8 +188,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/projects/clone` | 后台克隆（`{url, name?}`）；**租户强制禁用 git 凭证助手** |
 | GET | `/api/projects/clones` | 克隆任务进度（内存态，只对发起者可见） |
 | GET | `/api/projects/repos` | 可克隆仓库清单（gh，只要组织与协作关系，个人账号名下的不出现） |
-| GET | `/api/system/env` | 环境体检：brew/node/npm、CLI 与 ACP 适配器是否就位（含版本与路径）；npm 系依赖附带 registry 上的最新版与 `outdated` 标记，`?refresh=1` 绕过 5 分钟缓存重查 |
-| POST | `/api/system/env/install` | 一键安装缺失依赖，对已装的 npm 包即升级到最新版（`{key}`，只认后端白名单：brew formula / npm -g） |
+| GET | `/api/system/env` | 环境体检：brew/node/npm、CLI 与 ACP 适配器是否就位（含版本与路径）；除 node 外各项附带包管理器上的最新版与 `outdated` 标记（brew 项查 formulae.brew.sh，npm 项查 registry），`?refresh=1` 绕过 5 分钟缓存重查。命令若还是旧的 npm 全局安装占着，附 `migrateHint` 给出清理命令 |
+| POST | `/api/system/env/install` | 一键安装/升级依赖（`{key}`，只认后端白名单）。**除 `claude-agent-acp` 外全部走 Homebrew**（cask：codex、claude-code；formula：codex-acp、node），已装的自动改用 `brew upgrade`；`claude-agent-acp` 在 brew 里没有包，走 `npm install -g`。被旧 npm 安装占着命令名的项直接拒绝，让用户先清理 |
 | GET | `/api/system/title-model` | 会话标题模型配置（本机 ollama：`{enabled, baseUrl, model}`） |
 | PUT | `/api/system/title-model` | 存标题模型配置，热更生效（启用时必须选模型） |
 | GET | `/api/system/title-model/models` | 列某个 ollama 端点上已装的模型（`?baseUrl=`，为空取默认地址） |

@@ -91,6 +91,16 @@ export function EnvCheck() {
     }
   }
 
+  /**
+   * npm 旧安装占着命令名时一键安装必然撞车，只能先在终端清掉——把命令
+   * 递到用户手上，比让他自己去查 npm 的 EEXIST 报错强。
+   */
+  async function copyMigrate(dep: EnvDependency) {
+    const ok = await copyText(dep.migrateHint ?? "")
+    if (ok) toast.success(t("settingsPage.env.migrateCopied"))
+    else toast.error(t("common.copyFailed"))
+  }
+
   async function refresh() {
     setRefreshing(true)
     try {
@@ -252,7 +262,7 @@ export function EnvCheck() {
                 tone={
                   !dep.installed
                     ? "destructive"
-                    : dep.outdated
+                    : dep.outdated || dep.migrateHint
                       ? "warning"
                       : "success"
                 }
@@ -265,7 +275,11 @@ export function EnvCheck() {
                   <span className="truncate" title={dep.path}>
                     {dep.version || dep.path}
                   </span>
-                  {dep.outdated ? (
+                  {dep.migrateHint ? (
+                    <span className="shrink-0 text-warning">
+                      {t("settingsPage.env.npmLegacy")}
+                    </span>
+                  ) : dep.outdated ? (
                     <span className="shrink-0 text-warning">
                       → {dep.latest}
                     </span>
@@ -278,8 +292,17 @@ export function EnvCheck() {
                     : t("settingsPage.env.missing")}
                 </span>
               )}
-              {(dep.installKind === "auto" && !dep.installed) ||
-              dep.outdated ? (
+              {dep.migrateHint ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyMigrate(dep)}
+                >
+                  <CopyIcon data-icon="inline-start" />
+                  {t("settingsPage.env.migrateCopy")}
+                </Button>
+              ) : (dep.installKind === "auto" && !dep.installed) ||
+                dep.outdated ? (
                 <Button
                   size="sm"
                   disabled={
@@ -316,6 +339,15 @@ export function EnvCheck() {
               ) : null}
             </div>
           ))}
+
+          {/* 旧 npm 安装占着命令名：解释归解释，命令在行内那颗按钮上。 */}
+          {info.deps.some((d) => d.migrateHint) ? (
+            <Alert className="mt-2">
+              <AlertDescription>
+                {t("settingsPage.env.migrateHint")}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           {/* brew 装不了一键：交互式要密码，给复制命令去终端跑。 */}
           {info.deps.some((d) => !d.installed && d.installKind === "manual") ? (

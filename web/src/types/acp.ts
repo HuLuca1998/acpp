@@ -65,6 +65,11 @@ export interface EnvDependency {
   latest?: string
   /** 为真表示 version 落后于 latest，按钮变「更新」。 */
   outdated?: boolean
+  /**
+   * 非空表示这个命令还是旧的 npm 全局安装占着，而本项已改由 Homebrew 管；
+   * 两边争同一个命令名，必须先在终端跑这条命令腾位置。此时禁用一键安装。
+   */
+  migrateHint?: string
 }
 
 /** 环境体检结果；path 是后端进程实际使用的 PATH。 */

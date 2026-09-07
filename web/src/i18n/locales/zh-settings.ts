@@ -92,7 +92,7 @@ export const zhSettings = {
     connOk: "连接正常 · {{count}} 个可用模型",
     depsTitle: "依赖体检",
     depsDescription:
-      "按安装链排序：Homebrew → Node.js/npm → CLI 与 ACP 适配器。缺失项可一键安装，有新版时可一键更新。",
+      "按安装链排序：Homebrew → Node.js/npm → CLI 与 ACP 适配器。除 claude-agent-acp（brew 里没有）外全部由 Homebrew 管理版本，缺失项可一键安装，有新版时可一键更新。",
     recheck: "重新检测",
     missing: "未安装",
     bundledHint: "随 Node.js 一起提供",
@@ -109,6 +109,11 @@ export const zhSettings = {
       "Homebrew 需要在终端手动安装（过程会要求输入密码），复制命令后粘贴到终端执行：",
     copy: "复制命令",
     copied: "已复制",
+    npmLegacy: "npm 旧安装",
+    migrateHint:
+      "标着「npm 旧安装」的项还是早先用 npm 全局装的，与 Homebrew 争同一个命令名，装不进去。用那一行的按钮复制清理命令，在终端执行后点「重新检测」。",
+    migrateCopy: "复制清理命令",
+    migrateCopied: "已复制，去终端执行后点「重新检测」",
     pathLabel: "后端 PATH",
     deps: {
       brew: "Homebrew",
