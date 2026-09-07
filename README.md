@@ -272,7 +272,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | POST | `/api/mcp/report/{token}` | 会话的报告 MCP 端点（agent 回连，同一套 token）。工具 `report_open` 把 agent 写好的单文件 HTML 报告在用户工作区打开；只收路径不收全文，且限死会话工作目录内的 `.html` |
-| POST | `/api/mcp/discord-cron/{token}` | discord 子区的定时任务工具面端点（与上一条同一枚凭证）：`cron_add` / `cron_list` / `cron_update` / `cron_remove`，投递固定为子区所属频道 |
+| POST | `/api/mcp/discord-cron/{token}` | discord 子区的定时任务工具面端点（与上一条同一枚凭证）：`cron_add` / `cron_list` / `cron_update` / `cron_remove`，投递固定为子区所属频道。一次性任务用 `at`（RFC3339）或 `in`（相对时长 2h / 90m / 1d，服务端按当前时刻换算）；`cron_add` 的描述里注入会话开始时刻，模型据此换算「明早 9 点」 |
 | POST | `/api/mcp/discord/{token}` | discord 子区自家工具面端点（agent 回连，内存凭证）。`send_file` 交付文件（`paths` 一次最多 10 个，`as` 选形态：`auto` / `file` 附件 / `link` 渲染外链 / `image` 长图，`expire` 定外链有效期，默认 7d）；`list_links` 列出本子区还有效的外链；`revoke_link` 撤销（传 id 或 `all`）。外链是 secret gist + gistpreview 渲染页，只能撤 acpp 自己发的 |
 | GET | `/api/tools/servers` | 工具台：当前上下文（`?cwd=`）下的 MCP 工具面——工具名、给模型看的描述原文、参数 JSON Schema、只读/破坏性注解，外加这个面会不会真的挂给 agent（数据源为空就不挂） |
 | POST | `/api/tools/inspect` | 工具台试运行与自定义请求（`{cwd, request}`，request 是**原样的** JSON-RPC 消息）：走与 agent 完全相同的协议路径，回完整响应与耗时；通知类消息回 `accepted:true`（协议上就没有响应） |
@@ -434,7 +434,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 **三条入口**：
 
-- **子区里对 AI 说**（主路）：「以后每天早上 10 点这样出一份发到这个频道」。子区会话挂着 `acpp-cron` 工具面（`cron_add` / `cron_list` / `cron_update` / `cron_remove`），投递目标固定为当前频道——从凭证推，不让模型填频道 id。建完子区里出一张任务卡（立即运行 / 停用 / 删除三个按钮）。`scheduled-task` 技能（范本 [docs/skill-scheduled-task.md](docs/skill-scheduled-task.md)）教它「先做一次再固化」，并给出提示词的自包含清单。
+- **子区里对 AI 说**（主路）：「以后每天早上 10 点这样出一份发到这个频道」。子区会话挂着 `acpp-cron` 工具面（`cron_add` / `cron_list` / `cron_update` / `cron_remove`），投递目标固定为当前频道——从凭证推，不让模型填频道 id。「2 小时后跑一次」用 `in` 相对时长由服务端换算，模型不必知道现在几点；「明早 9 点」才用 `at`，工具描述里带了会话开始时刻当基准。建完子区里出一张任务卡（立即运行 / 停用 / 删除三个按钮）。`scheduled-task` 技能（范本 [docs/skill-scheduled-task.md](docs/skill-scheduled-task.md)）教它「先做一次再固化」，并给出提示词的自包含清单。
 - `/cron`：手机上看与管——`action` 选 list / run / pause / resume / runs / remove / clear，`id` 认任务 id 或名字前缀；`remove` 的 `id` 逗号分隔可一次删多条，`clear` 删光本频道全部（弹确认卡二次确认）。
 - 网页 Discord 页的「定时任务」区块：清单、新建（cron 常用预设 + 本机时区缺省）、编辑、启停、立即运行、运行记录（能跳到子区）。
 

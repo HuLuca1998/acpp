@@ -211,6 +211,41 @@ func TestCronToolsScope(t *testing.T) {
 	if _, err := add(`{"name":"坏","cron":"99 10 * * *","prompt":"x"}`); err == nil {
 		t.Error("坏表达式应报工具级错误")
 	}
+	// 相对时长 in：服务端按当前时刻换算成一次性 at——模型没有钟表，让它
+	// 自己算「2 小时后」的绝对时刻十有八九算错。
+	before := time.Now()
+	if out, err := add(`{"name":"一次","in":"2h","prompt":"p"}`); err != nil || !strings.Contains(out, "一次性") {
+		t.Fatalf("cron_add in=2h: %v %q", err, out)
+	}
+	var once *schedule.Job
+	for _, j := range s.sched.Jobs("c1") {
+		if j.Name == "一次" {
+			once = &j
+		}
+	}
+	if once == nil || once.At == nil || once.Cron != "" {
+		t.Fatalf("in 应折成一次性任务: %+v", once)
+	}
+	if d := once.At.Sub(before); d < 2*time.Hour-time.Minute || d > 2*time.Hour+time.Minute {
+		t.Errorf("at 应约等于 now+2h，实际差 %v", d)
+	}
+	if _, err := add(`{"name":"天","in":"1d","prompt":"p"}`); err != nil {
+		t.Errorf("in 要认 d 作天: %v", err)
+	}
+	for _, bad := range []string{`{"name":"x","in":"abc","prompt":"p"}`, `{"name":"x","in":"-1h","prompt":"p"}`,
+		`{"name":"x","in":"1h","at":"2030-01-01T00:00:00Z","prompt":"p"}`} {
+		if _, err := add(bad); err == nil {
+			t.Errorf("应拒绝 %s", bad)
+		}
+	}
+	// 过期的 at 报错要带基准时刻，模型才能自纠。
+	if _, err := add(`{"name":"x","at":"2020-01-01T00:00:00Z","prompt":"p"}`); err == nil || !strings.Contains(err.Error(), "现在是") {
+		t.Errorf("过期 at 的报错应带当前时刻: %v", err)
+	}
+	// 工具描述带会话开始时刻，「明早 9 点」这类具体钟点才有今天的基准。
+	if !strings.Contains(tools[0].Description, "现在是 20") {
+		t.Errorf("cron_add 描述应注入当前时刻: %q", tools[0].Description[len(tools[0].Description)-200:])
+	}
 	if _, err := s.cronTools("unknown")[0].Call(t.Context(), json.RawMessage(`{"name":"n","cron":"0 1 * * *","prompt":"p"}`)); err == nil {
 		t.Error("子区不明应报错")
 	}

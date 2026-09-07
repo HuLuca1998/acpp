@@ -706,7 +706,11 @@ func validate(j Job, now time.Time) error {
 		}
 	}
 	if j.At != nil && j.Enabled && j.LastRunAt == nil && j.At.Before(now.Add(-missedGrace)) {
-		return fmt.Errorf("%w: 一次性时刻已经过去了", ErrInvalid)
+		// 把两个时刻都写进去：模型不知道现在几点，光说「过去了」它下一次
+		// 还是猜；给了基准它才能自纠。
+		loc := j.Location()
+		return fmt.Errorf("%w: 一次性时刻 %s 已经过去了（现在是 %s）", ErrInvalid,
+			j.At.In(loc).Format("2006-01-02 15:04"), now.In(loc).Format("2006-01-02 15:04 MST"))
 	}
 	return nil
 }

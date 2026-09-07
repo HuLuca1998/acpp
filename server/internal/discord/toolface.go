@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -282,13 +283,23 @@ func cronAllowedTools() []string {
 // 工具描述写给模型看，回答的是「什么时候该想起它」与「prompt 该写成什么样」
 // ——后者是整个功能成败的关键：任务到点在全新会话里跑，没有这次对话的
 // 任何记忆，写得像「像刚才那样」的任务第一次就会跑歪。
+// cronAddDesc 是 cron_add 的说明。带上生成时刻：模型没有钟表，「2 小时后」
+// 靠 in 由服务端换算，「明早 9 点」这类具体钟点它得知道今天是几号才算得
+// 出 at。工具清单在会话开头拉一次，这个时刻就是会话起点——跨日的长会话
+// 里日期可能已经翻篇，所以描述里也让它优先用 in。
+func cronAddDesc(now time.Time) string {
+	return cronAddDescription + "\n**现在是 " + now.Format("2006-01-02 15:04（MST）") +
+		"**（会话开始时刻）。相对时间——「2 小时后」「40 分钟后」「明天这个点」——一律用 in（2h / 40m / 1d），" +
+		"别自己换算 at；只有用户给了具体钟点（「明早 9 点」「9 月 10 日 15:00」）才用 at，以上面这个时刻为今天的基准。"
+}
+
 const cronAddDescription = "给当前频道建一条定时任务：到点后在**全新会话**里执行 prompt，成果发到这个频道" +
 	"（频道里一条起始消息 + 挂在下面的子区，跑完用户可以在子区里追问）。" +
 	"\n什么时候用：用户说「每天 / 每周一 / 每隔 N 小时 / 以后定时 / 到点 / 固定时间发一份」" +
 	"——建任务。**绝不要用 sleep 循环、反复轮询或让用户手动提醒来冒充定时。**" +
 	"\n时间：cron 是 5 段表达式（分 时 日 月 周），按 tz 的墙钟解释，tz 缺省是本机时区。" +
 	"「每天早上 10 点」→ cron=\"0 10 * * *\"；「每两小时」→ \"0 */2 * * *\"；「每周一 9 点」→ \"0 9 * * 1\"；" +
-	"「每个工作日 18:30」→ \"30 18 * * 1-5\"。只跑一次的用 at（RFC3339 时刻）代替 cron。" +
+	"「每个工作日 18:30」→ \"30 18 * * 1-5\"。只跑一次的用 in（相对时长）或 at（RFC3339 时刻）代替 cron，跑成功即自动删。" +
 	"\n**prompt 是那次运行的全部上下文**：新会话没有这次对话的任何记忆。把数据来源（哪个库哪些表 / 哪台机器" +
 	"哪些日志路径）、口径（时间窗按「运行时刻」相对表述，如「过去 7 天」「自上次运行以来」；指标定义；过滤条件）、" +
 	"输出结构（先一行结论，再要点）、交付形态（报告按 html-report 写成单文件并 report_open；文件用 send_file）、" +
@@ -299,7 +310,7 @@ const cronAddDescription = "给当前频道建一条定时任务：到点后在*
 const cronListDescription = "列出当前频道的定时任务：id、名字、时间、下次运行、上次结果。" +
 	"用户问「有哪些定时任务」「那个日报还在跑吗」「上次跑成功了吗」，或你要改 / 删任务却手上没有 id 时用。"
 
-const cronUpdateDescription = "改当前频道的一条定时任务：换时间（cron / tz / at）、改 prompt、停用或启用（enabled）。" +
+const cronUpdateDescription = "改当前频道的一条定时任务：换时间（cron / tz / at / in）、改 prompt、停用或启用（enabled）。" +
 	"只传要改的字段。用户说「改成每天 9 点」「先停掉」「把周报也加上 xx 指标」时用；手上没有 id 先 cron_list。" +
 	"改 prompt 时传完整的新版本，不是补丁。"
 
@@ -339,24 +350,56 @@ func (s *Service) jobScope(threadID string) (channelID, creator string, err erro
 
 // cronArgs 是 cron_add / cron_update 共用的入参形状。
 type cronArgs struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Cron    string `json:"cron"`
-	TZ      string `json:"tz"`
-	At      string `json:"at"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Cron string `json:"cron"`
+	TZ   string `json:"tz"`
+	At   string `json:"at"`
+	// In 是相对时长（2h / 90m / 1d）：服务端拿当前时刻加出来的一次性 at。
+	In      string `json:"in"`
 	Prompt  string `json:"prompt"`
 	Enabled *bool  `json:"enabled"`
 }
 
-func (a cronArgs) atTime() (*time.Time, error) {
-	if strings.TrimSpace(a.At) == "" {
-		return nil, nil
+// atTime 把 at（绝对 RFC3339）或 in（相对时长）折成一次性时刻。in 是给
+// 「2 小时后」「明天这个点」准备的：模型不知道现在几点，让它自己算绝对
+// 时刻十有八九算错（真机里见过算到昨天的），相对时长由服务端按 now 加出
+// 来才靠得住。
+func (a cronArgs) atTime(now time.Time) (*time.Time, error) {
+	at, in := strings.TrimSpace(a.At), strings.TrimSpace(a.In)
+	switch {
+	case at != "" && in != "":
+		return nil, fmt.Errorf("at 与 in 只能二选一")
+	case in != "":
+		d, err := parseDelay(in)
+		if err != nil {
+			return nil, err
+		}
+		t := now.Add(d)
+		return &t, nil
+	case at != "":
+		t, err := time.Parse(time.RFC3339, at)
+		if err != nil {
+			return nil, fmt.Errorf("at 要是 RFC3339 时刻（如 2026-09-04T09:00:00+08:00）：%w", err)
+		}
+		return &t, nil
 	}
-	t, err := time.Parse(time.RFC3339, strings.TrimSpace(a.At))
-	if err != nil {
-		return nil, fmt.Errorf("at 要是 RFC3339 时刻（如 2026-09-04T09:00:00+08:00）：%w", err)
+	return nil, nil
+}
+
+// parseDelay 解析相对时长：Go duration 语法（2h、90m、1h30m），另认 d 作
+// 天——Go 原生不认「1d」，而「明天这个时候」正是模型爱用的说法。
+func parseDelay(s string) (time.Duration, error) {
+	if n, ok := strings.CutSuffix(s, "d"); ok {
+		if days, err := strconv.Atoi(n); err == nil && days > 0 {
+			return time.Duration(days) * 24 * time.Hour, nil
+		}
 	}
-	return &t, nil
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("in 要是正的时长，如 2h、90m、1h30m、1d：%q 不认识", s)
+	}
+	return d, nil
 }
 
 // cronTools 构造子区会话可用的定时任务工具集。
@@ -365,7 +408,8 @@ func (s *Service) cronTools(threadID string) []mcp.Tool {
 		"name":   map[string]any{"type": "string", "description": "任务名（≤80 字），起始消息与子区标题都用它"},
 		"cron":   map[string]any{"type": "string", "description": "5 段 cron 表达式（分 时 日 月 周），与 at 二选一"},
 		"tz":     map[string]any{"type": "string", "description": "IANA 时区（如 Asia/Shanghai），缺省本机时区"},
-		"at":     map[string]any{"type": "string", "description": "一次性任务的 RFC3339 时刻，与 cron 二选一；跑成功即删"},
+		"at":     map[string]any{"type": "string", "description": "一次性任务的 RFC3339 时刻（用户给了具体钟点时用），与 cron / in 三选一；跑成功即删"},
+		"in":     map[string]any{"type": "string", "description": "相对时长后跑一次（2h / 90m / 1h30m / 1d），与 cron / at 三选一；服务端按当前时刻换算，「N 小时后」一律用它"},
 		"prompt": map[string]any{"type": "string", "description": "任务提示词：那次运行的全部上下文，必须自包含"},
 	}
 	updateSchema := map[string]any{"id": map[string]any{"type": "string", "description": "任务 id（cron_list 里的）"}}
@@ -374,9 +418,13 @@ func (s *Service) cronTools(threadID string) []mcp.Tool {
 	}
 	updateSchema["enabled"] = map[string]any{"type": "boolean", "description": "false 停用、true 启用"}
 
+	now := time.Now()
+	if loc, err := time.LoadLocation(schedule.HostTZ()); err == nil {
+		now = now.In(loc)
+	}
 	return []mcp.Tool{{
 		Name:        cronToolAdd,
-		Description: cronAddDescription,
+		Description: cronAddDesc(now),
 		InputSchema: map[string]any{
 			"type": "object", "properties": jobSchema, "required": []any{"name", "prompt"},
 		},
@@ -389,7 +437,7 @@ func (s *Service) cronTools(threadID string) []mcp.Tool {
 			if err != nil {
 				return "", err
 			}
-			at, err := in.atTime()
+			at, err := in.atTime(time.Now())
 			if err != nil {
 				return "", err
 			}
@@ -445,7 +493,7 @@ func (s *Service) cronTools(threadID string) []mcp.Tool {
 			if !ok || job.Scope != channelID {
 				return "", fmt.Errorf("本频道没有 id 为 %s 的任务（先 cron_list）", in.ID)
 			}
-			at, err := in.atTime()
+			at, err := in.atTime(time.Now())
 			if err != nil {
 				return "", err
 			}
