@@ -103,6 +103,14 @@ mcp__Claude_Browser__navigate { url: "https://discord.com/channels/<guildId>/<ch
   把子区变成主视图就正常了——顺带草稿也是干净的（草稿绑在面板上）。
   子区 id 从后端拿：`~/.acpp-dev/discord.json` 的 `threads[].threadId`。
 
+### 4.1.5 面板是和用户共用的：每一步动手前核对 tab 标题里的频道名
+
+内嵌浏览器面板用户随时可能切去别的服务器看自己的东西。真机踩过：上一步还在
+`#ppgame-live`，下一步 `type "/cron"` 时面板已经在用户的正式频道里，命令直接
+打进了那个输入框（幸好没发）。所以 **每个 batch 的第一步先 `screenshot` 或看
+上一次结果里的 `Tab Context` 标题**，确认还是 `#<测试频道> | Acpp-Test` 再
+type / click；发现不对立刻停手告诉用户，别自己去清人家输入框里的草稿。
+
 ### 4.2 斜杠命令要「点浮层选中」再发
 
 ```
@@ -118,6 +126,18 @@ computer left_click  → 浮层里那一条命令
 
 带参数的命令（如 `/db source:…`）：选中命令后会列出参数，点参数名 → 弹选项列表 →
 点选项，再发送。
+
+带 choices 的参数（如 `/cron action:…`）实测顺序，用 `find` 拿 ref 比坐标稳
+（面板尺寸会变，坐标一变就点空）：
+
+```
+type "/cron" → find "定时任务：看清单"（浮层那条）→ click ref
+→ find "action" → click ref（参数名）→ find "remove" → click ref（选项）
+→ find "任务 id 或名字前缀"（id 参数那行）→ click ref → type 值
+→ JS dispatch Enter（4.1）
+```
+
+ephemeral 回复只有本人可见、bot API 拉不到；结论看截图或后端（5.）。
 
 ### 4.3 下拉/选项要 JS 派发完整指针序列
 
