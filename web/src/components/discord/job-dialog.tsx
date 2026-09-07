@@ -103,8 +103,8 @@ export function JobDialog({
   async function save() {
     setSaving(true)
     try {
-      // 后端 cron / at 二选一：一次性把 cron 清空；从一次性改回循环要显式
-      // clearAt，否则旧的 at 还留着会被判「二者都给了」。
+      // 后端 cron / at 互斥且自动对冲（给了 cron 就清 at，反之亦然）；这里
+      // 一次性显式清 cron、切回循环显式 clearAt，只是把意图写明白。
       const timing =
         mode === "once"
           ? { cron: "", at: toISO(at) }

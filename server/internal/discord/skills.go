@@ -310,6 +310,8 @@ func (s *Service) handleCronCommand(ctx context.Context, token string, ev intera
 // findJob 的规则各自匹配（任一段对不上整条拒绝，免得删掉一半才报错），
 // 重复命中只算一次。整个参数为空时退回 findJob 的单条语义。
 func findJobs(jobs []schedule.Job, ref string) ([]schedule.Job, error) {
+	// 手机中文输入法打出来的是全角「，」「、」，一并当分隔符。
+	ref = strings.NewReplacer("，", ",", "、", ",").Replace(ref)
 	parts := strings.Split(ref, ",")
 	var out []schedule.Job
 	seen := map[string]bool{}
@@ -338,10 +340,14 @@ func findJobs(jobs []schedule.Job, ref string) ([]schedule.Job, error) {
 // 哪几条没了、哪几条还在。
 func (s *Service) removeJobs(jobs []schedule.Job) string {
 	var done, failed []string
+	running := 0
 	for _, j := range jobs {
 		if err := s.sched.Remove(j.ID); err != nil && !errors.Is(err, schedule.ErrNotFound) {
 			failed = append(failed, j.Name+"（"+trimRunes(err.Error(), 80)+"）")
 			continue
+		}
+		if j.Running {
+			running++
 		}
 		done = append(done, j.Name)
 	}
@@ -358,6 +364,11 @@ func (s *Service) removeJobs(jobs []schedule.Job) string {
 			sb.WriteString("\n")
 		}
 		sb.WriteString("删不掉：" + strings.Join(failed, "；"))
+	}
+	// 删除只摘掉计划，不打断正在跑的那一轮——它会照常跑完并投递，只是
+	// 结果无处可记。不说清楚用户会以为「删了怎么还发」。
+	if running > 0 {
+		sb.WriteString(fmt.Sprintf("\n-# 其中 %d 条正在运行，这一轮会跑完并照常投递，之后不再有。", running))
 	}
 	return sb.String()
 }

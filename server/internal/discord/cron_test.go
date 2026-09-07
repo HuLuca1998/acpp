@@ -264,6 +264,9 @@ func TestFindJobs(t *testing.T) {
 	if got, err := findJobs(jobs, "j_2,用户周"); err != nil || len(got) != 1 {
 		t.Errorf("同一条命中两次只算一次: %v %+v", err, got)
 	}
+	if got, err := findJobs(jobs, "j_1，日志、j_2"); err != nil || len(got) != 3 {
+		t.Errorf("全角逗号与顿号也是分隔符: %v %+v", err, got)
+	}
 	if _, err := findJobs(jobs, "j_1,zzz"); err == nil {
 		t.Error("有一段对不上应整条拒绝")
 	}
@@ -310,6 +313,10 @@ func TestRemoveJobsAndClear(t *testing.T) {
 	}
 	if left := s.sched.Jobs("c1"); len(left) != 0 {
 		t.Errorf("应全部删光，剩 %d 条", len(left))
+	}
+	// 删的是正在跑的：计划摘掉了，但那一轮会跑完照常投递，回执得说清。
+	if text := s.removeJobs([]schedule.Job{{ID: "gone", Name: "跑着的", Running: true}}); !strings.Contains(text, "正在运行") || !strings.Contains(text, "跑着的") {
+		t.Errorf("正在运行的任务被删应附说明: %q", text)
 	}
 	if !strings.HasPrefix(jobPrefix+"clr:c1", jobPrefix) {
 		t.Error("清空按钮必须走 jobPrefix 路由")
