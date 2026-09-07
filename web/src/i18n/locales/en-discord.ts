@@ -114,6 +114,14 @@ export const enDiscord = {
     presetWorkday: "Weekdays 18:30",
     presetWeekly: "Mondays 09:00",
     presetHourly: "Every 2 hours",
+    modeCron: "Recurring",
+    modeOnce: "One-off",
+    fieldAt: "Run at",
+    atHint:
+      "Interpreted in this computer's timezone; deleted automatically once it succeeds. Quick picks:",
+    presetIn1h: "In 1 hour",
+    presetIn2h: "In 2 hours",
+    presetTomorrow9: "Tomorrow 09:00",
     fieldTz: "Timezone",
     fieldPrompt: "Task prompt",
     promptPlaceholder:

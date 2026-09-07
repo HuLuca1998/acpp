@@ -23,11 +23,38 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+
+type Mode = "cron" | "once"
+
+/** datetime-local 的值（浏览器本地时区、到分钟）→ 绝对时刻的 ISO 串。 */
+function toISO(local: string) {
+  return local ? new Date(local).toISOString() : ""
+}
+
+/** 绝对时刻 → datetime-local 输入框要的本地时区串（不能直接用 ISO，它带 Z）。 */
+function toLocalInput(iso?: string) {
+  if (!iso) return ""
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function inHours(h: number) {
+  return toLocalInput(new Date(Date.now() + h * 3_600_000).toISOString())
+}
+
+function tomorrowAt(hour: number) {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  d.setHours(hour, 0, 0, 0)
+  return toLocalInput(d.toISOString())
+}
 
 /**
- * 定时任务的新建 / 编辑表单。计划只做 cron（一次性任务在对话里让 AI 建
- * 更自然，表单里不放）；时区缺省本机；提示词是整个任务的关键，说明文字
- * 直接写在表单头上。
+ * 定时任务的新建 / 编辑表单。计划分两种：循环填 cron，一次性选一个时刻
+ * （跑成功即自动删）；两者在后端是 cron / at 二选一，切换模式时把另一边
+ * 清掉。时区缺省本机；提示词是整个任务的关键，说明文字直接写在表单头上。
  */
 export function JobDialog({
   job,
@@ -48,7 +75,9 @@ export function JobDialog({
   const [channel, setChannel] = useState(
     job?.scope ?? bindings[0]?.channelId ?? ""
   )
-  const [cron, setCron] = useState(job?.cron ?? "0 10 * * *")
+  const [mode, setMode] = useState<Mode>(job?.at ? "once" : "cron")
+  const [cron, setCron] = useState(job?.cron || "0 10 * * *")
+  const [at, setAt] = useState(toLocalInput(job?.at))
   const [tz, setTz] = useState(job?.tz ?? defaultTz ?? "")
   const [prompt, setPrompt] = useState(job?.prompt ?? "")
   const [saving, setSaving] = useState(false)
@@ -59,6 +88,12 @@ export function JobDialog({
     [t("discord.jobs.presetWeekly"), "0 9 * * 1"],
     [t("discord.jobs.presetHourly"), "0 */2 * * *"],
   ]
+  // 一次性的快捷是「点了才算」的函数：值随当下时间变，不能预先算死。
+  const oncePresets: [string, () => string][] = [
+    [t("discord.jobs.presetIn1h"), () => inHours(1)],
+    [t("discord.jobs.presetIn2h"), () => inHours(2)],
+    [t("discord.jobs.presetTomorrow9"), () => tomorrowAt(9)],
+  ]
 
   const channelLabel = (id: string) => {
     const b = bindings.find((x) => x.channelId === id)
@@ -68,14 +103,20 @@ export function JobDialog({
   async function save() {
     setSaving(true)
     try {
+      // 后端 cron / at 二选一：一次性把 cron 清空；从一次性改回循环要显式
+      // clearAt，否则旧的 at 还留着会被判「二者都给了」。
+      const timing =
+        mode === "once"
+          ? { cron: "", at: toISO(at) }
+          : { cron, ...(job?.at ? { clearAt: true } : {}) }
       const next = job
-        ? await api.discord.updateJob(job.id, { name, cron, tz, prompt })
+        ? await api.discord.updateJob(job.id, { name, tz, prompt, ...timing })
         : await api.discord.addJob({
             channelId: channel,
             name,
-            cron,
             tz,
             prompt,
+            ...timing,
           })
       onSaved(next, !job)
       toast.success(t("discord.jobs.saved"))
@@ -89,7 +130,9 @@ export function JobDialog({
     }
   }
 
-  const valid = name.trim() && cron.trim() && prompt.trim() && channel
+  // 只查填没填；「时刻已过去」交给后端（报错带当前时刻），渲染期不读时钟。
+  const timingOk = mode === "once" ? Boolean(at) : Boolean(cron.trim())
+  const valid = name.trim() && timingOk && prompt.trim() && channel
 
   return (
     <Dialog
@@ -140,28 +183,78 @@ export function JobDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="job-cron">{t("discord.jobs.fieldCron")}</Label>
-              <Input
-                id="job-cron"
-                className="font-mono"
-                value={cron}
-                placeholder={t("discord.jobs.cronPlaceholder")}
-                onChange={(e) => setCron(e.target.value)}
-              />
-              <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                <span>{t("discord.jobs.cronHint")}</span>
-                {presets.map(([label, expr]) => (
-                  <Button
-                    key={expr}
-                    type="button"
-                    variant={cron === expr ? "secondary" : "ghost"}
-                    size="xs"
-                    onClick={() => setCron(expr)}
-                  >
-                    {label}
-                  </Button>
-                ))}
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={mode === "once" ? "job-at" : "job-cron"}>
+                  {mode === "once"
+                    ? t("discord.jobs.fieldAt")
+                    : t("discord.jobs.fieldCron")}
+                </Label>
+                <ToggleGroup
+                  value={[mode]}
+                  variant="outline"
+                  size="sm"
+                  onValueChange={(v) => {
+                    const next = v[0] as Mode | undefined
+                    if (next) setMode(next)
+                  }}
+                >
+                  <ToggleGroupItem value="cron">
+                    {t("discord.jobs.modeCron")}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="once">
+                    {t("discord.jobs.modeOnce")}
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
+              {mode === "once" ? (
+                <>
+                  <Input
+                    id="job-at"
+                    type="datetime-local"
+                    className="font-mono"
+                    value={at}
+                    onChange={(e) => setAt(e.target.value)}
+                  />
+                  <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                    <span>{t("discord.jobs.atHint")}</span>
+                    {oncePresets.map(([label, pick]) => (
+                      <Button
+                        key={label}
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => setAt(pick())}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Input
+                    id="job-cron"
+                    className="font-mono"
+                    value={cron}
+                    placeholder={t("discord.jobs.cronPlaceholder")}
+                    onChange={(e) => setCron(e.target.value)}
+                  />
+                  <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                    <span>{t("discord.jobs.cronHint")}</span>
+                    {presets.map(([label, expr]) => (
+                      <Button
+                        key={expr}
+                        type="button"
+                        variant={cron === expr ? "secondary" : "ghost"}
+                        size="xs"
+                        onClick={() => setCron(expr)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="job-tz">{t("discord.jobs.fieldTz")}</Label>

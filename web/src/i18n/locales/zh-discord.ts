@@ -111,6 +111,13 @@ export const zhDiscord = {
     presetWorkday: "工作日 18:30",
     presetWeekly: "每周一 09:00",
     presetHourly: "每 2 小时",
+    modeCron: "循环",
+    modeOnce: "一次性",
+    fieldAt: "运行时刻",
+    atHint: "按这台电脑的时区解释；跑成功即自动删除。快捷：",
+    presetIn1h: "1 小时后",
+    presetIn2h: "2 小时后",
+    presetTomorrow9: "明早 9:00",
     fieldTz: "时区",
     fieldPrompt: "任务提示词",
     promptPlaceholder:
