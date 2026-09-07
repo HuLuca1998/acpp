@@ -42,6 +42,7 @@ export default {
     tools: "Tools",
     logs: "Logs",
     discord: "Discord",
+    jobs: "Scheduled tasks",
     settings: "Settings",
     connections: "Connections",
     help: "Get Help",

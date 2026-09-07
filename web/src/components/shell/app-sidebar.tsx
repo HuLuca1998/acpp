@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { groupSessionsByCwd } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
+  CalendarClockIcon,
   DatabaseIcon,
   HardDriveIcon,
   LayoutDashboardIcon,
@@ -116,6 +117,11 @@ export function AppSidebar({
               title: t("nav.discord"),
               url: "/discord",
               icon: <DiscordIcon />,
+            },
+            {
+              title: t("nav.jobs"),
+              url: "/jobs",
+              icon: <CalendarClockIcon />,
             },
             { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
           ]

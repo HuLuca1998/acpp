@@ -28,7 +28,7 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/             # 页面，与路由表一一对应：overview / sessions /
 │   │   │                       #   session-chat（工作区宿主，草稿态共用）/ skills / skill-detail /
-│   │   │                       #   databases / servers（远程服务器）/ tools（MCP 工具台）/ tenants（连接）/
+│   │   │                       #   databases / servers（远程服务器）/ tools（MCP 工具台）/ jobs（定时任务）/ tenants（连接）/
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
 │   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session /
@@ -436,7 +436,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 - **子区里对 AI 说**（主路）：「以后每天早上 10 点这样出一份发到这个频道」。子区会话挂着 `acpp-cron` 工具面（`cron_add` / `cron_list` / `cron_update` / `cron_remove`），投递目标固定为当前频道——从凭证推，不让模型填频道 id。「2 小时后跑一次」用 `in` 相对时长由服务端换算，模型不必知道现在几点；「明早 9 点」才用 `at`，工具描述里带了会话开始时刻当基准。建完子区里出一张任务卡（立即运行 / 停用 / 删除三个按钮）。`scheduled-task` 技能（范本 [docs/skill-scheduled-task.md](docs/skill-scheduled-task.md)）教它「先做一次再固化」，并给出提示词的自包含清单。
 - `/cron`：手机上看与管——`action` 选 list / run / pause / resume / runs / remove / clear，`id` 认任务 id 或名字前缀；`remove` 的 `id` 逗号分隔可一次删多条，`clear` 删光本频道全部（弹确认卡二次确认）。
-- 网页 Discord 页的「定时任务」区块：清单、新建（cron 常用预设 + 本机时区缺省）、编辑、启停、立即运行、运行记录（能跳到子区）。
+- 网页侧栏「定时任务」页（Discord 页底部也是同一块）：清单、新建（循环给 cron 常用预设，一次性选时刻或点「1 小时后 / 明早 9:00」快捷，时区缺省本机）、编辑（可在循环与一次性之间切）、启停、立即运行、运行记录（能跳到子区）。
 
 **无人值守契约**（注入会话提示词与每次运行的开场输入）：不提问不等待、交成品不交计划、避开要审批的操作、无事回 `NO_REPORT`、失败如实报。提问（elicitation）到达时后端直接取消；权限卡照常发在子区并 @ 任务创建者，没人点就等到轮超时算失败。开场还注入运行时事实——几点、上次运行时间与摘要——巡检类「只看自上次以来」全靠它。
 
@@ -561,7 +561,7 @@ cd web && npx shadcn@latest add <component>
 - 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
 - **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库，服务器页没有只读浏览面板（人要看自己 ssh）。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页能看到频道锁定的库与机器（「作用域」列），但改仍要走频道里的 `/db source` / `/server`。
-- **定时任务**（Discord，[adr-020](docs/adr-020-discord-定时任务.md)）：已落地（见上面「定时任务」一节）。剩余：一次性任务（`at`）只能在对话里让 AI 建，网页表单只做 cron；`scheduled-task` 技能与其它技能一样要放进技能库；投递只到任务所在频道，「跑在 prod 频道、发到 #alerts」待需求出现再加。
+- **定时任务**（Discord，[adr-020](docs/adr-020-discord-定时任务.md)）：已落地（见上面「定时任务」一节）。剩余：`scheduled-task` 技能与其它技能一样要放进技能库；投递只到任务所在频道，「跑在 prod 频道、发到 #alerts」待需求出现再加。
 - **技能助理**：复用对话面板、把工作目录固定到技能源目录 `<dataDir>/skills/<name>/`,让 agent 帮忙起草/优化 SKILL.md。技能管理与会话注入均已落地,助理待做。
 - **工作区面板**（[adr-002](docs/adr-002-会话工作区多面板.md)）M1–M4 已落地：dockview 骨架、九类面板、布局预设、多实例 PTY 终端与联动。剩 diff 虚拟滚动与压力验收。
 - **消息流与 diff 的虚拟滚动**：现在靠 `content-visibility:auto` 让屏外内容不绘制，元素与 DOM 节点仍然全在，几千条的会话滚动仍有代价。与另两项性能遗留（`git status` 的地板耗时、局域网场景的 h2c）一起记在 [docs/性能优化-2026-08](docs/性能优化-2026-08.md) 末尾。

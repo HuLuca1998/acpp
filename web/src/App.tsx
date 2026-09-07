@@ -32,6 +32,7 @@ const Databases = page(() => import("@/routes/databases"), "Databases")
 const Servers = page(() => import("@/routes/servers"), "Servers")
 const Tools = page(() => import("@/routes/tools"), "Tools")
 const Discord = page(() => import("@/routes/discord"), "Discord")
+const Jobs = page(() => import("@/routes/jobs"), "Jobs")
 const Settings = page(() => import("@/routes/settings"), "Settings")
 const Tenants = page(() => import("@/routes/tenants"), "Tenants")
 
@@ -84,6 +85,8 @@ export function App() {
           <Route path="tools" element={<Tools />} />
           {/* discord 频道工作区绑定管理（adr-016），与会话体系完全独立。 */}
           <Route path="discord" element={<Discord />} />
+          {/* 定时任务（adr-020）挂在 discord 绑定上，独立入口只为少翻一层。 */}
+          <Route path="jobs" element={<Jobs />} />
           <Route path="settings" element={<Settings />} />
           {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
           <Route path="connections" element={<Tenants />} />

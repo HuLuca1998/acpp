@@ -42,6 +42,7 @@ export default {
     tools: "工具",
     logs: "日志",
     discord: "Discord",
+    jobs: "定时任务",
     settings: "设置",
     connections: "连接",
     help: "帮助",
