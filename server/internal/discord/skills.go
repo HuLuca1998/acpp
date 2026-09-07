@@ -261,8 +261,22 @@ func (s *Service) handleCronCommand(ctx context.Context, token string, ev intera
 		for _, j := range jobs {
 			sb.WriteString(jobLine(j) + "\n")
 		}
-		sb.WriteString("-# /cron action:run|pause|resume|runs|remove id:<id 或名字前缀>")
+		sb.WriteString("-# /cron action:run|pause|resume|runs|remove id:<id 或名字前缀，remove 可逗号分隔多条> · action:clear 删光")
 		s.ephemeralKeep(token, ev, sb.String())
+		return
+	}
+	// 删除走多条通路：id 逗号分隔；clear 一次带走整批，必须二次确认。
+	switch action {
+	case "remove":
+		picks, err := findJobs(jobs, ev.option("id"))
+		if err != nil {
+			s.ephemeral(token, ev, err.Error())
+			return
+		}
+		s.ephemeral(token, ev, s.removeJobs(picks))
+		return
+	case "clear":
+		s.confirmClear(token, ev, b.ChannelID, len(jobs))
 		return
 	}
 	job, err := findJob(jobs, ev.option("id"))
@@ -287,14 +301,85 @@ func (s *Service) handleCronCommand(ctx context.Context, token string, ev intera
 		}
 	case "runs":
 		s.ephemeralKeep(token, ev, runsText(job))
-	case "remove":
-		if err := s.sched.Remove(job.ID); err != nil {
-			s.ephemeral(token, ev, "删不掉："+trimRunes(err.Error(), 200))
-			return
-		}
-		s.ephemeral(token, ev, "🗑 已删除 **"+job.Name+"**。")
 	default:
 		s.ephemeral(token, ev, "不认识的动作："+action)
+	}
+}
+
+// findJobs 解析 remove 的 id 参数：逗号分隔的多个 id / 名字前缀，每段按
+// findJob 的规则各自匹配（任一段对不上整条拒绝，免得删掉一半才报错），
+// 重复命中只算一次。整个参数为空时退回 findJob 的单条语义。
+func findJobs(jobs []schedule.Job, ref string) ([]schedule.Job, error) {
+	parts := strings.Split(ref, ",")
+	var out []schedule.Job
+	seen := map[string]bool{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" && len(parts) > 1 {
+			continue // 「a, b,」的尾逗号不算一段
+		}
+		j, err := findJob(jobs, p)
+		if err != nil {
+			return nil, err
+		}
+		if seen[j.ID] {
+			continue
+		}
+		seen[j.ID] = true
+		out = append(out, j)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("没指定要删哪条（/cron 看清单）")
+	}
+	return out, nil
+}
+
+// removeJobs 逐条删除并汇总成一句回执：批量删到一半失败时，用户得知道
+// 哪几条没了、哪几条还在。
+func (s *Service) removeJobs(jobs []schedule.Job) string {
+	var done, failed []string
+	for _, j := range jobs {
+		if err := s.sched.Remove(j.ID); err != nil && !errors.Is(err, schedule.ErrNotFound) {
+			failed = append(failed, j.Name+"（"+trimRunes(err.Error(), 80)+"）")
+			continue
+		}
+		done = append(done, j.Name)
+	}
+	var sb strings.Builder
+	switch len(done) {
+	case 0:
+	case 1:
+		sb.WriteString("🗑 已删除 **" + done[0] + "**。")
+	default:
+		sb.WriteString(fmt.Sprintf("🗑 已删除 %d 条：**%s**。", len(done), strings.Join(done, "**、**")))
+	}
+	if len(failed) > 0 {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("删不掉：" + strings.Join(failed, "；"))
+	}
+	return sb.String()
+}
+
+// confirmClear 是 /cron action:clear 的第一步：弹一张只有本人看得见的确认
+// 卡。与任务卡的删除、外链的撤销同一套两步——清空不可逆，而且一次带走的
+// 是整个频道的任务，误触的代价比单条删大得多。
+func (s *Service) confirmClear(token string, ev interactionEvent, channelID string, n int) {
+	if n == 0 {
+		s.ephemeral(token, ev, "本频道没有定时任务。")
+		return
+	}
+	err := interactionCallback(token, ev.ID, ev.Token, 4, map[string]any{
+		"flags": 1<<6 | 1<<15,
+		"components": v2Container(colorRed, []map[string]any{
+			v2Text(fmt.Sprintf("### 删光本频道的 %d 条定时任务？", n)),
+			v2Text("-# 不可恢复，每条任务的提示词一并没了。只是暂时不跑的话逐条「停用」（/cron action:pause）。"),
+			v2Row(v2DangerButton("确认全部删除", jobPrefix+"clr:"+channelID)),
+		}),
+	})
+	if err != nil {
+		slog.Warn("清空确认卡弹出失败", "err", err)
 	}
 }
 
@@ -472,7 +557,8 @@ func v2Button(label, customID string, style int) map[string]any {
 	return map[string]any{"type": 2, "style": style, "label": label, "custom_id": customID}
 }
 
-// handleJobButton 处理任务卡上的按钮：cj:run / cj:toggle / cj:rm（弹确认）/ cj:rmk（真删）。
+// handleJobButton 处理任务卡上的按钮：cj:run / cj:toggle / cj:rm（弹确认）/
+// cj:rmk（真删）；以及 /cron action:clear 确认卡上的 cj:clr（清空整个频道）。
 func (s *Service) handleJobButton(ctx context.Context, token string, ev interactionEvent) {
 	rest := strings.TrimPrefix(ev.Data.CustomID, jobPrefix)
 	action, id, _ := strings.Cut(rest, ":")
@@ -528,6 +614,19 @@ func (s *Service) handleJobButton(ctx context.Context, token string, ev interact
 		}
 		s.patchCard(ctx, token, ev.ChannelID, cardID, removedJobCard(name, ev.user()))
 		s.followup(ctx, ev.Token, colorGrey, "### 🗑 已删除\n-# 《"+trimRunes(name, 80)+"》不会再跑了。")
+	case "clr":
+		// id 段装的是频道 id（见 confirmClear）：/cron 可能在子区里敲，
+		// ev.ChannelID 是子区，任务却挂在父频道名下，所以不能现场推。
+		if err := interactionCallback(token, ev.ID, ev.Token, 6, nil); err != nil {
+			slog.Warn("清空 deferred 回调失败", "err", err)
+			return
+		}
+		jobs := s.sched.Jobs(id)
+		if len(jobs) == 0 {
+			s.followup(ctx, ev.Token, colorGrey, "### 本频道已经没有定时任务了")
+			return
+		}
+		s.followup(ctx, ev.Token, colorGrey, "### 🗑 已清空\n-# "+s.removeJobs(jobs))
 	default:
 		s.ephemeral(token, ev, "这个按钮已失效。")
 	}

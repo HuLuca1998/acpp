@@ -215,3 +215,68 @@ func TestCronToolsScope(t *testing.T) {
 		t.Error("子区不明应报错")
 	}
 }
+
+// 契约：remove 的 id 参数按逗号切成多段，每段各自按 findJob 的规则匹配，
+// 任一段对不上整条拒绝（不能删了一半才报错）；重复命中只算一次；尾逗号
+// 不算一段；整个参数为空退回单条语义。
+
+func TestFindJobs(t *testing.T) {
+	jobs := []schedule.Job{{ID: "j_1", Name: "用户日报"}, {ID: "j_2", Name: "用户周报"}, {ID: "j_3", Name: "日志巡检"}}
+	got, err := findJobs(jobs, "j_1, 日志,")
+	if err != nil || len(got) != 2 || got[0].ID != "j_1" || got[1].ID != "j_3" {
+		t.Errorf("逗号分隔 + 尾逗号: %v %+v", err, got)
+	}
+	if got, err := findJobs(jobs, "j_2,用户周"); err != nil || len(got) != 1 {
+		t.Errorf("同一条命中两次只算一次: %v %+v", err, got)
+	}
+	if _, err := findJobs(jobs, "j_1,zzz"); err == nil {
+		t.Error("有一段对不上应整条拒绝")
+	}
+	if _, err := findJobs(jobs, "j_1,用户"); err == nil {
+		t.Error("有一段多义应整条拒绝")
+	}
+	if got, err := findJobs(jobs[:1], ""); err != nil || len(got) != 1 || got[0].ID != "j_1" {
+		t.Errorf("为空且只有一条时退回单条语义: %v %+v", err, got)
+	}
+	if _, err := findJobs(jobs, ""); err == nil {
+		t.Error("为空且多条时应报错")
+	}
+}
+
+// 契约：批量删除逐条执行并汇总回执——删成功的都点名，删失败的单独列出；
+// 已经不在的视为删成功（用户要的结果已成立）。清空确认按钮的 custom_id
+// 走 jobPrefix 且携带频道 id（/cron 可能在子区里敲，现场推不出父频道）。
+
+func TestRemoveJobsAndClear(t *testing.T) {
+	dir := t.TempDir()
+	s, err := New(filepath.Join(dir, "discord.json"), Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.sched, err = schedule.New(filepath.Join(dir, "schedule.json"), nil, schedule.Hooks{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobs []schedule.Job
+	for _, name := range []string{"日报", "周报"} {
+		j, err := s.sched.Add(schedule.Input{Scope: "c1", Name: name, Cron: "0 10 * * *", Prompt: "p"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		jobs = append(jobs, j)
+	}
+	// 其中一条先删掉，模拟「清单是旧的、任务已被别人删了」。
+	if err := s.sched.Remove(jobs[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	text := s.removeJobs(jobs)
+	if !strings.Contains(text, "已删除 2 条") || !strings.Contains(text, "日报") || !strings.Contains(text, "周报") || strings.Contains(text, "删不掉") {
+		t.Errorf("回执 = %q", text)
+	}
+	if left := s.sched.Jobs("c1"); len(left) != 0 {
+		t.Errorf("应全部删光，剩 %d 条", len(left))
+	}
+	if !strings.HasPrefix(jobPrefix+"clr:c1", jobPrefix) {
+		t.Error("清空按钮必须走 jobPrefix 路由")
+	}
+}

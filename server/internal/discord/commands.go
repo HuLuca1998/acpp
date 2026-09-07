@@ -81,10 +81,11 @@ func slashCommands() []slashCommand {
 					{"name": "pause——停用", "value": "pause"},
 					{"name": "resume——启用", "value": "resume"},
 					{"name": "runs——看最近的运行记录", "value": "runs"},
-					{"name": "remove——删除", "value": "remove"},
+					{"name": "remove——删除（id 逗号分隔可删多条）", "value": "remove"},
+					{"name": "clear——删光本频道的全部任务（要二次确认）", "value": "clear"},
 				},
 			}, {
-				"type": 3, "name": "id", "description": "任务 id 或名字前缀（本频道只有一条时可不填）",
+				"type": 3, "name": "id", "description": "任务 id 或名字前缀；remove 可用逗号分隔多条（只有一条时可不填）",
 				"required": false,
 			}}},
 		{name: "stop", desc: "中止子区里正在跑的这一轮"},

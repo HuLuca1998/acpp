@@ -435,7 +435,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 **三条入口**：
 
 - **子区里对 AI 说**（主路）：「以后每天早上 10 点这样出一份发到这个频道」。子区会话挂着 `acpp-cron` 工具面（`cron_add` / `cron_list` / `cron_update` / `cron_remove`），投递目标固定为当前频道——从凭证推，不让模型填频道 id。建完子区里出一张任务卡（立即运行 / 停用 / 删除三个按钮）。`scheduled-task` 技能（范本 [docs/skill-scheduled-task.md](docs/skill-scheduled-task.md)）教它「先做一次再固化」，并给出提示词的自包含清单。
-- `/cron`：手机上看与管——`action` 选 list / run / pause / resume / runs / remove，`id` 认任务 id 或名字前缀。
+- `/cron`：手机上看与管——`action` 选 list / run / pause / resume / runs / remove / clear，`id` 认任务 id 或名字前缀；`remove` 的 `id` 逗号分隔可一次删多条，`clear` 删光本频道全部（弹确认卡二次确认）。
 - 网页 Discord 页的「定时任务」区块：清单、新建（cron 常用预设 + 本机时区缺省）、编辑、启停、立即运行、运行记录（能跳到子区）。
 
 **无人值守契约**（注入会话提示词与每次运行的开场输入）：不提问不等待、交成品不交计划、避开要审批的操作、无事回 `NO_REPORT`、失败如实报。提问（elicitation）到达时后端直接取消；权限卡照常发在子区并 @ 任务创建者，没人点就等到轮超时算失败。开场还注入运行时事实——几点、上次运行时间与摘要——巡检类「只看自上次以来」全靠它。
