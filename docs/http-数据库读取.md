@@ -33,6 +33,9 @@
 ```
 
 - `cwd`：**项目由工作目录推出**（工作区根下的相对路径、git 仓库名或 origin 的 `<组织>/<仓库>`，见 [scope.go](../server/internal/datasource/scope.go)），只看得见该项目的数据源。推不出项目就一条都没有，`tools/list` 仍会返回工具，但 `db_sources` 会说没有可用数据源。
+- **没有真实目录时怎么填 `cwd`**：它是路径不是项目名，直接写 `BDBGAME2024/pp-game` 或 `pp-game` 推不出项目（实测得「当前项目没有配置数据源」）。两个办法：
+  - 写 `<工作区根>/<项目名>`，如 `/Users/luca/acpp/BDBGAME2024/pp-game`。工作区根取 `GET /api/system` 的 `workspaceDir`；根下的推导是纯路径运算，**目录不存在也能对上**（实测）。注意必须写数据源上配的那个完整项目名，`/Users/luca/acpp/pp-game` 对不上 `BDBGAME2024/pp-game`。这是实现的副产物不是契约，脚本里用要有心理准备。
+  - 干脆不要 `cwd`：走 [路 B](#路-brest-查询要结构化结果时) 按数据源 id 查，`GET /api/datasources` 返回的每条都带 `project` 与 `ref`，按 `project` 挑出 id 即可。只想拿数据的脚本推荐这条。
 - `server`：留空或省略 = 数据库面 `acpp-db`；填 `acpp-server` 走服务器观察面（十二个只读工具，本文不展开）。
 - `request`：**原样的 JSON-RPC 消息**。支持 `initialize` / `ping` / `tools/list` / `tools/call` 四个方法；带 `id` 才有响应，通知类消息返回 `accepted: true` 且没有 `response`。
 
@@ -115,7 +118,11 @@ curl -s -X POST "$B/api/datasources/28/query" -H 'Content-Type: application/json
 {"data":{"database":"acpp_demo","results":[{"statement":"SELECT 1 AS ok","kind":"query","columns":["ok"],"rows":[[1]],"rowCount":1,"elapsedMs":0}],"elapsedMs":0}}
 ```
 
-`results` 按语句一条一项；`kind` 为 `query` 时有 `columns` / `rows`。这条路**不按项目过滤**（管理面，owner 看得见全部），也不进工具台的调用记录。
+`results` 按语句一条一项；`kind` 为 `query` 时有 `columns` / `rows`。这条路**不需要 `cwd`、不按项目过滤**（管理面，owner 看得见全部），也不进工具台的调用记录。按项目挑 id：
+
+```bash
+curl -s "$B/api/datasources" | python3 -c 'import sys,json; [print(i["id"], i["ref"]) for i in json.load(sys.stdin)["data"]["items"] if i["project"]=="BDBGAME2024/pp-game"]'
+```
 
 ## 路 C：agent 回连端点（了解即可）
 
