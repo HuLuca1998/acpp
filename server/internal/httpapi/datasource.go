@@ -366,3 +366,40 @@ func (h datasourceHandler) sessionSource(r *http.Request) (*model.DataSource, er
 	}
 	return nil, fmt.Errorf("%w: datasource %d", service.ErrNotFound, id)
 }
+
+// dbAPIHandler 是租户与脚本用的只读数据库面（/api/db，adr-021）：不经
+// 工作目录推项目，按数据源标识寻址；凭证走租户 cookie 或
+// `Authorization: Bearer`。它不在 owner 专属前缀内——这一面存在的意义就是
+// 让局域网里持租户 token 的程序能读库；写永远不开，护栏在 service 层。
+type dbAPIHandler struct {
+	sources *datasource.Service
+}
+
+// list 列出全部启用的数据源；`?project=` 只要某个项目的。响应不含密码。
+func (h dbAPIHandler) list(w http.ResponseWriter, r *http.Request) {
+	sources, err := h.sources.Enabled(r.Context(), r.URL.Query().Get("project"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, sources)
+}
+
+// query 按数据源标识执行只读查询。
+func (h dbAPIHandler) query(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Source  string `json:"source"`
+		SQL     string `json:"sql"`
+		MaxRows int    `json:"maxRows"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	res, err := h.sources.ReadQuery(r.Context(), req.Source, req.SQL, req.MaxRows)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, res)
+}

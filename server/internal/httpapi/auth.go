@@ -16,6 +16,9 @@ import (
 // tenantCookie 是身份凭证的载体。选 cookie 而不是 Authorization header，
 // 是因为 SSE（EventSource）与工作区终端（WebSocket）都带不了自定义
 // header——三条通道要统一鉴权，只有 cookie 能做到（adr-007）。
+//
+// 脚本与外部程序另认 `Authorization: Bearer <token>`（adr-021）：它们发个头
+// 比种 cookie 自然，而且同一枚 token、同一套判定，不是第二种身份。
 const tenantCookie = "acpp_tenant"
 
 // cookieMaxAge 是凭证有效期。停用租户是即时生效的（Authenticate 查库），
@@ -83,8 +86,8 @@ func withIdentity(tenants *service.TenantService, next http.Handler) http.Handle
 }
 
 func resolveIdentity(r *http.Request, tenants *service.TenantService) identity {
-	cookie, err := r.Cookie(tenantCookie)
-	hasCookie := err == nil && cookie.Value != ""
+	token := credentialOf(r)
+	hasCred := token != ""
 
 	// 本机访问即 owner：桌面壳与主机浏览器天然从回环地址进来，判定零配置、
 	// 不会丢，也不需要维护一份 owner 凭证。
@@ -93,13 +96,13 @@ func resolveIdentity(r *http.Request, tenants *service.TenantService) identity {
 	// 一是 owner 想在本机验一眼访客视角，点自己发出去的链接就行；
 	// 二是任何反向代理（含开发态的 vite proxy）都会把来源改写成回环，
 	// 若只看地址，代理后面的每个访客都会被提权成 owner。
-	if isLoopback(r.RemoteAddr) && !hasCookie {
+	if isLoopback(r.RemoteAddr) && !hasCred {
 		return identity{owner: true}
 	}
-	if !hasCookie {
+	if !hasCred {
 		return identity{}
 	}
-	tenant, err := tenants.Authenticate(r.Context(), cookie.Value)
+	tenant, err := tenants.Authenticate(r.Context(), token)
 	switch {
 	case err == nil:
 		return identity{tenant: tenant}
@@ -109,6 +112,21 @@ func resolveIdentity(r *http.Request, tenants *service.TenantService) identity {
 	default:
 		return identity{}
 	}
+}
+
+// credentialOf 取请求携带的租户凭证：cookie 优先（浏览器、SSE、WebSocket
+// 只能走它），其次 Authorization: Bearer。两者是同一枚 token，先后只决定
+// 同时带了听谁的——浏览器不会发 Bearer，脚本不会种 cookie，实际不会撞。
+func credentialOf(r *http.Request) string {
+	if cookie, err := r.Cookie(tenantCookie); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+	const scheme = "bearer "
+	auth := r.Header.Get("Authorization")
+	if len(auth) > len(scheme) && strings.EqualFold(auth[:len(scheme)], scheme) {
+		return strings.TrimSpace(auth[len(scheme):])
+	}
+	return ""
 }
 
 // isPublicPath 列出不需要身份的路径。

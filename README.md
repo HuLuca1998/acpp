@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -270,6 +270,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/datasources/{dsid}/databases` `/tables` | 同上但按会话过滤，项目之外的 id 按「不存在」处理 |
 | GET | `/api/workspace/servers` | **会话可见的**服务器（@ 引用选择器用）：不按项目过滤，租户也能取，响应不含凭证 |
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
+| GET | `/api/db/sources` | **租户与脚本的只读数据库面**（adr-021）：全部启用数据源，`?project=` 过滤，不含密码。不经工作目录、不在 owner 专属前缀内；凭证走租户 cookie 或 `Authorization: Bearer <租户 token>` |
+| POST | `/api/db/query` | 同上一面的只读查询：`{source, sql, maxRows}`，`source` 是 `<项目>/<环境>` / 环境名 / 数据源 id（与 `db_*` 工具同一套写法）；响应比 `/api/datasources/{id}/query` 多一个 `source` 说明落到了哪条。写语句一律拒绝：只读源 403、可写源 400 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | POST | `/api/mcp/report/{token}` | 会话的报告 MCP 端点（agent 回连，同一套 token）。工具 `report_open` 把 agent 写好的单文件 HTML 报告在用户工作区打开；只收路径不收全文，且限死会话工作目录内的 `.html` |
 | POST | `/api/mcp/discord-cron/{token}` | discord 子区的定时任务工具面端点（与上一条同一枚凭证）：`cron_add` / `cron_list` / `cron_update` / `cron_remove`，投递固定为子区所属频道。一次性任务用 `at`（RFC3339）或 `in`（相对时长 2h / 90m / 1d，服务端按当前时刻换算）；`cron_add` 的描述里注入会话开始时刻，模型据此换算「明早 9 点」 |
@@ -469,7 +471,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 ### 多租户（adr-007）
 
-局域网分享打开后，访问者分两种身份：**owner** 是本机访问（loopback 判定，全权），**租户**凭 owner 发的邀请链接换到一个 HttpOnly cookie。选 cookie 而不是 Authorization header，是因为 SSE（`EventSource`）与工作区终端（WebSocket）都带不了自定义 header——三条通道要统一鉴权，只有 cookie 能做到。
+局域网分享打开后，访问者分两种身份：**owner** 是本机访问（loopback 判定，全权），**租户**凭 owner 发的邀请链接换到一个 HttpOnly cookie。选 cookie 而不是 Authorization header，是因为 SSE（`EventSource`）与工作区终端（WebSocket）都带不了自定义 header——三条通道要统一鉴权，只有 cookie 能做到。脚本与外部程序另认 `Authorization: Bearer <租户 token>`（adr-021）：同一枚 token、同一套判定，只是换了载体；配套的只读数据库面是 `/api/db/sources` 与 `/api/db/query`，按数据源标识寻址、不经工作目录，接口文档见 [docs/http-数据库读取.md](docs/http-数据库读取.md)。
 
 隔离只有一个执行点（`service.Scope`）：数据面把租户条件写进查询本身（漏写等于查不到，不会变成越权），路径面把一切目录操作 canonical 化后钉在租户 root（`<工作区根>/<租户名>`）内。别人的会话按「不存在」处理而不是 403——403 会泄露会话是否存在，凭 id 递增就能数出别人有多少条。owner 专属面（系统设置、数据库连接管理、技能/工具的写）由集中的前缀表判定，新增路由自动继承策略。
 

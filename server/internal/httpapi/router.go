@@ -336,6 +336,11 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/workspace/datasources", draftDatasources.sessionList)
 	api.HandleFunc("GET /api/workspace/datasources/{dsid}/databases", draftDatasources.sessionDatabases)
 	api.HandleFunc("GET /api/workspace/datasources/{dsid}/tables", draftDatasources.sessionTables)
+	// 租户与脚本的只读数据库面（adr-021）：不经工作目录，按数据源标识寻址；
+	// 凭证走租户 cookie 或 Authorization: Bearer。刻意不落在 owner 专属前缀内。
+	dbAPI := dbAPIHandler{sources: svcs.DataSources}
+	api.HandleFunc("GET /api/db/sources", dbAPI.list)
+	api.HandleFunc("POST /api/db/query", dbAPI.query)
 	// agent 回连的数据库工具端点（token 是每条会话专属凭证）。
 	api.HandleFunc("/api/mcp/db/{token}", datasources.mcp)
 	reports := reportHandler{reports: svcs.Reports}

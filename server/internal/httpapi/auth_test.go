@@ -204,3 +204,35 @@ func decodeMe(t *testing.T, rec *httptest.ResponseRecorder) meResponse {
 	}
 	return body.Data
 }
+
+// 契约：`Authorization: Bearer <租户 token>` 与 cookie 是同一枚凭证、同一种
+// 身份（adr-021）——局域网脚本靠它进门；它同样会把回环来源降为租户，
+// 反向代理那条防线不因多了一种载体而松动；无效的 Bearer 与没带一样是 401。
+func TestAuth_BearerIsTenant(t *testing.T) {
+	handler, tenants := authRouter(t)
+	created, err := tenants.Create(t.Context(), service.TenantInput{Name: "dave"})
+	if err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+
+	me := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	me.RemoteAddr = "192.168.2.50:6000"
+	me.Header.Set("Authorization", "Bearer "+created.InviteToken)
+	if got := decodeMe(t, do(handler, me)); !got.Authenticated || got.Owner || got.TenantName != "dave" {
+		t.Fatalf("me = %+v, want tenant dave", got)
+	}
+
+	admin := httptest.NewRequest(http.MethodGet, "/api/tenants", nil)
+	admin.RemoteAddr = "127.0.0.1:6000"
+	admin.Header.Set("Authorization", "bearer "+created.InviteToken)
+	if got := do(handler, admin).Code; got != http.StatusForbidden {
+		t.Fatalf("loopback + Bearer GET /api/tenants = %d, want 403（凭证降为租户）", got)
+	}
+
+	bad := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	bad.RemoteAddr = "192.168.2.50:6000"
+	bad.Header.Set("Authorization", "Bearer nope")
+	if got := do(handler, bad).Code; got != http.StatusUnauthorized {
+		t.Fatalf("bad Bearer GET /api/sessions = %d, want 401", got)
+	}
+}
