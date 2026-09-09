@@ -26,6 +26,8 @@ func (h skillHandler) list(w http.ResponseWriter, r *http.Request) {
 			skills[i].UsageCount = counts[skills[i].Name]
 		}
 	}
+	// 筛选也在内存里做，且必须在切页之前——和排序同一个道理。
+	skills = filterSkills(skills, r.URL.Query().Get("q"), queryBool(r, "enabled"))
 	// 技能是扫盘得来的（磁盘即事实源），没有 SQL 可以 ORDER BY / LIMIT——
 	// 排序和切页都在内存里做。目录读取本身是 O(n)，但那部分快得多，真正会
 	// 拖慢页面的是把几百条连同正文一起塞进一次响应。
@@ -215,4 +217,25 @@ func boolRank(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+// filterSkills 按关键词（名字或描述含它，不分大小写）与启用状态过滤。
+func filterSkills(skills []service.Skill, keyword string, enabled *bool) []service.Skill {
+	kw := strings.ToLower(strings.TrimSpace(keyword))
+	if kw == "" && enabled == nil {
+		return skills
+	}
+	out := make([]service.Skill, 0, len(skills))
+	for _, sk := range skills {
+		if enabled != nil && sk.Enabled != *enabled {
+			continue
+		}
+		if kw != "" &&
+			!strings.Contains(strings.ToLower(sk.Name), kw) &&
+			!strings.Contains(strings.ToLower(sk.Description), kw) {
+			continue
+		}
+		out = append(out, sk)
+	}
+	return out
 }

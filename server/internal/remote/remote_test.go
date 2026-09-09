@@ -136,7 +136,7 @@ func TestService_MigrateFromDataSources(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	servers, err := svc.List(ctx)
+	servers, err := svc.List(ctx, "")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestService_MigrateFromDataSources(t *testing.T) {
 	if err := svc.MigrateFromDataSources(ctx); err != nil {
 		t.Fatalf("migrate again: %v", err)
 	}
-	again, err := svc.List(ctx)
+	again, err := svc.List(ctx, "")
 	if err != nil {
 		t.Fatalf("list again: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestService_List_UsedByCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	list, err := svc.List(ctx)
+	list, err := svc.List(ctx, "")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

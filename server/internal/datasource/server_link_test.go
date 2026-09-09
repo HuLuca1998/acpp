@@ -61,7 +61,7 @@ func TestService_Finish_AttachesServer(t *testing.T) {
 	if got.Server == nil {
 		t.Fatal("Get 必须填充跳板机")
 	}
-	list, _, err := svc.List(ctx, 1, 10, "")
+	list, _, err := svc.List(ctx, ListFilter{}, 1, 10, "")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

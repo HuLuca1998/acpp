@@ -14,6 +14,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/db"
 	"acpp/server/internal/model"
 )
 
@@ -56,8 +57,16 @@ type TenantView struct {
 	SessionCount int64 `json:"sessionCount"`
 }
 
+// TenantFilter 是访客列表的筛选条件，零值不过滤。
+type TenantFilter struct {
+	// Keyword 对名字做子串匹配。
+	Keyword string
+	// Disabled 为 nil 不过滤，否则只要停用（true）或启用（false）的。
+	Disabled *bool
+}
+
 // List 分页返回访客列表（每条带会话数）。
-func (s *TenantService) List(ctx context.Context, page, pageSize int, orderBy string) ([]TenantView, int64, error) {
+func (s *TenantService) List(ctx context.Context, f TenantFilter, page, pageSize int, orderBy string) ([]TenantView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -66,6 +75,12 @@ func (s *TenantService) List(ctx context.Context, page, pageSize int, orderBy st
 	}
 
 	q := s.db.WithContext(ctx).Model(&model.Tenant{})
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		q = q.Where("name LIKE ? ESCAPE '\\'", db.LikePattern(kw))
+	}
+	if f.Disabled != nil {
+		q = q.Where("disabled = ?", *f.Disabled)
+	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count tenants: %w", err)

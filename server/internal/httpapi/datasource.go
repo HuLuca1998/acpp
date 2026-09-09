@@ -25,7 +25,12 @@ func (h datasourceHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	// 排序字段走白名单（要进 ORDER BY，不能用占位符）。
 	sort := sortParams(r, "project", "env", "database", "host", "read_only", "updated_at")
-	items, total, err := h.sources.List(r.Context(), pageNum, pageSize, sort.OrderBy(""))
+	filter := datasource.ListFilter{
+		Keyword:  r.URL.Query().Get("q"),
+		Env:      r.URL.Query().Get("env"),
+		ReadOnly: queryBool(r, "readOnly"),
+	}
+	items, total, err := h.sources.List(r.Context(), filter, pageNum, pageSize, sort.OrderBy(""))
 	if err != nil {
 		writeError(w, err)
 		return

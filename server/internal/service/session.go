@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/db"
 	"acpp/server/internal/gitrepo"
 	"acpp/server/internal/model"
 )
@@ -84,7 +85,18 @@ const (
 	SessionOriginUser = "user"
 )
 
-func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, origin string, page, pageSize int, orderBy string) ([]SessionView, int64, error) {
+// SessionFilter 是列表页的筛选条件，零值不过滤。
+type SessionFilter struct {
+	AgentID uint
+	// Origin 见 SessionOriginAny / SessionOriginUser / model.SessionOriginAsk。
+	Origin string
+	// Keyword 对标题做子串匹配。
+	Keyword string
+	// State 精确匹配会话状态。
+	State string
+}
+
+func (s *SessionService) List(ctx context.Context, scope Scope, f SessionFilter, page, pageSize int, orderBy string) ([]SessionView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -96,10 +108,16 @@ func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, or
 	}
 
 	q := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{}))
-	if agentID != 0 {
-		q = q.Where("agent_id = ?", agentID)
+	if f.AgentID != 0 {
+		q = q.Where("agent_id = ?", f.AgentID)
 	}
-	switch origin {
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		q = q.Where("title LIKE ? ESCAPE '\\'", db.LikePattern(kw))
+	}
+	if f.State != "" {
+		q = q.Where("state = ?", f.State)
+	}
+	switch f.Origin {
 	case SessionOriginAny:
 	case SessionOriginUser:
 		// 加列之前的老会话这一格是 NULL，不是空串——它们当然也是界面里开的。

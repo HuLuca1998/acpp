@@ -23,6 +23,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/db"
 	"acpp/server/internal/mcp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
@@ -101,10 +102,16 @@ func (in Input) blank() bool {
 		in.Port == 0
 }
 
-// List 按名字排序返回全部服务器（配置页用），并带上被引用的条数。
-func (s *Service) List(ctx context.Context) ([]model.Server, error) {
+// List 按名字排序返回服务器（配置页用），并带上被引用的条数。
+// keyword 非空时只要名字或主机含它的。
+func (s *Service) List(ctx context.Context, keyword string) ([]model.Server, error) {
+	q := s.db.WithContext(ctx).Order("name")
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		like := db.LikePattern(kw)
+		q = q.Where("name LIKE ? ESCAPE '\\' OR host LIKE ? ESCAPE '\\'", like, like)
+	}
 	var out []model.Server
-	if err := s.db.WithContext(ctx).Order("name").Find(&out).Error; err != nil {
+	if err := q.Find(&out).Error; err != nil {
 		return nil, fmt.Errorf("list servers: %w", err)
 	}
 	for i := range out {

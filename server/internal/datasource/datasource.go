@@ -19,6 +19,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"acpp/server/internal/db"
 	"acpp/server/internal/mcp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/service"
@@ -136,7 +137,17 @@ type Input struct {
 //
 // 分页不是为了「现在」——是为了不给未来留一个随数据量线性变慢的读路径。
 // 一次全量返回在几条连接时看不出问题，等到几百条时它已经长在页面加载里了。
-func (s *Service) List(ctx context.Context, page, pageSize int, orderBy string) ([]model.DataSource, int64, error) {
+// ListFilter 是连接列表的筛选条件，零值不过滤。
+type ListFilter struct {
+	// Keyword 对项目、库名、主机做子串匹配。
+	Keyword string
+	// Env 精确匹配环境。
+	Env string
+	// ReadOnly 为 nil 不过滤，否则只要只读（true）或读写（false）的。
+	ReadOnly *bool
+}
+
+func (s *Service) List(ctx context.Context, f ListFilter, page, pageSize int, orderBy string) ([]model.DataSource, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -148,6 +159,16 @@ func (s *Service) List(ctx context.Context, page, pageSize int, orderBy string) 
 	}
 
 	q := s.db.WithContext(ctx).Model(&model.DataSource{})
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := db.LikePattern(kw)
+		q = q.Where("project LIKE ? ESCAPE '\\' OR database LIKE ? ESCAPE '\\' OR host LIKE ? ESCAPE '\\'", like, like, like)
+	}
+	if env := strings.TrimSpace(f.Env); env != "" {
+		q = q.Where("env = ?", env)
+	}
+	if f.ReadOnly != nil {
+		q = q.Where("read_only = ?", *f.ReadOnly)
+	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count datasources: %w", err)

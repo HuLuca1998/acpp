@@ -17,7 +17,7 @@ type serverHandler struct {
 
 // list 不分页：服务器是个位数量级的配置，翻页只会让前端多一层状态。
 func (h serverHandler) list(w http.ResponseWriter, r *http.Request) {
-	items, err := h.servers.List(r.Context())
+	items, err := h.servers.List(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
 		writeError(w, err)
 		return

@@ -217,7 +217,7 @@ func run() error {
 			return out, nil
 		},
 		DataSources: func(ctx context.Context) ([]discord.DBOption, error) {
-			list, _, err := datasourceService.List(ctx, 1, 200, "")
+			list, _, err := datasourceService.List(ctx, datasource.ListFilter{}, 1, 200, "")
 			if err != nil {
 				return nil, err
 			}

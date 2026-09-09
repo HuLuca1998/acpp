@@ -41,6 +41,7 @@
 | --- | --- | --- |
 | `config.SamePath` | config/datadir.go | 两个路径解析绝对路径后是否同一位置 |
 | `config.CopyDirFiles` | config/datadir.go | 目录内文件逐个拷贝（数据迁移用） |
+| `db.LikePattern` | db/like.go | 关键词 → `LIKE ? ESCAPE '\\'` 的子串模式（逃逸 `\` `%` `_`），列表搜索共用 |
 | `service.RebuildMessages` | service/rebuild.go | 线级转录 → UI 消息列表的重建器 |
 | `service.DegradedSettings` | service/chat_settings.go | 用探测缓存 + 设置快照拼未连接会话的设置视图 |
 | `service.DeriveTitle` | service/chat_turn.go | 首条消息 → 自动会话标题 |

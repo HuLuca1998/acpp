@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"acpp/server/internal/acp"
 	"acpp/server/internal/ask"
@@ -93,6 +94,20 @@ func queryInt(r *http.Request, key string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+// queryBool 解析三态布尔查询参数：缺失或空为 nil（不过滤），"1"/"true" 为真，
+// "0"/"false" 为假；别的写法当没给。
+func queryBool(r *http.Request, key string) *bool {
+	switch strings.ToLower(r.URL.Query().Get(key)) {
+	case "1", "true":
+		v := true
+		return &v
+	case "0", "false":
+		v := false
+		return &v
+	}
+	return nil
 }
 
 func decodeJSON(r *http.Request, dst any) error {

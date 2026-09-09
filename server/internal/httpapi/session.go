@@ -28,7 +28,13 @@ func (h sessionHandler) list(w http.ResponseWriter, r *http.Request) {
 	pageNum, pageSize := pageParams(r)
 
 	sort := sortParams(r, "id", "title", "agent_id", "tenant_id", "origin", "message_count", "state", "updated_at", "created_at")
-	sessions, total, err := h.sessions.List(r.Context(), scopeOf(r), agentID, r.URL.Query().Get("origin"), pageNum, pageSize, sort.OrderBy(""))
+	filter := service.SessionFilter{
+		AgentID: agentID,
+		Origin:  r.URL.Query().Get("origin"),
+		Keyword: r.URL.Query().Get("q"),
+		State:   r.URL.Query().Get("state"),
+	}
+	sessions, total, err := h.sessions.List(r.Context(), scopeOf(r), filter, pageNum, pageSize, sort.OrderBy(""))
 	if err != nil {
 		writeError(w, err)
 		return
