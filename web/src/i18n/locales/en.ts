@@ -54,6 +54,7 @@ export default {
     renameFailed: "Rename failed",
     resizeSidebar: "Drag to resize, double-click to reset",
     recentSessions: "Recent Sessions",
+    askedSessions: "AI Collaboration",
     viewAll: "View all",
   },
   overview: {

@@ -54,6 +54,7 @@ export default {
     renameFailed: "改名失败",
     resizeSidebar: "拖动调整宽度，双击复位",
     recentSessions: "最近会话",
+    askedSessions: "AI 协作",
     viewAll: "查看全部",
   },
   overview: {

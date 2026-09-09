@@ -38,6 +38,8 @@ import {
 // 分组前多拉一些：最终只展示 5 个项目 × 5 条，但要先有足够的样本才能
 // 挑出「最近用过的 5 个项目」。
 const RECENT_LIMIT = 50
+/** 「AI 协作」小节的条数上限：它是流水，看最近几条就够。 */
+const ASKED_LIMIT = 5
 
 export function AppSidebar({
   frame,
@@ -82,8 +84,19 @@ export function AppSidebar({
     }
   }, [pathname])
 
+  // 别的 AI 经 /api/ask 问出来的会话（adr-022）单独摆：一次审查就是一条
+  // 会话，且全开在同一个目录上，混进「最近会话」会把用户自己的对话顶掉。
+  const own = React.useMemo(
+    () => recent.filter((s) => s.origin !== "ask"),
+    [recent]
+  )
+  const asked = React.useMemo(
+    () => recent.filter((s) => s.origin === "ask").slice(0, ASKED_LIMIT),
+    [recent]
+  )
+
   // 按 cwd 分组，不依赖项目扫描——会话自带的目录永远对得上。
-  const groups = React.useMemo(() => groupSessionsByCwd(recent), [recent])
+  const groups = React.useMemo(() => groupSessionsByCwd(own), [own])
 
   // 租户只留会话与项目：技能、设置、连接都是 owner 的东西，后端也已按
   // owner-only 拦截，导航里直接不出现（adr-007）。
@@ -136,16 +149,17 @@ export function AppSidebar({
   )
 
   // 品牌图标标出会话属于哪个 agent，一眼可辨。
-  const recentItems = React.useMemo(
-    () =>
-      recent.map((session) => ({
-        id: session.id,
-        name: session.title || `${t("common.unnamed")} #${session.id}`,
-        url: `/sessions/${session.id}`,
-        icon: <AgentIcon flavor={session.agentFlavor} className="size-4" />,
-      })),
-    [recent, t]
+  const toItem = React.useCallback(
+    (session: Session) => ({
+      id: session.id,
+      name: session.title || `${t("common.unnamed")} #${session.id}`,
+      url: `/sessions/${session.id}`,
+      icon: <AgentIcon flavor={session.agentFlavor} className="size-4" />,
+    }),
+    [t]
   )
+  const recentItems = React.useMemo(() => own.map(toItem), [own, toItem])
+  const askedItems = React.useMemo(() => asked.map(toItem), [asked, toItem])
 
   // 改名后就地更新本地这份列表：等下次导航再刷新的话，改完那一下标题不动，
   // 看着像没生效。
@@ -201,6 +215,13 @@ export function AppSidebar({
             onRename={renameSession}
           />
         ) : null}
+        {askedItems.length > 0 && (
+          <NavRecent
+            label={t("nav.askedSessions")}
+            items={askedItems}
+            onRename={renameSession}
+          />
+        )}
       </SidebarContent>
       <SidebarFooter>
         {/* 底部从上到下：通知中心（要人动手处理的东西，占大头）→ 一行
