@@ -8,8 +8,8 @@ import (
 	"acpp/server/internal/model"
 )
 
-// 契约：/api/ask 是别的 AI 的同步问答面（adr-022）。这里只测不用真起
-// agent 就能验的部分——入参校验、agent 按名字寻址、续聊的归属闸。
+// 契约：/api/ask 是别的 AI 的同步问答面（adr-022），owner 专属。这里只测不用真起
+// agent 就能验的部分——入参校验、agent 按名字寻址、租户拒之门外。
 // 真跑一轮的行为靠真机验证（skill 的 ask.sh 双向各跑一遍）。
 
 func TestAsk_RejectsBadInput(t *testing.T) {
@@ -36,7 +36,7 @@ func TestAsk_RejectsBadInput(t *testing.T) {
 	}
 }
 
-func TestAsk_ThreadIsScopedToCaller(t *testing.T) {
+func TestAsk_OwnerOnly(t *testing.T) {
 	env := newFlowEnv(t)
 	// owner 先开一条会话。
 	rec := env.as(t, nil, http.MethodPost, "/api/sessions", `{"agentId":1,"cwd":"/tmp"}`)
@@ -48,11 +48,15 @@ func TestAsk_ThreadIsScopedToCaller(t *testing.T) {
 		t.Fatalf("界面建的会话不该带来源标记，得到 %q", sess.Origin)
 	}
 
-	// 租户拿 owner 的 thread 续聊：当作不存在，而不是 403。
+	// 整个面 owner 专属：租户连门都进不了（403），更别说拿 owner 的 thread 续聊。
 	body := fmt.Sprintf(`{"thread":%d,"prompt":"hi"}`, sess.ID)
 	rec = env.as(t, env.alice, http.MethodPost, "/api/ask", body)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("alice ask owner thread = %d, want 404: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("alice POST /api/ask = %d, want 403: %s", rec.Code, rec.Body.String())
+	}
+	rec = env.as(t, env.alice, http.MethodPost, "/api/ask", `{"agent":"claude","cwd":"/tmp","prompt":"hi"}`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("alice new ask = %d, want 403", rec.Code)
 	}
 	// 请求体里自己声明 origin 也不认（字段未知即 400）。
 	rec = env.as(t, nil, http.MethodPost, "/api/sessions", `{"agentId":1,"cwd":"/tmp","origin":"ask"}`)

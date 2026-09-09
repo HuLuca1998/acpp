@@ -61,6 +61,7 @@ import type {
   McpInspectResult,
   McpCall,
   McpToolStat,
+  SessionOrigin,
 } from "@/types/acp"
 
 import { ApiError, BASE, pageQuery, request } from "./core"
@@ -457,8 +458,9 @@ export const api = {
     overview: (days = 14) =>
       request<OverviewStats>(`/sessions/overview?days=${days}`),
 
-    list: (params?: Partial<PageQuery> & { agentId?: number }) =>
-      request<Paged<Session>>(`/sessions${pageQuery(params)}`),
+    list: (
+      params?: Partial<PageQuery> & { agentId?: number; origin?: SessionOrigin }
+    ) => request<Paged<Session>>(`/sessions${pageQuery(params)}`),
     get: (id: number) => request<Session>(`/sessions/${id}`),
     create: (input: {
       agentId: number

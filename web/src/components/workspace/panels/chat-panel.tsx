@@ -133,6 +133,14 @@ export const ChatPanel = memo(function ChatPanel() {
                       />
                     </span>
                   </Hint>
+                  {/* 别的 AI 问出来的会话（adr-022）：进了会话不必回列表看来源。 */}
+                  {chat.session.origin === "ask" ? (
+                    <Hint label={t("sessions.originAskHint")} align="start">
+                      <span className="shrink-0 rounded-sm border border-border px-1 text-[10px] leading-4 text-muted-foreground">
+                        {t("sessions.originAsk")}
+                      </span>
+                    </Hint>
+                  ) : null}
                   {/* 标题可就地改：后端从首条消息自动简写的名字未必是用户
                     认得的说法。单击进入编辑——这一行没有别的点击语义。 */}
                   <EditableTitle

@@ -615,6 +615,9 @@ export interface Paged<T> {
  * 分页列表的请求参数，`Paged` 的对偶。跨端契约：六个列表端点都认这四个
  * （AGENTS.md §2），`sort` 的取值是后端排序白名单里的**数据库列名**。
  */
+/** 会话列表的来源筛选：`ask` 只要别的 AI 问出来的，`user` 只要界面里开的。 */
+export type SessionOrigin = "ask" | "user"
+
 export interface PageQuery {
   page: number
   pageSize: number

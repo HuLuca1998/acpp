@@ -239,6 +239,11 @@ export default {
     deleteTitle: "删除会话",
     deleteConfirm: "删除这条会话？agent 子进程会一并回收，聊天记录不可恢复。",
     deleteHint: "子进程一并回收，聊天记录不可恢复",
+    origin: "来源",
+    originAsk: "AI 协作",
+    originUser: "界面",
+    filterAll: "全部",
+    originAskHint: "这条会话是另一个 AI 经 /api/ask 问出来的，你可以接着聊",
     form: {
       modelLabel: "模型",
       modelPlaceholder: "选择模型",

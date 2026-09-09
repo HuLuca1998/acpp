@@ -250,6 +250,11 @@ export default {
     deleteConfirm:
       "Delete this session? The agent subprocess is reclaimed and the transcript cannot be recovered.",
     deleteHint: "The subprocess is reclaimed; the transcript is gone for good",
+    origin: "Origin",
+    originAsk: "AI collab",
+    originUser: "UI",
+    filterAll: "All",
+    originAskHint: "Another AI opened this session via /api/ask; you can carry on the conversation",
     form: {
       modelLabel: "Model",
       modelPlaceholder: "Select a model",

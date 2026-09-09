@@ -32,6 +32,11 @@ export function usePagedData<T>(
     pageSize?: number
     keyOf?: (item: T) => string | number
     sort?: SortState
+    /**
+     * 页面自己的筛选条件：它们变了也要重拉。fetcher 是内联闭包，光靠它
+     * 本身认不出「条件变了」，调用方把条件值列在这里。换条件记得回第一页。
+     */
+    deps?: unknown[]
   }
 ) {
   const keyOf = options?.keyOf ?? ((item: T) => (item as { id: number }).id)
@@ -48,7 +53,7 @@ export function usePagedData<T>(
         // 没排序就别带 order——一个孤零零的 order=asc 只会让 URL 更难读。
         order: sort ? (sort.desc ? "desc" : "asc") : undefined,
       }),
-    [page, pageSize, sort?.id, sort?.desc]
+    [page, pageSize, sort?.id, sort?.desc, ...(options?.deps ?? [])]
   )
 
   /** 换排序回第一页：换了排序还停在第 5 页，那已经是另一批数据了。 */

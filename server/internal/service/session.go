@@ -77,7 +77,14 @@ type SessionInput struct {
 
 // List 按更新时间倒序分页。pageSize 有默认与上限——全量拉取会随
 // 会话数线性变慢，侧栏这类场景只需要前几条。
-func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, page, pageSize int, orderBy string) ([]SessionView, int64, error) {
+// SessionOriginFilter 是列表按来源过滤的取值：空不过滤，"ask" 只要别的 AI
+// 问出来的，"user" 只要界面里的人开的。
+const (
+	SessionOriginAny  = ""
+	SessionOriginUser = "user"
+)
+
+func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, origin string, page, pageSize int, orderBy string) ([]SessionView, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -91,6 +98,16 @@ func (s *SessionService) List(ctx context.Context, scope Scope, agentID uint, pa
 	q := scope.FilterSessions(s.db.WithContext(ctx).Model(&model.Session{}))
 	if agentID != 0 {
 		q = q.Where("agent_id = ?", agentID)
+	}
+	switch origin {
+	case SessionOriginAny:
+	case SessionOriginUser:
+		// 加列之前的老会话这一格是 NULL，不是空串——它们当然也是界面里开的。
+		q = q.Where("COALESCE(origin, '') = ''")
+	case model.SessionOriginAsk:
+		q = q.Where("origin = ?", model.SessionOriginAsk)
+	default:
+		return nil, 0, fmt.Errorf("%w: origin must be ask or user", ErrInvalid)
 	}
 
 	var total int64

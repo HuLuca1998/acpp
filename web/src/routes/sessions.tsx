@@ -12,7 +12,8 @@ import type { dataTableFeatures } from "@/components/data-table/data-table-featu
 import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Session } from "@/types/acp"
+import type { Session, SessionOrigin } from "@/types/acp"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { StatusDot } from "@/components/status-dot"
 import { SESSION_STATE_TONE } from "@/lib/status-tone"
 import {
@@ -45,6 +46,9 @@ export function Sessions() {
   // 创建者列只对 owner 有意义：租户只看得见自己的会话，那一列对他恒为
   // 自己，白占一列宽度（adr-007 的隔离已经保证了这一点）。
   const isOwner = useIdentity().identity?.owner ?? false
+  // 来源筛选：别的 AI 经 /api/ask 问出来的会话（adr-022）与自己开的混在
+  // 一张表里认不出谁是谁。缺省全部——列表页是「找那一条」的地方，先不藏。
+  const [origin, setOrigin] = useState<SessionOrigin | "all">("all")
   const {
     items: sessions,
     total,
@@ -57,11 +61,19 @@ export function Sessions() {
     setSorting,
     remove: dropRow,
     setError,
-  } = usePagedData((params) => api.sessions.list(params), {
-    // 默认按 id 倒序：会话编号就是创建顺序，最新建的排最前面。列表页要的是
-    // 「我刚开的那条在哪」，而不是「谁最近响过」——后者是侧边栏的活儿。
-    sort: [{ id: "id", desc: true }],
-  })
+  } = usePagedData(
+    (params) =>
+      api.sessions.list({
+        ...params,
+        origin: origin === "all" ? undefined : origin,
+      }),
+    {
+      // 默认按 id 倒序：会话编号就是创建顺序，最新建的排最前面。列表页要的是
+      // 「我刚开的那条在哪」，而不是「谁最近响过」——后者是侧边栏的活儿。
+      sort: [{ id: "id", desc: true }],
+      deps: [origin],
+    }
+  )
   async function remove(id: number) {
     try {
       await api.sessions.remove(id)
@@ -172,6 +184,34 @@ export function Sessions() {
           },
         ] satisfies SessionColumn[])
       : []),
+    // 来源列同样只给 owner：/api/ask 是 owner 专属面，租户的会话没有第二种来源。
+    ...(isOwner
+      ? ([
+          {
+            id: "origin",
+            accessorFn: (session: Session) => session.origin ?? "",
+            header: ({ column }) => (
+              <DataTableHeader column={column} title={t("sessions.origin")} />
+            ),
+            meta: {
+              label: t("sessions.origin"),
+              className: "text-muted-foreground",
+            },
+            // 只标出「AI 协作」这一种：绝大多数会话是界面里开的，每行都写一遍
+            // 「界面」只是噪音。
+            cell: ({ row }) =>
+              row.original.origin === "ask" ? (
+                <span className="text-foreground">
+                  {t("sessions.originAsk")}
+                </span>
+              ) : (
+                <span className="text-muted-foreground/50">
+                  {t("sessions.originUser")}
+                </span>
+              ),
+          },
+        ] satisfies SessionColumn[])
+      : []),
     {
       id: "project",
       accessorFn: (session: Session) => session.project ?? "",
@@ -260,7 +300,32 @@ export function Sessions() {
           <CardHeader>
             <CardTitle>{t("sessions.title")}</CardTitle>
             <CardDescription>{t("sessions.description")}</CardDescription>
-            <CardAction>
+            <CardAction className="flex items-center gap-2">
+              {isOwner ? (
+                <ToggleGroup
+                  value={[origin]}
+                  variant="outline"
+                  size="sm"
+                  aria-label={t("sessions.origin")}
+                  onValueChange={(v) => {
+                    const next = v[0] as SessionOrigin | "all" | undefined
+                    if (!next) return
+                    setOrigin(next)
+                    // 换筛选回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+                    setPage(1)
+                  }}
+                >
+                  <ToggleGroupItem value="all">
+                    {t("sessions.filterAll")}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="user">
+                    {t("sessions.originUser")}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="ask">
+                    {t("sessions.originAsk")}
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              ) : null}
               <Button size="sm" render={<Link to="/sessions/new" />}>
                 <PlusIcon data-icon="inline-start" />
                 {t("sessions.create")}
