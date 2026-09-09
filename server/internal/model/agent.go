@@ -32,9 +32,14 @@ type Agent struct {
 	// FastPolicy 是「快速模式」的使用取舍：空=未定（首次探测按 flavor 落
 	// 默认——claude 因额外计费默认 off，其余默认 on），"on"/"off" 之后
 	// 归用户在配置页管理，重探不覆盖。off 时快速开关不出现在任何界面。
-	FastPolicy string    `gorm:"size:8" json:"fastPolicy"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	FastPolicy string `gorm:"size:8" json:"fastPolicy"`
+	// AskModel / AskEffort 是别的 AI 经 /api/ask 问这个 agent 时（adr-022）
+	// 新会话要拨到的模型与思考深度；空=沿用 runtime 默认。在配置页设，
+	// 重探不清空——ask 会话没有人在界面上挑模型，只能预先定好。
+	AskModel  string    `gorm:"size:128" json:"askModel"`
+	AskEffort string    `gorm:"size:32" json:"askEffort"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 
 	Sessions []Session `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 }

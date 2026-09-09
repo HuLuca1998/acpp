@@ -63,6 +63,10 @@ type Service struct {
 	inflight map[uint]struct{}
 }
 
+// ErrTimeout 表示一轮在期限内没有跑完。单独成哨兵是为了让 HTTP 层给 504
+// 而不是 500：调用方要能分辨「对方太慢」与「服务坏了」。
+var ErrTimeout = errors.New("ask: turn did not finish before the deadline")
+
 // ErrInterjected 表示等答案的途中，界面上的人在这条会话里插了话。包着
 // acp.ErrBusy 复用 409：对调用方而言语义一样——这条 thread 现在不归你。
 var ErrInterjected = fmt.Errorf("%w: turn taken over by a person in the UI", acp.ErrBusy)
@@ -95,10 +99,11 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 		return nil, fmt.Errorf("%w: level must be one of safe / auto-edit / full", service.ErrInvalid)
 	}
 
-	sessionID, created, err := s.resolveSession(ctx, scope, in)
+	sessionID, agent, err := s.resolveSession(ctx, scope, in)
 	if err != nil {
 		return nil, err
 	}
+	created := agent != nil
 	release, err := s.acquire(sessionID)
 	if err != nil {
 		return nil, err
@@ -106,12 +111,24 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 	defer release()
 
 	// 新会话默认只读：问一句不该顺手让对方能改文件。续聊不带 level 就沿用。
-	level := in.Level
-	if level == "" && created {
-		level = acp.AccessSafe
+	patch := acp.SettingsPatch{}
+	if in.Level != "" {
+		patch.Level = &in.Level
+	} else if created {
+		level := acp.AccessSafe
+		patch.Level = &level
+	}
+	// 新会话还要拨到配置页里给 AI 协作定的模型与思考深度（空=沿用默认）。
+	if created {
+		if m := strings.TrimSpace(agent.AskModel); m != "" {
+			patch.Model = &m
+		}
+		if e := acp.Effort(strings.TrimSpace(agent.AskEffort)); e != "" {
+			patch.Effort = &e
+		}
 	}
 
-	stop, err := s.runTurn(ctx, sessionID, level, in.Prompt)
+	stop, err := s.runTurn(ctx, sessionID, patch, in.Prompt)
 	if err != nil {
 		// 刚为这一问开的会话一轮都没跑成，留着只是侧栏里一条空记录与一个
 		// 挂着的子进程。唯独「被人接手」不能收：那条会话此刻正被人用着，
@@ -148,15 +165,28 @@ func (s *Service) acquire(sessionID uint) (func(), error) {
 	}, nil
 }
 
-// runTurn 拨权限档、订阅、发送、等轮末。超时从这里就开始算：拉起子进程
+// runTurn 拨设置、订阅、发送、等轮末。超时从这里就开始算：拉起子进程
 // 与握手也可能卡住，只给等待段设限的话，前面那段能无限期占着会话闸门。
-func (s *Service) runTurn(parent context.Context, sessionID uint, level acp.AccessLevel, prompt string) (acp.StopReason, error) {
+func (s *Service) runTurn(parent context.Context, sessionID uint, patch acp.SettingsPatch, prompt string) (acp.StopReason, error) {
 	ctx, cancel := context.WithTimeout(parent, s.timeout)
 	defer cancel()
 
-	if level != "" {
-		if _, err := s.chat.ApplySettings(ctx, sessionID, acp.SettingsPatch{Level: &level}); err != nil {
+	// 裁决权限要知道**实际生效**的档位：续聊不带 level 时沿用会话现状，
+	// 那可能是 full——按空值当非 full 处理会把该放的请求拒掉。
+	var level acp.AccessLevel
+	if patch.Level != nil || patch.Model != nil || patch.Effort != nil {
+		settings, err := s.chat.ApplySettings(ctx, sessionID, patch)
+		if err != nil {
 			return "", err
+		}
+		level = settings.CurrentLevel
+	} else {
+		view, err := s.chat.Open(ctx, sessionID)
+		if err != nil {
+			return "", err
+		}
+		if view.Settings != nil {
+			level = view.Settings.CurrentLevel
 		}
 	}
 
@@ -184,56 +214,90 @@ func (s *Service) waitTurn(ctx context.Context, sessionID uint, level acp.Access
 	// started 以自己那条 user_message 为准：Send 之前广播里若还留着别的事件
 	//（刚拨设置推来的 settings、上一轮重放的残留），不该被当成这一轮的。
 	started := false
+
+	// handle 消化一条事件；done 为真表示这一轮到此为止（正常收尾或出错）。
+	handle := func(ev service.StreamEvent) (done bool, err error) {
+		switch ev.Kind {
+		case "user_message":
+			switch {
+			case ev.Message != nil && ev.Message.ID == sentID:
+				started = true
+			case started:
+				return true, fmt.Errorf("thread %d: %w", sessionID, ErrInterjected)
+			}
+		case "permission":
+			s.decidePermission(sessionID, level, ev)
+		case "elicitation":
+			if err := s.chat.ResolveElicitation(sessionID, ev.ElicitationID, "cancel", nil); err != nil {
+				slog.Warn("ask: cancel elicitation", "session", sessionID, "err", err)
+			}
+		case "turn_end":
+			stop = acp.StopReason(ev.StopReason)
+		case "error":
+			if started {
+				return true, fmt.Errorf("thread %d: %s", sessionID, ev.Error)
+			}
+		case "turn_done":
+			if started {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
 	poll := time.NewTicker(livenessPoll)
 	defer poll.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			// 调用方挂断或超时：把这一轮停掉，别让 agent 对着空气继续干。
-			if err := s.chat.Cancel(sessionID); err != nil {
-				slog.Warn("ask: cancel turn", "session", sessionID, "err", err)
-			}
+			s.cancelTurn(sessionID)
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return "", fmt.Errorf("thread %d: turn did not finish within %s", sessionID, s.timeout)
+				return "", fmt.Errorf("thread %d: %w", sessionID, ErrTimeout)
 			}
 			return "", ctx.Err()
 
 		case <-poll.C:
-			// 轮已经不在跑而 turn_done 没到：事件被丢了，按收尾处理。
-			if started && !s.chat.TurnActive(sessionID) {
-				return stop, nil
+			// 轮已经不在跑而 turn_done 没到：事件被丢了，按收尾处理。收尾前
+			// 先把通道里已经排着的事件吃完——轮末的 error / turn_end 可能
+			// 就在里面，凭「不在跑」直接返回会把失败报成成功、丢掉结束原因。
+			if !started || s.chat.TurnActive(sessionID) {
+				continue
+			}
+			for {
+				select {
+				case ev, ok := <-events:
+					if !ok {
+						return stop, nil
+					}
+					if done, err := handle(ev); done {
+						return stop, err
+					}
+				default:
+					return stop, nil
+				}
 			}
 
 		case ev, ok := <-events:
 			if !ok {
 				return "", fmt.Errorf("thread %d: event stream closed", sessionID)
 			}
-			switch ev.Kind {
-			case "user_message":
-				switch {
-				case ev.Message != nil && ev.Message.ID == sentID:
-					started = true
-				case started:
-					return "", fmt.Errorf("thread %d: %w", sessionID, ErrInterjected)
-				}
-			case "permission":
-				s.decidePermission(sessionID, level, ev)
-			case "elicitation":
-				if err := s.chat.ResolveElicitation(sessionID, ev.ElicitationID, "cancel", nil); err != nil {
-					slog.Warn("ask: cancel elicitation", "session", sessionID, "err", err)
-				}
-			case "turn_end":
-				stop = acp.StopReason(ev.StopReason)
-			case "error":
-				if started {
-					return "", fmt.Errorf("thread %d: %s", sessionID, ev.Error)
-				}
-			case "turn_done":
-				if started {
-					return stop, nil
-				}
+			if done, err := handle(ev); done {
+				return stop, err
 			}
 		}
+	}
+}
+
+// cancelTurn 在调用方挂断或超时后停掉那一轮。Send 只是把轮丢进 goroutine，
+// 轮真正登记到 acp 层要晚几毫秒——挂断恰好落在这个缝里时 Cancel 会落空，
+// agent 就对着空气继续干。所以先等它登记上（最多几秒），再取消。
+func (s *Service) cancelTurn(sessionID uint) {
+	deadline := time.Now().Add(3 * time.Second)
+	for !s.chat.TurnActive(sessionID) && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err := s.chat.Cancel(sessionID); err != nil {
+		slog.Warn("ask: cancel turn", "session", sessionID, "err", err)
 	}
 }
 
@@ -260,26 +324,27 @@ func (s *Service) decidePermission(sessionID uint, level acp.AccessLevel, ev ser
 }
 
 // resolveSession 找到要发问的会话：带 thread 就校验归属后复用，否则按
-// agent 名字新开一条并打上 ask 来源。第二个返回值说明会话是不是这次新开的。
-func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in Input) (uint, bool, error) {
+// agent 名字新开一条并打上 ask 来源。新开的会话连 agent 记录一起返回
+// （上层据此拨模型与思考深度）；复用的返回 nil。
+func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in Input) (uint, *model.Agent, error) {
 	if in.Thread != 0 {
 		ref, err := s.sessions.Guard(ctx, scope, in.Thread)
 		if err != nil {
-			return 0, false, err
+			return 0, nil, err
 		}
-		return ref.ID, false, nil
+		return ref.ID, nil, nil
 	}
 
 	name := strings.ToLower(strings.TrimSpace(in.Agent))
 	if name == "" {
-		return 0, false, fmt.Errorf("%w: agent is required for a new thread", service.ErrInvalid)
+		return 0, nil, fmt.Errorf("%w: agent is required for a new thread", service.ErrInvalid)
 	}
 	if strings.TrimSpace(in.Cwd) == "" {
-		return 0, false, fmt.Errorf("%w: cwd is required for a new thread", service.ErrInvalid)
+		return 0, nil, fmt.Errorf("%w: cwd is required for a new thread", service.ErrInvalid)
 	}
 	agents, err := s.agents.List(ctx)
 	if err != nil {
-		return 0, false, err
+		return 0, nil, err
 	}
 	var agent *model.Agent
 	for i := range agents {
@@ -289,7 +354,7 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 		}
 	}
 	if agent == nil {
-		return 0, false, fmt.Errorf("agent %q: %w", in.Agent, service.ErrNotFound)
+		return 0, nil, fmt.Errorf("agent %q: %w", in.Agent, service.ErrNotFound)
 	}
 
 	view, err := s.sessions.Create(ctx, scope, service.SessionInput{
@@ -299,9 +364,9 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 		Origin:  model.SessionOriginAsk,
 	})
 	if err != nil {
-		return 0, false, err
+		return 0, nil, err
 	}
-	return view.ID, true, nil
+	return view.ID, agent, nil
 }
 
 // discard 收掉一条没跑成的新会话：先回收子进程再删记录，顺序与

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gorm.io/gorm"
@@ -162,6 +163,10 @@ type CatalogInput struct {
 	Commands []CatalogItem `json:"commands"`
 	// FastPolicy 更新快速模式取舍（"on"/"off"），nil 不动。
 	FastPolicy *string `json:"fastPolicy,omitempty"`
+	// AskModel / AskEffort 是 AI 协作会话的模型与思考深度（adr-022）：
+	// nil 不动，空串=沿用默认，非空必须在探测清单里。
+	AskModel  *string `json:"askModel,omitempty"`
+	AskEffort *string `json:"askEffort,omitempty"`
 }
 
 // UpdateCatalog 应用配置页的勾选：只改 disabled/alias 标记与快速模式
@@ -195,6 +200,20 @@ func (s *AgentService) UpdateCatalog(ctx context.Context, id uint, in CatalogInp
 		default:
 			return nil, fmt.Errorf("%w: fastPolicy must be on or off", ErrInvalid)
 		}
+	}
+	if in.AskModel != nil {
+		want := strings.TrimSpace(*in.AskModel)
+		if want != "" && !slices.ContainsFunc(agent.Models, func(m model.AgentModel) bool { return m.ID == want }) {
+			return nil, fmt.Errorf("%w: askModel %q is not in the probed model list", ErrInvalid, want)
+		}
+		agent.AskModel = want
+	}
+	if in.AskEffort != nil {
+		want := strings.TrimSpace(*in.AskEffort)
+		if want != "" && !slices.Contains(agent.Skeleton.Efforts, want) {
+			return nil, fmt.Errorf("%w: askEffort %q is not in the probed effort list", ErrInvalid, want)
+		}
+		agent.AskEffort = want
 	}
 	if in.Commands != nil {
 		disabled := make(map[string]bool, len(in.Commands))

@@ -66,15 +66,23 @@ export function AppSidebar({
   // 但绝大多数导航并不改变这份列表（点开一条已有会话最典型），所以拉回来
   // 先比一遍——没变就留住原引用，整棵侧栏子树不重渲染。侧栏跟着每次导航
   // 抖一下，恰好发生在用户切会话、页面本来就最忙的那一刻。
+  // 别的 AI 经 /api/ask 问出来的会话（adr-022）单独摆：一次审查就是一条
+  // 会话，且全开在同一个目录上，混进「最近会话」会把用户自己的对话顶掉。
+  // 两路各拉各的：只拉最新 50 条再本地拆分的话，连着几十次协作就能把
+  // 用户自己的会话整个挤出样本。
+  const [asked, setAsked] = React.useState<Session[]>([])
   React.useEffect(() => {
     let cancelled = false
-    api.sessions
-      .list({ pageSize: RECENT_LIMIT })
-      .then((sessions) => {
+    Promise.all([
+      api.sessions.list({ pageSize: RECENT_LIMIT, origin: "user" }),
+      api.sessions.list({ pageSize: ASKED_LIMIT, origin: "ask" }),
+    ])
+      .then(([own, ask]) => {
         if (cancelled) return
         setRecent((prev) =>
-          sameRecentList(prev, sessions.items) ? prev : sessions.items
+          sameRecentList(prev, own.items) ? prev : own.items
         )
+        setAsked((prev) => (sameRecentList(prev, ask.items) ? prev : ask.items))
       })
       .catch(() => {
         // 侧边栏的最近列表拉不到就空着，不打断主流程。
@@ -84,19 +92,8 @@ export function AppSidebar({
     }
   }, [pathname])
 
-  // 别的 AI 经 /api/ask 问出来的会话（adr-022）单独摆：一次审查就是一条
-  // 会话，且全开在同一个目录上，混进「最近会话」会把用户自己的对话顶掉。
-  const own = React.useMemo(
-    () => recent.filter((s) => s.origin !== "ask"),
-    [recent]
-  )
-  const asked = React.useMemo(
-    () => recent.filter((s) => s.origin === "ask").slice(0, ASKED_LIMIT),
-    [recent]
-  )
-
   // 按 cwd 分组，不依赖项目扫描——会话自带的目录永远对得上。
-  const groups = React.useMemo(() => groupSessionsByCwd(own), [own])
+  const groups = React.useMemo(() => groupSessionsByCwd(recent), [recent])
 
   // 租户只留会话与项目：技能、设置、连接都是 owner 的东西，后端也已按
   // owner-only 拦截，导航里直接不出现（adr-007）。
@@ -158,7 +155,7 @@ export function AppSidebar({
     }),
     [t]
   )
-  const recentItems = React.useMemo(() => own.map(toItem), [own, toItem])
+  const recentItems = React.useMemo(() => recent.map(toItem), [recent, toItem])
   const askedItems = React.useMemo(() => asked.map(toItem), [asked, toItem])
 
   // 改名后就地更新本地这份列表：等下次导航再刷新的话，改完那一下标题不动，
@@ -167,11 +164,12 @@ export function AppSidebar({
     (id: number, title: string) => {
       api.sessions
         .rename(id, title)
-        .then((updated) =>
-          setRecent((prev) =>
+        .then((updated) => {
+          const rename = (prev: Session[]) =>
             prev.map((s) => (s.id === id ? { ...s, title: updated.title } : s))
-          )
-        )
+          setRecent(rename)
+          setAsked(rename)
+        })
         .catch(() => toast.error(t("nav.renameFailed")))
     },
     [t]

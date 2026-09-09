@@ -140,6 +140,11 @@ export default {
       fastPolicy: "允许快速模式",
       fastPolicyHint:
         "关闭后「快速」按钮不再出现；claude 的快速模式额外计费，默认关闭。",
+      askTitle: "AI 协作",
+      askDesc: "别的 AI 经 /api/ask 问这个工具时，新会话用的模型与思考深度；留空沿用默认。",
+      askModel: "模型",
+      askEffort: "思考深度",
+      askDefault: "沿用默认",
     },
   },
   upload: {

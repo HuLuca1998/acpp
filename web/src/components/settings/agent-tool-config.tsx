@@ -18,6 +18,17 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Field, FieldLabel } from "@/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+/** Select 不接受空串当值，「沿用默认」用一个占位值表示，提交时换回空串。 */
+const ASK_DEFAULT = "__default__"
 import { Spinner } from "@/components/ui/spinner"
 import { RefreshCwIcon, SearchIcon } from "lucide-react"
 
@@ -235,6 +246,73 @@ export function AgentToolConfig({ name }: { name: string }) {
               {t("agents.detail.fastPolicyHint")}
             </span>
           </label>
+        </CardContent>
+      </Card>
+
+      {/* AI 协作（adr-022）：别的 AI 经 /api/ask 问这个工具时用什么模型与
+          思考深度。那种会话没有人在界面上挑，只能在这里预先定好。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t("agents.detail.askTitle")}
+          </CardTitle>
+          <CardDescription>{t("agents.detail.askDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor={`ask-model-${agent.id}`}>
+              {t("agents.detail.askModel")}
+            </FieldLabel>
+            <Select
+              value={agent.askModel || ASK_DEFAULT}
+              onValueChange={(v) => {
+                if (typeof v !== "string") return
+                void mutateCatalog({ askModel: v === ASK_DEFAULT ? "" : v })
+              }}
+            >
+              <SelectTrigger id={`ask-model-${agent.id}`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ASK_DEFAULT}>
+                  {t("agents.detail.askDefault")}
+                </SelectItem>
+                {agent.models
+                  .filter((m) => !m.disabled)
+                  .map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.alias || m.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`ask-effort-${agent.id}`}>
+              {t("agents.detail.askEffort")}
+            </FieldLabel>
+            <Select
+              value={agent.askEffort || ASK_DEFAULT}
+              onValueChange={(v) => {
+                if (typeof v !== "string") return
+                void mutateCatalog({ askEffort: v === ASK_DEFAULT ? "" : v })
+              }}
+            >
+              <SelectTrigger id={`ask-effort-${agent.id}`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ASK_DEFAULT}>
+                  {t("agents.detail.askDefault")}
+                </SelectItem>
+                {(agent.skeleton?.efforts ?? []).map((e) => (
+                  <SelectItem key={e} value={e}>
+                    {e}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
         </CardContent>
       </Card>
 

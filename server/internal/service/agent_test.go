@@ -86,3 +86,42 @@ func TestAgentService_EnsureDefaults_KeepsExistingConfig(t *testing.T) {
 		t.Errorf("用户配置被覆盖: command=%q args=%v", got.Command, got.Args)
 	}
 }
+
+// 契约：AI 协作的模型与思考深度只能从探测清单里选（adr-022）——配置页的
+// 下拉本就只给清单项，API 层再挡一次，免得手写请求把 agent 拨到一个不存在
+// 的模型上、每次 ask 都失败。空串是「沿用默认」，永远合法。
+func TestAgentService_UpdateCatalog_AskPreferences(t *testing.T) {
+	svc := NewAgentService(agentDB(t))
+	created, err := svc.Create(t.Context(), AgentInput{Name: "codex", Command: "codex-acp"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	created.Models = model.AgentModelSlice{{ID: "gpt-5", Name: "GPT-5"}}
+	created.Skeleton = model.AgentSkeleton{Efforts: []string{"low", "high"}}
+	if err := svc.db.Save(created).Error; err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+
+	str := func(s string) *string { return &s }
+	cases := []struct {
+		name   string
+		in     CatalogInput
+		wantOK bool
+	}{
+		{"清单内的模型与深度", CatalogInput{AskModel: str("gpt-5"), AskEffort: str("high")}, true},
+		{"空串=沿用默认", CatalogInput{AskModel: str(""), AskEffort: str("")}, true},
+		{"清单外的模型", CatalogInput{AskModel: str("gpt-9")}, false},
+		{"清单外的深度", CatalogInput{AskEffort: str("ultra")}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := svc.UpdateCatalog(t.Context(), created.ID, tc.in)
+			if tc.wantOK != (err == nil) {
+				t.Fatalf("err = %v, wantOK %v", err, tc.wantOK)
+			}
+			if err == nil && tc.in.AskModel != nil && got.AskModel != *tc.in.AskModel {
+				t.Fatalf("askModel = %q, want %q", got.AskModel, *tc.in.AskModel)
+			}
+		})
+	}
+}

@@ -66,12 +66,10 @@ export const ChatStream = memo(function ChatStream({
 }) {
   const { t } = useTranslation()
   const flavor = chat.session?.agentFlavor
-  // 别的 AI 经 /api/ask 问出来的会话，提问那一侧不是人（adr-022）：署名与
-  // 头像都换成「AI 协作」，别把另一个 AI 的问题画成 owner 说的。
-  const userName =
-    chat.session?.origin === "ask"
-      ? t("sessions.originAsk")
-      : chat.session?.tenantName
+  // 来源是会话级的，署名却是逐条的：ask 会话里人接手后继续追问，他的话
+  // 不该也画成「AI 协作」。所以这里不按 origin 改署名，会话级的标记只
+  // 挂在顶栏（chat-panel）。
+  const userName = chat.session?.tenantName
 
   // 出错的那条消息给个重试入口：错误多半来自服务端过载这类与内容无关的
   // 意外，让用户把同一段话手打第二遍是没道理的。轮次在跑时不给——那还

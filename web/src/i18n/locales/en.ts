@@ -142,6 +142,11 @@ export default {
       fastPolicy: "Allow fast mode",
       fastPolicyHint:
         "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
+      askTitle: "AI collab",
+      askDesc: "Model and reasoning effort for sessions another AI opens via /api/ask; leave empty to use the runtime default.",
+      askModel: "Model",
+      askEffort: "Reasoning effort",
+      askDefault: "Runtime default",
     },
   },
   upload: {

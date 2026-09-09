@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/ask"
 	"acpp/server/internal/discord"
 	"acpp/server/internal/service"
 )
@@ -68,6 +69,9 @@ func writeError(w http.ResponseWriter, err error) {
 		// 该 runtime 不支持这个统一设置维度；正常前端不会发（控件按
 		// Settings 隐藏），发了就是入参问题。
 		status = http.StatusBadRequest
+	case errors.Is(err, ask.ErrTimeout):
+		// 对方在期限内没答完：问题在被问的 agent 太慢，不是这个服务坏了。
+		status = http.StatusGatewayTimeout
 	case errors.Is(err, acp.ErrBusy):
 		// 这条会话上一轮还没完。同步问答面（/api/ask）不排队，直接告诉
 		// 调用方等一等再来。

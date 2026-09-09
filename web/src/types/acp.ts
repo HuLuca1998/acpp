@@ -120,6 +120,9 @@ export interface CatalogInput {
   commands?: { key: string; disabled: boolean }[]
   /** 快速模式取舍；缺省不动。 */
   fastPolicy?: "on" | "off"
+  /** AI 协作会话的模型 / 思考深度（adr-022）：缺省不动，空串=沿用默认。 */
+  askModel?: string
+  askEffort?: string
 }
 
 /** runtime 方言，由后端从 agent 身份识别；generic 表示未知 runtime。 */
@@ -163,6 +166,12 @@ export interface Agent {
   }
   /** 快速模式取舍：off 时快速开关不出现（空=未定，探测按 flavor 落默认）。 */
   fastPolicy?: "on" | "off" | ""
+  /**
+   * 别的 AI 经 /api/ask 问这个工具时新会话拨到的模型与思考深度（adr-022）。
+   * 空=沿用 runtime 默认。
+   */
+  askModel?: string
+  askEffort?: string
   createdAt: string
   updatedAt: string
 }
@@ -235,7 +244,7 @@ export interface Session {
    * 会话来源：空是界面里的人开的，`ask` 是别的 AI 经 /api/ask 问出来的
    *（adr-022）。侧栏据此把「AI 问 AI」的会话与自己的分开摆。
    */
-  origin?: 'ask'
+  origin?: "ask"
   state: SessionState
   stopReason: string
   messageCount: number
