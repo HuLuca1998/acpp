@@ -21,6 +21,11 @@ import { ServerDialog } from "@/components/servers/server-dialog"
 import { StatusDot } from "@/components/status-dot"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import { DataTableHeader } from "@/components/data-table/data-table-header"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import {
@@ -46,6 +51,8 @@ type ServerColumn = ColumnDef<typeof dataTableFeatures, Server, unknown>
  */
 export function Servers() {
   const { t } = useTranslation()
+  const search = useSearchDraft({ q: "" })
+  const { values } = search
   const {
     items: servers,
     total,
@@ -56,10 +63,22 @@ export function Servers() {
     setPage,
     setPageSize,
     setSorting,
+    fetching,
     reload,
     replace,
     remove: dropRow,
-  } = usePagedData((params) => api.servers.list(params))
+  } = usePagedData((params) => api.servers.list({ ...params, q: values.q }), {
+    deps: [values],
+  })
+  // 提交或重置都回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+  const submitSearch = () => {
+    search.commit()
+    setPage(1)
+  }
+  const resetSearch = () => {
+    search.reset()
+    setPage(1)
+  }
 
   const [editing, setEditing] = useState<Server | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -87,7 +106,6 @@ export function Servers() {
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <ListPageHeader
         title={t("server.title")}
-        description={t("server.description")}
         total={servers ? total : undefined}
       />
       <DataTable
@@ -97,6 +115,16 @@ export function Servers() {
         page={page}
         pageSize={pageSize}
         sorting={sorting}
+        search={
+          <SearchBar onSearch={submitSearch} onReset={resetSearch}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("server.searchPlaceholder")}
+            />
+          </SearchBar>
+        }
+        fetching={fetching}
         actions={
           <Button size="sm" onClick={() => openEdit(null)}>
             <PlusIcon data-icon="inline-start" />

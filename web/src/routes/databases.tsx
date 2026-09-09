@@ -12,6 +12,12 @@ import { StatusDot } from "@/components/status-dot"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchSelect,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import { DataTableHeader } from "@/components/data-table/data-table-header"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -56,6 +62,8 @@ import {
  */
 export function Databases() {
   const { t } = useTranslation()
+  const search = useSearchDraft({ q: "", env: "", readOnly: "" })
+  const { values } = search
   const {
     items: sources,
     total,
@@ -66,10 +74,29 @@ export function Databases() {
     setPage,
     setPageSize,
     setSorting,
+    fetching,
     reload,
     replace,
     remove: dropRow,
-  } = usePagedData((params) => api.datasources.list(params))
+  } = usePagedData(
+    (params) =>
+      api.datasources.list({
+        ...params,
+        q: values.q,
+        env: values.env,
+        readOnly: values.readOnly,
+      }),
+    { deps: [values] }
+  )
+  // 提交或重置都回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+  const submitSearch = () => {
+    search.commit()
+    setPage(1)
+  }
+  const resetSearch = () => {
+    search.reset()
+    setPage(1)
+  }
 
   // 项目名建议来自工作区已有的仓库；拉不到不影响填写（自由输入）。
   //
@@ -165,7 +192,6 @@ export function Databases() {
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <ListPageHeader
         title={t("db.title")}
-        description={t("db.description")}
         total={sources ? total : undefined}
       />
       <DataTable
@@ -175,6 +201,31 @@ export function Databases() {
         page={page}
         pageSize={pageSize}
         sorting={sorting}
+        search={
+          <SearchBar onSearch={submitSearch} onReset={resetSearch}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("db.searchPlaceholder")}
+            />
+            <SearchText
+              value={search.draft.env}
+              onChange={(v) => search.set("env", v)}
+              placeholder={t("db.env")}
+              width="sm"
+            />
+            <SearchSelect
+              label={t("db.mode")}
+              value={search.draft.readOnly}
+              onChange={(v) => search.set("readOnly", v)}
+              options={[
+                { value: "1", label: t("db.readOnlyBadge") },
+                { value: "0", label: t("db.readWrite") },
+              ]}
+            />
+          </SearchBar>
+        }
+        fetching={fetching}
         actions={
           <Button size="sm" onClick={() => openEdit(null)}>
             <PlusIcon data-icon="inline-start" />

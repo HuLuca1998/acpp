@@ -7,6 +7,7 @@ export const enServer = {
   add: "New server",
   edit: "Edit server",
   name: "Name",
+  searchPlaceholder: "Name / host",
   namePlaceholder: "pp-game-live",
   nameHint: "This is what the AI passes to its tools; no spaces or slashes",
   host: "Host",

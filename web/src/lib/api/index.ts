@@ -62,6 +62,7 @@ import type {
   McpCall,
   McpToolStat,
   SessionOrigin,
+  SessionState,
 } from "@/types/acp"
 
 import { ApiError, BASE, pageQuery, request } from "./core"
@@ -459,7 +460,13 @@ export const api = {
       request<OverviewStats>(`/sessions/overview?days=${days}`),
 
     list: (
-      params?: Partial<PageQuery> & { agentId?: number; origin?: SessionOrigin }
+      params?: Partial<PageQuery> & {
+        /** 标题关键词（子串） */
+        q?: string
+        agentId?: number
+        origin?: SessionOrigin
+        state?: SessionState
+      }
     ) => request<Paged<Session>>(`/sessions${pageQuery(params)}`),
     get: (id: number) => request<Session>(`/sessions/${id}`),
     create: (input: {
@@ -563,7 +570,8 @@ export const api = {
   },
 
   skills: {
-    list: (params?: Partial<PageQuery>) =>
+    /** enabled 用 "1" / "0" 三态，不传不过滤（pageQuery 会把空串丢掉）。 */
+    list: (params?: Partial<PageQuery> & { q?: string; enabled?: string }) =>
       request<Paged<Skill>>(`/skills${pageQuery(params)}`),
     get: (name: string) => request<SkillDetail>(`/skills/${name}`),
     create: (input: SkillCreateInput) =>
@@ -621,7 +629,8 @@ export const api = {
 
   /** 租户管理（owner 专属）。 */
   tenants: {
-    list: (params?: Partial<PageQuery>) =>
+    /** disabled 用 "1" / "0" 三态，不传不过滤。 */
+    list: (params?: Partial<PageQuery> & { q?: string; disabled?: string }) =>
       request<Paged<Tenant>>(`/tenants${pageQuery(params)}`),
     create: (name: string) =>
       request<Tenant>("/tenants", {

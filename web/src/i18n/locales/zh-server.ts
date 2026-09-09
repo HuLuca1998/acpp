@@ -7,6 +7,7 @@ export const zhServer = {
   add: "新建服务器",
   edit: "编辑服务器",
   name: "名称",
+  searchPlaceholder: "名称 / 主机",
   namePlaceholder: "pp-game-live",
   nameHint: "AI 调工具时填的就是这个名字；不能含空格或斜杠",
   host: "主机",

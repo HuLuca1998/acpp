@@ -14,6 +14,11 @@ import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
 import { Hint } from "@/components/hint"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import type { ColumnDef } from "@tanstack/react-table"
 import {
@@ -63,13 +68,23 @@ export function Discord() {
   const {
     data: info,
     error,
+    fetching,
     setData,
     reload,
   } = useAsyncData<DiscordInfo>(() => api.discord.get(), [])
+  // 绑定清单是整份拿回来的（没有分页接口），关键词在本地过滤频道与仓库名。
+  const search = useSearchDraft({ q: "" })
   const [editing, setEditing] = useState<DiscordBinding | null>(null)
   const [removing, setRemoving] = useState<DiscordBinding | null>(null)
 
-  const bindings = info?.bindings ?? []
+  const keyword = search.values.q.trim().toLowerCase()
+  const bindings = (info?.bindings ?? []).filter(
+    (b) =>
+      !keyword ||
+      `${b.channelName ?? ""} ${b.repo} ${b.workdir} ${b.agent}`
+        .toLowerCase()
+        .includes(keyword)
+  )
 
   function patchBinding(next: DiscordBinding) {
     if (!info) return
@@ -110,7 +125,6 @@ export function Discord() {
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <ListPageHeader
         title={t("nav.discord")}
-        description={t("discord.page.description")}
         total={info ? bindings.length : undefined}
       />
       <DataTable
@@ -120,6 +134,16 @@ export function Discord() {
         page={1}
         pageSize={bindings.length || 20}
         sorting={[]}
+        search={
+          <SearchBar onSearch={search.commit} onReset={search.reset}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("discord.page.searchPlaceholder")}
+            />
+          </SearchBar>
+        }
+        fetching={fetching}
         actions={
           <>
             <Button

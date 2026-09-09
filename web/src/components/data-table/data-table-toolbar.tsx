@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import type { DataTableFeatures } from "@/components/data-table/data-table-features"
 import { Hint } from "@/components/hint"
+import { LOADING_CYCLE_MS } from "@/hooks/use-min-loading"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -28,11 +29,14 @@ import { RefreshCwIcon, Settings2Icon } from "lucide-react"
 export function DataTableToolbar<TData extends RowData>({
   table,
   actions,
+  fetching = false,
   onReload,
 }: {
   table: Table<DataTableFeatures, TData>
   /** 左侧：新建、批量操作等改变数据的按钮。 */
   actions?: React.ReactNode
+  /** 请求中：刷新图标转圈，与进度线同一节奏。 */
+  fetching?: boolean
   /** 给了才出刷新按钮。 */
   onReload?: () => void
 }) {
@@ -55,7 +59,14 @@ export function DataTableToolbar<TData extends RowData>({
               aria-label={t("table.refresh")}
               onClick={onReload}
             >
-              <RefreshCwIcon />
+              <RefreshCwIcon
+                className={fetching ? "animate-spin" : undefined}
+                style={
+                  fetching
+                    ? { animationDuration: `${LOADING_CYCLE_MS}ms` }
+                    : undefined
+                }
+              />
             </Button>
           </Hint>
         ) : null}

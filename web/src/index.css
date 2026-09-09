@@ -69,6 +69,18 @@
   /* 活跃状态点的呼吸动画：比 animate-pulse 轻得多，只做存在感提示。 */
   --animate-breathe: breathe 2.6s var(--ease-fluid) infinite;
 
+  /* 列表页进度线：半宽的亮段从左扫到右，时长由 LOADING_CYCLE_MS 在行内样式里覆盖。 */
+  --animate-loading-sweep: loading-sweep 0.5s linear infinite;
+
+  @keyframes loading-sweep {
+    0% {
+      left: -50%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+
   @keyframes breathe {
     0%,
     100% {

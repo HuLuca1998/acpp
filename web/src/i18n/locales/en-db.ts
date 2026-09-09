@@ -52,6 +52,8 @@ export const enDb = {
   address: "Address",
   viaSsh: "via SSH tunnel",
   mode: "Access",
+  searchPlaceholder: "Project / database / host",
+  readWrite: "Read-write",
   writable: "writable",
   loadMore: "Loaded {{loaded}} of {{total}} — load more",
   port: "Port",

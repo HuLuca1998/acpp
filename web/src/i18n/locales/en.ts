@@ -26,6 +26,9 @@ export default {
   table: {
     columns: "Columns",
     search: "Search",
+    reset: "Reset",
+    all: "All",
+    loading: "Loading…",
     refresh: "Refresh",
     total: "{{total}} total",
   },
@@ -145,7 +148,8 @@ export default {
       fastPolicyHint:
         "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
       askTitle: "AI collab",
-      askDesc: "Model and reasoning effort for sessions another AI opens via /api/ask; leave empty to use the runtime default.",
+      askDesc:
+        "Model and reasoning effort for sessions another AI opens via /api/ask; leave empty to use the runtime default.",
       askModel: "Model",
       askEffort: "Reasoning effort",
       askDefault: "Runtime default",
@@ -178,6 +182,8 @@ export default {
     enabled: "Enabled",
     enabledDesc:
       "Turning it off stops injecting it; the files stay in the library",
+    filterEnabled: "Enabled",
+    filterDisabled: "Disabled",
     updated: "Updated",
     effectNote:
       "Toggles and edits apply to new sessions; running sessions are unaffected.",
@@ -261,7 +267,8 @@ export default {
     originAsk: "AI collab",
     originUser: "UI",
     filterAll: "All",
-    originAskHint: "Another AI opened this session via /api/ask; you can carry on the conversation",
+    originAskHint:
+      "Another AI opened this session via /api/ask; you can carry on the conversation",
     form: {
       modelLabel: "Model",
       modelPlaceholder: "Select a model",
@@ -534,6 +541,9 @@ export default {
     addAndCopy: "Create and copy link",
     name: "Name",
     namePlaceholder: "alice",
+    filterStatus: "Status",
+    filterEnabled: "Active",
+    filterDisabled: "Disabled",
     nameHint: "1-32 characters: letters, digits, dot, underscore or hyphen.",
     root: "Workspace",
     sessions: "Sessions",

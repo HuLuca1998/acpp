@@ -50,6 +50,8 @@ export const zhDb = {
   address: "地址",
   viaSsh: "经 SSH 隧道",
   mode: "读写",
+  searchPlaceholder: "项目 / 库名 / 主机",
+  readWrite: "读写",
   writable: "可写",
   loadMore: "已加载 {{loaded}} / {{total}}，继续加载",
   port: "端口",

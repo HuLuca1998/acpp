@@ -12,6 +12,8 @@ import type {
   SortingState,
   VisibilityState,
 } from "@/components/data-table/data-table-state"
+import { LoadingBar } from "@/components/data-table/loading-bar"
+import { useMinLoading } from "@/hooks/use-min-loading"
 import { Card } from "@/components/ui/card"
 import {
   Table,
@@ -54,6 +56,7 @@ export function DataTable<TData extends RowData>({
   empty,
   search,
   actions,
+  fetching = false,
   onReload,
   onPage,
   onPageSize,
@@ -76,6 +79,8 @@ export function DataTable<TData extends RowData>({
   search?: React.ReactNode
   /** 操作区左侧：新建、批量操作等改变数据的按钮。 */
   actions?: React.ReactNode
+  /** 请求飞行中：表格区顶端亮进度线、内容压暗、刷新图标转圈。 */
+  fetching?: boolean
   /** 给了操作区右侧才出刷新按钮。 */
   onReload?: () => void
   onPage: (page: number) => void
@@ -113,6 +118,8 @@ export function DataTable<TData extends RowData>({
   // 下一步 CTA 都在 ListPageStates 里（AGENTS.md 的硬规则），表格自己
   // 不该再造一套。搜索区与操作区照常画。
   const hasRows = data !== null && data.length > 0
+  // 快请求也至少亮完一趟，免得进度线只闪一帧
+  const showLoading = useMinLoading(fetching)
 
   return (
     <div className="flex flex-col gap-3">
@@ -120,12 +127,18 @@ export function DataTable<TData extends RowData>({
         <div className="flex flex-wrap items-center gap-2">{search}</div>
       ) : null}
 
-      <DataTableToolbar table={table} actions={actions} onReload={onReload} />
+      <DataTableToolbar
+        table={table}
+        actions={actions}
+        fetching={showLoading}
+        onReload={onReload}
+      />
 
       {/* 表格区自成一张卡片：固定列的不透明底取的就是卡片色（--row-bg），
           表格离开卡片就会露馅。空态与骨架也待在同一张卡里，三态切换时
           页面骨架不动。 */}
-      <Card className="gap-0 py-0">
+      <Card className={cn("relative gap-0 py-0", showLoading && "opacity-70")}>
+        <LoadingBar show={showLoading} />
         {hasRows ? (
           <Table containerRef={pin.scrollerRef}>
             <TableHeader>

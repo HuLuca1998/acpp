@@ -45,10 +45,12 @@
 
 | 文件                 | 职责                                                                                                            | 关键导出                                       |
 | -------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| use-async-data.ts    | 「进页面拉一次」的加载样板：cancelled 守卫 + data/error；轮询和分页不适用                                       | `useAsyncData`                                 |
+| use-async-data.ts    | 「进页面拉一次」的加载样板：cancelled 守卫 + data/error/fetching + reload；轮询不适用                                       | `useAsyncData`                                 |
 | use-sidebar-frame.ts | 侧栏外框：可拖宽度（持久化）+ 折叠后的悬停浮出与防误触发上锁（规范 §5.6）                                        | `useSidebarFrame`                              |
 | use-notice-leave.ts | 关一条通知的两步走：先播离场动画，播完才真正从存量删（侧栏卡片与列表项共用）        | `useNoticeLeave`                               |
 | use-paged-data.ts | 分页列表的标准接线：page/pageSize 状态 + 拉取 + 就地增删改                | `usePagedData`                                                       |
+| use-search-draft.ts | 列表页搜索区的草稿 / 已提交两份状态：set 改草稿、commit 提交、reset 清空 | `useSearchDraft` |
+| use-min-loading.ts | 把「正在请求」变成「该亮指示器」：亮起后至少扫完一整趟（500ms）才灭，快请求不闪 | `useMinLoading`、`LOADING_CYCLE_MS`、`remainingMs` |
 | use-active-sessions.ts | 订阅会话活跃态广播（侧边栏状态点呼吸用）                                    | `useActiveSessions`                            |
 | use-chat.ts          | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决                                               | `useChat`                                      |
 | identity-context.ts  | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |

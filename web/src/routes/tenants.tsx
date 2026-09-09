@@ -8,6 +8,12 @@ import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchSelect,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import { DataTableHeader } from "@/components/data-table/data-table-header"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -61,6 +67,8 @@ import {
  */
 export function Tenants() {
   const { t, i18n } = useTranslation()
+  const search = useSearchDraft({ q: "", disabled: "" })
+  const { values } = search
   const {
     items: tenants,
     total,
@@ -71,10 +79,24 @@ export function Tenants() {
     setPage,
     setPageSize,
     setSorting,
+    fetching,
     reload,
     replace,
     remove: dropRow,
-  } = usePagedData((params) => api.tenants.list(params))
+  } = usePagedData(
+    (params) =>
+      api.tenants.list({ ...params, q: values.q, disabled: values.disabled }),
+    { deps: [values] }
+  )
+  // 提交或重置都回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+  const submitSearch = () => {
+    search.commit()
+    setPage(1)
+  }
+  const resetSearch = () => {
+    search.reset()
+    setPage(1)
+  }
 
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
@@ -267,7 +289,6 @@ export function Tenants() {
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <ListPageHeader
         title={t("tenants.title")}
-        description={t("tenants.description")}
         total={tenants ? total : undefined}
       />
       {/* 只监听本机时，任何链接发出去都打不开——与其让人试半天，
@@ -286,6 +307,25 @@ export function Tenants() {
         page={page}
         pageSize={pageSize}
         sorting={sorting}
+        search={
+          <SearchBar onSearch={submitSearch} onReset={resetSearch}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("tenants.name")}
+            />
+            <SearchSelect
+              label={t("tenants.filterStatus")}
+              value={search.draft.disabled}
+              onChange={(v) => search.set("disabled", v)}
+              options={[
+                { value: "0", label: t("tenants.filterEnabled") },
+                { value: "1", label: t("tenants.filterDisabled") },
+              ]}
+            />
+          </SearchBar>
+        }
+        fetching={fetching}
         actions={
           <Button size="sm" onClick={() => setCreating(true)}>
             <PlusIcon data-icon="inline-start" />

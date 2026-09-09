@@ -37,6 +37,7 @@ export const zhDiscord = {
     botOffline: "bot 未上线",
     botOnline: "已上线：{{name}}",
     gotoSettings: "去设置",
+    searchPlaceholder: "频道 / 仓库",
     empty: "还没有任何频道绑定",
     emptyHint: "在 Discord 频道里输入 /init，选仓库与模型即可创建。",
     channel: "频道",

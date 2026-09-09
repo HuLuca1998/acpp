@@ -29,7 +29,7 @@ export const connectionsApi = {
   servers: {
     // 服务器是个位数量级的配置，后端一次返回全部；分页参数照发不误，
     // 好让列表页与别处共用同一个分页 hook（后端忽略它们）。
-    list: (params?: Partial<PageQuery>) =>
+    list: (params?: Partial<PageQuery> & { q?: string }) =>
       request<Paged<Server>>(`/servers${pageQuery(params)}`),
     get: (id: number) => request<Server>(`/servers/${id}`),
     create: (input: ServerInput) =>
@@ -72,8 +72,14 @@ export const connectionsApi = {
    * 免得在会话里误用别的项目的连接。
    */
   datasources: {
-    list: (params?: Partial<PageQuery>) =>
-      request<Paged<DataSource>>(`/datasources${pageQuery(params)}`),
+    /** readOnly 用 "1" / "0" 三态，不传不过滤。 */
+    list: (
+      params?: Partial<PageQuery> & {
+        q?: string
+        env?: string
+        readOnly?: string
+      }
+    ) => request<Paged<DataSource>>(`/datasources${pageQuery(params)}`),
     /** 配置页选库用：列出这组连接参数能看到的全部库（连接还没绑定库）。 */
     probeDatabases: (input: DataSourceInput & { id?: number }) =>
       request<DbDatabase[]>("/datasources/probe-databases", {

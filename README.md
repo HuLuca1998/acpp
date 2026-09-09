@@ -174,7 +174,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 
 前端四个列表页（会话 / 访客 / 数据库 / 技能）共用 `usePagedData` + `DataTable`：翻页、每页行数、表头三态排序（无序 → 升 → 降 → 无序）都发给后端，列显隐留在客户端（那是一个人此刻想看什么，不是配置）。行为（改排序或每页行数回第一页、删空当前页退回上一页）因此只有一套。
 
-列表页的版式也只有一套，自上而下固定四区，全部由 `DataTable` 画、页面只往里填内容：**搜索区**（筛选控件，没有就不占位）→ **操作区**（左：新建 / 批量按钮；右：刷新 + 列显隐）→ **表格区**（一张卡片，有行画表、没行在同一张卡里画三态壳）→ **翻页**（靠右，只有一页时不出现）。页头是 `ListPageHeader`（标题 + 「共 N 条」+ 一句说明）。搜索区与操作区在没有行时照常在——筛出 0 条时最需要的恰恰是清掉条件的那个控件。
+列表页的版式也只有一套（与 gosaic 的 CRUD 页同一副骨架），自上而下固定四区，全部由 `DataTable` 画、页面只往里填内容：**搜索区**（`SearchBar` + 关键词 / 枚举控件，草稿与已提交分开，点「查询」或回车才请求；关键词一律走 `?q=`，服务端 `LIKE` 且转义通配符）→ **操作区**（左：新建 / 批量按钮；右：刷新 + 列显隐）→ **表格区**（一张卡片，有行画表、没行在同一张卡里画三态壳）→ **翻页**（靠右，只有一页时不出现）。页头是 `ListPageHeader`（标题 + 「共 N 条」）。请求飞行中表格区顶端亮一条进度线、内容压暗、刷新图标转圈，且至少亮完一趟 500ms（`useMinLoading`），快请求不闪。搜索区与操作区在没有行时照常在——筛出 0 条时最需要的恰恰是清掉条件的那个控件。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -183,7 +183,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/auth/me` | 当前身份（owner / 租户 / 被停用 / 匿名）。未认证也返回 200，前端据此渲染邀请页 |
 | POST | `/api/auth/redeem` | 用邀请链接里的 token 换 HttpOnly cookie（`{token}`） |
 | POST | `/api/auth/logout` | 清凭证 |
-| GET/POST | `/api/tenants` | 局域网访客列表（带可直接转发的邀请链接）/ 新建（`{name}`，名字即目录名） |
+| GET/POST | `/api/tenants` | 局域网访客列表（`?q=`名字关键词、`disabled=1|0`；带可直接转发的邀请链接）/ 新建（`{name}`，名字即目录名） |
 | PUT/DELETE | `/api/tenants/{id}` | 停用/启用、改 root / 删除（保留其会话与目录） |
 | POST | `/api/tenants/{id}/rotate` | 重新生成分享链接（旧链接立刻作废） |
 | GET/POST | `/api/projects` | 工作区项目（工作区根下的 git 仓库；每条带 `name` 位置与 `repo` 身份）/ 新建空项目（`{name}`，最多 `<组织>/<仓库>` 两层） |
@@ -215,14 +215,14 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET/PUT/DELETE | `/api/agents/{id}` | agent 详情 / 更新 / 删除 |
 | POST | `/api/agents/{id}/probe` | 重探统一设置能力（flavor、模型与命令清单），同步返回 |
 | PUT | `/api/agents/{id}/catalog` | 配置页勾选：更新 models/commands 的启用状态（禁用只影响本软件的下拉与补全，agent 侧能力不变）；另收 `askModel` / `askEffort`（AI 协作会话的模型与思考深度，adr-022，必须在探测清单内，空串=沿用默认） |
-| GET/POST | `/api/skills` | 技能列表（遍历 `<dataDir>/skills`，磁盘为事实源）/ 新建（`{name, description, body}`，frontmatter 由后端组装转义） |
+| GET/POST | `/api/skills` | 技能列表（遍历 `<dataDir>/skills`，磁盘为事实源；`?q=`名字或描述关键词、`enabled=1|0`，先筛后排后切页）/ 新建（`{name, description, body}`，frontmatter 由后端组装转义） |
 | GET/PUT/DELETE | `/api/skills/{name}` | 技能详情（`body` 为 frontmatter 之后的正文）/ 更新（`{description?, body?, enabled?}` 逐项可选，启停即建/删 skillpack 符号链接）/ 删除（连源目录带分发链接） |
 | GET/PUT/DELETE | `/api/skills/{name}/files/{path...}` | 附属文件（`references/` / `assets/` 等）读 / 写 / 删；文本可编辑、二进制只列出，路径限制在技能目录内 |
 | GET | `/api/skills/{name}/files` | 附属文件清单（带 size / binary / 修改时间） |
 | GET | `/api/skills/{name}/scripts` | `scripts/` 下脚本的头部元信息（`desc/usage/arg/opt/env` 注释解析成参数控件描述） |
 | POST | `/api/skills/{name}/scripts/run` | 传参试运行脚本（`{path, args, opts, env}`）：以技能目录为 cwd、60s 超时、输出各 256KB 截断，返回退出码与 stdout/stderr |
 | GET/POST/DELETE | `/api/uploads` | 本机文件上传：列出传过的 / 上传（multipart `file`，单个 ≤32 MiB）/ 删除（`?hash=&name=`）。落点是各自身份的家目录（owner 是工作区根，访客是自己的 root）下的 `.acpp-uploads/<内容 hash 前 12 位>/<原名>`——**隔离由路径本身给**，不需要再加一层归属过滤；同内容不重复写盘 |
-| GET/POST | `/api/sessions` | 会话列表（`?agentId=&origin=&page=&pageSize=`，按更新时间倒序分页；`origin=ask` 只要别的 AI 问出来的、`user` 只要界面里开的）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
+| GET/POST | `/api/sessions` | 会话列表（`?q=&agentId=&origin=&state=&page=&pageSize=`，`q` 是标题关键词、`state` 精确匹配；按更新时间倒序分页；`origin=ask` 只要别的 AI 问出来的、`user` 只要界面里开的）/ 新建（`{agentId, cwd?, title?, worktree?}`：带 worktree 时先开隔离工作区再把会话开在里面） |
 | GET/PATCH/DELETE | `/api/sessions/{id}` | 会话详情（**Peek：绝不拉进程**，查看记录零成本；未连接时 `settings`/`commands` 由 agent 探测缓存降级拼出，`Current*` 留空） / 改标题（`{title}`，空白不受理——标题原本由后端从首条消息自动简写，这里让用户改成自己认得的说法） / 删除（回收子进程，并尽力调 `session/delete` 清掉 agent 侧线程历史） |
 | GET | `/api/sessions/{id}/messages` | 历史消息（`?limit=` 取尾部 N 条，`?before=<id>` 加载更早）。**正文优先**：工具调用的超大入出参截成预览下发（`rawInputTruncated` / `rawOutputTruncated` 标记），完整版展开时按需拉 |
 | GET | `/api/sessions/{id}/outline` | 提问索引：会话里全部用户提问的锚点与文案（`{items:[{messageId, text, createdAt, digested, reply}], pending}`，`reply` 是这一轮回答的开头，给索引气泡当第二行），供对话左侧的索引条跳转。不分页——服务端在已缓存的重建结果上遍历，覆盖整条会话而与界面加载到哪儿无关 |
@@ -254,13 +254,13 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/sessions/{id}/retry` | 重跑最后一条用户消息：不必重发原文，界面上不留重复气泡；claude 会话还会把 agent 侧上下文退回那条消息之前（响应 `{rewound}` 说明是否做到，codex 一律 false），见 [docs/adr-014](docs/adr-014-消息重试与上下文回退.md) |
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用。**turn 进行中也能改**：界面在轮里只放开权限档与思考深度（前者是就地管住 agent 的唯一手段，后者给下一轮预约），模型/plan/fast 锁到轮末。生效时机两端不同——权限档 claude 立刻对本轮生效、codex 要等下一轮（档位是轮开始时的快照），思考深度两端一律下一轮；控件的悬停说明照实写明 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消）。卡片挂起最长 **30 分钟**（等真人点选的反向调用统一这个时限，含交互式提问；机器应答的 fs 读写仍是 1 分钟），超时按 cancelled 回给 agent，那一步工具调用随即失败 |
-| GET/POST | `/api/servers` | 服务器列表 / 新建（`{name, host, port, user, auth, password?, keyPath?, passphrase?, note?}`；凭证永不下发，响应只给 `hasPassword` / `hasPassphrase` 标志位） |
+| GET/POST | `/api/servers` | 服务器列表（`?q=`名称或主机关键词）/ 新建（`{name, host, port, user, auth, password?, keyPath?, passphrase?, note?}`；凭证永不下发，响应只给 `hasPassword` / `hasPassphrase` 标志位） |
 | GET/PUT/DELETE | `/api/servers/{id}` | 服务器详情 / 更新（凭证留空=不改） / 删除（被数据源当跳板机用着的不让删） |
 | POST | `/api/servers/probe` | 测一份还没保存的配置（新建对话框的按钮） |
 | POST | `/api/servers/{id}/test` | 测一条已存记录；请求体带表单内容则先合并再测，传 `{}` 表示就测这条 |
 | GET | `/api/servers/{id}/secret` | 明文凭证（密码 + 通行短语），密码框的「看一眼」用。口径同数据源那条 |
 | POST | `/api/mcp/server/{token}` | **agent 回连**：服务器观察工具面的 JSON-RPC 端点（公开，凭会话 token；不在 owner 前缀内） |
-| GET/POST | `/api/datasources` | 数据库连接列表 / 新建（`{project, env, host, port, user, password?, database?, sshEnabled?, serverId?…}`；密码永不下发，响应只给 `hasPassword` 标志位。SSH 跳板机由 `serverId` 指向服务器表，见 adr-019） |
+| GET/POST | `/api/datasources` | 数据库连接列表（`?q=`项目/库名/主机关键词、`env=`、`readOnly=1|0`）/ 新建（`{project, env, host, port, user, password?, database?, sshEnabled?, serverId?…}`；密码永不下发，响应只给 `hasPassword` 标志位。SSH 跳板机由 `serverId` 指向服务器表，见 adr-019） |
 | GET/PUT/DELETE | `/api/datasources/{id}` | 连接详情 / 更新（密码留空=不改） / 删除 |
 | POST | `/api/datasources/{id}/test` | 测试连接（连不上返回 200 带 `{ok:false, error}`，那是配置问题不是服务故障） |
 | POST | `/api/datasources/probe-databases` | 配置页选库：列出这组连接参数可见的库（参数走请求体，编辑时带 `id` 沿用已存密码） |

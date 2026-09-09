@@ -8,6 +8,12 @@ import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchSelect,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import { DataTableHeader } from "@/components/data-table/data-table-header"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -33,6 +39,8 @@ import { InfoIcon, PlusIcon, PuzzleIcon, Trash2Icon } from "lucide-react"
 
 export function Skills() {
   const { t, i18n } = useTranslation()
+  const search = useSearchDraft({ q: "", enabled: "" })
+  const { values } = search
   const {
     items: skills,
     total,
@@ -43,12 +51,27 @@ export function Skills() {
     setPage,
     setPageSize,
     setSorting,
+    fetching,
     reload,
     patch,
     remove: dropRow,
-  } = usePagedData((params) => api.skills.list(params), {
-    keyOf: (s) => s.name,
-  })
+  } = usePagedData(
+    (params) =>
+      api.skills.list({ ...params, q: values.q, enabled: values.enabled }),
+    {
+      deps: [values],
+      keyOf: (s) => s.name,
+    }
+  )
+  // 提交或重置都回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+  const submitSearch = () => {
+    search.commit()
+    setPage(1)
+  }
+  const resetSearch = () => {
+    search.reset()
+    setPage(1)
+  }
   const [deleting, setDeleting] = useState<Skill | null>(null)
 
   async function toggle(skill: Skill, enabled: boolean) {
@@ -198,7 +221,6 @@ export function Skills() {
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <ListPageHeader
         title={t("skills.title")}
-        description={t("skills.description")}
         total={skills ? total : undefined}
       />
       <DataTable
@@ -208,6 +230,25 @@ export function Skills() {
         page={page}
         pageSize={pageSize}
         sorting={sorting}
+        search={
+          <SearchBar onSearch={submitSearch} onReset={resetSearch}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("skills.name")}
+            />
+            <SearchSelect
+              label={t("skills.enabled")}
+              value={search.draft.enabled}
+              onChange={(v) => search.set("enabled", v)}
+              options={[
+                { value: "1", label: t("skills.filterEnabled") },
+                { value: "0", label: t("skills.filterDisabled") },
+              ]}
+            />
+          </SearchBar>
+        }
+        fetching={fetching}
         actions={
           <Button size="sm" render={<Link to="/skills/new" />}>
             <PlusIcon data-icon="inline-start" />

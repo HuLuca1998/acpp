@@ -29,10 +29,7 @@ export function Jobs() {
         // 绑定清单还没回来：页头照画，表格区那张卡先放骨架 / 错误，
         // 位置与 DiscordJobsCard 画出来的一致，加载完不跳。
         <>
-          <ListPageHeader
-            title={t("discord.jobs.title")}
-            description={t("discord.jobs.description")}
-          />
+          <ListPageHeader title={t("discord.jobs.title")} />
           <Card className="gap-0 py-0">
             <CardContent className="p-4">
               <ListPageStates

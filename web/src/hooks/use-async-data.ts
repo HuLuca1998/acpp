@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState, type DependencyList } from "react"
  * 一次性异步加载的标准样板：cancelled 守卫 + data/error 双态。
  * deps 变化时重新加载；setData 暴露给调用方做本地更新（删除行等）。
  * reload 按同样的参数再拉一次——旧数据留在原地，拉回来再整体替换，
- * 列表不会先清空再闪回来。
+ * 列表不会先清空再闪回来。fetching 在请求飞行期间为 true（首次与重拉都算），
+ * 给进度线与刷新按钮的转圈用。
  *
  * 只适合「进页面拉一次」的场景；轮询、分页游标、多来源合并请自己写。
  */
@@ -17,6 +18,11 @@ export function useAsyncData<T>(
   // 只是个计数器：每加一就让下面的 effect 重跑一遍，值本身没有意义。
   const [version, setVersion] = useState(0)
   const reload = useCallback(() => setVersion((v) => v + 1), [])
+  // fetching 不是一个独立的开关，而是「最近一次完成的请求对应哪组 deps」
+  // 与当前 deps 的比较：不一致就是还在飞。这样 effect 开头不必同步 setState。
+  const key = [version, ...deps]
+  const [settled, setSettled] = useState<DependencyList | null>(null)
+  const fetching = settled === null || !sameDeps(settled, key)
 
   useEffect(() => {
     let cancelled = false
@@ -30,12 +36,19 @@ export function useAsyncData<T>(
       .catch((err: Error) => {
         if (!cancelled) setError(err.message)
       })
+      .finally(() => {
+        if (!cancelled) setSettled(key)
+      })
     return () => {
       cancelled = true
     }
     // fetcher 是内联箭头，稳定性由 deps 表达——这正是本 hook 的契约。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, ...deps])
+  }, key)
 
-  return { data, error, setData, setError, reload }
+  return { data, error, fetching, setData, setError, reload }
+}
+
+function sameDeps(a: DependencyList, b: DependencyList): boolean {
+  return a.length === b.length && a.every((v, i) => Object.is(v, b[i]))
 }

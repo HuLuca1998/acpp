@@ -6,15 +6,21 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Hint } from "@/components/hint"
 import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
+import { useAsyncData } from "@/hooks/use-async-data"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchSelect,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import { DataTableHeader } from "@/components/data-table/data-table-header"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import { useIdentity } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
 import { capitalize, formatDateTime, formatRelativeTime } from "@/lib/format"
-import type { Session, SessionOrigin } from "@/types/acp"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import type { Agent, Session, SessionOrigin, SessionState } from "@/types/acp"
 import { StatusDot } from "@/components/status-dot"
 import { SESSION_STATE_TONE } from "@/lib/status-tone"
 import {
@@ -39,13 +45,20 @@ export function Sessions() {
   // 创建者列只对 owner 有意义：租户只看得见自己的会话，那一列对他恒为
   // 自己，白占一列宽度（adr-007 的隔离已经保证了这一点）。
   const isOwner = useIdentity().identity?.owner ?? false
-  // 来源筛选：别的 AI 经 /api/ask 问出来的会话（adr-022）与自己开的混在
-  // 一张表里认不出谁是谁。缺省全部——列表页是「找那一条」的地方，先不藏。
-  const [origin, setOrigin] = useState<SessionOrigin | "all">("all")
+  // 搜索区：标题关键词、agent、来源（owner 才有：别的 AI 经 /api/ask 问出来的
+  // 会话与自己开的混在一张表里认不出谁是谁，adr-022）、状态。缺省全部——
+  // 列表页是「找那一条」的地方，先不藏。
+  const search = useSearchDraft({ q: "", agentId: "", origin: "", state: "" })
+  const { values } = search
+  const agents = useAsyncData<Agent[]>(
+    () => api.agents.list().then((r) => r.items),
+    []
+  )
   const {
     items: sessions,
     total,
     error,
+    fetching,
     page,
     pageSize,
     sorting,
@@ -59,15 +72,27 @@ export function Sessions() {
     (params) =>
       api.sessions.list({
         ...params,
-        origin: origin === "all" ? undefined : origin,
+        q: values.q,
+        agentId: values.agentId ? Number(values.agentId) : undefined,
+        origin: (values.origin || undefined) as SessionOrigin | undefined,
+        state: (values.state || undefined) as SessionState | undefined,
       }),
     {
       // 默认按 id 倒序：会话编号就是创建顺序，最新建的排最前面。列表页要的是
       // 「我刚开的那条在哪」，而不是「谁最近响过」——后者是侧边栏的活儿。
       sort: [{ id: "id", desc: true }],
-      deps: [origin],
+      deps: [values],
     }
   )
+  // 提交或重置都回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+  const submitSearch = () => {
+    search.commit()
+    setPage(1)
+  }
+  const resetSearch = () => {
+    search.reset()
+    setPage(1)
+  }
   async function remove(id: number) {
     try {
       await api.sessions.remove(id)
@@ -291,7 +316,6 @@ export function Sessions() {
     <div className="flex flex-col gap-4 p-4 lg:p-6">
       <ListPageHeader
         title={t("sessions.title")}
-        description={t("sessions.description")}
         total={sessions ? total : undefined}
       />
       <DataTable
@@ -302,32 +326,46 @@ export function Sessions() {
         pageSize={pageSize}
         sorting={sorting}
         search={
-          isOwner ? (
-            <ToggleGroup
-              value={[origin]}
-              variant="outline"
-              size="sm"
-              aria-label={t("sessions.origin")}
-              onValueChange={(v) => {
-                const next = v[0] as SessionOrigin | "all" | undefined
-                if (!next) return
-                setOrigin(next)
-                // 换筛选回第一页：停在旧条件的第 5 页上已经是另一批数据了。
-                setPage(1)
-              }}
-            >
-              <ToggleGroupItem value="all">
-                {t("sessions.filterAll")}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="user">
-                {t("sessions.originUser")}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="ask">
-                {t("sessions.originAsk")}
-              </ToggleGroupItem>
-            </ToggleGroup>
-          ) : undefined
+          <SearchBar onSearch={submitSearch} onReset={resetSearch}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("sessions.columnTitle")}
+            />
+            <SearchSelect
+              label={t("sessions.agent")}
+              value={search.draft.agentId}
+              onChange={(v) => search.set("agentId", v)}
+              options={(agents.data ?? []).map((a) => ({
+                value: String(a.id),
+                label: a.name,
+              }))}
+            />
+            {isOwner ? (
+              <SearchSelect
+                label={t("sessions.origin")}
+                value={search.draft.origin}
+                onChange={(v) => search.set("origin", v)}
+                options={[
+                  { value: "user", label: t("sessions.originUser") },
+                  { value: "ask", label: t("sessions.originAsk") },
+                ]}
+              />
+            ) : null}
+            <SearchSelect
+              label={t("sessions.state")}
+              value={search.draft.state}
+              onChange={(v) => search.set("state", v)}
+              options={[
+                { value: "active", label: t("sessions.stateActive") },
+                { value: "idle", label: t("sessions.stateIdle") },
+                { value: "ended", label: t("sessions.stateEnded") },
+                { value: "error", label: t("sessions.stateError") },
+              ]}
+            />
+          </SearchBar>
         }
+        fetching={fetching}
         actions={
           <Button size="sm" render={<Link to="/sessions/new" />}>
             <PlusIcon data-icon="inline-start" />

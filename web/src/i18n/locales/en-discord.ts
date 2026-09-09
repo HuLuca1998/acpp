@@ -39,6 +39,7 @@ export const enDiscord = {
     botOffline: "Bot offline",
     botOnline: "Online: {{name}}",
     gotoSettings: "Open settings",
+    searchPlaceholder: "Channel / repo",
     empty: "No channel bindings yet",
     emptyHint: "Type /init in a Discord channel and pick a repo and model.",
     channel: "Channel",

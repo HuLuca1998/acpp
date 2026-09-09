@@ -22,6 +22,11 @@ import { ListPageStates } from "@/components/list-page-states"
 import { Hint } from "@/components/hint"
 import { StatusDot } from "@/components/status-dot"
 import { DataTable } from "@/components/data-table/data-table"
+import {
+  SearchBar,
+  SearchText,
+} from "@/components/data-table/data-table-search"
+import { useSearchDraft } from "@/hooks/use-search-draft"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import {
   AlertDialog,
@@ -87,14 +92,20 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
   const {
     data: jobs,
     error,
+    fetching,
     setData,
     reload,
   } = useAsyncData<DiscordJob[]>(() => api.discord.jobs(), [])
+  // 任务清单整份拿回来（没有分页接口），关键词在本地过滤任务名。
+  const search = useSearchDraft({ q: "" })
   const [editing, setEditing] = useState<DiscordJob | "new" | null>(null)
   const [removing, setRemoving] = useState<DiscordJob | null>(null)
   const [runsOf, setRunsOf] = useState<DiscordJob | null>(null)
 
-  const list = jobs ?? []
+  const keyword = search.values.q.trim().toLowerCase()
+  const list = (jobs ?? []).filter(
+    (j) => !keyword || j.name.toLowerCase().includes(keyword)
+  )
   const channelName = (id: string) => {
     const b = info.bindings.find((x) => x.channelId === id)
     return b ? `#${b.channelName || b.channelId}` : id
@@ -300,7 +311,6 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
     <div className="flex flex-col gap-4">
       <ListPageHeader
         title={t("discord.jobs.title")}
-        description={t("discord.jobs.description")}
         total={jobs ? list.length : undefined}
       />
       <DataTable
@@ -310,6 +320,16 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
         page={1}
         pageSize={list.length || 20}
         sorting={[]}
+        search={
+          <SearchBar onSearch={search.commit} onReset={search.reset}>
+            <SearchText
+              value={search.draft.q}
+              onChange={(v) => search.set("q", v)}
+              placeholder={t("discord.jobs.name")}
+            />
+          </SearchBar>
+        }
+        fetching={fetching}
         actions={
           <Button
             size="sm"

@@ -44,7 +44,7 @@ export function usePagedData<T>(
   const [pageSize, setPageSize] = useState(options?.pageSize ?? 20)
   const [sorting, setSorting] = useState<SortState>(options?.sort ?? [])
   const sort = sorting[0]
-  const { data, error, setData, setError, reload } = useAsyncData(
+  const { data, error, fetching, setData, setError, reload } = useAsyncData(
     () =>
       fetcher({
         page,
@@ -118,6 +118,7 @@ export function usePagedData<T>(
     items: data?.items ?? null,
     total: data?.total ?? 0,
     error,
+    fetching,
     page,
     pageSize,
     sorting,
