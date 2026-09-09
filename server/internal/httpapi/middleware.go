@@ -2,8 +2,11 @@ package httpapi
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"acpp/server/internal/apilog"
+	"acpp/server/internal/model"
 )
 
 // statusRecorder 记录实际写出的状态码，供日志中间件使用。
@@ -309,4 +315,209 @@ func (w *compressWriter) finish() {
 		gzipPool.Put(w.gz)
 		w.gz = nil
 	}
+}
+
+// withAPILog 把每个 API 请求记进日志库：方法、路径、身份、请求头与正文、
+// 响应状态与正文、耗时。挂在身份中间件之内、压缩之外——身份已经解析好，
+// 响应体还是明文。
+//
+// 三类请求不记：
+//   - SSE（响应头是 text/event-stream）：一条连接挂几小时，「耗时」没有意义，
+//     正文是无穷的；
+//   - WebSocket 升级（工作区终端）：连接被 Hijack 走，中间件看不到之后的事；
+//   - 日志页自己的读取（/api/logs）：不然翻一页日志就多一条日志，越翻越多。
+//
+// 落库放在 goroutine 里：写一条记录几毫秒，不该算进请求的响应时间。
+func withAPILog(logs *apilog.Service, next http.Handler) http.Handler {
+	if logs == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if skipAPILog(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+
+		// 请求正文：只截前 BodyLimit 字节，剩下的原样流给 handler。
+		reqBody := &bodyTap{limit: apilog.BodyLimit, textual: apilog.IsTextual(r.Header.Get("Content-Type"))}
+		if r.Body != nil {
+			r.Body = reqBody.wrap(r.Body)
+		}
+		rec := &apiLogRecorder{ResponseWriter: w, status: http.StatusOK, limit: apilog.BodyLimit}
+
+		next.ServeHTTP(rec, r)
+
+		if rec.stream {
+			return
+		}
+		entry := model.APILog{
+			Method:          r.Method,
+			Path:            r.URL.Path,
+			Query:           r.URL.RawQuery,
+			Status:          rec.status,
+			DurationMs:      time.Since(start).Milliseconds(),
+			RemoteAddr:      remoteIP(r),
+			Origin:          requestOrigin(r),
+			UserAgent:       r.UserAgent(),
+			Identity:        identityLabel(identityOf(r)),
+			RequestHeaders:  apilog.HeadersJSON(r.Header),
+			ResponseHeaders: apilog.HeadersJSON(rec.Header()),
+			RequestBody:     reqBody.text(),
+			RequestSize:     reqBody.size,
+			ResponseBody:    rec.text(),
+			ResponseSize:    rec.size,
+		}
+		// 请求的 context 在响应写完后就取消了，落库用独立的。
+		go logs.Record(context.Background(), entry)
+	})
+}
+
+func skipAPILog(r *http.Request) bool {
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return true
+	}
+	return strings.HasPrefix(r.URL.Path, "/api/logs")
+}
+
+// identityLabel 把身份写成人话：owner / 租户名 / anonymous。
+func identityLabel(id identity) string {
+	switch {
+	case id.owner:
+		return "owner"
+	case id.tenant != nil:
+		return id.tenant.Name
+	default:
+		return "anonymous"
+	}
+}
+
+// remoteIP 去掉端口只留地址；反代场景下优先信 X-Forwarded-For 的第一跳。
+func remoteIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if first, _, ok := strings.Cut(xff, ","); ok {
+			return strings.TrimSpace(first)
+		}
+		return strings.TrimSpace(xff)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// requestOrigin 是请求发自哪个页面：浏览器跨源/非简单请求带 Origin，同源导航
+// 带 Referer；CLI（别的 AI 经 /api/ask）两者都没有，留空。
+func requestOrigin(r *http.Request) string {
+	if o := r.Header.Get("Origin"); o != "" {
+		return o
+	}
+	return r.Header.Get("Referer")
+}
+
+// bodyTap 旁路抄一份请求正文的开头，不影响 handler 读到的内容。
+type bodyTap struct {
+	limit   int
+	textual bool
+	buf     bytes.Buffer
+	size    int64
+}
+
+func (t *bodyTap) wrap(rc io.ReadCloser) io.ReadCloser {
+	return &tapReader{ReadCloser: rc, tap: t}
+}
+
+func (t *bodyTap) write(p []byte) {
+	t.size += int64(len(p))
+	if !t.textual {
+		return
+	}
+	if room := t.limit - t.buf.Len(); room > 0 {
+		if len(p) > room {
+			p = p[:room]
+		}
+		t.buf.Write(p)
+	}
+}
+
+func (t *bodyTap) text() string {
+	if t.size > int64(t.limit) && t.textual {
+		return t.buf.String() + "\n…（已截断）"
+	}
+	return t.buf.String()
+}
+
+type tapReader struct {
+	io.ReadCloser
+	tap *bodyTap
+}
+
+func (r *tapReader) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if n > 0 {
+		r.tap.write(p[:n])
+	}
+	return n, err
+}
+
+// apiLogRecorder 记状态码并旁路抄一份响应正文的开头。
+// Flush / Hijack 必须转发下去，否则 SSE 攒着不发、websocket 升级 501。
+type apiLogRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+	stream      bool
+	textual     bool
+	limit       int
+	buf         bytes.Buffer
+	size        int64
+}
+
+func (r *apiLogRecorder) WriteHeader(status int) {
+	if !r.wroteHeader {
+		r.wroteHeader = true
+		r.status = status
+		ct := r.Header().Get("Content-Type")
+		r.stream = strings.HasPrefix(strings.ToLower(ct), "text/event-stream")
+		r.textual = apilog.IsTextual(ct)
+	}
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *apiLogRecorder) Write(p []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	r.size += int64(len(p))
+	if r.textual && !r.stream {
+		if room := r.limit - r.buf.Len(); room > 0 {
+			if len(p) > room {
+				r.buf.Write(p[:room])
+			} else {
+				r.buf.Write(p)
+			}
+		}
+	}
+	return r.ResponseWriter.Write(p)
+}
+
+func (r *apiLogRecorder) text() string {
+	if r.size > int64(r.limit) && r.textual {
+		return r.buf.String() + "\n…（已截断）"
+	}
+	return r.buf.String()
+}
+
+func (r *apiLogRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (r *apiLogRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, errors.New("underlying ResponseWriter does not support hijacking")
 }

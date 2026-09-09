@@ -23,6 +23,7 @@
 | mcp | 我方 MCP server 的协议外壳：JSON-RPC 信封、工具声明与分发（initialize/ping/tools.list/tools.call），外加非会话调用方的回连凭证 PeerTokens（datasource/report 共用）。业务包提供工具集，协议外壳与之解耦 | 叶子 |
 | webshot | 页面 → 整页 PNG：驱动本机 Chrome（headless + 自带的 mini CDP 客户端），discord 报告长图用。找不到 Chrome 由调用方降级 | 叶子 |
 | gist | 内容 → GitHub secret gist 外链：发布（gh CLI）、按归属列出、撤销、过期清扫。状态全写在 gist 描述里，不落盘。discord 的报告与 HTML 交付用；gh 不可用由调用方降级 | 叶子 |
+| apilog | HTTP API 请求的观测记录：httpapi 的中间件写（方法 / 路径 / 身份 / 对方 IP / 来源 / 头 / 正文 / 耗时），日志页读。凭证头抹掉、正文截 8 KB、留最近 5000 条 | 业务 |
 | mcpcall | MCP 工具调用的观测记录与统计：谁调的、传了什么、拿回什么、花多久。工具台读它，数据源工具面写它（经窄接口，两包不互相 import）。留存有上限，长文本落库前截断 | 业务 |
 | ask | 别的 AI 的同步问答面（adr-022）：本机 CLI 里的 claude / codex 经 `POST /api/ask` 把问题交给另一方——开会话（打 `origin=ask`）、拨权限档、发一轮、替人裁决权限与提问、阻塞到轮末、从转录取回答。同一会话不排队（409），失败的新会话即刻收掉。只是把 service 的会话/对话操作串成一条同步路径，不碰 db | 业务 |
 | service | 普通会话的业务规则：会话/对话/技能/工作区/终端/agent 配置；多租户身份与隔离范围（Scope） | 业务 |

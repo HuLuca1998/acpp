@@ -158,6 +158,8 @@ func isOwnerOnly(r *http.Request) bool {
 		strings.HasPrefix(path, "/api/tools"),
 		// discord 配置里有 bot token 与本机路径，整面 owner 专属。
 		strings.HasPrefix(path, "/api/discord"),
+		// 请求日志里有所有人的请求正文，只给 owner 看。
+		strings.HasPrefix(path, "/api/logs"),
 		// 别的 AI 的同步问答面（adr-022）是本机 CLI 的协作入口，租户不给：
 		// 它能开会话、拨到 full 档让 agent 无人审批地干活。
 		strings.HasPrefix(path, "/api/ask"),

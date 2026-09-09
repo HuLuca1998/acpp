@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"acpp/server/internal/apilog"
+	"acpp/server/internal/model"
 	"fmt"
 	"net"
 	"net/http"
@@ -316,4 +318,52 @@ func (h discordHandler) runJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusAccepted, map[string]bool{"triggered": true})
+}
+
+// logsHandler 是日志页的读面：列表、详情、清空。owner 专属（isOwnerOnly 按前缀覆盖）。
+type logsHandler struct {
+	logs *apilog.Service
+}
+
+func (h logsHandler) list(w http.ResponseWriter, r *http.Request) {
+	pageNo, pageSize := pageParams(r)
+	q := r.URL.Query()
+	filter := apilog.Filter{
+		Keyword:     q.Get("q"),
+		Method:      q.Get("method"),
+		StatusClass: q.Get("status"),
+		Identity:    q.Get("identity"),
+	}
+	sort := sortParams(r, "id", "method", "path", "status", "duration_ms", "identity", "remote_addr", "created_at")
+	rows, total, err := h.logs.List(r.Context(), filter, pageNo, pageSize, sort.OrderBy(""))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if rows == nil {
+		rows = []model.APILog{}
+	}
+	writeData(w, http.StatusOK, page[model.APILog]{Items: rows, Total: total, Page: pageNo, PageSize: pageSize})
+}
+
+func (h logsHandler) get(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	rec, err := h.logs.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, rec)
+}
+
+func (h logsHandler) clear(w http.ResponseWriter, r *http.Request) {
+	if err := h.logs.Clear(r.Context()); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, nil)
 }

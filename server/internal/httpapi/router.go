@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"acpp/server/internal/apilog"
 	"acpp/server/internal/ask"
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
@@ -46,6 +47,8 @@ type Services struct {
 	Reports *report.Service
 	// MCPCalls 是 MCP 工具调用的观测记录，工具台读它。
 	MCPCalls *mcpcall.Service
+	// APILogs 是 HTTP 请求的观测记录：中间件写、日志页读。nil 就不记。
+	APILogs *apilog.Service
 	// Notices 是全局通知广播口，全局事件流从这里取本人名下的通知。
 	Notices *stream.Hub
 	// Discord 是独立于会话的频道工作区子系统（adr-016），可为 nil（未装配）。
@@ -393,10 +396,17 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/sessions/{id}/elicitation", chat.elicitation)
 	api.HandleFunc("POST /api/sessions/{id}/permission", chat.permission)
 
+	// 请求日志：owner 专属读面。中间件里跳过这个前缀，免得翻日志本身生日志。
+	logs := logsHandler{logs: svcs.APILogs}
+	api.HandleFunc("GET /api/logs", logs.list)
+	api.HandleFunc("GET /api/logs/{id}", logs.get)
+	api.HandleFunc("DELETE /api/logs", logs.clear)
+
 	root := http.NewServeMux()
 	// 身份中间件只包 API：前端页面本身必须对未认证访客可加载，否则
 	// 邀请链接 `/?invite=xxx` 会先撞 401 白屏，连兑换都发不出去。
-	root.Handle("/api/", withIdentity(svcs.Tenants, api))
+	// 请求日志在身份之内（记得下是谁）、压缩之外（抄到的是明文）。
+	root.Handle("/api/", withIdentity(svcs.Tenants, withAPILog(svcs.APILogs, api)))
 	if cfg.WebDir != "" {
 		root.Handle("/", spaHandler(cfg.WebDir))
 	}

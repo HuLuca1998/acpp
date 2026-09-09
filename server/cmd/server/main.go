@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/apilog"
 	"acpp/server/internal/ask"
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
@@ -119,6 +120,7 @@ func run() error {
 	// 工具调用记录：MCP 工具面每被调一次就落一条，工具台读它。
 	// 观测是旁路，datasource 只认得 Calls 接口。
 	mcpCalls := mcpcall.NewService(gdb)
+	apiLogs := apilog.NewService(gdb)
 
 	// 服务器面（adr-019）：既是 AI 的只读观察目标，也是数据源的 SSH 跳板。
 	// 先于 datasource 构造，后者要借它取跳板机配置。
@@ -292,6 +294,7 @@ func run() error {
 		Servers:     remoteService,
 		Reports:     reportService,
 		MCPCalls:    mcpCalls,
+		APILogs:     apiLogs,
 		Discord:     discordService,
 	})
 	srv := &http.Server{
