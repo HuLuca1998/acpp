@@ -12,6 +12,9 @@ const (
 	SessionError  SessionState = "error"
 )
 
+// SessionOriginAsk 是「别的 AI 经 /api/ask 开的会话」的来源标记。
+const SessionOriginAsk = "ask"
+
 // Session 对应 ACP 的一次 session/new，是消息流的容器。
 type Session struct {
 	ID uint `gorm:"primaryKey" json:"id"`
@@ -57,7 +60,11 @@ type Session struct {
 	//
 	// 索引刻意不加 unique：绝大多数会话这里是空串，而 SQLite 的唯一索引
 	// 会把多个空串判成重复。唯一性由 24 字节随机数保证，不靠约束。
-	MCPToken  string    `gorm:"size:64;index" json:"-"`
+	MCPToken string `gorm:"size:64;index" json:"-"`
+	// Origin 标记会话是谁开的：空是界面里的人，"ask" 是别的 AI 经
+	// POST /api/ask 问出来的（adr-022）。界面据此把「AI 问 AI」的会话与
+	// 用户自己的分开摆，不让审查/咨询的流水混进日常列表。
+	Origin    string    `gorm:"size:16;index" json:"origin,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `gorm:"index" json:"updatedAt"`
 

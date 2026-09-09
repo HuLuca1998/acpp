@@ -397,6 +397,11 @@ func (s *ChatService) ActiveTurnCount() int {
 	return s.manager.ActiveTurnCount()
 }
 
+// TurnActive 报告这条会话上有没有一轮正在跑。同步问答面用它拒绝插队。
+func (s *ChatService) TurnActive(sessionID uint) bool {
+	return s.manager.TurnActive(sessionKey(sessionID))
+}
+
 // Cancel 中止会话上正在跑的一轮。
 func (s *ChatService) Cancel(sessionID uint) error {
 	if err := s.manager.Cancel(sessionKey(sessionID)); err != nil {

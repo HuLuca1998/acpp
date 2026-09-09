@@ -70,6 +70,9 @@ type SessionInput struct {
 	Worktree string `json:"worktree,omitempty"`
 	// WorktreeBranch 为空时用 Worktree 当分支名。
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// Origin 是会话来源标记（见 model.Session.Origin）。不出 JSON：它由
+	// 服务端按入口写死，不该让请求体自己声明「我是 AI 问的」。
+	Origin string `json:"-"`
 }
 
 // List 按更新时间倒序分页。pageSize 有默认与上限——全量拉取会随
@@ -270,6 +273,7 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 		TenantID: scope.TenantID,
 		Title:    in.Title,
 		Cwd:      cwd,
+		Origin:   in.Origin,
 		// 刚建出来的会话一轮都没跑过，是 idle 不是 active。
 		// active 的语义是「有一轮正在跑」，只由 chat_turn 在发起时置上、
 		// 轮末归回（那边的注释写着「只在这里出现」）——这里写 active 与它

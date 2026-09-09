@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；adr-022 别的 AI 的同步问答面；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -79,6 +79,7 @@ acpp/
         ├── datasource/         # 外部 MySQL 数据源（adr-008）：连接配置、SSH 隧道（跳板机取自 remote）、库表探查、多段执行、MCP 工具面
         ├── discord/            # Discord 频道工作区（adr-016/017/018）：频道绑定、子区对话、工作树与数据库环境锁定；定时任务的运行管线与入口（adr-020）
         ├── schedule/           # 定时任务调度核心（adr-020）：任务与运行记录存储、cron 解析、整分钟扫描、失败退避与自动停用；Runner 与 Scope 由调用方注入
+        ├── ask/                # 别的 AI 的同步问答面（adr-022）：/api/ask 的开会话→发一轮→等轮末→取回答
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
         │   ├── tenant.go / guard.go # 多租户：租户 CRUD 与隔离范围（Scope）
@@ -272,6 +273,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/workspace/datasources` 及 `.../{dsid}/databases` `/tables` | **草稿态**数据源：项目由 `?cwd=` 的目录决定——选完工作目录 @ 引用与 `/db` 即可用，不必等首条消息建会话；过滤规则与会话侧相同 |
 | GET | `/api/db/sources` | **租户与脚本的只读数据库面**（adr-021）：全部启用数据源，`?project=` 过滤，不含密码。不经工作目录、不在 owner 专属前缀内；凭证走租户 cookie 或 `Authorization: Bearer <租户 token>` |
 | POST | `/api/db/query` | 同上一面的只读查询：`{source, sql, maxRows}`，`source` 是 `<项目>/<环境>` / 环境名 / 数据源 id（与 `db_*` 工具同一套写法）；响应比 `/api/datasources/{id}/query` 多一个 `source` 说明落到了哪条。写语句一律拒绝：只读源 403、可写源 400 |
+| POST | `/api/ask` | **别的 AI 的同步问答面**（adr-022）：本机 CLI 里的 claude / codex 经它把问题交给另一方。`{agent, cwd, prompt, level?, thread?}`——`agent` 按内置工具名认（claude / codex），`level` 是权限档（`safe` 默认只读 / `auto-edit` / `full`），`thread` 带上即续聊（此时 agent / cwd 忽略、level 省略表示不动）。**阻塞到轮末**才回 `{thread, text, stopReason?}`：`text` 是这一轮 agent 说的全部正文（工具调用之间的段落按序拼接），`thread` 是 acpp 会话 id，界面里能点开看全程。权限请求由后端替人裁决（full 放行一次、其余拒绝一次），交互式提问一律取消；同一 thread 上一轮没完再问回 409；单轮上限 1 小时，调用方挂断即中止那一轮。回环即 owner，脚本不需要凭证 |
 | POST | `/api/mcp/db/{token}` | 会话的数据库 MCP 端点（agent 回连，token 为每会话专属凭证，不出现在 API 响应里） |
 | POST | `/api/mcp/report/{token}` | 会话的报告 MCP 端点（agent 回连，同一套 token）。工具 `report_open` 把 agent 写好的单文件 HTML 报告在用户工作区打开；只收路径不收全文，且限死会话工作目录内的 `.html` |
 | POST | `/api/mcp/discord-cron/{token}` | discord 子区的定时任务工具面端点（与上一条同一枚凭证）：`cron_add` / `cron_list` / `cron_update` / `cron_remove`，投递固定为子区所属频道。一次性任务用 `at`（RFC3339）或 `in`（相对时长 2h / 90m / 1d，服务端按当前时刻换算）；`cron_add` 的描述里注入会话开始时刻，模型据此换算「明早 9 点」 |
@@ -305,7 +307,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 ## 数据模型
 
 - **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。产品形态上固定为内置的 claude / codex 两条记录（启动时缺失自动预置、按 name 判存不覆盖用户配置，见 adr-005），API 仍是通用的 `/api/agents`。`flavor` / `models` / `commands` / `skeleton` 是注册/更新后自动探测的缓存（拉临时会话读能力）：模型与命令供草稿态展示与 `/` 补全（条目带 `disabled` 标记，重探不清空取舍）；`skeleton` 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），与模型清单一起构成未连接会话的完整降级设置视图。模型条目支持 `alias`（配置页起显示别名，所有模型下拉优先显示）；`fastPolicy` 是快速模式取舍（首探按 flavor 落默认：claude 因额外计费默认 off，其余 on；off 时快速开关不出现在任何界面）。
-- **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`promptDigests` 是长提问的一句话摘要缓存（对话索引用，键是提问正文的内容指纹而不是消息 id——消息 id 是转录行号，重建逻辑一变就整体漂移），不出 API。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
+- **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`origin` 标记会话是谁开的：空是界面里的人，`ask` 是别的 AI 经 `/api/ask` 问出来的（adr-022），侧栏据此分开摆。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`promptDigests` 是长提问的一句话摘要缓存（对话索引用，键是提问正文的内容指纹而不是消息 id——消息 id 是转录行号，重建逻辑一变就整体漂移），不出 API。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
 - **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
 - **Project / Clone** — 都不入库：项目是工作区根下的 git 仓库目录（扫盘得来）。每条带两个名字——`name` 是**位置**（相对根的路径），`repo` 是**身份**（哪个 git 仓库，见上面「项目」一节）。克隆任务只存在于内存（进程重启时 git 子进程也一起没了，留个「进行中」的假记录只会骗人）。

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/ask"
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/db"
@@ -277,6 +278,7 @@ func run() error {
 		Agents:      agentService,
 		Sessions:    sessionService,
 		Chat:        chatService,
+		Ask:         ask.NewService(agentService, sessionService, chatService, 0),
 		Terminals:   terminalService,
 		System:      system.NewService(gdb, cfg),
 		Skills:      service.NewSkillService(cfg.DataDir, skillUsage),

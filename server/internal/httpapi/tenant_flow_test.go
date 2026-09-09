@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/ask"
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/model"
@@ -65,10 +66,14 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	sessions := service.NewSessionService(gdb)
 	skillUsage := service.NewSkillUsageService(gdb, dir)
 	tenants := service.NewTenantService(gdb, base)
+	agents := service.NewAgentService(gdb)
+	chat := service.NewChatService(gdb, sessions, manager, transcripts, skillUsage)
 	env := &flowEnv{base: base}
 	env.handler = NewRouter(config.Config{}, Services{
+		Agents:      agents,
 		Sessions:    sessions,
-		Chat:        service.NewChatService(gdb, sessions, manager, transcripts, skillUsage),
+		Chat:        chat,
+		Ask:         ask.NewService(agents, sessions, chat, 0),
 		Tenants:     tenants,
 		Projects:    project.NewService(gdb),
 		DataSources: datasource.NewService(gdb, sessions, "127.0.0.1:48080"),

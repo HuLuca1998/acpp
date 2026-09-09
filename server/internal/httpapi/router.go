@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"acpp/server/internal/ask"
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/discord"
@@ -24,9 +25,11 @@ import (
 // Services 是路由需要的全部业务服务，由装配层（cmd/server）构建后传入——
 // HTTP 层只做路由与编解码，不负责连库与组装依赖。
 type Services struct {
-	Agents     *service.AgentService
-	Sessions   *service.SessionService
-	Chat       *service.ChatService
+	Agents   *service.AgentService
+	Sessions *service.SessionService
+	Chat     *service.ChatService
+	// Ask 是别的 AI 的同步问答面（adr-022）。
+	Ask        *ask.Service
 	Terminals  *service.TerminalService
 	System     *system.Service
 	Skills     *service.SkillService
@@ -54,6 +57,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	agents := agentHandler{agents: svcs.Agents, chat: svcs.Chat}
 	sessions := sessionHandler{sessions: svcs.Sessions, chat: svcs.Chat}
 	chat := chatHandler{chat: svcs.Chat, sessions: svcs.Sessions}
+	ask := askHandler{svc: svcs.Ask}
 	system := systemHandler{system: svcs.System, addr: cfg.Addr, update: svcs.Update, titler: svcs.Titler, busyTurns: svcs.Chat.ActiveTurnCount}
 	skills := skillHandler{skills: svcs.Skills, usage: svcs.SkillUsage}
 
@@ -76,6 +80,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 身份：邀请兑换、身份自查、退出（adr-007）。这三条是公开路径，
 	// 未认证也能访问——否则前端连「我需要邀请链接」都问不出来。
 	auth := authHandler{tenants: svcs.Tenants}
+	// 别的 AI 的同步问答面：一个端点，阻塞到轮末（adr-022）。
+	api.HandleFunc("POST /api/ask", ask.ask)
+
 	api.HandleFunc("GET /api/auth/me", auth.me)
 	api.HandleFunc("POST /api/auth/redeem", auth.redeem)
 	api.HandleFunc("POST /api/auth/logout", auth.logout)

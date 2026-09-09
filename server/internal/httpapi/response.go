@@ -68,6 +68,10 @@ func writeError(w http.ResponseWriter, err error) {
 		// 该 runtime 不支持这个统一设置维度；正常前端不会发（控件按
 		// Settings 隐藏），发了就是入参问题。
 		status = http.StatusBadRequest
+	case errors.Is(err, acp.ErrBusy):
+		// 这条会话上一轮还没完。同步问答面（/api/ask）不排队，直接告诉
+		// 调用方等一等再来。
+		status = http.StatusConflict
 	case errors.Is(err, acp.ErrAuthRequired):
 		// agent 侧未登录（-32000）。424：问题出在我们依赖的外部进程，
 		// 不是请求本身；也与租户认证的 401/403 严格区分。

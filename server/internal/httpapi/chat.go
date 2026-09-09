@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"acpp/server/internal/acp"
+	"acpp/server/internal/ask"
 	"acpp/server/internal/service"
 )
 
@@ -262,4 +263,28 @@ func (h chatHandler) events(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// askHandler 是别的 AI 的同步问答面（adr-022）：本机 CLI 里的 claude / codex
+// 把问题交过来，这里阻塞到对方答完再回。它是对话面的另一种入口，所以
+// 与 chatHandler 同住。
+type askHandler struct {
+	svc *ask.Service
+}
+
+// ask 跑一轮问答。响应要等整轮结束，可能是几分钟到一小时——服务的
+// WriteTimeout 本就为 SSE 设成 0，这里搭同一趟车。
+func (h askHandler) ask(w http.ResponseWriter, r *http.Request) {
+	var in ask.Input
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	result, err := h.svc.Ask(r.Context(), scopeOf(r), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, result)
 }

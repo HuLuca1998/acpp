@@ -231,6 +231,11 @@ export interface Session {
    * 取自 origin），与它被克隆到哪儿无关。cwd 不在任何仓库里时为空。
    */
   project?: string
+  /**
+   * 会话来源：空是界面里的人开的，`ask` 是别的 AI 经 /api/ask 问出来的
+   *（adr-022）。侧栏据此把「AI 问 AI」的会话与自己的分开摆。
+   */
+  origin?: 'ask'
   state: SessionState
   stopReason: string
   messageCount: number
