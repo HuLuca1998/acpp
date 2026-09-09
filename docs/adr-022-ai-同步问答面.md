@@ -32,5 +32,6 @@ acpp 已经用 ACP 同时会说两家 runtime：会话池、事件归一化、�
 
 - 新增 `internal/ask` 包（`ask.Service`）与 `httpapi/chat.go` 里的 `askHandler`；`model.Session` 加 `origin` 列，前端类型同步。`acp.ErrBusy` 在 `writeError` 里映射为 409。
 - 2026-09-09 真机：经 dev 后端分别问 codex 与 claude，会话正常入库、`level=safe` 生效（claude 试写 `/tmp` 被拒并如实汇报）、续聊命中同一会话、同 thread 并发回 409。codex 侧当时撞到模型限流（429），文本原样带回，这正是「过程可见」的价值——错误不会被过滤成沉默。第一版让 claude 审自己，它抓出三处真问题并已修：busy 检查与 Send 之间的竞态（改为包内持锁的在途表）、turn_done 被丢只能等到超时（加 5 秒一次的 TurnActive 兜底探查）、没跑成的新会话残留（即刻收掉）。
-- 已知边界：`safe` 档下 agent 仍能读会话目录外的文件（与界面会话一致，adr-007 的执行边界是软的）。要真正的只读隔离需要 OS 级沙箱，不在范围内。
+- 已知边界：`safe` 档下 agent 仍能读会话目录外的文件（与界面会话一致，adr-007 的执行边界是软的）。要真正的只读隔离需要 OS 级沙箱，不在范围内。另一条是 codex 审出来的：ask 的在途闸只挡 `/api/ask` 之间的并发，界面上的人在同一条会话里插话仍会并入这一轮（`Send` 的 steering 语义）——那是人主动接手，按「人优先」处理，不加闸。
+- 请求体多一个可选 `title`：调用方往 prompt 前注入了角色 header 时，自动标题会抄成「你是一名严格的审查者……」，侧栏一排认不出谁是谁；skill 的 `ask.sh` 用正文首行填它。
 - 回归保护：`httpapi/ask_test.go`（入参校验、agent 寻址、续聊归属闸、请求体不能自报 origin）、`ask/ask_test.go`（`text` 的取法）。真跑一轮的行为靠 skill 的 `ask.sh` 双向真机验证。

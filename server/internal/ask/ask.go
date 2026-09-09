@@ -27,6 +27,10 @@ type Input struct {
 	Cwd string `json:"cwd,omitempty"`
 	// Prompt 是问题正文。
 	Prompt string `json:"prompt"`
+	// Title 是新会话的标题，可省——省了就按 prompt 首句自动简写。调用方往
+	// prompt 前面注入了角色 header 时，首句是「你是一名严格的审查者……」，
+	// 侧栏里一排全是这个，认不出哪条是哪条；给它一个能认的名字。
+	Title string `json:"title,omitempty"`
 	// Level 是权限档：safe（默认，只读）/ auto-edit / full。续聊时省略表示不动。
 	Level acp.AccessLevel `json:"level,omitempty"`
 	// Thread 是要续聊的会话 id；省略即新开一条。
@@ -139,8 +143,12 @@ func (s *Service) acquire(sessionID uint) (func(), error) {
 	}, nil
 }
 
-// runTurn 拨权限档、订阅、发送、等轮末。
-func (s *Service) runTurn(ctx context.Context, sessionID uint, level acp.AccessLevel, prompt string) (acp.StopReason, error) {
+// runTurn 拨权限档、订阅、发送、等轮末。超时从这里就开始算：拉起子进程
+// 与握手也可能卡住，只给等待段设限的话，前面那段能无限期占着会话闸门。
+func (s *Service) runTurn(parent context.Context, sessionID uint, level acp.AccessLevel, prompt string) (acp.StopReason, error) {
+	ctx, cancel := context.WithTimeout(parent, s.timeout)
+	defer cancel()
+
 	if level != "" {
 		if _, err := s.chat.ApplySettings(ctx, sessionID, acp.SettingsPatch{Level: &level}); err != nil {
 			return "", err
@@ -154,10 +162,7 @@ func (s *Service) runTurn(ctx context.Context, sessionID uint, level acp.AccessL
 	if _, err := s.chat.Send(ctx, sessionID, service.SendInput{Content: prompt}); err != nil {
 		return "", err
 	}
-
-	turnCtx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-	return s.waitTurn(turnCtx, sessionID, level, events)
+	return s.waitTurn(ctx, sessionID, level, events)
 }
 
 // waitTurn 消费事件流直到这一轮收尾。路上替没在场的人做两件事：权限请求
@@ -273,6 +278,7 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 	view, err := s.sessions.Create(ctx, scope, service.SessionInput{
 		AgentID: agent.ID,
 		Cwd:     in.Cwd,
+		Title:   strings.TrimSpace(in.Title),
 		Origin:  model.SessionOriginAsk,
 	})
 	if err != nil {
