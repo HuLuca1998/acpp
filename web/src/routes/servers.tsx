@@ -14,6 +14,7 @@ import {
 import { api } from "@/lib/api"
 import type { Server } from "@/types/acp"
 import { Hint } from "@/components/hint"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { authLabelKey } from "@/components/servers/auth-label"
 import { ServerDialog } from "@/components/servers/server-dialog"
@@ -34,14 +35,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 
 type ServerColumn = ColumnDef<typeof dataTableFeatures, Server, unknown>
 
@@ -63,6 +56,7 @@ export function Servers() {
     setPage,
     setPageSize,
     setSorting,
+    reload,
     replace,
     remove: dropRow,
   } = usePagedData((params) => api.servers.list(params))
@@ -91,47 +85,45 @@ export function Servers() {
 
   return (
     <div className="flex flex-col gap-4 p-4 lg:p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("server.title")}</CardTitle>
-          <CardDescription>{t("server.description")}</CardDescription>
-          <CardAction>
-            <Button size="sm" onClick={() => openEdit(null)}>
-              <PlusIcon data-icon="inline-start" />
-              {t("server.add")}
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            columns={serverColumns(t, openEdit, setDeleting)}
-            data={error ? null : servers}
-            total={total}
-            page={page}
-            pageSize={pageSize}
-            sorting={sorting}
-            onPage={setPage}
-            onPageSize={setPageSize}
-            onSorting={setSorting}
-            onRowClick={openEdit}
-            empty={
-              <ListPageStates
-                icon={<HardDriveIcon />}
-                error={error}
-                loading={servers === null}
-                emptyTitle={t("server.empty")}
-                emptyHint={t("server.emptyHint")}
-                emptyAction={
-                  <Button size="sm" onClick={() => openEdit(null)}>
-                    <PlusIcon data-icon="inline-start" />
-                    {t("server.add")}
-                  </Button>
-                }
-              />
+      <ListPageHeader
+        title={t("server.title")}
+        description={t("server.description")}
+        total={servers ? total : undefined}
+      />
+      <DataTable
+        columns={serverColumns(t, openEdit, setDeleting)}
+        data={error ? null : servers}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        sorting={sorting}
+        actions={
+          <Button size="sm" onClick={() => openEdit(null)}>
+            <PlusIcon data-icon="inline-start" />
+            {t("server.add")}
+          </Button>
+        }
+        onReload={reload}
+        onPage={setPage}
+        onPageSize={setPageSize}
+        onSorting={setSorting}
+        onRowClick={openEdit}
+        empty={
+          <ListPageStates
+            icon={<HardDriveIcon />}
+            error={error}
+            loading={servers === null}
+            emptyTitle={t("server.empty")}
+            emptyHint={t("server.emptyHint")}
+            emptyAction={
+              <Button size="sm" onClick={() => openEdit(null)}>
+                <PlusIcon data-icon="inline-start" />
+                {t("server.add")}
+              </Button>
             }
           />
-        </CardContent>
-      </Card>
+        }
+      />
 
       <ServerDialog
         open={dialogOpen}

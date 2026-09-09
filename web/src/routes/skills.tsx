@@ -4,6 +4,7 @@ import { Link } from "react-router"
 import { toast } from "sonner"
 
 import { Hint } from "@/components/hint"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
@@ -27,14 +28,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { InfoIcon, PlusIcon, PuzzleIcon, Trash2Icon } from "lucide-react"
 
@@ -50,6 +43,7 @@ export function Skills() {
     setPage,
     setPageSize,
     setSorting,
+    reload,
     patch,
     remove: dropRow,
   } = usePagedData((params) => api.skills.list(params), {
@@ -201,56 +195,52 @@ export function Skills() {
   ]
 
   return (
-    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-      <div className="px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("skills.title")}</CardTitle>
-            <CardDescription>{t("skills.description")}</CardDescription>
-            <CardAction>
+    <div className="flex flex-col gap-4 p-4 lg:p-6">
+      <ListPageHeader
+        title={t("skills.title")}
+        description={t("skills.description")}
+        total={skills ? total : undefined}
+      />
+      <DataTable
+        columns={columns}
+        data={error ? null : skills}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        sorting={sorting}
+        actions={
+          <Button size="sm" render={<Link to="/skills/new" />}>
+            <PlusIcon data-icon="inline-start" />
+            {t("skills.add")}
+          </Button>
+        }
+        onReload={reload}
+        onPage={setPage}
+        onPageSize={setPageSize}
+        onSorting={setSorting}
+        empty={
+          <ListPageStates
+            icon={<PuzzleIcon />}
+            error={error}
+            loading={skills === null}
+            emptyTitle={t("skills.empty")}
+            emptyHint={t("skills.emptyHint")}
+            emptyAction={
               <Button size="sm" render={<Link to="/skills/new" />}>
                 <PlusIcon data-icon="inline-start" />
                 {t("skills.add")}
               </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              columns={columns}
-              data={error ? null : skills}
-              total={total}
-              page={page}
-              pageSize={pageSize}
-              sorting={sorting}
-              onPage={setPage}
-              onPageSize={setPageSize}
-              onSorting={setSorting}
-              empty={
-                <ListPageStates
-                  icon={<PuzzleIcon />}
-                  error={error}
-                  loading={skills === null}
-                  emptyTitle={t("skills.empty")}
-                  emptyHint={t("skills.emptyHint")}
-                  emptyAction={
-                    <Button size="sm" render={<Link to="/skills/new" />}>
-                      <PlusIcon data-icon="inline-start" />
-                      {t("skills.add")}
-                    </Button>
-                  }
-                />
-              }
-            />
-            {/* 只在有技能时说：空列表下方挂一句「改动即时生效」是废话。 */}
-            {skills && skills.length > 0 ? (
-              <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <InfoIcon className="size-3.5" />
-                {t("skills.effectNote")}
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+            }
+          />
+        }
+      />
+      {/* 只在有技能时说：空列表下方挂一句「改动即时生效」是废话。 */}
+      {skills && skills.length > 0 ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <InfoIcon className="size-3.5" />
+          {t("skills.effectNote")}
+        </p>
+      ) : null}
 
       <AlertDialog
         open={deleting !== null}

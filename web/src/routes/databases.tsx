@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import { toast } from "sonner"
 
 import { Hint } from "@/components/hint"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { DataSourceDialog } from "@/components/db/datasource-dialog"
 import { DataSourceExplorer } from "@/components/db/datasource-explorer"
@@ -65,6 +66,7 @@ export function Databases() {
     setPage,
     setPageSize,
     setSorting,
+    reload,
     replace,
     remove: dropRow,
   } = usePagedData((params) => api.datasources.list(params))
@@ -161,57 +163,55 @@ export function Databases() {
 
   return (
     <div className="flex flex-col gap-4 p-4 lg:p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("db.title")}</CardTitle>
-          <CardDescription>{t("db.description")}</CardDescription>
-          <CardAction>
-            <Button size="sm" onClick={() => openEdit(null)}>
-              <PlusIcon data-icon="inline-start" />
-              {t("db.add")}
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            columns={columns}
-            data={error ? null : sources}
-            total={total}
-            page={page}
-            pageSize={pageSize}
-            sorting={sorting}
-            onPage={setPage}
-            onPageSize={setPageSize}
-            onSorting={setSorting}
-            onRowClick={(source) =>
-              setOpened((prev) => (prev?.id === source.id ? null : source))
-            }
-            // 走 --row-bg 而不是直接 bg-*：固定列（项目、操作）自带不透明
-            // 底遮挡滚动内容，底色得跟这一行同源，否则展开的那行会从固定
-            // 列这里断色。
-            rowClassName={(source) =>
-              opened?.id === source.id
-                ? "[--row-bg:var(--accent)] bg-[var(--row-bg)]"
-                : undefined
-            }
-            empty={
-              <ListPageStates
-                icon={<DatabaseIcon />}
-                error={error}
-                loading={sources === null}
-                emptyTitle={t("db.empty")}
-                emptyHint={t("db.emptyHint")}
-                emptyAction={
-                  <Button size="sm" onClick={() => openEdit(null)}>
-                    <PlusIcon data-icon="inline-start" />
-                    {t("db.add")}
-                  </Button>
-                }
-              />
+      <ListPageHeader
+        title={t("db.title")}
+        description={t("db.description")}
+        total={sources ? total : undefined}
+      />
+      <DataTable
+        columns={columns}
+        data={error ? null : sources}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        sorting={sorting}
+        actions={
+          <Button size="sm" onClick={() => openEdit(null)}>
+            <PlusIcon data-icon="inline-start" />
+            {t("db.add")}
+          </Button>
+        }
+        onReload={reload}
+        onPage={setPage}
+        onPageSize={setPageSize}
+        onSorting={setSorting}
+        onRowClick={(source) =>
+          setOpened((prev) => (prev?.id === source.id ? null : source))
+        }
+        // 走 --row-bg 而不是直接 bg-*：固定列（项目、操作）自带不透明
+        // 底遮挡滚动内容，底色得跟这一行同源，否则展开的那行会从固定
+        // 列这里断色。
+        rowClassName={(source) =>
+          opened?.id === source.id
+            ? "[--row-bg:var(--accent)] bg-[var(--row-bg)]"
+            : undefined
+        }
+        empty={
+          <ListPageStates
+            icon={<DatabaseIcon />}
+            error={error}
+            loading={sources === null}
+            emptyTitle={t("db.empty")}
+            emptyHint={t("db.emptyHint")}
+            emptyAction={
+              <Button size="sm" onClick={() => openEdit(null)}>
+                <PlusIcon data-icon="inline-start" />
+                {t("db.add")}
+              </Button>
             }
           />
-        </CardContent>
-      </Card>
+        }
+      />
 
       {/* 展开的那条连接：表浏览 + SQL 控制台。放表格下方而不是塞进行里
           ——它是一整块工作区，挤在表格行内没法用。 */}

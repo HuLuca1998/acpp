@@ -26,6 +26,8 @@ export default {
   table: {
     columns: "列",
     search: "搜索",
+    refresh: "刷新",
+    total: "共 {{total}} 条",
   },
   pagination: {
     range: "第 {{from}}–{{to}} 条 / 共 {{total}} 条",

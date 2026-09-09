@@ -26,6 +26,8 @@ export default {
   table: {
     columns: "Columns",
     search: "Search",
+    refresh: "Refresh",
+    total: "{{total}} total",
   },
   pagination: {
     range: "{{from}}–{{to}} of {{total}}",

@@ -12,6 +12,7 @@ import type {
   SortingState,
   VisibilityState,
 } from "@/components/data-table/data-table-state"
+import { Card } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -22,7 +23,18 @@ import {
 } from "@/components/ui/table"
 
 /**
- * 列表页共用的数据表：表头排序、列显隐、分页，全部对接**服务端**。
+ * 列表页共用的数据表，也是列表页的四区骨架，自上而下固定为：
+ *
+ * 1. 搜索区（`search`）：筛选条件，没有就不占位；
+ * 2. 操作区：左边新建 / 批量按钮（`actions`），右边刷新 + 列显隐；
+ * 3. 表格区：一张卡片，有行画表、没行画三态壳（`empty`）；
+ * 4. 翻页：靠右，只有一页时不出现。
+ *
+ * 四区都由这里画，六个列表页只往里填内容，版式才不会各长各的。
+ * 搜索区与操作区在没有行的时候也在——筛出 0 条时最需要的恰恰是
+ * 「把条件清掉」那个控件，它不能跟着表格一起消失。
+ *
+ * 表头排序、列显隐、分页，全部对接**服务端**。
  *
  * 排序走服务端是必须的：客户端排序在分页列表上是错的——它只会把当前这
  * 一页的 20 条重排一遍，用户以为看到的是「全部里最大的」，其实是「这
@@ -40,7 +52,9 @@ export function DataTable<TData extends RowData>({
   pageSize,
   sorting,
   empty,
-  toolbar,
+  search,
+  actions,
+  onReload,
   onPage,
   onPageSize,
   onSorting,
@@ -54,12 +68,16 @@ export function DataTable<TData extends RowData>({
   pageSize: number
   sorting: SortingState
   /**
-   * 没有行可画时整个替换成它。传 ListPageStates：加载中、出错、空列表
+   * 没有行可画时表格区替换成它。传 ListPageStates：加载中、出错、空列表
    * 三种都归它管，各页文案不同。
    */
   empty?: React.ReactNode
-  /** 工具栏左侧的自定义内容（搜索框、筛选等）。 */
-  toolbar?: React.ReactNode
+  /** 搜索区：筛选控件。 */
+  search?: React.ReactNode
+  /** 操作区左侧：新建、批量操作等改变数据的按钮。 */
+  actions?: React.ReactNode
+  /** 给了操作区右侧才出刷新按钮。 */
+  onReload?: () => void
   onPage: (page: number) => void
   onPageSize: (size: number) => void
   onSorting: (sorting: SortingState) => void
@@ -81,8 +99,7 @@ export function DataTable<TData extends RowData>({
     manualSorting: true,
   })
 
-  // 关键信息与操作按钮钉在两侧，中间的字段横向滚（meta.pin）。必须在
-  // 下面那个 early return 之前取，hooks 的调用顺序不能随数据变。
+  // 关键信息与操作按钮钉在两侧，中间的字段横向滚（meta.pin）。
   const headers = table.getHeaderGroups()[0]?.headers ?? []
   const pin = usePinnedColumns(
     headers.map((h) => ({
@@ -92,83 +109,98 @@ export function DataTable<TData extends RowData>({
     data !== null && data.length > 0
   )
 
-  // 没有行可画就整个让给三态壳：加载中的骨架、出错的说明、空列表的
+  // 没有行可画就把表格区让给三态壳：加载中的骨架、出错的说明、空列表的
   // 下一步 CTA 都在 ListPageStates 里（AGENTS.md 的硬规则），表格自己
-  // 不该再造一套。
-  if (data === null || data.length === 0) {
-    return <>{empty}</>
-  }
+  // 不该再造一套。搜索区与操作区照常画。
+  const hasRows = data !== null && data.length > 0
 
   return (
     <div className="flex flex-col gap-3">
-      <DataTableToolbar table={table} extra={toolbar} />
+      {search ? (
+        <div className="flex flex-wrap items-center gap-2">{search}</div>
+      ) : null}
 
-      <Table containerRef={pin.scrollerRef}>
-        <TableHeader>
-          {table.getHeaderGroups().map((group) => (
-            <TableRow key={group.id} ref={pin.headRowRef}>
-              {group.headers.map((header) => {
-                const meta = header.column.columnDef.meta
-                const pinned = pin.pinProps(header.column.id, meta?.pin)
-                return (
-                  <TableHead
-                    key={header.id}
-                    className={cn(meta?.className, pinned.className)}
-                    style={pinned.style}
-                  >
-                    {header.isPlaceholder ? null : (
-                      <table.FlexRender header={header} />
-                    )}
-                  </TableHead>
-                )
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow
-              key={row.id}
-              className={cn(
-                // relative 是拉伸链接（after:absolute inset-0）的落脚点，
-                // 本项目所有列表行的主链接都是这个模式（AGENTS.md §5.5）。
-                // transform 是给 WebKit 的兜底：WKWebView（桌面壳）不把 tr 的
-                // relative 当 absolute 后代的定位基准，链接的 ::after 会相对
-                // 外层容器铺满整张表、最后一行叠在最顶——表现为整表只有最后
-                // 一行可点。任何非 none 的 transform 建立的定位基准两家引擎
-                // 都认，对 Chrome 无行为差异。
-                "group relative [transform:translate(0)]",
-                onRowClick && "cursor-pointer",
-                rowClassName?.(row.original)
-              )}
-              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-            >
-              {row.getVisibleCells().map((cell) => {
-                const meta = cell.column.columnDef.meta
-                const pinned = pin.pinProps(cell.column.id, meta?.pin)
-                return (
-                  <TableCell
-                    key={cell.id}
-                    className={cn(meta?.className, pinned.className)}
-                    style={pinned.style}
-                  >
-                    <table.FlexRender cell={cell} />
-                  </TableCell>
-                )
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTableToolbar table={table} actions={actions} onReload={onReload} />
 
-      <DataPagination
-        total={total}
-        page={page}
-        pageSize={pageSize}
-        onPage={onPage}
-        onPageSize={onPageSize}
-        className="pt-0"
-      />
+      {/* 表格区自成一张卡片：固定列的不透明底取的就是卡片色（--row-bg），
+          表格离开卡片就会露馅。空态与骨架也待在同一张卡里，三态切换时
+          页面骨架不动。 */}
+      <Card className="gap-0 py-0">
+        {hasRows ? (
+          <Table containerRef={pin.scrollerRef}>
+            <TableHeader>
+              {table.getHeaderGroups().map((group) => (
+                <TableRow key={group.id} ref={pin.headRowRef}>
+                  {group.headers.map((header) => {
+                    const meta = header.column.columnDef.meta
+                    const pinned = pin.pinProps(header.column.id, meta?.pin)
+                    return (
+                      <TableHead
+                        key={header.id}
+                        className={cn(meta?.className, pinned.className)}
+                        style={pinned.style}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <table.FlexRender header={header} />
+                        )}
+                      </TableHead>
+                    )
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className={cn(
+                    // relative 是拉伸链接（after:absolute inset-0）的落脚点，
+                    // 本项目所有列表行的主链接都是这个模式（AGENTS.md §5.5）。
+                    // transform 是给 WebKit 的兜底：WKWebView（桌面壳）不把 tr 的
+                    // relative 当 absolute 后代的定位基准，链接的 ::after 会相对
+                    // 外层容器铺满整张表、最后一行叠在最顶——表现为整表只有最后
+                    // 一行可点。任何非 none 的 transform 建立的定位基准两家引擎
+                    // 都认，对 Chrome 无行为差异。
+                    "group relative [transform:translate(0)]",
+                    onRowClick && "cursor-pointer",
+                    rowClassName?.(row.original)
+                  )}
+                  onClick={
+                    onRowClick ? () => onRowClick(row.original) : undefined
+                  }
+                >
+                  {row.getVisibleCells().map((cell) => {
+                    const meta = cell.column.columnDef.meta
+                    const pinned = pin.pinProps(cell.column.id, meta?.pin)
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(meta?.className, pinned.className)}
+                        style={pinned.style}
+                      >
+                        <table.FlexRender cell={cell} />
+                      </TableCell>
+                    )
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="p-4">{empty}</div>
+        )}
+      </Card>
+
+      {hasRows ? (
+        <DataPagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          onPage={onPage}
+          onPageSize={onPageSize}
+          className="pt-0"
+        />
+      ) : null}
     </div>
   )
 }

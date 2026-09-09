@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { Hint } from "@/components/hint"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
 import { usePagedData } from "@/hooks/use-paged-data"
@@ -27,14 +28,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -78,6 +71,7 @@ export function Tenants() {
     setPage,
     setPageSize,
     setSorting,
+    reload,
     replace,
     remove: dropRow,
   } = usePagedData((params) => api.tenants.list(params))
@@ -270,60 +264,54 @@ export function Tenants() {
   ]
 
   return (
-    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-      <div className="px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("tenants.title")}</CardTitle>
-            <CardDescription>{t("tenants.description")}</CardDescription>
-            <CardAction>
+    <div className="flex flex-col gap-4 p-4 lg:p-6">
+      <ListPageHeader
+        title={t("tenants.title")}
+        description={t("tenants.description")}
+        total={tenants ? total : undefined}
+      />
+      {/* 只监听本机时，任何链接发出去都打不开——与其让人试半天，
+          不如直接说清楚现在的状态和开启方式。 */}
+      {tenants && tenants.length > 0 && !tenants[0].shareable ? (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>{t("tenants.localOnlyTitle")}</AlertTitle>
+          <AlertDescription>{t("tenants.localOnlyHint")}</AlertDescription>
+        </Alert>
+      ) : null}
+      <DataTable
+        columns={columns}
+        data={error ? null : tenants}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        sorting={sorting}
+        actions={
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <PlusIcon data-icon="inline-start" />
+            {t("tenants.add")}
+          </Button>
+        }
+        onReload={reload}
+        onPage={setPage}
+        onPageSize={setPageSize}
+        onSorting={setSorting}
+        empty={
+          <ListPageStates
+            icon={<UsersIcon />}
+            error={error}
+            loading={tenants === null}
+            emptyTitle={t("tenants.empty")}
+            emptyHint={t("tenants.emptyHint")}
+            emptyAction={
               <Button size="sm" onClick={() => setCreating(true)}>
                 <PlusIcon data-icon="inline-start" />
                 {t("tenants.add")}
               </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {/* 只监听本机时，任何链接发出去都打不开——与其让人试半天，
-                不如直接说清楚现在的状态和开启方式。 */}
-            {tenants && tenants.length > 0 && !tenants[0].shareable ? (
-              <Alert>
-                <TriangleAlertIcon />
-                <AlertTitle>{t("tenants.localOnlyTitle")}</AlertTitle>
-                <AlertDescription>
-                  {t("tenants.localOnlyHint")}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <DataTable
-              columns={columns}
-              data={error ? null : tenants}
-              total={total}
-              page={page}
-              pageSize={pageSize}
-              sorting={sorting}
-              onPage={setPage}
-              onPageSize={setPageSize}
-              onSorting={setSorting}
-              empty={
-                <ListPageStates
-                  icon={<UsersIcon />}
-                  error={error}
-                  loading={tenants === null}
-                  emptyTitle={t("tenants.empty")}
-                  emptyHint={t("tenants.emptyHint")}
-                  emptyAction={
-                    <Button size="sm" onClick={() => setCreating(true)}>
-                      <PlusIcon data-icon="inline-start" />
-                      {t("tenants.add")}
-                    </Button>
-                  }
-                />
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
+            }
+          />
+        }
+      />
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="sm:max-w-md">

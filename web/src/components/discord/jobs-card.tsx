@@ -17,19 +17,12 @@ import { api } from "@/lib/api"
 import type { DiscordInfo, DiscordJob, DiscordJobRun } from "@/types/discord"
 import { formatDateTime, formatRelativeTime } from "@/lib/format"
 import { useAsyncData } from "@/hooks/use-async-data"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { Hint } from "@/components/hint"
 import { StatusDot } from "@/components/status-dot"
 import { DataTable } from "@/components/data-table/data-table"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,6 +88,7 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
     data: jobs,
     error,
     setData,
+    reload,
   } = useAsyncData<DiscordJob[]>(() => api.discord.jobs(), [])
   const [editing, setEditing] = useState<DiscordJob | "new" | null>(null)
   const [removing, setRemoving] = useState<DiscordJob | null>(null)
@@ -303,11 +297,20 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
   ]
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("discord.jobs.title")}</CardTitle>
-        <CardDescription>{t("discord.jobs.description")}</CardDescription>
-        <CardAction>
+    <div className="flex flex-col gap-4">
+      <ListPageHeader
+        title={t("discord.jobs.title")}
+        description={t("discord.jobs.description")}
+        total={jobs ? list.length : undefined}
+      />
+      <DataTable
+        columns={columns}
+        data={error ? null : list}
+        total={list.length}
+        page={1}
+        pageSize={list.length || 20}
+        sorting={[]}
+        actions={
           <Button
             size="sm"
             disabled={info.bindings.length === 0}
@@ -316,46 +319,37 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
             <PlusIcon data-icon="inline-start" />
             {t("discord.jobs.add")}
           </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        <DataTable
-          columns={columns}
-          data={error ? null : list}
-          total={list.length}
-          page={1}
-          pageSize={list.length || 20}
-          sorting={[]}
-          onPage={() => {}}
-          onPageSize={() => {}}
-          onSorting={() => {}}
-          empty={
-            <ListPageStates
-              icon={<CalendarClockIcon className="size-6" />}
-              error={error}
-              loading={!jobs && !error}
-              emptyTitle={t("discord.jobs.empty")}
-              // 一个频道都没绑时「新建」是禁用的，空态别再劝人点它——指路去绑定。
-              emptyHint={
-                info.bindings.length === 0
-                  ? t("discord.jobs.emptyNoBinding")
-                  : t("discord.jobs.emptyHint")
-              }
-              emptyAction={
-                info.bindings.length === 0 ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<Link to="/discord" />}
-                  >
-                    {t("discord.jobs.gotoDiscord")}
-                  </Button>
-                ) : undefined
-              }
-            />
-          }
-        />
-      </CardContent>
+        }
+        onReload={reload}
+        onPage={() => {}}
+        onPageSize={() => {}}
+        onSorting={() => {}}
+        empty={
+          <ListPageStates
+            icon={<CalendarClockIcon className="size-6" />}
+            error={error}
+            loading={!jobs && !error}
+            emptyTitle={t("discord.jobs.empty")}
+            // 一个频道都没绑时「新建」是禁用的，空态别再劝人点它——指路去绑定。
+            emptyHint={
+              info.bindings.length === 0
+                ? t("discord.jobs.emptyNoBinding")
+                : t("discord.jobs.emptyHint")
+            }
+            emptyAction={
+              info.bindings.length === 0 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link to="/discord" />}
+                >
+                  {t("discord.jobs.gotoDiscord")}
+                </Button>
+              ) : undefined
+            }
+          />
+        }
+      />
 
       {editing ? (
         <JobDialog
@@ -401,7 +395,7 @@ export function DiscordJobsCard({ info }: { info: DiscordInfo }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </div>
   )
 }
 

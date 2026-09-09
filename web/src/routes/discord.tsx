@@ -9,21 +9,13 @@ import type { DiscordBinding, DiscordInfo } from "@/types/acp"
 import { formatRelativeTime } from "@/lib/format"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { DiscordIcon } from "@/components/agent-icon"
-import { DiscordJobsCard } from "@/components/discord/jobs-card"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { StatusDot } from "@/components/status-dot"
 import { Hint } from "@/components/hint"
 import { DataTable } from "@/components/data-table/data-table"
 import type { dataTableFeatures } from "@/components/data-table/data-table-features"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +64,7 @@ export function Discord() {
     data: info,
     error,
     setData,
+    reload,
   } = useAsyncData<DiscordInfo>(() => api.discord.get(), [])
   const [editing, setEditing] = useState<DiscordBinding | null>(null)
   const [removing, setRemoving] = useState<DiscordBinding | null>(null)
@@ -115,62 +108,57 @@ export function Discord() {
 
   return (
     <div className="flex flex-col gap-4 p-4 lg:p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("nav.discord")}</CardTitle>
-          <CardDescription>{t("discord.page.description")}</CardDescription>
-          <CardAction>
-            <div className="flex items-center gap-3">
-              <StatusDot
-                tone={info?.status.connected ? "success" : "muted"}
-                label={statusText}
-              />
+      <ListPageHeader
+        title={t("nav.discord")}
+        description={t("discord.page.description")}
+        total={info ? bindings.length : undefined}
+      />
+      <DataTable
+        columns={bindingColumns(t, i18n.language, setEditing, setRemoving)}
+        data={error ? null : bindings}
+        total={bindings.length}
+        page={1}
+        pageSize={bindings.length || 20}
+        sorting={[]}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link to="/settings?section=discord" />}
+            >
+              <SettingsIcon data-icon="inline-start" />
+              {t("discord.page.gotoSettings")}
+            </Button>
+            <StatusDot
+              tone={info?.status.connected ? "success" : "muted"}
+              label={statusText}
+            />
+          </>
+        }
+        onReload={reload}
+        onPage={() => {}}
+        onPageSize={() => {}}
+        onSorting={() => {}}
+        empty={
+          <ListPageStates
+            icon={<DiscordIcon className="size-6" />}
+            error={error}
+            loading={!info && !error}
+            emptyTitle={t("discord.page.empty")}
+            emptyHint={t("discord.page.emptyHint")}
+            emptyAction={
               <Button
                 variant="outline"
                 size="sm"
                 render={<Link to="/settings?section=discord" />}
               >
-                <SettingsIcon data-icon="inline-start" />
                 {t("discord.page.gotoSettings")}
               </Button>
-            </div>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            columns={bindingColumns(t, i18n.language, setEditing, setRemoving)}
-            data={error ? null : bindings}
-            total={bindings.length}
-            page={1}
-            pageSize={bindings.length || 20}
-            sorting={[]}
-            onPage={() => {}}
-            onPageSize={() => {}}
-            onSorting={() => {}}
-            empty={
-              <ListPageStates
-                icon={<DiscordIcon className="size-6" />}
-                error={error}
-                loading={!info && !error}
-                emptyTitle={t("discord.page.empty")}
-                emptyHint={t("discord.page.emptyHint")}
-                emptyAction={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<Link to="/settings?section=discord" />}
-                  >
-                    {t("discord.page.gotoSettings")}
-                  </Button>
-                }
-              />
             }
           />
-        </CardContent>
-      </Card>
-
-      {/* 定时任务：挂在频道绑定上（绑定列表之下，与它同一页管）。 */}
-      {info ? <DiscordJobsCard info={info} /> : null}
+        }
+      />
 
       {editing && info ? (
         <EditBindingDialog

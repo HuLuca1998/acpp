@@ -4,6 +4,7 @@ import { Link } from "react-router"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { Hint } from "@/components/hint"
+import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { usePagedData } from "@/hooks/use-paged-data"
 import { DataTable } from "@/components/data-table/data-table"
@@ -28,14 +29,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { MessagesSquareIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
 /** 列定义的类型别名：v9 的第一个泛型是 features 不是 data，写全太吵。 */
@@ -59,6 +52,7 @@ export function Sessions() {
     setPage,
     setPageSize,
     setSorting,
+    reload,
     remove: dropRow,
     setError,
   } = usePagedData(
@@ -294,74 +288,72 @@ export function Sessions() {
   ]
 
   return (
-    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-      <div className="px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("sessions.title")}</CardTitle>
-            <CardDescription>{t("sessions.description")}</CardDescription>
-            <CardAction className="flex items-center gap-2">
-              {isOwner ? (
-                <ToggleGroup
-                  value={[origin]}
-                  variant="outline"
-                  size="sm"
-                  aria-label={t("sessions.origin")}
-                  onValueChange={(v) => {
-                    const next = v[0] as SessionOrigin | "all" | undefined
-                    if (!next) return
-                    setOrigin(next)
-                    // 换筛选回第一页：停在旧条件的第 5 页上已经是另一批数据了。
-                    setPage(1)
-                  }}
-                >
-                  <ToggleGroupItem value="all">
-                    {t("sessions.filterAll")}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="user">
-                    {t("sessions.originUser")}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="ask">
-                    {t("sessions.originAsk")}
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              ) : null}
+    <div className="flex flex-col gap-4 p-4 lg:p-6">
+      <ListPageHeader
+        title={t("sessions.title")}
+        description={t("sessions.description")}
+        total={sessions ? total : undefined}
+      />
+      <DataTable
+        columns={columns}
+        data={rows}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        sorting={sorting}
+        search={
+          isOwner ? (
+            <ToggleGroup
+              value={[origin]}
+              variant="outline"
+              size="sm"
+              aria-label={t("sessions.origin")}
+              onValueChange={(v) => {
+                const next = v[0] as SessionOrigin | "all" | undefined
+                if (!next) return
+                setOrigin(next)
+                // 换筛选回第一页：停在旧条件的第 5 页上已经是另一批数据了。
+                setPage(1)
+              }}
+            >
+              <ToggleGroupItem value="all">
+                {t("sessions.filterAll")}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="user">
+                {t("sessions.originUser")}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="ask">
+                {t("sessions.originAsk")}
+              </ToggleGroupItem>
+            </ToggleGroup>
+          ) : undefined
+        }
+        actions={
+          <Button size="sm" render={<Link to="/sessions/new" />}>
+            <PlusIcon data-icon="inline-start" />
+            {t("sessions.create")}
+          </Button>
+        }
+        onReload={reload}
+        onPage={setPage}
+        onPageSize={setPageSize}
+        onSorting={setSorting}
+        empty={
+          <ListPageStates
+            icon={<MessagesSquareIcon />}
+            error={error}
+            loading={sessions === null}
+            emptyTitle={t("sessions.empty")}
+            emptyHint={t("sessions.emptyHint")}
+            emptyAction={
               <Button size="sm" render={<Link to="/sessions/new" />}>
                 <PlusIcon data-icon="inline-start" />
                 {t("sessions.create")}
               </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              columns={columns}
-              data={rows}
-              total={total}
-              page={page}
-              pageSize={pageSize}
-              sorting={sorting}
-              onPage={setPage}
-              onPageSize={setPageSize}
-              onSorting={setSorting}
-              empty={
-                <ListPageStates
-                  icon={<MessagesSquareIcon />}
-                  error={error}
-                  loading={sessions === null}
-                  emptyTitle={t("sessions.empty")}
-                  emptyHint={t("sessions.emptyHint")}
-                  emptyAction={
-                    <Button size="sm" render={<Link to="/sessions/new" />}>
-                      <PlusIcon data-icon="inline-start" />
-                      {t("sessions.create")}
-                    </Button>
-                  }
-                />
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
+            }
+          />
+        }
+      />
     </div>
   )
 }
