@@ -35,10 +35,10 @@ const Discord = page(() => import("@/routes/discord"), "Discord")
 const Jobs = page(() => import("@/routes/jobs"), "Jobs")
 const Settings = page(() => import("@/routes/settings"), "Settings")
 const Tenants = page(() => import("@/routes/tenants"), "Tenants")
+const Logs = page(() => import("@/routes/logs"), "Logs")
 
 /** 尚未实现、但已在导航里占位的页面。 */
 const PLACEHOLDERS = [
-  { path: "logs", titleKey: "nav.logs", descKey: "placeholderPage.logs" },
   { path: "help", titleKey: "nav.help", descKey: "placeholderPage.help" },
   { path: "search", titleKey: "nav.search", descKey: "placeholderPage.search" },
 ] as const
@@ -90,6 +90,7 @@ export function App() {
           <Route path="settings" element={<Settings />} />
           {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
           <Route path="connections" element={<Tenants />} />
+          <Route path="logs" element={<Logs />} />
           {PLACEHOLDERS.map(({ path, titleKey, descKey }) => (
             <Route
               key={path}

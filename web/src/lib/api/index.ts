@@ -64,6 +64,7 @@ import type {
   SessionOrigin,
   SessionState,
 } from "@/types/acp"
+import type { ApiLog } from "@/types/apilog"
 
 import { ApiError, BASE, pageQuery, request } from "./core"
 
@@ -625,6 +626,21 @@ export const api = {
         body: JSON.stringify({ token }),
       }),
     logout: () => request<Identity>("/auth/logout", { method: "POST" }),
+  },
+
+  /** 请求日志（owner 专属）：中间件记的每条 HTTP API 请求。 */
+  logs: {
+    /** status 是状态码百位（"2" 只要 2xx）。 */
+    list: (
+      params?: Partial<PageQuery> & {
+        q?: string
+        method?: string
+        status?: string
+        identity?: string
+      }
+    ) => request<Paged<ApiLog>>(`/logs${pageQuery(params)}`),
+    get: (id: number) => request<ApiLog>(`/logs/${id}`),
+    clear: () => request<null>("/logs", { method: "DELETE" }),
   },
 
   /** 租户管理（owner 专属）。 */

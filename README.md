@@ -48,7 +48,7 @@ acpp/
 │   │   │   ├── settings/       # 设置页分区面板（内置工具 claude/codex 的配置面）
 │   │   │   └── *.tsx           # 跨域小组件：status-dot / diff-view / dir-picker / agent-icon / list-page-header / list-page-states
 │   │   ├── lib/                # 纯函数与客户端；README.md 是工具索引（脚本对账）
-│   │   ├── types/              # 领域类型，与 server/internal/model 对齐（acp.ts 转出 db.ts）
+│   │   ├── types/              # 领域类型，与 server/internal/model 对齐（acp.ts 转出 db.ts、apilog.ts）
 │   │   └── index.css           # Tailwind v4 主题变量 + 视觉深度层
 │   └── vite.config.ts          # /api 代理到 127.0.0.1:48080；outDir 指向 ../build/web
 └── server/
@@ -68,8 +68,9 @@ acpp/
         │   ├── adapter*.go     #   统一词汇表 + claude/codex/generic 三实现
         │   └── isolation.go    #   技能隔离注入
         ├── config/             # 环境变量配置、数据目录准备与迁移、路径工具
-        ├── db/                 # GORM 连接 + AutoMigrate
-        ├── model/              # Agent / Session / Message(重建 DTO) / SkillUsage
+        ├── db/                 # GORM 连接 + AutoMigrate + LIKE 模式辅助
+        ├── model/              # Agent / Session / Message(重建 DTO) / SkillUsage / APILog …
+        ├── apilog/             # HTTP 请求日志：中间件写、日志页读（留最近 5000 条，凭证抹掉，正文截断）
         ├── transcript/         # 会话转录 JSONL（对话内容唯一的持久化）
         ├── stream/             # SSE 事件形状与广播器（会话流的叶子包）
         ├── project/            # 工作区项目（adr-007）：git 仓库发现、克隆、gh 远端仓库清单
@@ -183,6 +184,9 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/auth/me` | 当前身份（owner / 租户 / 被停用 / 匿名）。未认证也返回 200，前端据此渲染邀请页 |
 | POST | `/api/auth/redeem` | 用邀请链接里的 token 换 HttpOnly cookie（`{token}`） |
 | POST | `/api/auth/logout` | 清凭证 |
+| GET | `/api/logs` | 请求日志列表（owner 专属；`?q=`路径关键词、`method=`、`status=`状态码百位、`identity=`、分页与排序）。中间件对每条 `/api` 请求记方法、路径、查询串、状态、耗时、对方 IP、来源地址（Origin / Referer）、身份、请求与响应的头和正文；SSE、WebSocket 升级与 `/api/logs` 自身不记，凭证头抹成 `[redacted]`，正文只留前 8 KB，最多留最近 5000 条。列表不带头与正文 |
+| GET | `/api/logs/{id}` | 一条请求的完整记录（含头与正文） |
+| DELETE | `/api/logs` | 清空请求日志 |
 | GET/POST | `/api/tenants` | 局域网访客列表（`?q=`名字关键词、`disabled=1|0`；带可直接转发的邀请链接）/ 新建（`{name}`，名字即目录名） |
 | PUT/DELETE | `/api/tenants/{id}` | 停用/启用、改 root / 删除（保留其会话与目录） |
 | POST | `/api/tenants/{id}/rotate` | 重新生成分享链接（旧链接立刻作废） |
@@ -565,7 +569,7 @@ cd web && npx shadcn@latest add <component>
 
 ## 尚未实现
 
-- 侧边栏的 Logs 与 agent 的新建页仍是占位页（详情页已是配置页）。
+- 侧边栏的 agent 新建页仍是占位页（详情页已是配置页）。
 - **服务器观察能力**（[adr-019](docs/adr-019-服务器观察能力.md)）：已落地（见上面「服务器」一节）。剩余：网页管理页还不能改频道锁定的服务器（走频道里的 `/init`），skill 还要用户自己放进技能库，服务器页没有只读浏览面板（人要看自己 ssh）。
 - **Discord 接入**：已落地（频道绑定 [adr-016](docs/adr-016-discord-频道工作区.md)、子区对话 [adr-017](docs/adr-017-discord-子区对话.md)、工作树与数据库环境绑定 [adr-018](docs/adr-018-discord-工作树与数据库绑定.md)）；bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)。剩余：网页管理页能看到频道锁定的库与机器（「作用域」列），但改仍要走频道里的 `/db source` / `/server`。
 - **定时任务**（Discord，[adr-020](docs/adr-020-discord-定时任务.md)）：已落地（见上面「定时任务」一节）。剩余：`scheduled-task` 技能与其它技能一样要放进技能库；投递只到任务所在频道，「跑在 prod 频道、发到 #alerts」待需求出现再加。
