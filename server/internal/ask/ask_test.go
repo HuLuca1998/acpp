@@ -31,6 +31,9 @@ func TestReplyAfterLastPrompt(t *testing.T) {
 			agentText("  结论：没问题。  "),
 		}, "先看代码。\n\n结论：没问题。"},
 		{"提问后还没回答", []model.Message{user("q1"), agentText("a1"), user("q2")}, ""},
+		// 界面上的人插话后锚点滑到人的那条上，ask 自己那问的回答就取不到了——
+		// 这正是 waitTurn 要在事件层拦截插话（ErrInterjected）而不是事后补救的原因。
+		{"人插话后锚点滑走", []model.Message{user("q1"), agentText("a1"), user("human")}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

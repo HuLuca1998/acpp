@@ -63,6 +63,10 @@ type Service struct {
 	inflight map[uint]struct{}
 }
 
+// ErrInterjected 表示等答案的途中，界面上的人在这条会话里插了话。包着
+// acp.ErrBusy 复用 409：对调用方而言语义一样——这条 thread 现在不归你。
+var ErrInterjected = fmt.Errorf("%w: turn taken over by a person in the UI", acp.ErrBusy)
+
 // DefaultTimeout 是一轮问答的默认上限。审查 / 咨询几分钟就完，全权干活
 // 的一轮可能要几十分钟，一小时是对后者的容忍，不是对前者的期望。
 const DefaultTimeout = time.Hour
@@ -109,9 +113,10 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 
 	stop, err := s.runTurn(ctx, sessionID, level, in.Prompt)
 	if err != nil {
-		if created {
-			// 刚为这一问开的会话一轮都没跑成，留着只是侧栏里一条空记录
-			// 与一个挂着的子进程。
+		// 刚为这一问开的会话一轮都没跑成，留着只是侧栏里一条空记录与一个
+		// 挂着的子进程。唯独「被人接手」不能收：那条会话此刻正被人用着，
+		// 收掉等于把会话从他手底下删了。
+		if created && !errors.Is(err, ErrInterjected) {
 			s.discard(ctx, scope, sessionID)
 		}
 		return nil, err
@@ -159,18 +164,25 @@ func (s *Service) runTurn(parent context.Context, sessionID uint, level acp.Acce
 	events, unsubscribe := s.chat.Subscribe(sessionID)
 	defer unsubscribe()
 
-	if _, err := s.chat.Send(ctx, sessionID, service.SendInput{Content: prompt}); err != nil {
+	sent, err := s.chat.Send(ctx, sessionID, service.SendInput{Content: prompt})
+	if err != nil {
 		return "", err
 	}
-	return s.waitTurn(ctx, sessionID, level, events)
+	return s.waitTurn(ctx, sessionID, level, sent.ID, events)
 }
 
 // waitTurn 消费事件流直到这一轮收尾。路上替没在场的人做两件事：权限请求
 // 按权限档裁决，交互式提问一律取消——问的人是脚本，没有第二个人能回答。
-func (s *Service) waitTurn(ctx context.Context, sessionID uint, level acp.AccessLevel, events <-chan service.StreamEvent) (acp.StopReason, error) {
+//
+// sentID 是自己那条 user_message 的 id。等待途中出现**别的** user_message，
+// 唯一解释是界面上的人在这条会话里插了话（user_message 全项目只在 Send
+// 里发）：插话会并入当前轮或排成下一轮，而取答案的锚点是「最后一条用户
+// 消息之后的正文」——锚点一滑，脚本拿回的就是人那一问的答案，还分辨不出。
+// 所以立刻退出并回 ErrInterjected；不 Cancel 那一轮，会话与回答留给人。
+func (s *Service) waitTurn(ctx context.Context, sessionID uint, level acp.AccessLevel, sentID uint, events <-chan service.StreamEvent) (acp.StopReason, error) {
 	var stop acp.StopReason
-	// started 以本轮的 user_message 为准：Send 之前广播里若还留着别的事件
-	//（比如刚拨设置推来的 settings），不该被当成这一轮的。
+	// started 以自己那条 user_message 为准：Send 之前广播里若还留着别的事件
+	//（刚拨设置推来的 settings、上一轮重放的残留），不该被当成这一轮的。
 	started := false
 	poll := time.NewTicker(livenessPoll)
 	defer poll.Stop()
@@ -198,7 +210,12 @@ func (s *Service) waitTurn(ctx context.Context, sessionID uint, level acp.Access
 			}
 			switch ev.Kind {
 			case "user_message":
-				started = true
+				switch {
+				case ev.Message != nil && ev.Message.ID == sentID:
+					started = true
+				case started:
+					return "", fmt.Errorf("thread %d: %w", sessionID, ErrInterjected)
+				}
 			case "permission":
 				s.decidePermission(sessionID, level, ev)
 			case "elicitation":
