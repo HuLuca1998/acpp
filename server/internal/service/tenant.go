@@ -28,6 +28,10 @@ var ErrUnauthorized = errors.New("unauthorized")
 // 与 URL 都安全的字符，且必须以字母数字开头（挡住隐藏目录）。
 var tenantNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,31}$`)
 
+// githubLoginRe 是 GitHub 用户名的合法形状：字母数字与连字符、不以连字符
+// 开头结尾、最长 39 位。它会原样拼进 gh 的查询参数，先在这里挡住乱填。
+var githubLoginRe = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$`)
+
 // lastSeenThrottle 是 LastSeenAt 的写库节流窗口。每个请求都 UPDATE 一次
 // 会让 SSE 这种长轮询场景把库写爆，分钟级精度对「谁还在用」足够。
 const lastSeenThrottle = time.Minute
@@ -196,8 +200,9 @@ func (s *TenantService) Rotate(ctx context.Context, id uint) (*TenantView, error
 // TenantPatch 是租户的可改项。Name 不在其中：它是 root 的目录名，改名
 // 会让已建会话的 cwd 悬空。
 type TenantPatch struct {
-	Disabled *bool   `json:"disabled"`
-	Root     *string `json:"root"`
+	Disabled    *bool   `json:"disabled"`
+	Root        *string `json:"root"`
+	GithubLogin *string `json:"githubLogin"`
 }
 
 func (s *TenantService) Update(ctx context.Context, id uint, patch TenantPatch) (*model.Tenant, error) {
@@ -220,6 +225,13 @@ func (s *TenantService) Update(ctx context.Context, id uint, patch TenantPatch) 
 			return nil, fmt.Errorf("create tenant root: %w", err)
 		}
 		updates["root"] = root
+	}
+	if patch.GithubLogin != nil {
+		login := strings.TrimSpace(*patch.GithubLogin)
+		if login != "" && !githubLoginRe.MatchString(login) {
+			return nil, fmt.Errorf("%w: invalid GitHub username", ErrInvalid)
+		}
+		updates["github_login"] = login
 	}
 	if len(updates) == 0 {
 		return tenant, nil

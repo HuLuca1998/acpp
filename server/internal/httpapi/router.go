@@ -13,6 +13,7 @@ import (
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/discord"
+	"acpp/server/internal/github"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
 	"acpp/server/internal/remote"
@@ -49,6 +50,8 @@ type Services struct {
 	MCPCalls *mcpcall.Service
 	// APILogs 是 HTTP 请求的观测记录：中间件写、日志页读。nil 就不记。
 	APILogs *apilog.Service
+	// GitHub 是 issue 页的业务面：关注仓库与 issue 汇总，租户可用。
+	GitHub *github.Service
 	// Notices 是全局通知广播口，全局事件流从这里取本人名下的通知。
 	Notices *stream.Hub
 	// Discord 是独立于会话的频道工作区子系统（adr-016），可为 nil（未装配）。
@@ -97,6 +100,13 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("PUT /api/tenants/{id}", tenants.update)
 	api.HandleFunc("POST /api/tenants/{id}/rotate", tenants.rotate)
 	api.HandleFunc("DELETE /api/tenants/{id}", tenants.remove)
+
+	// GitHub issue 页：租户可用（不在 owner 前缀表里），数据按身份的关注
+	// 清单与 GitHub 用户名各取各的。
+	gh := githubHandler{github: svcs.GitHub}
+	api.HandleFunc("GET /api/github/issues", gh.issues)
+	api.HandleFunc("GET /api/github/repos", gh.repos)
+	api.HandleFunc("PUT /api/github/repos", gh.updateRepos)
 
 	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。
 	// ?files=1 时连同文件一起列（@ 文件引用用）。

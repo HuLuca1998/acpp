@@ -3,19 +3,14 @@ package project
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
+	"acpp/server/internal/ghcli"
 	"acpp/server/internal/service"
 )
-
-// ghTimeout 是单次 gh 调用的上限：清单是个交互式操作，等超过这个时间
-// 用户早就手输 URL 了。
-const ghTimeout = 15 * time.Second
 
 // repoCacheTTL 是仓库清单的缓存时长。清单变化很慢，而每次打开克隆对话框
 // 都去打一次 GitHub API 既慢又白费配额。
@@ -108,28 +103,12 @@ func currentLogin(ctx context.Context) string {
 	return user.Login
 }
 
-// gh 跑一条 gh 命令。没装或没登录都翻译成可直接显示给用户的话——
-// 「exit status 1」对着界面没有任何意义。
+// gh 跑一条 gh 命令（ghcli 封装），没装或没登录翻译成 ErrInvalid——
+// 那是用户环境的问题，界面要原话显示。
 func gh(ctx context.Context, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, ghTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "gh", args...)
-	out, err := cmd.Output()
-	if err == nil {
-		return out, nil
+	out, err := ghcli.Run(ctx, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", service.ErrInvalid, err)
 	}
-
-	if errors.Is(err, exec.ErrNotFound) {
-		return nil, fmt.Errorf("%w: gh CLI not installed", service.ErrInvalid)
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		stderr := tailLines(string(exitErr.Stderr), 3)
-		if strings.Contains(stderr, "auth login") || strings.Contains(stderr, "authentication") {
-			return nil, fmt.Errorf("%w: gh CLI not logged in (run `gh auth login`)", service.ErrInvalid)
-		}
-		return nil, fmt.Errorf("%w: gh: %s", service.ErrInvalid, stderr)
-	}
-	return nil, fmt.Errorf("run gh: %w", err)
+	return out, nil
 }

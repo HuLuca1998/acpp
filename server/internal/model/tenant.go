@@ -21,6 +21,10 @@ type Tenant struct {
 	// 三差五重新要链接只会招人烦），要断谁的访问就停用谁——每次鉴权现查，
 	// 即时生效，会话与目录都保留。
 	Disabled bool `gorm:"not null;default:false" json:"disabled"`
+	// GithubLogin 是这位访客在 GitHub 上的用户名：GitHub 页按它筛「分配给我」
+	// 的 issue。由 owner 在访客管理里填——issue 是用 owner 本机的 gh 登录态
+	// 拉的，访客自己没有凭证可以证明「我是谁」。空表示没配，GitHub 页提示。
+	GithubLogin string `gorm:"size:64" json:"githubLogin"`
 	// LastSeenAt 是最近一次带有效凭证发请求的时间，供 owner 判断谁还在用。
 	// 每请求都写库太贵，节流到分钟级（见 service.TenantService.Authenticate）。
 	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`

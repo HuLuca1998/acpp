@@ -20,6 +20,7 @@ import (
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/db"
 	"acpp/server/internal/discord"
+	"acpp/server/internal/github"
 	"acpp/server/internal/httpapi"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/model"
@@ -121,6 +122,7 @@ func run() error {
 	// 观测是旁路，datasource 只认得 Calls 接口。
 	mcpCalls := mcpcall.NewService(gdb)
 	apiLogs := apilog.NewService(gdb)
+	githubService := github.NewService(gdb)
 
 	// 服务器面（adr-019）：既是 AI 的只读观察目标，也是数据源的 SSH 跳板。
 	// 先于 datasource 构造，后者要借它取跳板机配置。
@@ -295,6 +297,7 @@ func run() error {
 		Reports:     reportService,
 		MCPCalls:    mcpCalls,
 		APILogs:     apiLogs,
+		GitHub:      githubService,
 		Discord:     discordService,
 	})
 	srv := &http.Server{
@@ -307,6 +310,7 @@ func run() error {
 
 	// 收到中断信号后停止接收新请求，给在途请求 10 秒收尾。
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	githubService.Start(ctx)
 	defer stop()
 
 	// 空闲子进程定期回收：上下文在 agent 侧持久化，续聊时无感恢复。

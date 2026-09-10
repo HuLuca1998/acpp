@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；adr-022 别的 AI 的同步问答面；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；adr-022 别的 AI 的同步问答面；adr-023 GitHub issue 页；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -28,7 +28,7 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/             # 页面，与路由表一一对应：overview / sessions /
 │   │   │                       #   session-chat（工作区宿主，草稿态共用）/ skills / skill-detail /
-│   │   │                       #   databases / servers（远程服务器）/ tools（MCP 工具台）/ jobs（定时任务）/ tenants（连接）/
+│   │   │                       #   databases / servers（远程服务器）/ tools（MCP 工具台）/ jobs（定时任务）/ tenants（连接）/ github（issue 列表）/
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
 │   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session /
@@ -188,8 +188,10 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/logs/{id}` | 一条请求的完整记录（含头与正文） |
 | DELETE | `/api/logs` | 清空请求日志 |
 | GET/POST | `/api/tenants` | 局域网访客列表（`?q=`名字关键词、`disabled=1|0`；带可直接转发的邀请链接）/ 新建（`{name}`，名字即目录名） |
-| PUT/DELETE | `/api/tenants/{id}` | 停用/启用、改 root / 删除（保留其会话与目录） |
+| PUT/DELETE | `/api/tenants/{id}` | 停用/启用、改 root、设 `githubLogin`（访客的 GitHub 用户名，GitHub 页按它筛「分配给我」）/ 删除（保留其会话与目录） |
 | POST | `/api/tenants/{id}/rotate` | 重新生成分享链接（旧链接立刻作废） |
+| GET | `/api/github/issues` | **GitHub issue 列表**（adr-023，租户可用）：当前身份关注仓库里的 issue 一页。`?repos=`逗号分隔限定仓库、`q=`标题关键词或编号、`assignee=me|all`（默认 me：owner 按 gh 登录名，租户按访客记录上的 GitHub 用户名，没配则不按人筛）、`state=open|closed|all`（默认 open）、`board=active|all|<看板列名>`（默认 active：排除名字含「完成 / 取消 / 关闭 / done / closed / cancel」的列）、`priority=`、`label=`、`sort=priority|updated`（默认优先级，紧急在前、同档更新时间新的在前、没优先级的垫底）、分页。响应在 `{items,total,page,pageSize}` 之外带 `statuses` / `priorities`（关注仓库上的看板列与优先级档，按 GitHub 声明顺序，画筛选器用）、`labels`、`login`、`fetchedAt`（最旧仓库缓存的时间）、`errors`（拉失败的仓库）。`refresh=1` 先刷新缓存再查。数据经本机 gh 按仓库拉（`gh issue list` + GraphQL 读 issue Fields 的 Priority 与所属 Project 的 Status），内存缓存、后台每 3 分钟刷新 |
+| GET/PUT | `/api/github/repos` | 可关注的仓库清单（gh 登录账号能看到的全部，含个人名下的；每条带 `watched`）/ 覆盖当前身份的关注清单（`{repos:["owner/name",…]}`，立即拉一遍新加的仓库） |
 | GET/POST | `/api/projects` | 工作区项目（工作区根下的 git 仓库；每条带 `name` 位置与 `repo` 身份）/ 新建空项目（`{name}`，最多 `<组织>/<仓库>` 两层） |
 | DELETE | `/api/projects/{name...}` | 删项目目录（会话记录保留） |
 | POST | `/api/projects/clone` | 后台克隆（`{url, name?}`）；**租户强制禁用 git 凭证助手** |
@@ -315,7 +317,8 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。产品形态上固定为内置的 claude / codex 两条记录（启动时缺失自动预置、按 name 判存不覆盖用户配置，见 adr-005），API 仍是通用的 `/api/agents`。`flavor` / `models` / `commands` / `skeleton` 是注册/更新后自动探测的缓存（拉临时会话读能力）：模型与命令供草稿态展示与 `/` 补全（条目带 `disabled` 标记，重探不清空取舍）；`skeleton` 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），与模型清单一起构成未连接会话的完整降级设置视图。模型条目支持 `alias`（配置页起显示别名，所有模型下拉优先显示）；`fastPolicy` 是快速模式取舍（首探按 flavor 落默认：claude 因额外计费默认 off，其余 on；off 时快速开关不出现在任何界面）。`askModel` / `askEffort` 是别的 AI 经 `/api/ask` 问这个工具时新会话拨到的模型与思考深度（adr-022），配置页设、重探不清空，空=沿用 runtime 默认。
 - **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`origin` 标记会话是谁开的：空是界面里的人，`ask` 是别的 AI 经 `/api/ask` 问出来的（adr-022），侧栏据此分开摆。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`promptDigests` 是长提问的一句话摘要缓存（对话索引用，键是提问正文的内容指纹而不是消息 id——消息 id 是转录行号，重建逻辑一变就整体漂移），不出 API。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
-- **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
+- **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`、`githubLogin`（访客在 GitHub 上的用户名，owner 填；GitHub 页按它筛「分配给我」的 issue——issue 是用 owner 本机的 gh 登录态拉的，访客没有自己的凭证）。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
+- **GithubWatch** — 一个身份关注的 GitHub 仓库清单（adr-023）：`tenantId`（`0` = owner，与 Session 同一约定）+ `repos`（JSON 文本）。issue 本身不入库：按仓库缓存在内存里、后台刷新，进程重启就重拉。
 - **Project / Clone** — 都不入库：项目是工作区根下的 git 仓库目录（扫盘得来）。每条带两个名字——`name` 是**位置**（相对根的路径），`repo` 是**身份**（哪个 git 仓库，见上面「项目」一节）。克隆任务只存在于内存（进程重启时 git 子进程也一起没了，留个「进行中」的假记录只会骗人）。
 - **MCPCall** — 一次 MCP 工具调用的观测记录：server、工具名、来源（`agent` = 子进程回连、`manual` = 工具台人工试运行）、会话 id、参数与返回文本、是否报错、耗时。**只记发生过的调用**，工具声明是代码不入库。参数 4KB / 返回 8KB 截断后落库，全表留最近 2000 条（超出按自增 id 裁最老的）——它是运行时观测不是账本。
 - **DataSource** — 一个外部 MySQL 数据源（adr-008）。身份是**项目 + 环境**两级（`pp-game` 的 `local`/`dev`/`pre`），组合唯一，`<项目>/<环境>` 即对外标识（AI 调工具时填的 `source`）。只存配置不存连接：每次调用都是「拨号 → 执行 → 关闭」的一次性连接（含 SSH 隧道），因此没有任何运行态字段。密码类字段永不出 API，响应只带 `hasPassword` 这类布尔位。
