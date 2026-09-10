@@ -44,8 +44,8 @@ type threadChat struct {
 	// planMsgID/planGen 是本回合计划卡的消息 id 与更新代号（见 plan.go）。
 	planMsgID string
 	planGen   uint64
-	// toolLog/toolMsgID/toolGen/toolRendered 是本回合工具活动卡的状态
-	// （见 tools.go）；toolLog 的长度就是回合小结里的工具调用数。
+	// toolLog/toolMsgID/toolGen/toolRendered 是本回合过程卡的状态
+	// （见 progress.go）；toolLog 的长度就是回合小结里的工具调用数。
 	toolLog      []toolEntry
 	toolMsgID    string
 	toolGen      uint64
@@ -62,6 +62,12 @@ type threadChat struct {
 	// job 非空表示当前回合是定时任务的一次运行（无人值守：提问自动取消、
 	// 会话提示词多一段约定、NO_REPORT 不发进子区）。
 	job *jobRun
+	// turnNonce 是当前回合的代号（进过程卡停止按钮的 custom_id）；
+	// turnCancel 掐的是回合 ctx（覆盖会话启动阶段）；stoppedBy 非空表示
+	// 这一轮被人中止，过程卡收口时署名。三者由 beginTurn 每轮重置（见 stop.go）。
+	turnNonce  string
+	turnCancel context.CancelFunc
+	stoppedBy  string
 }
 
 // queuedMsg 是排队中的一条输入。queued 标记它曾在回合进行中等待过
@@ -460,30 +466,6 @@ func (s *Service) say(ctx context.Context, token, threadID, text string) {
 	if err != nil {
 		slog.Error("子区发消息失败", "err", err)
 	}
-}
-
-// stopThread 处理 /stop：掐掉当前回合、清空排队的输入。
-func (s *Service) stopThread(token string, ev interactionEvent) {
-	if s.acpMgr == nil {
-		s.ephemeral(token, ev, "对话功能没有启用。")
-		return
-	}
-	key := "dc:" + ev.ChannelID
-	tc := s.chatState(ev.ChannelID)
-	tc.mu.Lock()
-	queued := len(tc.queue)
-	tc.queue = nil
-	tc.asks = nil
-	running := tc.running
-	tc.mu.Unlock()
-	if !running && queued == 0 {
-		s.ephemeral(token, ev, "这里没有正在跑的回合。")
-		return
-	}
-	if err := s.acpMgr.Cancel(key); err != nil {
-		slog.Warn("中止子区回合失败", "key", key, "err", err)
-	}
-	s.ephemeral(token, ev, "⏹ 已中止，排队的输入也清掉了。")
 }
 
 // stripMention 去掉文本里的 @bot 标记（<@id> 与 <@!id> 两种写法）。

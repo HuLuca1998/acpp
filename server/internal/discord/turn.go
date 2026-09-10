@@ -34,8 +34,18 @@ type turnOutcome struct {
 // 轮末把正文分段发回子区。
 func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID string, tc *threadChat, input string, atts []attachment) turnOutcome {
 	key := "dc:" + threadID
-	sess, fresh, err := s.openChatSession(ctx, key, b, threadID, tc)
+	// 回合 ctx 只管「会话启动 + prompt」——被停止按钮掐掉时，收口消息仍要
+	// 靠外层 ctx 发出去。
+	tctx, endTurn := tc.beginTurn(ctx)
+	defer endTurn()
+	s.postTurnCard(token, threadID, tc)
+	sess, fresh, err := s.openChatSession(tctx, key, b, threadID, tc)
 	if err != nil {
+		s.finalizeTurnCard(token, threadID, tc)
+		if tctx.Err() != nil {
+			// 启动途中被人中止：不是故障，过程卡已经署名。
+			return turnOutcome{stop: acp.StopCancelled}
+		}
 		if !errors.Is(err, acp.ErrPoolFull) {
 			s.say(ctx, token, threadID, "❌ 会话启动失败\n-# "+trimRunes(err.Error(), 400))
 		}
@@ -47,7 +57,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 		s.say(ctx, token, threadID, n)
 	}
 	// 每轮前把绑定的模型/深度/权限拨到位——绑定可能刚被 /model 改过。
-	s.applyBindingSettings(ctx, key, b)
+	s.applyBindingSettings(tctx, key, b)
 	_ = sess
 
 	// typing 指示器只活 10 秒，循环续到回合结束。
@@ -79,10 +89,11 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 		blocks = append(blocks, acp.ContentBlock{Type: "text", Text: input})
 	}
 	if len(blocks) == 0 {
+		s.finalizeTurnCard(token, threadID, tc)
 		return turnOutcome{}
 	}
 	started := time.Now()
-	result, err := s.acpMgr.Prompt(ctx, key, blocks)
+	result, err := s.acpMgr.Prompt(tctx, key, blocks)
 	stopTyping()
 
 	tc.mu.Lock()
@@ -111,7 +122,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	unattended := tc.job != nil
 	tc.mu.Unlock()
 
-	s.finalizeToolCard(token, threadID, tc)
+	s.finalizeTurnCard(token, threadID, tc)
 	out := turnOutcome{reply: reply, final: final, err: err, stop: result.StopReason, tools: toolCount, tokens: tokens, elapsed: time.Since(started)}
 
 	switch {

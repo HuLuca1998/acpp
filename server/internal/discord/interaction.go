@@ -182,7 +182,7 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 	case ev.Type == 2 && ev.Data.Name == "unbind":
 		s.unbindChannel(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "stop":
-		s.stopThread(token, ev)
+		s.stopThread(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "db":
 		s.handleDBCommand(ctx, token, ev)
 	case ev.Type == 2 && ev.Data.Name == "server":
@@ -215,6 +215,8 @@ func (s *Service) handleInteraction(ctx context.Context, token string, d json.Ra
 		s.serverPicked(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, "db:"):
 		s.dbPicked(ctx, token, ev)
+	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, stopPrefix):
+		s.stopClicked(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, jobPrefix):
 		s.handleJobButton(ctx, token, ev)
 	case ev.Type == 3 && strings.HasPrefix(ev.Data.CustomID, confirmPrefix):
@@ -696,6 +698,7 @@ func (s *Service) showHelp(token string, ev interactionEvent) {
 		"**要报告** — 说「写一份 xx 报告并打开」，出报告卡一键浏览器预览。\n" +
 		"**定时任务** — 在子区里说「以后每天早上 10 点出一份发到这个频道」，AI 会建一条定时任务；到点频道里开子区自动跑，`/cron` 看与管。\n" +
 		"**回合中** — ⏳ 已排队、✅ 已进对话；权限/提问是卡片，点按钮或直接回话（选项可回编号）。\n" +
+		"**停下来** — 子区里的过程卡上有 **⏹ 停止** 按钮，点一下掐掉当前回合并清空排队；`/stop` 等效。\n" +
 		"**命令** — 在输入框打 `/` 就能看到全部命令，每条都带说明。"
 	s.ephemeralKeep(token, ev, text)
 }
