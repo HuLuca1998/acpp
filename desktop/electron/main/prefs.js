@@ -20,6 +20,8 @@ const DEFAULTS = {
   startMinimized: false,
   /** 窗口位置与大小，对应 Swift 版的 setFrameAutosaveName。 */
   windowBounds: { width: 1280, height: 820 },
+  /** 菜单栏点 issue 时用哪个 Chrome 账号打开（profile 目录名），空 = 不指定。 */
+  chromeProfile: "",
   /** 迁移标记：只从 UserDefaults 搬一次，之后用户在新壳里的选择说了算。 */
   migratedFromDefaults: false,
 }
@@ -93,6 +95,13 @@ export const prefs = {
   },
   set startMinimized(on) {
     load().startMinimized = on
+    save()
+  },
+  get chromeProfile() {
+    return load().chromeProfile || ""
+  },
+  set chromeProfile(dir) {
+    load().chromeProfile = dir || ""
     save()
   },
   get windowBounds() {

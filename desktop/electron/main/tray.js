@@ -3,7 +3,14 @@ import { fileURLToPath } from "node:url"
 
 import { Menu, Tray, app, nativeImage } from "electron"
 
+import { chromeProfiles, openURL } from "./browser.js"
+import { MENU_LIMIT } from "./issues.js"
+import { prefs } from "./prefs.js"
+
 const here = path.dirname(fileURLToPath(import.meta.url))
+
+/** 菜单项标题的长度上限：菜单栏下拉再宽也就这么些字，长了系统会截成省略号。 */
+const TITLE_MAX = 48
 
 /**
  * 菜单栏图标：左键切换主窗口显隐，右键（或 ⌃+左键）弹操作菜单。
@@ -14,9 +21,10 @@ const here = path.dirname(fileURLToPath(import.meta.url))
  * 的默认行为；Electron 直接分了两个事件，popUpContextMenu 用完即散。
  */
 export class TrayController {
-  constructor({ server, shell }) {
+  constructor({ server, shell, issues }) {
     this.server = server
     this.shell = shell
+    this.issues = issues
 
     const icon = nativeImage.createFromPath(iconPath())
     // 模板图：系统按菜单栏明暗自动着色
@@ -32,6 +40,8 @@ export class TrayController {
   }
 
   popMenu() {
+    // 菜单画的是上一次拉到的清单；弹出时顺手再拉一次给下次用。
+    void this.issues?.refresh()
     this.tray.popUpContextMenu(this.buildMenu())
   }
 
@@ -51,6 +61,8 @@ export class TrayController {
     const lanURL = server.lanURL
     const items = [
       { label: status, enabled: false },
+      { type: "separator" },
+      ...this.issueItems(running),
       { type: "separator" },
       { label: "打开 ACPP", click: () => this.shell.showMainWindow() },
       { label: "在浏览器中打开", enabled: running, click: () => this.shell.openInBrowser() },
@@ -94,9 +106,80 @@ export class TrayController {
     return Menu.buildFromTemplate(items)
   }
 
+  /**
+   * 「分配给我的 issue」一段：默认条件与 GitHub 页一致（open、排除做完 / 取消
+   * 的看板列、按优先级排），点一条用选定的 Chrome 账号打开；末尾是账号子菜单
+   * 与「查看全部」。
+   */
+  issueItems(running) {
+    const snap = this.issues?.snapshot
+    const items = []
+    if (!running || !snap) {
+      items.push({ label: "我的 issue（服务未运行）", enabled: false })
+      return items
+    }
+    if (snap.items.length === 0) {
+      const why = snap.error
+        ? `拉取失败：${snap.error}`
+        : snap.watched && snap.watched.length === 0
+          ? "还没有关注仓库，去 GitHub 页挑几个"
+          : "没有分配给你的 issue"
+      items.push({ label: "我的 issue", enabled: false })
+      items.push({ label: `    ${truncate(why, 60)}`, enabled: false })
+    } else {
+      const more = snap.total > snap.items.length ? `，显示前 ${snap.items.length}` : ""
+      items.push({ label: `我的 issue（${snap.total}${more}）`, enabled: false })
+      for (const it of snap.items.slice(0, MENU_LIMIT)) {
+        // 优先级与看板列作前缀：菜单项没有颜色可用，文字得把两件事说清。
+        const tags = [it.priority, it.status].filter(Boolean).join(" · ")
+        const repo = it.repo.split("/").pop()
+        items.push({
+          label: `${tags ? `[${tags}] ` : ""}#${it.number} ${truncate(it.title, TITLE_MAX)}`,
+          toolTip: `${it.repo}#${it.number}\n${it.title}`,
+          sublabel: repo,
+          click: () => openURL(it.url, prefs.chromeProfile),
+        })
+      }
+      if (snap.error) items.push({ label: `    部分仓库拉取失败`, enabled: false, toolTip: snap.error })
+    }
+    items.push({
+      label: "查看全部 issue",
+      click: () => this.shell.showMainWindow("/github"),
+    })
+    const profiles = chromeProfiles()
+    if (profiles.length > 0) {
+      const current = prefs.chromeProfile
+      items.push({
+        label: "用哪个 Chrome 账号打开",
+        submenu: [
+          {
+            label: "跟随 Chrome 上次使用的账号",
+            type: "radio",
+            checked: current === "",
+            click: () => (prefs.chromeProfile = ""),
+          },
+          { type: "separator" },
+          ...profiles.map((p) => ({
+            label: p.email ? `${p.name} — ${p.email}` : p.name,
+            sublabel: p.dir,
+            type: "radio",
+            checked: current === p.dir,
+            click: () => (prefs.chromeProfile = p.dir),
+          })),
+        ],
+      })
+    }
+    return items
+  }
+
   destroy() {
     this.tray?.destroy()
   }
+}
+
+function truncate(s, n) {
+  const str = String(s ?? "")
+  return str.length > n ? `${str.slice(0, n - 1)}…` : str
 }
 
 /** 模板图位置：打包态在 Resources 下，开发态回退到仓库 build 产物。 */

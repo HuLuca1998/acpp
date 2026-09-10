@@ -113,6 +113,23 @@ export class MainWindow {
     this.win.loadURL(url, { extraHeaders: "pragma: no-cache\n" })
   }
 
+  /**
+   * 让已加载的界面切到某个路由（菜单栏「查看全部 issue」用）。前端是 SPA，
+   * pushState + popstate 就能让路由器跟上，不必整页重载；页面还没加载好
+   * 或根本不是我们的界面时才走 loadApp。
+   */
+  navigate(appURL, route) {
+    const wc = this.win.webContents
+    if (wc.isLoading() || !wc.getURL().startsWith(appURL)) {
+      this.loadApp(appURL + route.replace(/^\//, ""))
+      return
+    }
+    const path = JSON.stringify(route)
+    void wc.executeJavaScript(
+      `history.pushState(null, "", ${path}); dispatchEvent(new PopStateEvent("popstate"));`
+    )
+  }
+
   showLoading() {
     this.loadPage({ mark: "❯_", markPulse: true, title: "正在启动 ACPP 服务…", detail: "" })
   }

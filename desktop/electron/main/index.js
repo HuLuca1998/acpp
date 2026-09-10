@@ -4,6 +4,7 @@ import { BrowserWindow, app, clipboard, shell } from "electron"
 
 import { installBridge } from "./bridge.js"
 import { installMainMenu } from "./menu.js"
+import { IssueFeed } from "./issues.js"
 import { launchPrefs } from "./launch-prefs.js"
 import { notifier } from "./notifier.js"
 import { LOG_PATH, ServerController } from "./server.js"
@@ -73,7 +74,8 @@ class AppShell {
       return
     }
 
-    this.tray = new TrayController({ server: this.server, shell: this })
+    this.issues = new IssueFeed({ server: this.server })
+    this.tray = new TrayController({ server: this.server, shell: this, issues: this.issues })
 
     // 通知：这里只接线，**不请求授权**——启动就弹系统授权框是最招人烦的做法，
     // 而且用户还没见过这个 app 会通知什么。授权由设置页里的开关发起。
@@ -96,6 +98,8 @@ class AppShell {
   applyServerResult(ok) {
     if (ok) this.window.loadApp(this.server.localURL)
     else this.window.showFailure(LOG_PATH)
+    // 服务起来才有 issue 可拉；重启服务也走这里，顺手重拉一次。
+    if (ok) this.issues?.start()
   }
 
   // MARK: - 菜单栏动作
@@ -105,8 +109,12 @@ class AppShell {
     this.window.toggle()
   }
 
-  showMainWindow() {
+  /** route 给了就顺带切到那个页面（如菜单栏的「查看全部 issue」→ /github）。 */
+  showMainWindow(route) {
     this.restoreRegularActivation()
+    if (route && this.server.state === "running") {
+      this.window.navigate(this.server.localURL, route)
+    }
     this.window.show()
   }
 
