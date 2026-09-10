@@ -52,6 +52,7 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  CircleDotIcon,
   CopyIcon,
   TriangleAlertIcon,
   MoreHorizontalIcon,
@@ -103,6 +104,8 @@ export function Tenants() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Tenant | null>(null)
   const [rotating, setRotating] = useState<Tenant | null>(null)
+  const [editingLogin, setEditingLogin] = useState<Tenant | null>(null)
+  const [loginDraft, setLoginDraft] = useState("")
 
   function upsert(saved: Tenant) {
     replace(saved)
@@ -148,6 +151,25 @@ export function Tenants() {
       toast.success(
         tenant.disabled ? t("tenants.enabled") : t("tenants.disabled")
       )
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+
+  function openLogin(tenant: Tenant) {
+    setLoginDraft(tenant.githubLogin ?? "")
+    setEditingLogin(tenant)
+  }
+
+  async function saveLogin() {
+    if (!editingLogin) return
+    try {
+      const updated = await api.tenants.update(editingLogin.id, {
+        githubLogin: loginDraft.trim(),
+      })
+      upsert({ ...editingLogin, ...updated, inviteUrl: editingLogin.inviteUrl })
+      toast.success(t("tenants.githubLoginSaved"))
+      setEditingLogin(null)
     } catch (err) {
       toast.error((err as Error).message)
     }
@@ -208,6 +230,23 @@ export function Tenants() {
       cell: ({ row }) => row.original.root,
     },
     {
+      id: "github_login",
+      accessorFn: (tenant: Tenant) => tenant.githubLogin,
+      header: ({ column }) => (
+        <DataTableHeader column={column} title={t("tenants.githubLogin")} />
+      ),
+      meta: {
+        label: t("tenants.githubLogin"),
+        className: "font-mono text-xs",
+      },
+      cell: ({ row }) =>
+        row.original.githubLogin ? (
+          row.original.githubLogin
+        ) : (
+          <span className="text-muted-foreground/50">{t("common.none")}</span>
+        ),
+    },
+    {
       id: "sessions",
       // 会话数是聚合出来的，不是 tenants 表上的列，没法进 ORDER BY。
       enableSorting: false,
@@ -262,6 +301,10 @@ export function Tenants() {
             <DropdownMenuItem onClick={() => setRotating(row.original)}>
               <RefreshCwIcon />
               <span>{t("tenants.rotate")}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openLogin(row.original)}>
+              <CircleDotIcon />
+              <span>{t("tenants.setGithubLogin")}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => void toggle(row.original)}>
@@ -382,6 +425,42 @@ export function Tenants() {
             <Button onClick={() => void create()} disabled={!newName.trim()}>
               {t("tenants.addAndCopy")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editingLogin !== null}
+        onOpenChange={(open) => !open && setEditingLogin(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("tenants.setGithubLogin")}</DialogTitle>
+            <DialogDescription>
+              {t("tenants.githubLoginDesc", { name: editingLogin?.name ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="tenant-github-login">
+              {t("tenants.githubLogin")}
+            </FieldLabel>
+            <Input
+              id="tenant-github-login"
+              value={loginDraft}
+              autoFocus
+              className="font-mono"
+              placeholder={t("tenants.githubLoginPlaceholder")}
+              onChange={(e) => setLoginDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void saveLogin()
+              }}
+            />
+          </Field>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingLogin(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={() => void saveLogin()}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -30,7 +30,7 @@ type tenantView struct {
 
 func (h tenantHandler) list(w http.ResponseWriter, r *http.Request) {
 	pageNum, pageSize := pageParams(r)
-	sort := sortParams(r, "name", "root", "disabled", "last_seen_at", "created_at")
+	sort := sortParams(r, "name", "root", "disabled", "github_login", "last_seen_at", "created_at")
 	filter := service.TenantFilter{
 		Keyword:  r.URL.Query().Get("q"),
 		Disabled: queryBool(r, "disabled"),
