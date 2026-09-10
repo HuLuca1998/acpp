@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data:">
+<title>我的 issue</title>
+<link rel="stylesheet" href="popover.css">
+</head>
+<body>
+<div class="panel">
+  <header class="head">
+    <span class="head-title">我的 issue</span>
+    <span class="head-count" id="count"></span>
+    <span class="head-meta" id="meta"></span>
+    <button class="icon-btn" id="refresh" title="立刻去 GitHub 拉一次">↻</button>
+  </header>
+  <div class="list" id="list"></div>
+  <footer class="foot">
+    <button class="foot-btn" id="open-app">打开 ACPP</button>
+    <button class="foot-btn" id="open-all">查看全部 issue ↗</button>
+  </footer>
+</div>
+<script src="popover.js"></script>
+</body>
+</html>

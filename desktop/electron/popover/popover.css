@@ -1,0 +1,170 @@
+/* 托盘弹层：底色由窗口的 vibrancy（系统菜单材质）提供，这里只画前景。
+   颜色全走变量并按系统明暗切换，跟 NSMenu 一样在浅色菜单栏下也能读。 */
+:root {
+  --fg: rgba(0, 0, 0, 0.9);
+  --fg2: rgba(0, 0, 0, 0.55);
+  --fg3: rgba(0, 0, 0, 0.38);
+  --hover: rgba(0, 0, 0, 0.07);
+  --btn: rgba(0, 0, 0, 0.06);
+  --btn-hover: rgba(0, 0, 0, 0.12);
+  --line: rgba(0, 0, 0, 0.1);
+  --link: #0a60ff;
+  --ok: #1f8f4e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: rgba(255, 255, 255, 0.92);
+    --fg2: rgba(255, 255, 255, 0.6);
+    --fg3: rgba(255, 255, 255, 0.4);
+    --hover: rgba(255, 255, 255, 0.1);
+    --btn: rgba(255, 255, 255, 0.09);
+    --btn-hover: rgba(255, 255, 255, 0.2);
+    --line: rgba(255, 255, 255, 0.09);
+    --link: #5b9dff;
+    --ok: #7fc99a;
+  }
+}
+
+html, body {
+  margin: 0;
+  background: transparent;
+  color: var(--fg);
+  font: 13px/1.3 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  cursor: default;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.panel { padding: 6px 0 6px; }
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 14px 8px;
+}
+.head-title { font-weight: 600; }
+.head-count {
+  font: 600 11px ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--fg2);
+}
+.head-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--fg3);
+}
+.icon-btn {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fg2);
+  padding: 2px 5px;
+  border-radius: 4px;
+  align-self: center;
+}
+.icon-btn:hover { background: var(--btn-hover); color: var(--fg); }
+.icon-btn.spin { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.list { max-height: 540px; overflow-y: auto; }
+
+.info {
+  padding: 6px 14px;
+  color: var(--fg2);
+  font-size: 12px;
+}
+
+/* 一行一条：点 · 编号 · 仓库 · 状态 · 标题 …… 按钮 */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  margin: 0 6px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+.row:hover { background: var(--hover); }
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b949e;
+}
+.num {
+  flex: none;
+  font: 600 11px ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--fg2);
+  min-width: 34px;
+}
+.repo {
+  flex: none;
+  font: 500 10px ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--fg3);
+}
+.status {
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--st, var(--fg2));
+  background: color-mix(in srgb, var(--st, var(--fg2)) 16%, transparent);
+}
+.title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.open {
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--link);
+  background: var(--btn);
+  border-radius: 4px;
+  padding: 2px 8px;
+  visibility: hidden;
+}
+.row:hover .open { visibility: visible; }
+.open:hover { background: var(--btn-hover); color: var(--fg); }
+
+.row.copied .num,
+.row.copied .repo,
+.row.copied .status,
+.row.copied .title,
+.row.copied .open { display: none; }
+.copied-msg {
+  display: none;
+  font-weight: 500;
+  color: var(--ok);
+}
+.row.copied .copied-msg { display: inline; }
+
+.foot {
+  display: flex;
+  gap: 4px;
+  margin: 6px 6px 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.foot-btn {
+  flex: 1;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--fg2);
+}
+.foot-btn:hover { background: var(--hover); color: var(--fg); }

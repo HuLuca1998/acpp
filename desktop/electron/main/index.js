@@ -7,6 +7,7 @@ import { installMainMenu } from "./menu.js"
 import { IssueFeed } from "./issues.js"
 import { launchPrefs } from "./launch-prefs.js"
 import { notifier } from "./notifier.js"
+import { PopoverWindow } from "./popover.js"
 import { LOG_PATH, ServerController } from "./server.js"
 import { MainWindow } from "./window.js"
 import { TrayController } from "./tray.js"
@@ -77,7 +78,8 @@ class AppShell {
     }
 
     this.issues = new IssueFeed({ server: this.server })
-    this.tray = new TrayController({ server: this.server, shell: this, issues: this.issues })
+    this.popover = new PopoverWindow({ issues: this.issues, shell: this })
+    this.tray = new TrayController({ server: this.server, shell: this, popover: this.popover })
 
     // 通知：这里只接线，**不请求授权**——启动就弹系统授权框是最招人烦的做法，
     // 而且用户还没见过这个 app 会通知什么。授权由设置页里的开关发起。
@@ -189,6 +191,7 @@ class AppShell {
     } catch (err) {
       console.error("停止 acp-server 失败:", err)
     }
+    this.popover?.destroy()
     this.tray?.destroy()
     app.exit(0)
   }

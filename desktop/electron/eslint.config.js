@@ -20,6 +20,14 @@ export default [
     },
   },
   {
+    files: ["popover/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "script",
+      globals: { ...globals.browser },
+    },
+  },
+  {
     files: ["preload/**/*.cjs"],
     languageOptions: {
       ecmaVersion: 2024,

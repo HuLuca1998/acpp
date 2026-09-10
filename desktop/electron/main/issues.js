@@ -22,6 +22,8 @@ export class IssueFeed {
     this.snapshot = { items: [], total: 0, fetchedAt: null, error: null }
     this.timer = null
     this.inflight = null
+    /** 快照更新后的回调，弹层据此重画；壳装配时赋值。 */
+    this.onChange = null
   }
 
   /** 起后台刷新。服务起来前拉不到东西，但拉一次的代价只是一个失败的 fetch。 */
@@ -44,6 +46,7 @@ export class IssueFeed {
     if (this.inflight) return this.inflight
     this.inflight = this.fetchOnce(force).finally(() => {
       this.inflight = null
+      this.onChange?.()
     })
     return this.inflight
   }

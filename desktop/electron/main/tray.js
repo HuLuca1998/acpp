@@ -1,31 +1,27 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { Menu, Tray, app, clipboard, nativeImage } from "electron"
+import { Menu, Tray, app, nativeImage } from "electron"
 
-import { chromeProfiles, openURL } from "./browser.js"
-import { MENU_LIMIT } from "./issues.js"
+import { chromeProfiles } from "./browser.js"
 import { prefs } from "./prefs.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
-/** 菜单项标题的长度上限：菜单栏下拉再宽也就这么些字，长了系统会截成省略号。 */
-const TITLE_MAX = 48
-
 /**
- * 菜单栏图标：**左键只弹「我的 issue」清单**（照 codex-ui 的 Codex Viewer，
- * 图标就是一张 issue 清单），**右键（或 ⌃+左键）弹操作菜单**（打开窗口、
- * 局域网、启动项、重启服务、退出）。两个菜单每次现 build，直接读服务状态，
- * 不维护同步逻辑。
+ * 菜单栏图标：**左键弹「我的 issue」面板**（popover.js 自绘，照 codex-ui 的
+ * Codex Viewer——图标就是一张 issue 清单），**右键（或 ⌃+左键）弹操作菜单**
+ * （打开窗口、局域网、启动项、重启服务、退出）。操作菜单每次现 build，
+ * 直接读服务状态，不维护同步逻辑。
  *
  * 曾经左键是切主窗口显隐，实际用下来点图标想看的都是清单，窗口有 Dock 图标
  * 可点，于是左键让给了清单。
  */
 export class TrayController {
-  constructor({ server, shell, issues }) {
+  constructor({ server, shell, popover }) {
     this.server = server
     this.shell = shell
-    this.issues = issues
+    this.popover = popover
 
     const icon = nativeImage.createFromPath(iconPath())
     // 模板图：系统按菜单栏明暗自动着色
@@ -33,29 +29,19 @@ export class TrayController {
     this.tray = new Tray(icon)
     this.tray.setToolTip("ACPP")
 
-    this.tray.on("click", (event) => {
+    this.tray.on("click", (event, bounds) => {
       if (event.ctrlKey) this.popActionMenu()
-      else this.popIssueMenu()
+      else this.popover.toggle(bounds)
     })
     this.tray.on("right-click", () => this.popActionMenu())
   }
 
-  popIssueMenu() {
-    // 菜单画的是上一次拉到的清单；弹出时顺手再拉一次给下次用。
-    void this.issues?.refresh()
-    this.tray.popUpContextMenu(this.buildIssueMenu())
-  }
-
   popActionMenu() {
+    this.popover.hide()
     this.tray.popUpContextMenu(this.buildActionMenu())
   }
 
-  /** 左键菜单：只有 issue 清单及其配套项（查看全部、刷新、Chrome 账号）。 */
-  buildIssueMenu() {
-    return Menu.buildFromTemplate(this.issueItems(this.server.state === "running"))
-  }
-
-  /** 右键菜单：服务状态与壳的操作项，不放 issue。 */
+  /** 右键菜单：服务状态与壳的操作项，issue 在左键面板里。 */
   buildActionMenu() {
     const server = this.server
     const running = server.state === "running"
@@ -75,6 +61,7 @@ export class TrayController {
       { type: "separator" },
       { label: "打开 ACPP", click: () => this.shell.showMainWindow() },
       { label: "在浏览器中打开", enabled: running, click: () => this.shell.openInBrowser() },
+      ...chromeProfileItems(),
       { type: "separator" },
       {
         label: "允许局域网访问",
@@ -115,93 +102,40 @@ export class TrayController {
     return Menu.buildFromTemplate(items)
   }
 
-  /**
-   * 「分配给我的 issue」一段：默认条件与 GitHub 页一致（open、排除做完 / 取消
-   * 的看板列、按优先级排）。点一条**复制纯数字编号**——日常最高频的动作是把
-   * 编号丢给 AI 的 /issue 命令，与 codex-ui 的菜单一致；⌥ 点击才用选定的
-   * Chrome 账号打开。末尾是账号子菜单与「查看全部」。
-   */
-  issueItems(running) {
-    const snap = this.issues?.snapshot
-    const items = []
-    if (!running || !snap) {
-      items.push({ label: "我的 issue（服务未运行）", enabled: false })
-      return items
-    }
-    if (snap.items.length === 0) {
-      const why = snap.error
-        ? `拉取失败：${snap.error}`
-        : snap.watched && snap.watched.length === 0
-          ? "还没有关注仓库，去 GitHub 页挑几个"
-          : "没有分配给你的 issue"
-      items.push({ label: "我的 issue", enabled: false })
-      items.push({ label: `    ${truncate(why, 60)}`, enabled: false })
-    } else {
-      const more = snap.total > snap.items.length ? `，显示前 ${snap.items.length}` : ""
-      items.push({
-        label: `我的 issue（${snap.total}${more}）· 点击复制编号，⌥ 点击打开`,
-        enabled: false,
-      })
-      for (const it of snap.items.slice(0, MENU_LIMIT)) {
-        // 优先级与看板列作前缀：菜单项没有颜色可用，文字得把两件事说清。
-        const tags = [it.priority, it.status].filter(Boolean).join(" · ")
-        const repo = it.repo.split("/").pop()
-        items.push({
-          label: `${tags ? `[${tags}] ` : ""}#${it.number} ${truncate(it.title, TITLE_MAX)}`,
-          toolTip: `${it.repo}#${it.number}\n${it.title}\n点击复制 ${it.number}，⌥ 点击打开 GitHub`,
-          sublabel: repo,
-          // Electron 的原生菜单做不了 codex-ui 那种「行内分热区」，用修饰键分工。
-          click: (_item, _win, event) => {
-            if (event?.altKey) openURL(it.url, prefs.chromeProfile)
-            else clipboard.writeText(String(it.number))
-          },
-        })
-      }
-      if (snap.error) items.push({ label: `    部分仓库拉取失败`, enabled: false, toolTip: snap.error })
-    }
-    items.push({
-      label: "查看全部 issue",
-      click: () => this.shell.showMainWindow("/github"),
-    })
-    items.push({
-      label: "刷新 issue",
-      enabled: running,
-      click: () => void this.issues?.refresh({ force: true }),
-    })
-    const profiles = chromeProfiles()
-    if (profiles.length > 0) {
-      const current = prefs.chromeProfile
-      items.push({
-        label: "用哪个 Chrome 账号打开",
-        submenu: [
-          {
-            label: "跟随 Chrome 上次使用的账号",
-            type: "radio",
-            checked: current === "",
-            click: () => (prefs.chromeProfile = ""),
-          },
-          { type: "separator" },
-          ...profiles.map((p) => ({
-            label: p.email ? `${p.name} — ${p.email}` : p.name,
-            sublabel: p.dir,
-            type: "radio",
-            checked: current === p.dir,
-            click: () => (prefs.chromeProfile = p.dir),
-          })),
-        ],
-      })
-    }
-    return items
-  }
-
   destroy() {
     this.tray?.destroy()
   }
 }
 
-function truncate(s, n) {
-  const str = String(s ?? "")
-  return str.length > n ? `${str.slice(0, n - 1)}…` : str
+/**
+ * 「用哪个 Chrome 账号打开 issue」：读 Chrome 的账号清单做单选子菜单，偏好存
+ * 壳的 prefs。私有仓库只有某个账号有权限时用。没装 Chrome 就不出这项。
+ */
+function chromeProfileItems() {
+  const profiles = chromeProfiles()
+  if (profiles.length === 0) return []
+  const current = prefs.chromeProfile
+  return [
+    {
+      label: "用哪个 Chrome 账号打开 issue",
+      submenu: [
+        {
+          label: "跟随 Chrome 上次使用的账号",
+          type: "radio",
+          checked: current === "",
+          click: () => (prefs.chromeProfile = ""),
+        },
+        { type: "separator" },
+        ...profiles.map((p) => ({
+          label: p.email ? `${p.name} — ${p.email}` : p.name,
+          sublabel: p.dir,
+          type: "radio",
+          checked: current === p.dir,
+          click: () => (prefs.chromeProfile = p.dir),
+        })),
+      ],
+    },
+  ]
 }
 
 /** 模板图位置：打包态在 Resources 下，开发态回退到仓库 build 产物。 */
