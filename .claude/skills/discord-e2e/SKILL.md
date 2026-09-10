@@ -94,6 +94,9 @@ mcp__Claude_Browser__navigate { url: "https://discord.com/channels/<guildId>/<ch
   el.focus();
   el.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true, cancelable:true}));
   ```
+- **点卡片上的按钮用 `find` 拿 ref 再 `click`**：按截图坐标点会落空——截图到点击之间
+  面板尺寸常变（同一轮里 800x630 → 800x668），坐标整体漂移；ref 不受影响（真机踩过：
+  停止按钮按坐标点了没反应，用 ref 一下就中）。
 - **清空输入框**：清不掉。`execCommand('delete')` 只改 DOM，Slate 内部 state
   还留着旧内容，发出去的是旧的（真机踩过：想发长消息，实际只发出一个残留的 `a`）。
   唯一可靠的办法是**把它发出去**，或者换一个干净频道操作。刷新页面会恢复草稿，没用。
