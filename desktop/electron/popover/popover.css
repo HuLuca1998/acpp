@@ -83,7 +83,7 @@ button {
   font-size: 12px;
 }
 
-/* 一行一条：点 · 编号 · 仓库 · 状态 · 标题 …… 按钮 */
+/* 一行一条：点 · 编号 · 仓库 · 状态 · 标题 */
 .row {
   display: flex;
   align-items: center;
@@ -106,7 +106,12 @@ button {
   font: 600 11px ui-monospace, "SF Mono", Menlo, monospace;
   color: var(--fg2);
   min-width: 34px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border-radius: 4px;
+  text-align: left;
 }
+.num:hover { background: var(--btn-hover); color: var(--fg); }
 .repo {
   flex: none;
   font: 500 10px ui-monospace, "SF Mono", Menlo, monospace;
@@ -128,24 +133,10 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.open {
-  flex: none;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--link);
-  background: var(--btn);
-  border-radius: 4px;
-  padding: 2px 8px;
-  visibility: hidden;
-}
-.row:hover .open { visibility: visible; }
-.open:hover { background: var(--btn-hover); color: var(--fg); }
-
 .row.copied .num,
 .row.copied .repo,
 .row.copied .status,
-.row.copied .title,
-.row.copied .open { display: none; }
+.row.copied .title { display: none; }
 .copied-msg {
   display: none;
   font-weight: 500;

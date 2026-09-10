@@ -1,4 +1,4 @@
-// 托盘弹层的渲染：拿快照画列表，点行复制编号，按钮打开 GitHub。
+// 托盘弹层的渲染：拿快照画列表，点行打开 GitHub，点编号复制编号。
 // 没有框架：一屏十几行，手写 DOM 比拉一套依赖便宜得多。
 
 /** GitHub 单选字段的色名（Priority / 看板列共用一套）→ 实际颜色，与 codex-ui 同表。 */
@@ -74,29 +74,27 @@ function render(snap) {
 
 function row(it) {
   const r = el("div", "row")
-  r.title = `${it.repo}#${it.number}\n${it.title}\n点击复制 ${it.number}`
+  r.title = `${it.repo}#${it.number}\n${it.title}\n点击打开 GitHub；点编号复制 ${it.number}`
   const dot = el("span", "dot")
   dot.style.background = dotColor(it)
-  r.append(dot, el("span", "num", `#${it.number}`), el("span", "repo", it.repo.split("/").pop()))
+  // 编号是独立热区：点它复制纯数字编号，不冒泡到行（行是打开 GitHub）
+  const num = el("button", "num", `#${it.number}`)
+  num.title = `复制 ${it.number}`
+  num.addEventListener("click", (e) => {
+    e.stopPropagation()
+    void window.acppTray.copy(String(it.number))
+    r.classList.add("copied")
+    setTimeout(() => r.classList.remove("copied"), 1200)
+  })
+  r.append(dot, num, el("span", "repo", it.repo.split("/").pop()))
   if (it.status) {
     const st = el("span", "status", it.status)
     const c = ghColor(it.statusColor)
     if (c) st.style.setProperty("--st", c)
     r.append(st)
   }
-  r.append(el("span", "title", it.title))
-  const open = el("button", "open", "打开")
-  open.title = "在浏览器打开 GitHub"
-  open.addEventListener("click", (e) => {
-    e.stopPropagation()
-    void window.acppTray.open(it.url)
-  })
-  r.append(open, el("span", "copied-msg", `✓ 已复制 #${it.number}`))
-  r.addEventListener("click", () => {
-    void window.acppTray.copy(String(it.number))
-    r.classList.add("copied")
-    setTimeout(() => r.classList.remove("copied"), 1200)
-  })
+  r.append(el("span", "title", it.title), el("span", "copied-msg", `✓ 已复制 #${it.number}`))
+  r.addEventListener("click", () => void window.acppTray.open(it.url))
   return r
 }
 
