@@ -1,6 +1,6 @@
 import path from "node:path"
 
-import { BrowserWindow, app, clipboard, shell } from "electron"
+import { BrowserWindow, app, clipboard, powerMonitor, shell } from "electron"
 
 import { installBridge } from "./bridge.js"
 import { installMainMenu } from "./menu.js"
@@ -16,9 +16,11 @@ import { TrayController } from "./tray.js"
  * 产品约定（沿用 ADR-004）：关闭窗口/Cmd+Q/Dock 退出都只是隐藏窗口，服务常驻
  * 菜单栏；真退出只有两条路——菜单栏右键「退出」，或收到 SIGTERM（自更新）。
  *
- * 与 Swift 版的一处已知差别：那边靠读 Quit AppleEvent 的 `why?` 参数放行系统
- * 注销/关机，Electron 没有等价 API。注销时系统会提示「应用阻止了注销」，需要
- * 用户确认一下——这是权衡后接受的代价（见 ADR-015）。
+ * 系统注销/关机也必须放行：Electron 重写了 `terminate:`，系统的 Quit 事件只会
+ * 走到 `before-quit`，被拦下后既不回复取消也不退出，macOS 连「应用阻止了关机」
+ * 都不弹，关机就一直卡着。区分来源靠 `powerMonitor` 的 `shutdown` 事件——它对应
+ * NSWorkspaceWillPowerOffNotification，只在注销/重启/关机时发、且早于 Quit 事件，
+ * Cmd+Q 与 Dock 退出都不会触发（见 ADR-015 补记）。
  */
 
 // 窗口遮挡计算在 resize 期间反复触发且跟着掉帧，必须在 ready 之前关掉（ADR-015）。
@@ -222,6 +224,14 @@ if (!app.requestSingleInstanceLock()) {
     // 点 Dock 图标且无可见窗口时召回主窗口。
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length > 0) shellApp.showMainWindow()
+    })
+
+    // 系统注销/重启/关机：真退出，回收服务子进程。powerMonitor 必须在 ready 之后
+    // 才能访问；preventDefault 是告诉 Electron「别走它的 quit 流程，我们自己退」，
+    // 随后系统补发的 terminate: 会被 Electron 挡掉，不会与这里的退出路径打架。
+    powerMonitor.on("shutdown", (event) => {
+      event.preventDefault()
+      shellApp.requestRealQuit()
     })
   })
 

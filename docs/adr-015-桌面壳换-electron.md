@@ -60,6 +60,15 @@ Cmd+Q 改真退出 / 保持拦截 / 加超时启发式——选了**保持拦截
 会弹「应用阻止了注销」要用户确认一下。启发式方案被否掉是因为它不保证对所有
 系统流程都准，那种「大部分时候对」的行为比一个稳定的提示更难排查。
 
+**2026-09-10 补记**：「没有等价 API」与「系统会提示」两个前提都不成立。实测关机时
+ACPP 只是静默不退、关机一直卡着，没有任何提示——因为 Electron 重写了 `terminate:`，
+系统的 Quit AppleEvent 只走到 `before-quit`，被拦下后既不回复 `NSTerminateCancel`
+也不退出。等价 API 其实有：Electron 在 `applicationWillFinishLaunching` 里监听了
+`NSWorkspaceWillPowerOffNotification`，暴露为 `powerMonitor` 的 `shutdown` 事件，
+只在注销/重启/关机时发且早于 Quit 事件，Cmd+Q 与 Dock 退出不会触发。壳现在在该
+事件里走真退出（停 acp-server 后 `app.exit`），决策本身（Cmd+Q 只隐藏）不变，
+「注销要手动确认」这个代价没了。
+
 ### 主进程用 ESM JS，不引 TypeScript
 
 壳是薄装配层，为它单独拉一条 tsc 构建链不划算；`make typecheck` 继续只管 web。
