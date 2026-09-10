@@ -14,7 +14,7 @@ import { TrayController } from "./tray.js"
 /**
  * 装配层 + 生命周期裁决：谁能真正退出这个 app，是这里唯一的复杂逻辑。
  * 产品约定（沿用 ADR-004）：关闭窗口/Cmd+Q/Dock 退出都只是隐藏窗口，服务常驻
- * 菜单栏；真退出只有两条路——菜单栏右键「退出」，或收到 SIGTERM（自更新）。
+ * 菜单栏；真退出只有两条路——菜单栏图标菜单「退出」，或收到 SIGTERM（自更新）。
  *
  * 系统注销/关机也必须放行：Electron 重写了 `terminate:`，系统的 Quit 事件只会
  * 走到 `before-quit`，被拦下后既不回复取消也不退出，macOS 连「应用阻止了关机」
@@ -105,11 +105,6 @@ class AppShell {
   }
 
   // MARK: - 菜单栏动作
-
-  toggleMainWindow() {
-    this.restoreRegularActivation()
-    this.window.toggle()
-  }
 
   /** route 给了就顺带切到那个页面（如菜单栏的「查看全部 issue」→ /github）。 */
   showMainWindow(route) {

@@ -92,11 +92,6 @@ export class MainWindow {
     this.win.hide()
   }
 
-  toggle() {
-    if (this.isVisible) this.hide()
-    else this.show()
-  }
-
   /** 窗口位置与大小记在偏好里，下次开在原地（对应 Swift 的 setFrameAutosaveName）。 */
   rememberBounds() {
     if (this.win.isMinimized() || this.win.isFullScreen()) return

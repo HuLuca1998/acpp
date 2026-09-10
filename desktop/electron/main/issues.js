@@ -36,21 +36,24 @@ export class IssueFeed {
     this.timer = null
   }
 
-  /** 拉一次；并发调用共用同一个请求。 */
-  refresh() {
+  /**
+   * 拉一次；并发调用共用同一个请求。默认只读后端缓存（后端自己每 3 分钟
+   * 刷一轮 GitHub），force 才让后端立刻去 GitHub 拉——菜单里的「刷新」用。
+   */
+  refresh({ force = false } = {}) {
     if (this.inflight) return this.inflight
-    this.inflight = this.fetchOnce().finally(() => {
+    this.inflight = this.fetchOnce(force).finally(() => {
       this.inflight = null
     })
     return this.inflight
   }
 
-  async fetchOnce() {
+  async fetchOnce(force) {
     if (this.server.state !== "running") {
       this.snapshot = { ...this.snapshot, items: [], total: 0, error: "服务未运行" }
       return
     }
-    const url = `http://127.0.0.1:${PORT}/api/github/issues?pageSize=${MENU_LIMIT}`
+    const url = `http://127.0.0.1:${PORT}/api/github/issues?pageSize=${MENU_LIMIT}${force ? "&refresh=1" : ""}`
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
       const body = await res.json()

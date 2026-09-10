@@ -1,7 +1,7 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { Menu, Tray, app, nativeImage } from "electron"
+import { Menu, Tray, app, clipboard, nativeImage } from "electron"
 
 import { chromeProfiles, openURL } from "./browser.js"
 import { MENU_LIMIT } from "./issues.js"
@@ -13,12 +13,12 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const TITLE_MAX = 48
 
 /**
- * 菜单栏图标：左键切换主窗口显隐，右键（或 ⌃+左键）弹操作菜单。
+ * 菜单栏图标：左键、右键都弹同一个菜单（照 codex-ui 的 Codex Viewer：菜单栏
+ * 图标就是一张「我的 issue」清单，主窗口从菜单里的「打开 ACPP」进）。
  * 菜单每次现 build，直接读服务状态，不维护同步逻辑。
  *
- * 比 Swift 版干净的一点：那边为了保住「左键切窗口/右键菜单」的分工，得靠
- * 「右键时临时挂 menu 再 performClick，然后立刻摘掉」的手法绕开 NSStatusItem
- * 的默认行为；Electron 直接分了两个事件，popUpContextMenu 用完即散。
+ * 曾经是「左键切窗口 / 右键菜单」的分工，实际用下来点图标想看的都是清单，
+ * 窗口有 Dock 图标可点，于是改成一律弹菜单。
  */
 export class TrayController {
   constructor({ server, shell, issues }) {
@@ -32,10 +32,7 @@ export class TrayController {
     this.tray = new Tray(icon)
     this.tray.setToolTip("ACPP")
 
-    this.tray.on("click", (event) => {
-      if (event.ctrlKey) this.popMenu()
-      else this.shell.toggleMainWindow()
-    })
+    this.tray.on("click", () => this.popMenu())
     this.tray.on("right-click", () => this.popMenu())
   }
 
@@ -108,8 +105,9 @@ export class TrayController {
 
   /**
    * 「分配给我的 issue」一段：默认条件与 GitHub 页一致（open、排除做完 / 取消
-   * 的看板列、按优先级排），点一条用选定的 Chrome 账号打开；末尾是账号子菜单
-   * 与「查看全部」。
+   * 的看板列、按优先级排）。点一条**复制纯数字编号**——日常最高频的动作是把
+   * 编号丢给 AI 的 /issue 命令，与 codex-ui 的菜单一致；⌥ 点击才用选定的
+   * Chrome 账号打开。末尾是账号子菜单与「查看全部」。
    */
   issueItems(running) {
     const snap = this.issues?.snapshot
@@ -128,16 +126,23 @@ export class TrayController {
       items.push({ label: `    ${truncate(why, 60)}`, enabled: false })
     } else {
       const more = snap.total > snap.items.length ? `，显示前 ${snap.items.length}` : ""
-      items.push({ label: `我的 issue（${snap.total}${more}）`, enabled: false })
+      items.push({
+        label: `我的 issue（${snap.total}${more}）· 点击复制编号，⌥ 点击打开`,
+        enabled: false,
+      })
       for (const it of snap.items.slice(0, MENU_LIMIT)) {
         // 优先级与看板列作前缀：菜单项没有颜色可用，文字得把两件事说清。
         const tags = [it.priority, it.status].filter(Boolean).join(" · ")
         const repo = it.repo.split("/").pop()
         items.push({
           label: `${tags ? `[${tags}] ` : ""}#${it.number} ${truncate(it.title, TITLE_MAX)}`,
-          toolTip: `${it.repo}#${it.number}\n${it.title}`,
+          toolTip: `${it.repo}#${it.number}\n${it.title}\n点击复制 ${it.number}，⌥ 点击打开 GitHub`,
           sublabel: repo,
-          click: () => openURL(it.url, prefs.chromeProfile),
+          // Electron 的原生菜单做不了 codex-ui 那种「行内分热区」，用修饰键分工。
+          click: (_item, _win, event) => {
+            if (event?.altKey) openURL(it.url, prefs.chromeProfile)
+            else clipboard.writeText(String(it.number))
+          },
         })
       }
       if (snap.error) items.push({ label: `    部分仓库拉取失败`, enabled: false, toolTip: snap.error })
@@ -145,6 +150,11 @@ export class TrayController {
     items.push({
       label: "查看全部 issue",
       click: () => this.shell.showMainWindow("/github"),
+    })
+    items.push({
+      label: "刷新 issue",
+      enabled: running,
+      click: () => void this.issues?.refresh({ force: true }),
     })
     const profiles = chromeProfiles()
     if (profiles.length > 0) {
