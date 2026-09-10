@@ -107,7 +107,7 @@ func equalInts(a, b []int) bool {
 }
 
 // 契约：零值查询 = 分配给我 + open + 排除做完 / 取消的看板列 + 按优先级
-// 紧急在前、同档更新时间新的在前、没优先级的垫底。
+// 紧急在前、同档按仓库与编号升序、没优先级的垫底。
 func TestQuery_Defaults(t *testing.T) {
 	got, total := Query{Login: "luca"}.apply(sample(), rank)
 	want := []int{2, 1, 6}
@@ -124,10 +124,10 @@ func TestQuery_Filters(t *testing.T) {
 	}{
 		{"全部人", Query{Login: "luca", Assignee: "all"}, []int{2, 3, 1, 6}},
 		{"没配用户名就不按人筛", Query{}, []int{2, 3, 1, 6}},
-		{"看板全部", Query{Login: "luca", Board: "all"}, []int{2, 7, 1, 6, 4}},
+		{"看板全部", Query{Login: "luca", Board: "all"}, []int{2, 7, 1, 4, 6}},
 		{"指定看板列", Query{Login: "luca", Board: "待处理"}, []int{1}},
 		{"closed", Query{Login: "luca", State: "closed", Board: "all"}, []int{5}},
-		{"all 状态", Query{Login: "luca", State: "all", Board: "all"}, []int{2, 7, 5, 1, 6, 4}},
+		{"all 状态", Query{Login: "luca", State: "all", Board: "all"}, []int{2, 5, 7, 1, 4, 6}},
 		{"优先级", Query{Login: "luca", Priority: "Low"}, []int{1}},
 		{"标签", Query{Login: "luca", Label: "bug"}, []int{1}},
 		{"关键词标题", Query{Login: "luca", Keyword: "登录"}, []int{1}},
@@ -149,7 +149,7 @@ func TestQuery_Filters(t *testing.T) {
 func TestQuery_Paging(t *testing.T) {
 	q := Query{Login: "luca", Board: "all", Page: 2, PageSize: 2}
 	got, total := q.apply(sample(), rank)
-	if total != 5 || !equalInts(numbers(got), []int{1, 6}) {
+	if total != 5 || !equalInts(numbers(got), []int{1, 4}) {
 		t.Fatalf("page 2 = %v (total %d)", numbers(got), total)
 	}
 	got, _ = Query{Login: "luca", Board: "all", Page: 9, PageSize: 2}.apply(sample(), rank)

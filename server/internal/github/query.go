@@ -134,8 +134,9 @@ func (q Query) match(is Issue) bool {
 	return true
 }
 
-// sortIssues 排序。优先级排序里没有优先级的排最后；同档按更新时间新的在前。
-// 稳定排序，保证翻页时同一条不会在两页间跳。
+// sortIssues 排序。优先级排序里没有优先级的排最后；同档按仓库、编号升序——
+// 编号就是 issue 的创建顺序，同一档里先建的先做，比「谁最近被碰过」更稳定，
+// 清单不会因为一条评论就重排。稳定排序，保证翻页时同一条不会在两页间跳。
 func (q Query) sortIssues(list []Issue, priorityRank map[string]int) {
 	rank := func(is Issue) int {
 		if r, ok := priorityRank[is.Priority]; ok && is.Priority != "" {
@@ -159,6 +160,9 @@ func (q Query) sortIssues(list []Issue, priorityRank map[string]int) {
 			}
 			return ra > rb
 		}
-		return a.UpdatedAt.After(b.UpdatedAt)
+		if a.Repo != b.Repo {
+			return a.Repo < b.Repo
+		}
+		return a.Number < b.Number
 	})
 }
