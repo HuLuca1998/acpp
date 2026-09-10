@@ -78,9 +78,13 @@ func NewService(gdb *gorm.DB) *Service {
 	return &Service{db: gdb, cache: newCache()}
 }
 
-// Start 起后台刷新：所有被关注的仓库每 refreshEvery 拉一次。ctx 取消即停。
+// Start 起后台刷新：启动先把所有被关注的仓库预热一遍（进程重启后第一个
+// 打开页面的人不用干等二十秒），之后每 refreshEvery 拉一次。ctx 取消即停。
 func (s *Service) Start(ctx context.Context) {
-	go s.refreshLoop(ctx)
+	go func() {
+		s.cache.ensure(ctx, s.watchedRepos(ctx))
+		s.refreshLoop(ctx)
+	}()
 }
 
 // Watched 返回一个身份关注的仓库清单；没设置过就是空。
@@ -171,6 +175,8 @@ type Result struct {
 	Statuses   []Option `json:"statuses"`
 	Priorities []Option `json:"priorities"`
 	Labels     []string `json:"labels"`
+	// Watched 是当前身份的关注清单：前端的仓库筛选项直接取它，不用再问一次。
+	Watched []string `json:"watched"`
 	// Login 是「分配给我」实际用的 GitHub 用户名；空表示这个身份没配。
 	Login string `json:"login"`
 	// FetchedAt 是最旧的那个仓库缓存的拉取时间；零值表示还没拉到过。
@@ -244,6 +250,7 @@ func (s *Service) Issues(ctx context.Context, scope service.Scope, login string,
 		Statuses:   statuses.list(),
 		Priorities: priorities.list(),
 		Labels:     labelList,
+		Watched:    watched,
 		Login:      login,
 		FetchedAt:  oldest,
 		Errors:     errs,

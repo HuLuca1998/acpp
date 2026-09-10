@@ -36,6 +36,7 @@ const Jobs = page(() => import("@/routes/jobs"), "Jobs")
 const Settings = page(() => import("@/routes/settings"), "Settings")
 const Tenants = page(() => import("@/routes/tenants"), "Tenants")
 const Logs = page(() => import("@/routes/logs"), "Logs")
+const Github = page(() => import("@/routes/github"), "Github")
 
 /** 尚未实现、但已在导航里占位的页面。 */
 const PLACEHOLDERS = [
@@ -91,6 +92,7 @@ export function App() {
           {/* 「连接」= 局域网访客管理（adr-007）：发链接、看谁在用、随时关停。 */}
           <Route path="connections" element={<Tenants />} />
           <Route path="logs" element={<Logs />} />
+          <Route path="github" element={<Github />} />
           {PLACEHOLDERS.map(({ path, titleKey, descKey }) => (
             <Route
               key={path}

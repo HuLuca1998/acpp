@@ -39,6 +39,7 @@
 | notify/store.ts   | 通知中心的存量（模块级广播，内存态不落盘）：同 id 覆盖、按优先级排序（update 最高）、上限裁剪 | `pushNotice`、`dismissNotice`、`clearNotices`、`Notice`、`NoticeKind` |
 | subagents.ts      | 子代理清单提取：两端形状（claude 的 Agent 调用 / codex 的独立 thread）归一成条目 | `collectSubagents`、`hasSubagents`、`isSubagentWork`、`subagentLocations`、`SubagentEntry` |
 | status-tone.ts    | 会话/agent 状态 → StatusDot 色调的统一映射                            | `SESSION_STATE_TONE`、`AGENT_STATUS_TONE`、`StatusTone`              |
+| github-color.ts   | GitHub 单选字段颜色名（看板列 / Priority）→ 状态点底色类             | `githubDotClass`                                                     |
 | utils.ts          | 类名合并（shadcn 标配）                                               | `cn`                                                                 |
 
 ## hooks/ — 可复用 React 逻辑

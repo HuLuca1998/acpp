@@ -26,6 +26,7 @@ import { groupSessionsByCwd } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   CalendarClockIcon,
+  CircleDotIcon,
   DatabaseIcon,
   HardDriveIcon,
   LayoutDashboardIcon,
@@ -95,8 +96,8 @@ export function AppSidebar({
   // 按 cwd 分组，不依赖项目扫描——会话自带的目录永远对得上。
   const groups = React.useMemo(() => groupSessionsByCwd(recent), [recent])
 
-  // 租户只留会话与项目：技能、设置、连接都是 owner 的东西，后端也已按
-  // owner-only 拦截，导航里直接不出现（adr-007）。
+  // 租户只留会话、项目与 GitHub：技能、设置、连接都是 owner 的东西，后端
+  // 也已按 owner-only 拦截，导航里直接不出现（adr-007）。
   const navMain = React.useMemo(
     () =>
       isOwner
@@ -134,6 +135,7 @@ export function AppSidebar({
               icon: <CalendarClockIcon />,
             },
             { title: t("nav.logs"), url: "/logs", icon: <ScrollTextIcon /> },
+            { title: t("nav.github"), url: "/github", icon: <CircleDotIcon /> },
           ]
         : [
             {
@@ -141,6 +143,8 @@ export function AppSidebar({
               url: "/sessions",
               icon: <MessagesSquareIcon />,
             },
+            // GitHub issue 页对租户开放（adr-023）：看的是分配给他自己的 issue。
+            { title: t("nav.github"), url: "/github", icon: <CircleDotIcon /> },
           ],
     [isOwner, t]
   )

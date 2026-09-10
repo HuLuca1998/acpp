@@ -43,6 +43,16 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
 
+  /* GitHub 单选字段的八个颜色名（看板列 / Priority），同样跨 palette 恒定。 */
+  --color-gh-gray: var(--gh-gray);
+  --color-gh-blue: var(--gh-blue);
+  --color-gh-green: var(--gh-green);
+  --color-gh-yellow: var(--gh-yellow);
+  --color-gh-orange: var(--gh-orange);
+  --color-gh-red: var(--gh-red);
+  --color-gh-pink: var(--gh-pink);
+  --color-gh-purple: var(--gh-purple);
+
   /* 品牌色：agent 图标用，跨 palette 与明暗恒定（Claude 官方橙）。 */
   --color-brand-claude: #d97757;
 }
@@ -159,6 +169,14 @@
   --chart-5: oklch(from var(--primary) 0.72 calc(c * 0.6) calc(h - 120));
   --success: oklch(0.6 0.15 150);
   --warning: oklch(0.666 0.132 75);
+  --gh-gray: oklch(0.6 0 0);
+  --gh-blue: oklch(0.6 0.16 255);
+  --gh-green: oklch(0.6 0.15 150);
+  --gh-yellow: oklch(0.7 0.14 85);
+  --gh-orange: oklch(0.68 0.17 50);
+  --gh-red: oklch(0.6 0.22 25);
+  --gh-pink: oklch(0.62 0.22 350);
+  --gh-purple: oklch(0.58 0.2 295);
   --radius: 0.875rem;
 
   /* 无边框窗口的尺寸（规范 §5.6）。窗口条是一整条 fixed 元素，钉在左上角，
@@ -208,6 +226,14 @@
   --chart-5: oklch(from var(--primary) 0.82 calc(c * 0.6) calc(h - 120));
   --success: oklch(0.723 0.19 150);
   --warning: oklch(0.75 0.14 80);
+  --gh-gray: oklch(0.7 0 0);
+  --gh-blue: oklch(0.72 0.14 255);
+  --gh-green: oklch(0.723 0.19 150);
+  --gh-yellow: oklch(0.8 0.14 85);
+  --gh-orange: oklch(0.76 0.16 50);
+  --gh-red: oklch(0.7 0.19 25);
+  --gh-pink: oklch(0.74 0.18 350);
+  --gh-purple: oklch(0.72 0.16 295);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.723 0.219 149.579);

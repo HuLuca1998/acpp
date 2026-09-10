@@ -377,8 +377,32 @@ type ghRepo struct {
 	private bool
 }
 
-// listRepos 列出登录账号能看到的全部仓库（个人 + 组织 + 协作）。
+// repoCacheTTL 是仓库清单的缓存时长：清单变化很慢，而每次打开关注对话框
+// 都翻一遍 GitHub API（--paginate 是好几个请求）既慢又白费配额。
+const repoCacheTTL = time.Minute
+
+var repoCache struct {
+	mu      sync.Mutex
+	repos   []ghRepo
+	fetched time.Time
+}
+
+// listRepos 列出登录账号能看到的全部仓库（个人 + 组织 + 协作），带缓存。
 func listRepos(ctx context.Context) ([]ghRepo, error) {
+	repoCache.mu.Lock()
+	defer repoCache.mu.Unlock()
+	if repoCache.repos != nil && time.Since(repoCache.fetched) < repoCacheTTL {
+		return repoCache.repos, nil
+	}
+	repos, err := fetchRepos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	repoCache.repos, repoCache.fetched = repos, time.Now()
+	return repos, nil
+}
+
+func fetchRepos(ctx context.Context) ([]ghRepo, error) {
 	raw, err := ghcli.Run(ctx, "api", "-H", "Accept: application/vnd.github+json", "--paginate",
 		"/user/repos?affiliation=owner,organization_member,collaborator&sort=updated&per_page=100")
 	if err != nil {

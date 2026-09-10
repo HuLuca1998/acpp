@@ -65,6 +65,7 @@ import type {
   SessionState,
 } from "@/types/acp"
 import type { ApiLog } from "@/types/apilog"
+import type { GithubIssueResult, GithubRepo } from "@/types/github"
 
 import { ApiError, BASE, pageQuery, request } from "./core"
 
@@ -653,8 +654,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ name }),
       }),
-    /** 停用/启用，或改工作目录根。 */
-    update: (id: number, patch: { disabled?: boolean; root?: string }) =>
+    /** 停用/启用、改工作目录根，或设 GitHub 用户名。 */
+    update: (
+      id: number,
+      patch: { disabled?: boolean; root?: string; githubLogin?: string }
+    ) =>
       request<Tenant>(`/tenants/${id}`, {
         method: "PUT",
         body: JSON.stringify(patch),
@@ -664,6 +668,33 @@ export const api = {
       request<Tenant>(`/tenants/${id}/rotate`, { method: "POST" }),
     remove: (id: number) =>
       request<null>(`/tenants/${id}`, { method: "DELETE" }),
+  },
+
+  /** GitHub issue 页（adr-023）：关注仓库里的 issue 汇总，租户可用。 */
+  github: {
+    /**
+     * board 是 "active"（默认，排除做完 / 取消的列）/ "all" / 某个列名；
+     * assignee 是 "me"（默认）/ "all"；state 是 open（默认）/ closed / all。
+     */
+    issues: (
+      params?: Partial<PageQuery> & {
+        repos?: string
+        q?: string
+        assignee?: string
+        state?: string
+        board?: string
+        priority?: string
+        label?: string
+        refresh?: string
+      }
+    ) => request<GithubIssueResult>(`/github/issues${pageQuery(params)}`),
+    repos: () => request<GithubRepo[]>("/github/repos"),
+    /** 覆盖当前身份的关注清单。 */
+    setRepos: (repos: string[]) =>
+      request<string[]>("/github/repos", {
+        method: "PUT",
+        body: JSON.stringify({ repos }),
+      }),
   },
 
   /** 工作区项目：磁盘即事实源，克隆是后台任务。 */

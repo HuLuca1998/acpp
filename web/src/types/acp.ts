@@ -729,6 +729,8 @@ export interface Tenant {
   name: string
   root: string
   disabled: boolean
+  /** 访客在 GitHub 上的用户名，owner 填；GitHub 页按它筛「分配给我」。 */
+  githubLogin: string
   lastSeenAt?: string
   createdAt: string
   updatedAt: string

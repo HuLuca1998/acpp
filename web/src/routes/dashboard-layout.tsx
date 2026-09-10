@@ -28,6 +28,7 @@ const TITLE_KEYS = [
   ["/sessions", "nav.sessions"],
   ["/tools", "nav.tools"],
   ["/logs", "nav.logs"],
+  ["/github", "nav.github"],
   ["/settings", "nav.settings"],
   ["/connections", "tenants.title"],
   ["/help", "nav.help"],
