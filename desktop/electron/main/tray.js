@@ -13,12 +13,13 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const TITLE_MAX = 48
 
 /**
- * 菜单栏图标：左键、右键都弹同一个菜单（照 codex-ui 的 Codex Viewer：菜单栏
- * 图标就是一张「我的 issue」清单，主窗口从菜单里的「打开 ACPP」进）。
- * 菜单每次现 build，直接读服务状态，不维护同步逻辑。
+ * 菜单栏图标：**左键只弹「我的 issue」清单**（照 codex-ui 的 Codex Viewer，
+ * 图标就是一张 issue 清单），**右键（或 ⌃+左键）弹操作菜单**（打开窗口、
+ * 局域网、启动项、重启服务、退出）。两个菜单每次现 build，直接读服务状态，
+ * 不维护同步逻辑。
  *
- * 曾经是「左键切窗口 / 右键菜单」的分工，实际用下来点图标想看的都是清单，
- * 窗口有 Dock 图标可点，于是改成一律弹菜单。
+ * 曾经左键是切主窗口显隐，实际用下来点图标想看的都是清单，窗口有 Dock 图标
+ * 可点，于是左键让给了清单。
  */
 export class TrayController {
   constructor({ server, shell, issues }) {
@@ -32,17 +33,30 @@ export class TrayController {
     this.tray = new Tray(icon)
     this.tray.setToolTip("ACPP")
 
-    this.tray.on("click", () => this.popMenu())
-    this.tray.on("right-click", () => this.popMenu())
+    this.tray.on("click", (event) => {
+      if (event.ctrlKey) this.popActionMenu()
+      else this.popIssueMenu()
+    })
+    this.tray.on("right-click", () => this.popActionMenu())
   }
 
-  popMenu() {
+  popIssueMenu() {
     // 菜单画的是上一次拉到的清单；弹出时顺手再拉一次给下次用。
     void this.issues?.refresh()
-    this.tray.popUpContextMenu(this.buildMenu())
+    this.tray.popUpContextMenu(this.buildIssueMenu())
   }
 
-  buildMenu() {
+  popActionMenu() {
+    this.tray.popUpContextMenu(this.buildActionMenu())
+  }
+
+  /** 左键菜单：只有 issue 清单及其配套项（查看全部、刷新、Chrome 账号）。 */
+  buildIssueMenu() {
+    return Menu.buildFromTemplate(this.issueItems(this.server.state === "running"))
+  }
+
+  /** 右键菜单：服务状态与壳的操作项，不放 issue。 */
+  buildActionMenu() {
     const server = this.server
     const running = server.state === "running"
     const status =
@@ -58,8 +72,6 @@ export class TrayController {
     const lanURL = server.lanURL
     const items = [
       { label: status, enabled: false },
-      { type: "separator" },
-      ...this.issueItems(running),
       { type: "separator" },
       { label: "打开 ACPP", click: () => this.shell.showMainWindow() },
       { label: "在浏览器中打开", enabled: running, click: () => this.shell.openInBrowser() },
