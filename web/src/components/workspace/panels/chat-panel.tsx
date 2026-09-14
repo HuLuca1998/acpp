@@ -25,7 +25,7 @@ import { resetLayout } from "@/components/workspace/layout-presets"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
-import { mascotStateOf } from "@/lib/chat/mascot-state"
+import { useMascotFace } from "@/hooks/use-mascot-face"
 import { sumSessionUsage } from "@/lib/chat/usage"
 import { cn } from "@/lib/utils"
 import { ImageIcon } from "lucide-react"
@@ -61,6 +61,10 @@ export const ChatPanel = memo(function ChatPanel() {
     addImages,
     draftCwd,
   } = useChatPanel()
+
+  // 吉祥物此刻的样子。草稿态传 null——还没有会话，connected 恒为 false，
+  // 照状态机算会误报断线。
+  const mascot = useMascotFace(isNew ? null : chat)
 
   // 本地斜杠命令的结果（目前只有 /db）：浮在输入框上方，不进对话流。
   // null 表示没在看。
@@ -245,8 +249,9 @@ export const ChatPanel = memo(function ChatPanel() {
         pending={isNew && newSession.creating}
         disabled={isNew && (newSession.agents === null || !newSession.selected)}
         placeholder={t("chat.placeholder")}
-        // 草稿态还没有会话，connected 恒为 false，照状态机算会误报断线。
-        mascotState={isNew ? "idle" : mascotStateOf(chat)}
+        mascotState={mascot.state}
+        mascotSpeech={mascot.speech}
+        mascotTokens={chat.lastUsage?.totalTokens}
         // 排队条也浮在输入卡上方，两个一起出现就会叠上。
         duckMascot={chat.queued.length > 0}
         commands={(() => {

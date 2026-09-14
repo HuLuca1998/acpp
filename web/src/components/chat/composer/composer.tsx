@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next"
 
 import type { SlashCommand } from "@/types/acp"
 import type { DraftStore } from "@/lib/chat/draft-store"
-import type { MascotState } from "@/lib/chat/mascot-state"
+import type { MascotSpeech, MascotState } from "@/lib/chat/mascot-state"
 import { imagesFromClipboard } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/hint"
-import { Mascot } from "@/components/chat/composer/mascot"
+import { MascotPerch } from "@/components/chat/composer/mascot-perch"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
@@ -44,6 +44,8 @@ export function Composer({
   queue,
   localPanel,
   mascotState,
+  mascotSpeech = null,
+  mascotTokens,
   duckMascot = false,
 }: {
   /**
@@ -82,6 +84,10 @@ export function Composer({
    * 收在本组件里，把它抬到调用方等于让整个对话面板跟着每个按键重渲。
    */
   mascotState?: MascotState
+  /** 吉祥物气泡该说什么；null 就闭嘴。 */
+  mascotSpeech?: MascotSpeech | null
+  /** 本轮 token 量：大活干完才撒花，小活安静收工。 */
+  mascotTokens?: number
   /** 输入卡上方被别的东西占了（排队条等），让吉祥物先退场别叠在一起。 */
   duckMascot?: boolean
 }) {
@@ -90,9 +96,13 @@ export function Composer({
   const onChange = draft.set
   const canSend = !disabled && !pending && value.trim() !== ""
 
-  // 空闲 + 输入框里有字 = 「正在打字」：唯一需要就地判断的表情态。
-  const mascotShown =
-    mascotState === "idle" && value.trim() !== "" ? "typing" : mascotState
+  // 空闲/发呆/睡着 + 输入框里有字 = 「正在打字」：唯一需要就地判断的表情态。
+  // 从睡着直接接管而不是等打盹计时器：人都开始敲了，它没理由还在睡。
+  const dozy =
+    mascotState === "idle" ||
+    mascotState === "dozing" ||
+    mascotState === "asleep"
+  const mascotShown = dozy && value.trim() !== "" ? "typing" : mascotState
 
   // "/" 补全：只在整条输入是一个未完成的命令词时出现。
   //
@@ -122,6 +132,9 @@ export function Composer({
   const [activeIndex, setActiveIndex] = useState(0)
   const menuOpen = matches.length > 0
   const active = Math.min(activeIndex, matches.length - 1)
+
+  // 补全菜单和排队条都浮在输入卡上方，占的正是它蹲的那块地方。
+  const mascotDucked = menuOpen || duckMascot
 
   function pickCommand(name: string) {
     onChange(`/${name} `)
@@ -168,21 +181,15 @@ export function Composer({
               ))}
             </div>
           ) : null}
-          {/* 吉祥物蹲在顶缘右侧，压着边线——落位归这里，形象归 mascot.tsx。
-              斜杠补全菜单正是从这块位置往上弹的，菜单一开它就让位；
-              排队条同理（duckMascot）。 */}
+          {/* 吉祥物蹲在顶缘压着边线。落位与周边交互整块在 MascotPerch 里，
+              这里只把「该摆哪张脸」和「上方被占了」传进去。 */}
           {mascotShown ? (
-            <div
-              aria-hidden={menuOpen || duckMascot}
-              className={cn(
-                "pointer-events-none absolute top-0 right-5 size-14 -translate-y-[55%]",
-                "transition-[opacity,translate] duration-150 ease-snappy",
-                (menuOpen || duckMascot) &&
-                  "-translate-y-[20%] opacity-0 motion-reduce:translate-y-0"
-              )}
-            >
-              <Mascot state={mascotShown} />
-            </div>
+            <MascotPerch
+              state={mascotShown}
+              speech={mascotSpeech}
+              tokens={mascotTokens}
+              ducked={mascotDucked}
+            />
           ) : null}
           {attachments}
           <textarea

@@ -29,6 +29,7 @@
 | chat/usage.ts     | 会话累计用量：把历史各轮的 turnUsage 相加（用量面板用）              | `sumSessionUsage`、`SessionUsageTotals`                              |
 | chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）与块的身份/轮首判定 | `groupMessages`、`blockKey`、`turnStartsOf`                          |
 | chat/mascot-state.ts | 聊天状态 → 输入卡吉祥物的表情态（grok-ball 表情 id 的映射在组件里）；纯派生，后端不加字段 | `mascotStateOf`、`MascotState`、`MascotInput`、`MASCOT_BUSY` |
+| chat/mascot-prefs.ts | 输入卡吉祥物的本地偏好（localStorage）：开关、安静模式、蹲哪边；带模块级广播 | `getMascotPrefs`、`saveMascotPrefs`、`subscribeMascotPrefs`、`MascotPrefs`、`MascotSide` |
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |
@@ -63,3 +64,4 @@
 | use-server-events.ts | 全局事件流 /api/events 的单一连接（模块级）+ 订阅 hook；含断线退避重连                                          | `useServerEvents`                              |
 | use-notifications.ts | 通知：判断该不该打扰（偏好 + 用户在不在看这一页），落进通知中心并分派提示（桌面壳系统通知 / 浏览器标题闪烁 + 声音）；含系统通知回调的裁决处理 | `useNotifications`                             |
 | use-notices.ts       | 订阅通知中心存量（useSyncExternalStore 接 lib/notify/store.ts）                                                | `useNotices`                                   |
+| use-mascot-face.ts   | 吉祥物此刻的样子：聊天派生的表情态之上叠「干完庆祝 / 没人理发呆睡着 / 被叫醒」，活动检测走 ref 不触发重渲染 | `useMascotFace`、`MascotFace`                  |

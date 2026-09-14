@@ -13,6 +13,7 @@ import { WorkspaceDirCard } from "@/components/settings/workspace-dir"
 import { AboutUpdate } from "@/components/settings/about-update"
 import { DesktopLaunchCard } from "@/components/settings/desktop-launch"
 import { NotificationsCard } from "@/components/settings/notifications"
+import { MascotPrefsCard } from "@/components/settings/mascot-prefs"
 import { NotifyPrefsCard } from "@/components/settings/notify-prefs"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
@@ -191,6 +192,8 @@ export function Settings() {
               <WorkspaceDirCard info={info} onChange={setInfo} />
               {/* 这两块只在 macOS 壳里渲染，浏览器里整块不出现。 */}
               <DesktopLaunchCard />
+              {/* 输入卡上那只吉祥物：开关、安静模式、蹲哪边。 */}
+              <MascotPrefsCard />
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
