@@ -175,7 +175,7 @@ export function Composer({
             <div
               aria-hidden={menuOpen || duckMascot}
               className={cn(
-                "pointer-events-none absolute top-0 right-5 size-9 -translate-y-[55%]",
+                "pointer-events-none absolute top-0 right-5 size-14 -translate-y-[55%]",
                 "transition-[opacity,translate] duration-150 ease-snappy",
                 (menuOpen || duckMascot) &&
                   "-translate-y-[20%] opacity-0 motion-reduce:translate-y-0"
