@@ -13,7 +13,7 @@
 | api.ts            | 后端 API 客户端，全部 HTTP/SSE/ws 地址的唯一出口；组件禁止裸 fetch    | `api`、`ApiError`、`Paged`                                           |
 | api-core.ts       | HTTP 地基：基址、`ApiError`、请求器、分页查询串。端点定义分了多个文件，它们都要用这几样，放 api.ts 会绕成环 | `request`、`pageQuery`、`ApiError`、`BASE`                            |
 | api-connections.ts | 连接类端点：远程服务器（adr-019）与数据库数据源（adr-008）。展开进 `api`，调用方仍写 `api.servers.*` | `connectionsApi`                                                     |
-| chat/chat-events.ts | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat  | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs`、`reconcileMessages` |
+| chat/chat-events.ts | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat  | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs`、`reconcileMessages`、`isToolActive` |
 | clipboard.ts      | 复制到剪贴板，返回成功与否；非安全上下文（局域网 http）退回 execCommand | `copyText`                                                           |
 | db-uri.ts         | 连接 URI 解析（Navicat 的 `navicat://` 与通用 `mysql://`）→ 表单字段；导出在后端 | `parseDbUri`、`ParsedUri`                                            |
 | db-result.ts      | 数据库 MCP 工具输出文本 → 结构化结果（对话里渲染真表格用）；格式与后端 datasource/render.go 共同约定 | `parseDbToolOutput`、`isDbQueryCall`、`ParsedDbResult`              |
@@ -28,6 +28,7 @@
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |
 | chat/usage.ts     | 会话累计用量：把历史各轮的 turnUsage 相加（用量面板用）              | `sumSessionUsage`、`SessionUsageTotals`                              |
 | chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）与块的身份/轮首判定 | `groupMessages`、`blockKey`、`turnStartsOf`                          |
+| chat/mascot-state.ts | 聊天状态 → 输入卡吉祥物的表情态（grok-ball 表情 id 的映射在组件里）；纯派生，后端不加字段 | `mascotStateOf`、`MascotState`、`MascotInput`、`MASCOT_BUSY` |
 | palette.ts        | 主题方案的注册、读写与应用（token 定义在 index.css）                  | `PALETTES`、`loadPalette`、`applyPalette`                            |
 | path-tree.ts      | 一组带路径的条目 → 目录树（单子目录链压缩），变更面板等树形视图共用   | `buildPathTree`、`countFiles`、`PathTreeNode`                        |
 | saved-layouts.ts  | 用户自存的工作区布局（localStorage）：存/读/删，上限 8 套             | `loadSavedLayouts`、`saveLayout`、`deleteLayout`                     |

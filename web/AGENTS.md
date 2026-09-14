@@ -16,6 +16,7 @@
 | `src/components/ui/` | shadcn 组件（CLI 托管，目录级规范见其 AGENTS.md） | 升级用 `--diff` 手动合并，禁止盲目 `--overwrite` |
 | `src/hooks/` | 自定义 hooks | 不放纯函数（那是 `lib/`） |
 | `src/lib/` | 纯函数与客户端；**索引在 [src/lib/README.md](src/lib/README.md)** | 不出现 JSX、不依赖组件 |
+| `src/vendor/` | 按源码收纳的第三方库（不在 npm 上、只能整份带进来的那种），一库一子目录，各自带 README 记来源 commit 与升级步骤 | **禁止手改上游文件**；不放我们自己的代码 |
 | `src/types/` | 领域类型，`acp.ts` 与 `server/internal/model` 字段对齐 | 组件 props 类型不放这里，跟组件走 |
 | `src/i18n/` | 语言配置与资源 | — |
 
@@ -93,6 +94,14 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 | `warning` | 需要注意（预留） | 降级、重连中 |
 
 优先级：**出错 > 运行中 > 其他**。「正在运行」加 `pulse`（呼吸动画），静止状态永远不动。
+
+**输入卡的吉祥物**（`chat/composer/mascot.tsx`）是同一套状态语言的另一种表达，分三层，改哪层只碰哪层：
+
+- **表情态**从 `ChatState` 纯派生（`lib/chat/mascot-state.ts`），**后端不加任何字段**；优先级与上表同源（出错 > 阻塞等人 > 运行中 > 其他），其中「运行中」压在「断线」之前，理由写在函数注释里，别照上表的字面顺序改回去。
+- **形象**交给第三方引擎（`vendor/grok-ball`，MIT）。球色与眼色走 `--mascot` / `--mascot-eye` 两个语义 token，**必须是 hex**（引擎要拿它算球面渐变），组件里现取不写死。引擎是共享 rAF 驱动的，页面进后台必须 `setActive(false)`。
+- **落位**在 `composer.tsx`（蹲在输入卡顶缘右侧）。形象与落位分开，换位置不用碰 mascot.tsx；输入卡上方被斜杠补全菜单或排队条占用时它要让位（`duckMascot`）。
+
+加一个表情态的路径：mascot-state.ts 加态 → mascot.tsx 的 `EMOTION` 表补一个 grok-ball 表情 id → i18n 补读屏文案（zh/en）。
 
 ### 5.4 动效系统
 

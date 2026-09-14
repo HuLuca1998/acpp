@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next"
 
 import type { SlashCommand } from "@/types/acp"
 import type { DraftStore } from "@/lib/chat/draft-store"
+import type { MascotState } from "@/lib/chat/mascot-state"
 import { imagesFromClipboard } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/hint"
+import { Mascot } from "@/components/chat/composer/mascot"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
@@ -41,6 +43,8 @@ export function Composer({
   onPasteImages,
   queue,
   localPanel,
+  mascotState,
+  duckMascot = false,
 }: {
   /**
    * 草稿的外部 store。**刻意不收 value/onChange**：那样每个按键都要把
@@ -71,11 +75,24 @@ export function Composer({
   queue?: React.ReactNode
   /** 本地斜杠命令的结果卡（输入卡上方，前端自己渲染，不进对话流）。 */
   localPanel?: React.ReactNode
+  /**
+   * 吉祥物的表情态；不传就没有吉祥物。
+   *
+   * 「用户正在打字」这一态由这里就地升级而不是调用方传下来——草稿的订阅
+   * 收在本组件里，把它抬到调用方等于让整个对话面板跟着每个按键重渲。
+   */
+  mascotState?: MascotState
+  /** 输入卡上方被别的东西占了（排队条等），让吉祥物先退场别叠在一起。 */
+  duckMascot?: boolean
 }) {
   const { t } = useTranslation()
   const value = useSyncExternalStore(draft.subscribe, draft.get)
   const onChange = draft.set
   const canSend = !disabled && !pending && value.trim() !== ""
+
+  // 空闲 + 输入框里有字 = 「正在打字」：唯一需要就地判断的表情态。
+  const mascotShown =
+    mascotState === "idle" && value.trim() !== "" ? "typing" : mascotState
 
   // "/" 补全：只在整条输入是一个未完成的命令词时出现。
   //
@@ -149,6 +166,22 @@ export function Composer({
                   ) : null}
                 </button>
               ))}
+            </div>
+          ) : null}
+          {/* 吉祥物蹲在顶缘右侧，压着边线——落位归这里，形象归 mascot.tsx。
+              斜杠补全菜单正是从这块位置往上弹的，菜单一开它就让位；
+              排队条同理（duckMascot）。 */}
+          {mascotShown ? (
+            <div
+              aria-hidden={menuOpen || duckMascot}
+              className={cn(
+                "pointer-events-none absolute top-0 right-5 size-9 -translate-y-[55%]",
+                "transition-[opacity,translate] duration-150 ease-snappy",
+                (menuOpen || duckMascot) &&
+                  "-translate-y-[20%] opacity-0 motion-reduce:translate-y-0"
+              )}
+            >
+              <Mascot state={mascotShown} />
             </div>
           ) : null}
           {attachments}

@@ -35,6 +35,11 @@ export interface LiveToolCall {
   subagentPath?: string
 }
 
+/** 这次调用还在跑：消息流的「正在干的那件事」与吉祥物的表情共用这一个口径。 */
+export function isToolActive(tool: LiveToolCall): boolean {
+  return tool.status !== "completed" && tool.status !== "failed"
+}
+
 /** 上下文用量（usage 事件），按占比展示。cost 只有 claude 间歇带，
  *  拿到过就留住——后续不带 cost 的 usage 快照不该把它闪没。 */
 export interface ContextUsage {

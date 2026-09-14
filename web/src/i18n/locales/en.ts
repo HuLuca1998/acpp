@@ -375,6 +375,20 @@ export default {
       steerDesc: "Inject this line into the turn that is already running",
       recallDesc: "Put it back in the input box and send nothing",
     },
+    /** Composer mascot, for screen readers: it is not clickable, so this is the only cue. */
+    mascot: {
+      idle: "Assistant idle",
+      typing: "Assistant watching you type",
+      thinking: "Assistant thinking",
+      reading: "Assistant looking things up",
+      working: "Assistant working",
+      replying: "Assistant replying",
+      waiting: "Assistant waiting on you",
+      done: "Assistant just finished a turn",
+      error: "Assistant hit an error",
+      cancelled: "That turn did not finish normally",
+      offline: "Connection lost",
+    },
     fileEdit: {
       edited: "Edited",
       toggle: "Toggle diff",

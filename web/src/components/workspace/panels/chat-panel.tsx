@@ -25,6 +25,7 @@ import { resetLayout } from "@/components/workspace/layout-presets"
 import { useWorkspace } from "@/components/workspace/workspace-context"
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu"
 import { parseLocalCommand, withLocalCommands } from "@/lib/local-commands"
+import { mascotStateOf } from "@/lib/chat/mascot-state"
 import { sumSessionUsage } from "@/lib/chat/usage"
 import { cn } from "@/lib/utils"
 import { ImageIcon } from "lucide-react"
@@ -244,6 +245,10 @@ export const ChatPanel = memo(function ChatPanel() {
         pending={isNew && newSession.creating}
         disabled={isNew && (newSession.agents === null || !newSession.selected)}
         placeholder={t("chat.placeholder")}
+        // 草稿态还没有会话，connected 恒为 false，照状态机算会误报断线。
+        mascotState={isNew ? "idle" : mascotStateOf(chat)}
+        // 排队条也浮在输入卡上方，两个一起出现就会叠上。
+        duckMascot={chat.queued.length > 0}
         commands={(() => {
           // 草稿态选了工作目录，/db 就有项目可查；没选目录不列——
           // 列一个按了没反应的命令比没有更糟。

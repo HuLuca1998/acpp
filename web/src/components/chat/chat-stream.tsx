@@ -26,7 +26,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
-import type { ChatState } from "@/lib/chat/chat-events"
+import { isToolActive, type ChatState } from "@/lib/chat/chat-events"
 import { groupMessages, turnStartsOf } from "@/lib/chat/message-blocks"
 import { BrainIcon, CircleAlertIcon, ShieldCheckIcon } from "lucide-react"
 
@@ -143,9 +143,7 @@ export const ChatStream = memo(function ChatStream({
       liveEdits: main.filter((tool) => tool.kind === "edit"),
       liveOthers: main.filter((tool) => tool.kind !== "edit"),
       // 折叠头上显示「正在干的那件事」：最后一个未完成的工具调用。
-      activeTool: main.findLast(
-        (tool) => tool.status !== "completed" && tool.status !== "failed"
-      ),
+      activeTool: main.findLast(isToolActive),
     }
   }, [chat.liveTools])
   const liveActivityCount =

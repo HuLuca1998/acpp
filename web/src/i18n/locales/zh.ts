@@ -356,6 +356,20 @@ export default {
       steerDesc: "立刻把这句插进正在跑的这一轮",
       recallDesc: "取回输入框，这次不发了",
     },
+    /** 输入卡吉祥物的读屏文案：它不可点，这是读屏软件唯一的信息来源。 */
+    mascot: {
+      idle: "助手空闲",
+      typing: "助手在看你打字",
+      thinking: "助手正在思考",
+      reading: "助手正在查资料",
+      working: "助手正在干活",
+      replying: "助手正在回复",
+      waiting: "助手在等你决定",
+      done: "助手刚干完一轮",
+      error: "助手出错了",
+      cancelled: "这一轮没正常结束",
+      offline: "连接已断开",
+    },
     fileEdit: {
       edited: "已编辑",
       toggle: "展开改动",
