@@ -1,6 +1,9 @@
-import { memo, useEffect, useState } from "react"
+import { memo, useCallback, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
 
+import { useVisibleLoad } from "@/hooks/use-panel-visible"
+import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import {
   useGitOverview,
@@ -19,7 +22,9 @@ import { SparklesIcon } from "lucide-react"
  * 与变更面板刻意分开而不是上下拼在一个面板里——提交说明是要读的文字，
  * 文件清单是要点的列表，两者的滚动节奏完全不同（GoLand 也是分开的）。
  */
-export const CommitDetailPanel = memo(function CommitDetailPanel() {
+export const CommitDetailPanel = memo(function CommitDetailPanel(
+  props: IDockviewPanelProps
+) {
   const { t, i18n } = useTranslation()
   const ws = useWorkspace()
   const selection = useGitSelection()
@@ -29,30 +34,30 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
   const [compare, setCompare] = useState<GitCompare | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // stale 守卫：切选择比请求回来快是常事，没有它旧结果会盖掉新结果，
+  // 面板显示的就是上一次点的那条。
+  const seqRef = useRef(0)
 
   const comparing = selection.refs.length === 2
   const [base, head] = selection.refs
 
-  // stale 守卫：切选择比请求回来快是常事，没有它旧结果会盖掉新结果，
-  // 面板显示的就是上一次点的那条。
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!ws.ready) return
-    let stale = false
+    const seq = ++seqRef.current
+    const fresh = () => seqRef.current === seq
 
     if (comparing) {
       ws.scope
         .gitCompare(ws.sessionId, base, head)
         .then((data) => {
-          if (stale) return
+          if (!fresh()) return
           setCompare(data)
           setCommit(null)
           setError(null)
         })
-        .catch((err: Error) => !stale && setError(err.message))
-        .finally(() => !stale && setLoading(false))
-      return () => {
-        stale = true
-      }
+        .catch((err: Error) => fresh() && setError(err.message))
+        .finally(() => fresh() && setLoading(false))
+      return
     }
 
     if (!selection.sha) {
@@ -61,23 +66,32 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
       setCompare(null)
       setCommit(null)
       setError(null)
+      // 看工作区时这一栏的内容来自共享的 git 汇总，刷新落在它身上。
+      ws.refreshGit()
       return
     }
 
     ws.scope
       .gitCommit(ws.sessionId, selection.sha)
       .then((detail) => {
-        if (stale) return
+        if (!fresh()) return
         setCommit(detail.commit)
         setCompare(null)
         setError(null)
       })
-      .catch((err: Error) => !stale && setError(err.message))
-      .finally(() => !stale && setLoading(false))
-    return () => {
-      stale = true
-    }
+      .catch((err: Error) => fresh() && setError(err.message))
+      .finally(() => fresh() && setLoading(false))
   }, [ws, comparing, base, head, selection.sha])
+
+  // 选择一变就重拉（load 的引用跟着选择走），工作区刷新广播同样带动它：
+  // 看的若是工作区那条，提交与分支在 agent 手里随时会变。
+  // 藏在 tab 后面时不白拉，切回来补一次。
+  useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
+
+  const refresh = useCallback(() => {
+    setLoading(true)
+    load()
+  }, [load])
 
   if (!ws.ready) {
     return (
@@ -87,13 +101,32 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
       />
     )
   }
+  const title = comparing
+    ? `${base} → ${head}`
+    : selection.sha
+      ? selection.sha.slice(0, 7)
+      : t("workspace.git.workingTree")
+
+  // 头部（含刷新）在任何状态下都得在：加载失败、正在拉、什么都没选的
+  // 时候，恰恰是最需要「再读一遍」的时候。
+  const shell = (body: ReactNode) => (
+    <div className="flex h-full flex-col">
+      <GitPanelHeader
+        title={title}
+        loading={loading || git.loading}
+        onRefresh={refresh}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
+    </div>
+  )
+
   if (error) {
-    return (
+    return shell(
       <PanelEmptyState title={t("common.loadFailed")} description={error} />
     )
   }
   if (loading) {
-    return (
+    return shell(
       <div className="flex h-full items-center justify-center">
         <Spinner className="size-4 text-muted-foreground" />
       </div>
@@ -101,8 +134,8 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
   }
 
   if (compare) {
-    return (
-      <div className="flex h-full flex-col gap-3 overflow-y-auto p-3 text-xs">
+    return shell(
+      <div className="flex flex-col gap-3 p-3 text-xs">
         <div>
           <p className="font-mono text-sm">
             {compare.base} → {compare.head}
@@ -149,7 +182,7 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
   if (!commit) {
     // 没选提交 = 看工作区：给出当前分支的一句话状态，别留一块空白。
     const overview = git.data
-    return (
+    return shell(
       <PanelEmptyState
         title={t("workspace.git.workingTree")}
         description={
@@ -164,8 +197,8 @@ export const CommitDetailPanel = memo(function CommitDetailPanel() {
     )
   }
 
-  return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+  return shell(
+    <div className="flex flex-col gap-3 p-3">
       <p className="text-sm leading-relaxed font-medium">{commit.subject}</p>
       <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
         <span className="font-mono">{commit.sha}</span>

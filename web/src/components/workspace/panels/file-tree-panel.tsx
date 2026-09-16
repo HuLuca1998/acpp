@@ -1,14 +1,17 @@
-import { memo, useCallback, useContext, useMemo, useState } from "react"
+import {
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 import type { IDockviewPanelProps } from "dockview-react"
 
 import { useVisibleLoad } from "@/hooks/use-panel-visible"
-import {
-  ChevronRightIcon,
-  FileIcon,
-  FolderIcon,
-  RotateCwIcon,
-} from "lucide-react"
+import { ChevronRightIcon, FileIcon, FolderIcon } from "lucide-react"
 
 import { displayPath } from "@/lib/format"
 import {
@@ -23,12 +26,12 @@ import { useTreeSelection } from "@/components/workspace/panels/use-tree-selecti
 import type { TreeEntry } from "@/types/acp"
 import { useIdentity } from "@/hooks/identity-context"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
+import { PanelRefreshButton } from "@/components/workspace/panels/panel-refresh"
 import { ChatPanelContext } from "@/components/workspace/chat-panel-context"
 import {
   useGitOverview,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
-import { Hint } from "@/components/hint"
 import { StatusDot } from "@/components/status-dot"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -124,6 +127,62 @@ export const FileTreePanel = memo(function FileTreePanel(
     return out
   }, [entries, expanded, childrenByPath])
 
+  // 首屏之后的刷新不再重置展开状态：刷新是自动的（agent 每干完一件事
+  // 就广播一次），把用户展开到第三层的目录折回去，等于每隔一会儿把他
+  // 手里的东西收走一次。这几个都用 ref——它们只决定下一次加载怎么落地，
+  // 自己不该触发渲染。
+  const loadedOnce = useRef(false)
+  // 树的世代：切会话/换目录后，上一棵树在飞的请求全部作废。
+  const treeSeq = useRef(0)
+  // 在飞的懒加载目录，防同一个目录被重复请求（刷新与展开可能同时发起）。
+  const inflight = useRef(new Set<string>())
+  // 已经懒加载过哪些目录 + 当前展开了哪些：刷新时要照着它们重读一遍，
+  // 而刷新是回调里做的事，拿不到渲染时的闭包值。
+  const childrenRef = useRef(childrenByPath)
+  const expandedRef = useRef(expanded)
+  useEffect(() => {
+    childrenRef.current = childrenByPath
+  }, [childrenByPath])
+  useEffect(() => {
+    expandedRef.current = expanded
+  }, [expanded])
+
+  /**
+   * 读一个目录的下一层。**必须走 ws.scope**——草稿态没有会话，请求得打
+   * `/workspace?cwd=`，写死 api.sessions 会打到 `/sessions/0` 上，失败又被
+   * 静默吞掉，表现就是展开一个目录后永远转圈。
+   *
+   * 拿回来直接覆盖旧内容，中途不清空：清空会让这一支闪一次 spinner，
+   * 而刷新时它多半根本没变。
+   */
+  const fetchDir = useCallback(
+    (path: string) => {
+      if (inflight.current.has(path)) return
+      inflight.current.add(path)
+      const seq = treeSeq.current
+      void ws.scope
+        .workspaceTree(ws.sessionId, { path, depth: 1 })
+        .then((listing) => {
+          if (treeSeq.current !== seq) return
+          setChildrenByPath((prev) => new Map(prev).set(path, listing.entries))
+          setFailed((prev) => {
+            if (!prev.has(path)) return prev
+            const next = new Set(prev)
+            next.delete(path)
+            return next
+          })
+        })
+        // 失败不打断整棵树，只在这一行标出来（收起再展开即重试）。
+        .catch(() => {
+          if (treeSeq.current === seq) {
+            setFailed((prev) => new Set(prev).add(path))
+          }
+        })
+        .finally(() => inflight.current.delete(path))
+    },
+    [ws.scope, ws.sessionId]
+  )
+
   const load = useCallback(() => {
     if (!ws.ready) return
     ws.scope
@@ -133,26 +192,70 @@ export const FileTreePanel = memo(function FileTreePanel(
         setRoot(listing.root)
         setEntries(listing.entries)
         setTruncated(listing.truncated ?? false)
-        // 首屏默认展开第一层目录（即「默认展开 2 层」——根内容 + 一级目录内容全部可见）。
-        setExpanded(
-          new Set(
-            listing.entries.filter((e) => e.kind === "dir").map((e) => e.path)
+        if (!loadedOnce.current) {
+          loadedOnce.current = true
+          // 首屏默认展开第一层目录（即「默认展开 2 层」——根内容 + 一级目录内容全部可见）。
+          setExpanded(
+            new Set(
+              listing.entries.filter((e) => e.kind === "dir").map((e) => e.path)
+            )
           )
-        )
-        setChildrenByPath(new Map())
-        setFailed(new Set())
+        }
+        // 深层目录不在这次响应里（后端只给两层），得各自再读一遍——
+        // 否则刷新只更新了看得见的前两层，展开着的深处还挂着旧快照。
+        for (const path of childrenRef.current.keys()) {
+          if (expandedRef.current.has(path)) fetchDir(path)
+        }
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err))
       })
-  }, [ws.ready, ws.sessionId, ws.scope])
+  }, [ws.ready, ws.sessionId, ws.scope, fetchDir])
+
+  // 切会话/换工作目录 = 换了一棵树：展开状态属于上一棵，跟着一起翻篇。
+  useEffect(() => {
+    loadedOnce.current = false
+    treeSeq.current += 1
+    inflight.current.clear()
+    setExpanded(new Set())
+    setChildrenByPath(new Map())
+    setFailed(new Set())
+  }, [ws.sessionId, ws.scope])
 
   // turn 结束后的工作区广播：树跟着 git 数据一起重拉。
   // 藏在 tab 后面时不白拉，切回来再补。
   useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
 
+  // 展开着、但内容还没到手的目录：补拉。
+  //
+  // 放在这里而不是展开那一下顺手发请求，是因为「该有内容却没有」不止
+  // 展开一种来路——首屏之后新出现的目录、失败后重试、切树重来，都归
+  // 同一个判断管；少了它，那些位置会挂着一个永远转不完的 spinner。
+  const pendingDirs = useMemo(() => {
+    const out: string[] = []
+    const walk = (list: TreeEntry[]) => {
+      for (const e of list) {
+        if (e.kind !== "dir" || !expanded.has(e.path)) continue
+        const kids =
+          e.children ?? (e.listed ? NO_CHILDREN : childrenByPath.get(e.path))
+        if (!kids) {
+          if (!failed.has(e.path)) out.push(e.path)
+          continue
+        }
+        walk(kids)
+      }
+    }
+    walk(entries ?? [])
+    return out
+  }, [entries, expanded, childrenByPath, failed])
+
+  useEffect(() => {
+    for (const path of pendingDirs) fetchDir(path)
+  }, [pendingDirs, fetchDir])
+
   const toggleDir = useCallback(
     (entry: TreeEntry) => {
+      const opening = !expandedRef.current.has(entry.path)
       setExpanded((prev) => {
         const next = new Set(prev)
         if (next.has(entry.path)) {
@@ -162,28 +265,18 @@ export const FileTreePanel = memo(function FileTreePanel(
         }
         return next
       })
-      // 未展开过的深层目录：补拉一层。**必须走 ws.scope**——草稿态没有会话，
-      // 请求得打 /workspace?cwd=，写死 api.sessions 会打到 /sessions/0 上，
-      // 失败又被静默吞掉，表现就是展开一个目录后永远转圈。
-      if (!entry.listed && !childrenByPath.has(entry.path)) {
-        setFailed((prev) => {
-          if (!prev.has(entry.path)) return prev
-          const next = new Set(prev)
-          next.delete(entry.path)
-          return next
-        })
-        void ws.scope
-          .workspaceTree(ws.sessionId, { path: entry.path, depth: 1 })
-          .then((listing) => {
-            setChildrenByPath((prev) =>
-              new Map(prev).set(entry.path, listing.entries)
-            )
-          })
-          // 失败不打断整棵树，只在这一行标出来（收起再展开即重试）。
-          .catch(() => setFailed((prev) => new Set(prev).add(entry.path)))
-      }
+      if (!opening || entry.listed) return
+      // 重新展开一个看过的目录：旧内容先摆着，同时重读一遍。收起再展开
+      // 本来就是用户最直觉的「刷新这一支」的手势，失败过的也由此重试。
+      setFailed((prev) => {
+        if (!prev.has(entry.path)) return prev
+        const next = new Set(prev)
+        next.delete(entry.path)
+        return next
+      })
+      fetchDir(entry.path)
     },
-    [ws.scope, ws.sessionId, childrenByPath]
+    [fetchDir]
   )
 
   if (!ws.ready) {
@@ -255,20 +348,11 @@ export const FileTreePanel = memo(function FileTreePanel(
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-        <Hint
+        <PanelRefreshButton
           label={t("workspace.tree.refresh")}
           desc={t("workspace.tree.refreshDesc")}
-          align="end"
-        >
-          <button
-            type="button"
-            aria-label={t("workspace.tree.refresh")}
-            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-[scale,background-color,color] duration-150 ease-snappy hover:bg-muted hover:text-foreground active:scale-[0.97]"
-            onClick={load}
-          >
-            <RotateCwIcon className="size-3.5" />
-          </button>
-        </Hint>
+          onRefresh={load}
+        />
       </div>
       <ScrollArea className="min-h-0 flex-1 px-1 pb-2">
         {!rootOpen ? null : entries.length === 0 ? (

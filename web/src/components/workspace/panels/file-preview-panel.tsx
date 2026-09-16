@@ -1,5 +1,14 @@
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react"
+import {
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useTranslation } from "react-i18next"
+import type { IDockviewPanelProps } from "dockview-react"
 import {
   AtSignIcon,
   CodeIcon,
@@ -24,11 +33,13 @@ import {
   previewKind,
 } from "@/components/workspace/panels/file-preview-kind"
 import { MediaPreview } from "@/components/workspace/panels/file-preview-media"
+import { PanelRefreshButton } from "@/components/workspace/panels/panel-refresh"
 import { TablePreview } from "@/components/workspace/panels/file-preview-table"
 import {
   usePreviewTarget,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
+import { useVisibleLoad } from "@/hooks/use-panel-visible"
 import {
   Empty,
   EmptyDescription,
@@ -54,6 +65,36 @@ const MAX_RENDER_LINES = 5000
 const DIFF_MAX_LINES = 2000
 
 /**
+ * 刷新拿回同样的内容时，保留旧结果对象。
+ *
+ * 工作区刷新一轮能来好几次，而一个文件多数时候根本没变。正文是几千个
+ * DOM 节点，换一个新对象就等于整篇重渲一遍——内容一模一样，用户只会
+ * 看到滚动位置与选中文字被白白抹掉。
+ *
+ * 表格不比：几万个格子逐个比对比重渲还贵，照常换。
+ */
+function keepIfSame(next: PreviewResult) {
+  return (prev: PreviewResult | null): PreviewResult => {
+    if (!prev || prev.key !== next.key || prev.error !== next.error) return next
+    if (next.file && prev.file) {
+      return prev.file.content === next.file.content &&
+        prev.file.binary === next.file.binary &&
+        prev.file.truncated === next.file.truncated
+        ? prev
+        : next
+    }
+    if (next.diff && prev.diff) {
+      return prev.diff.oldText === next.diff.oldText &&
+        prev.diff.newText === next.diff.newText &&
+        prev.diff.binary === next.diff.binary
+        ? prev
+        : next
+    }
+    return next
+  }
+}
+
+/**
  * 文件查看器面板：只读、等宽、行号，两种形态——
  * **file** 看文件当前内容，**diff** 看它改了什么（工作区改动或某条提交）。
  *
@@ -61,7 +102,9 @@ const DIFF_MAX_LINES = 2000
  * 只会让人在「现在什么样」和「改了什么」之间来回找。形态由命令总线的
  * 预览目标决定（文件树点文件 → file，变更面板点文件 → diff）。
  */
-export const FilePreviewPanel = memo(function FilePreviewPanel() {
+export const FilePreviewPanel = memo(function FilePreviewPanel(
+  props: IDockviewPanelProps
+) {
   const { t } = useTranslation()
   const ws = useWorkspace()
   const target = usePreviewTarget()
@@ -80,7 +123,13 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   // markdown 默认看渲染后的样子——打开一个 README 是为了读它，不是读它的
   // 语法；要看源码点一下切过去。
   const [raw, setRaw] = useState(false)
+  // 手动刷新的世代号。图片/音视频/PDF/html 不经我们的 fetch，由浏览器
+  // 按 URL 自己取——URL 不变它就不会再请求，所以刷新时把这个号拼进
+  // 地址，逼它重新拿一份。
+  const [reloadKey, setReloadKey] = useState(0)
   const bodyRef = useRef<HTMLDivElement>(null)
+  // 请求世代：切文件比请求回来快是常事，只认最后发出的那一次。
+  const seqRef = useRef(0)
 
   // 图片/音视频/PDF 走浏览器原生渲染，不拉正文——把一个 mp4 读成字符串
   // 只会得到一堆乱码和一次白拉的流量。
@@ -102,11 +151,11 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
   const needsFetch = Boolean(path && ws.sessionId && !media && !showHtml)
   const loading = needsFetch && current === null
 
-  useEffect(() => {
+  const load = useCallback(() => {
     // 这几种都不需要正文：媒体与 html 渲染形态由浏览器按 URL 自己取。
     if (!path || !ws.sessionId || media || showHtml) return
-    let stale = false
     const key = requestKey
+    const seq = ++seqRef.current
 
     const request = showTable
       ? ws.scope
@@ -126,19 +175,18 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
 
     request
       .then((result) => {
-        if (!stale) setLoaded({ key, ...result })
+        if (seqRef.current === seq) setLoaded(keepIfSame({ key, ...result }))
       })
       .catch((err) => {
-        if (!stale) {
-          setLoaded({
-            key,
-            error: err instanceof Error ? err.message : String(err),
-          })
+        if (seqRef.current === seq) {
+          setLoaded(
+            keepIfSame({
+              key,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          )
         }
       })
-    return () => {
-      stale = true
-    }
   }, [
     path,
     mode,
@@ -150,6 +198,25 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
     ws.sessionId,
     ws.scope,
   ])
+
+  // 打开即加载 + 跟着工作区刷新走（agent 每干完一件事、每轮结束都会广播）。
+  // 藏在 tab 后面时不白拉，切回来那一刻补一次——查看器的正文是全篇文本，
+  // 看不见的时候每隔一会儿拉一遍是纯浪费。
+  //
+  // load 的引用跟着 requestKey 变，所以换文件/换形态同样由它驱动，
+  // 不必再留一个只为首次加载的 effect。
+  useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
+
+  // 手动刷新：正文重拉，交给浏览器渲染的那几种换个地址逼它重取。
+  const refresh = useCallback(() => {
+    setReloadKey((n) => n + 1)
+    load()
+  }, [load])
+
+  // 媒体与 html 的地址：带上世代号，手动刷新才能绕过浏览器缓存。
+  const inlineUrl = path
+    ? `${ws.scope.previewUrl(ws.sessionId, path)}${reloadKey ? `&v=${reloadKey}` : ""}`
+    : ""
 
   // 定位到行：行高固定 leading-5（20px），content-visibility 的估算尺寸
   // 与之一致，按行数换算滚动位置即可，顶部留三行上下文。
@@ -197,6 +264,12 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         >
           {path}
         </span>
+        <PanelRefreshButton
+          label={t("workspace.preview.refresh")}
+          desc={t("workspace.preview.refreshDesc")}
+          align="center"
+          onRefresh={refresh}
+        />
         <FollowToggle />
         {hasRichView(path) && hasSourceView(path) && mode !== "diff" ? (
           <Hint
@@ -267,7 +340,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
       <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
         {showHtml ? (
           <iframe
-            src={ws.scope.previewUrl(ws.sessionId, path)}
+            src={inlineUrl}
             title={path}
             // 服务端给 html 的 inline 响应打了 CSP sandbox，这里的 sandbox
             // 属性是第二道：页面里的脚本一律不跑，它与我们同源。
@@ -277,7 +350,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel() {
         ) : media ? (
           <MediaPreview
             kind={media}
-            src={ws.scope.previewUrl(ws.sessionId, path)}
+            src={inlineUrl}
             name={path}
           />
         ) : error ? (

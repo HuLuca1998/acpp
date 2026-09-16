@@ -74,6 +74,8 @@ export const zhWorkspace = {
   },
   preview: {
     emptyTitle: "没有打开的文件",
+    refresh: "刷新",
+    refreshDesc: "重新读一遍这个文件当前的内容",
     emptyHint: "在文件树中点击文件即可预览。",
     rendered: "看渲染结果",
     source: "看源码",

@@ -78,6 +78,8 @@ export const enWorkspace = {
   },
   preview: {
     emptyTitle: "No file open",
+    refresh: "Refresh",
+    refreshDesc: "Read this file's current content again",
     emptyHint: "Click a file in the file tree to preview it.",
     rendered: "Show rendered",
     source: "Show source",
