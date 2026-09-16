@@ -7,6 +7,7 @@ import { api, workspaceScopeApi, type WorkspaceScopeApi } from "@/lib/api"
 import { copyText } from "@/lib/clipboard"
 import { toast } from "sonner"
 import i18n from "@/i18n"
+import { useWorkspaceWatch } from "@/hooks/use-workspace-watch"
 import { applyLayoutPreset } from "@/components/workspace/layout-presets"
 import {
   useWorkspace,
@@ -269,6 +270,11 @@ export function WorkspaceProvider({
         .finally(notify)
     }
   }, [sessionId, activeScope, draftCwd])
+
+  // 文件变动来了就整片重读。与「agent 干完一件事」那条广播互补：那条
+  // 管得到版本库的动静（commit 只改 .git，文件系统这边看不见），这条
+  // 管得到 agent 之外的人——用户在编辑器里改的、命令行里跑出来的。
+  useWorkspaceWatch(activeScope, sessionId, value.ready, value.refreshWorkspace)
 
   return (
     <WorkspaceContext.Provider value={value}>

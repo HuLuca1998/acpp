@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"acpp/server/internal/fswatch"
 	"acpp/server/internal/service"
 )
 
@@ -23,6 +25,9 @@ type cwdResolver func(r *http.Request) (string, error)
 // 一切路径以会话 cwd 为边界，canonical guard 在 service 层。
 type workspaceHandler struct {
 	cwdOf cwdResolver
+	// 文件变动监视器（见本文件末尾的 watch）。缺席时监视流直接回
+	// unavailable，其余数据面照常工作。
+	watcher watcherHub
 }
 
 func (h workspaceHandler) tree(w http.ResponseWriter, r *http.Request) {
@@ -340,3 +345,91 @@ func (h workspaceHandler) gitCommit(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, http.StatusOK, detail)
 }
+
+// ---- 文件变动监视流 ----
+
+// 工作区监视流的心跳间隔。与全局事件流同理：空闲长连接要定期有字节流动，
+// 否则服务端发现不了对端已经走了，中间层也可能按空闲超时掐断。
+const watchHeartbeat = 25 * time.Second
+
+// watch 是工作目录的文件变动流（SSE）。
+//
+// 面板此前只在 agent 干完一件事之后才重读；用户自己在编辑器里改的、
+// 命令行里跑出来的，界面一概不知道。这条流补上那一半：改动来自谁都算数。
+//
+// 事件只有一种、也不带路径——面板本来就要整片重读（文件树、git 汇总、
+// 正在看的那个文件），逐条路径对它们没有用处。合帧在 fswatch 里做完了，
+// 这里只管转发。
+//
+// 这棵树太大不适合监视时（依赖与产物没排干净的巨型目录），回一条
+// `unavailable` 就收线，客户端据此不再重连、退回手动刷新——比让它对着
+// 一条永远不来事件的流干等强。
+func (h workspaceHandler) watch(w http.ResponseWriter, r *http.Request) {
+	cwd, err := h.cwdOf(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, envelope{Error: "streaming unsupported"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	var (
+		events <-chan struct{}
+		cancel func()
+	)
+	if h.watcher != nil {
+		events, cancel, err = h.watcher.Subscribe(cwd)
+	} else {
+		err = fswatch.ErrUnavailable
+	}
+	if err != nil {
+		if _, err := fmt.Fprint(w, "data: {\"kind\":\"unavailable\"}\n\n"); err == nil {
+			flusher.Flush()
+		}
+		return
+	}
+	defer cancel()
+
+	ticker := time.NewTicker(watchHeartbeat)
+	defer ticker.Stop()
+
+	ctx := r.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-events:
+			if !ok {
+				return
+			}
+			if _, err := fmt.Fprint(w, "data: {\"kind\":\"fs_changed\"}\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-ticker.C:
+			// SSE 注释行：只保活，不触发前端的 onmessage。
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+// watcherHub 是 workspaceHandler 依赖的监视器共用层。用接口而不是直接
+// 拿 *fswatch.Hub，是为了让「没有监视器」也是一种合法装配（测试、或者
+// 将来某个不需要它的部署形态）——handler 不必到处判空。
+type watcherHub interface {
+	Subscribe(root string) (<-chan struct{}, func(), error)
+}
+
+var _ watcherHub = (*fswatch.Hub)(nil)

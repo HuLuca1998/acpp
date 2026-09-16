@@ -235,6 +235,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET | `/api/sessions/{id}/tool-calls/{toolCallId}/output` | 一次工具调用的完整入出参（`{rawInput, rawOutput}`），工具卡展开那一刻按需取 |
 | GET | `/api/sessions/{id}/fs/entries` | 工作区文件树（`?path=&depth=`，depth≤2；全量展示，仅过滤固定黑名单 .git/node_modules/.DS_Store，路径限制在会话 cwd 内） |
 | GET | `/api/sessions/{id}/fs/file` | 工作区文件预览（`?path=`；1MB 截断、二进制检测，同上 path guard） |
+| GET | `/api/sessions/{id}/fs/watch` | **工作目录文件变动流（SSE）**：目录里有东西变了就推一条 `{kind:"fs_changed"}`，工作区面板据此整片重读。事件不带路径——面板本来就要重读文件树、git 汇总与正在看的那个文件。成串事件在后端合帧（400ms），`.git`/`node_modules`/产物目录里的动静不算数。macOS 走 FSEvents 递归流——整棵树一个句柄，1.3 万个目录的工作区根也不额外花钱。监视建不起来时推一条 `{kind:"unavailable"}` 就收线，客户端不再重连、退回手动刷新 |
 | GET | `/api/sessions/{id}/fs/table` | csv/tsv/xlsx 摊平成表格（`?path=`，返回 `{sheets:[{name,rows,truncated}]}`，csv 是只有一页的特例）。csv 走标准库、xlsx 走 excelize；非 UTF-8 的 csv 按 GBK 兜底解码（Excel 导出默认就是它）；5000 行 / 200 列 / 32MB 三道闸，超了如实标记 |
 | GET | `/api/sessions/{id}/fs/download` | 原样下发文件（`?path=`；`?archive=1` 把目录边打包边发 zip）。`?inline=1` 改成**浏览器内预览**：按扩展名给真实 Content-Type + `Content-Disposition: inline`，PDF/图片/音视频/纯文本浏览器自己就画得出来；HTML/SVG 这类可能自带脚本的加 `CSP: sandbox`（同源下不设防就能读走身份 cookie），白名单外的类型回落成另存为 |
 | GET | `/api/sessions/{id}/git/overview` | git 汇总：分支、upstream、ahead/behind、变更文件（含 numstat）、未推送 commit；非仓库返回 `isRepo:false` |
@@ -374,6 +375,14 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 | 终端 | 可多实例的真实 pty |
 
 四个 git 面板不互相说话，全部读命令总线里的同一份选择态——因此可以只开其中一个，也可以任意摆放。布局预设 **Git 工作台** 把它们按「左分支 ｜ 中链路 ｜ 右上变更 / 右下详情」一次摆好。
+
+**面板什么时候重读**（三条路互补，每条都有手动刷新兜底）：
+
+- **agent 干完一件事**——轮内每完成一次工具调用合帧刷一次（1.5s 窗口），外加 turn 结束刷一次。它管得到版本库的动静：commit 只改 `.git`，文件系统那边看不见。
+- **文件真的变了**——后端监视工作目录（`/fs/watch` 的 SSE 流，400ms 合帧），用户自己在编辑器里改的、命令行里跑出来的同样算数。页面进后台即断开，回到前台重连。设计与选型见 [adr-024](docs/adr-024-工作区文件变动监视.md)。
+- **手动**——每个面板头部都有刷新按钮。
+
+**看不见就不拉**：藏在 tab 后面的面板收到刷新广播只记一笔账，切回来那一刻补一次。文件树刷新不会把展开状态折回去（展开着的深层目录各自重读，旧内容先摆着、新的到手再换），查看器拿回一模一样的内容时也不会白重渲一遍。
 
 **AI 联动**：右键提交「让 AI 审查」、右键分支「让 AI 对比」、右键文件「让 AI 分析改动」，写好的 prompt **只填进输入框，不自动发送**——发消息是用户的动作。
 

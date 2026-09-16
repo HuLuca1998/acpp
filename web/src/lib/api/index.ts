@@ -141,6 +141,14 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
         )
       ),
 
+    /**
+     * 工作区文件变动流（SSE）的地址。返回 URL 而不是发请求：这是条长连接，
+     * 由调用方用 EventSource 接住并负责生命周期。
+     *
+     * 事件只有两种：`fs_changed`（这个目录里有东西变了，重读一遍）与
+     * `unavailable`（这棵树太大，后端不监视它——别再重连，退回手动刷新）。
+     */
+    workspaceWatchUrl: (id: number) => `${BASE}${at(id, "/fs/watch")}`,
     /** 工作区文件树：path 为空从会话 cwd 开始，depth ≤ 2。 */
     workspaceTree: (id: number, params?: { path?: string; depth?: number }) => {
       const qs = new URLSearchParams()

@@ -13,6 +13,7 @@ import (
 	"acpp/server/internal/config"
 	"acpp/server/internal/datasource"
 	"acpp/server/internal/discord"
+	"acpp/server/internal/fswatch"
 	"acpp/server/internal/github"
 	"acpp/server/internal/mcpcall"
 	"acpp/server/internal/project"
@@ -240,12 +241,17 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("POST /api/uploads", uploads.create)
 	api.HandleFunc("DELETE /api/uploads", uploads.remove)
 
-	workspace := workspaceHandler{cwdOf: sessionCwd}
+	// 文件变动监视：按目录共用一个监视器，没人看的时候不占句柄。
+	// 会话态与草稿态共用同一份——同一个工作目录被两边同时看着很常见。
+	watcher := fswatch.NewHub()
+	workspace := workspaceHandler{cwdOf: sessionCwd, watcher: watcher}
 
 	// 草稿态工作区：会话还没建，目录由 `?cwd=` 给。看文件与 git 状态只需要
 	// 一个目录——选完工作目录就该能用，不必先发一条消息把会话建出来。
-	draft := workspaceHandler{cwdOf: draftCwd}
+	draft := workspaceHandler{cwdOf: draftCwd, watcher: watcher}
 	api.HandleFunc("GET /api/workspace/fs/entries", draft.tree)
+	// 文件变动流：工作区面板据此自动重读（agent 之外的改动也算数）。
+	api.HandleFunc("GET /api/workspace/fs/watch", draft.watch)
 	api.HandleFunc("GET /api/workspace/fs/file", draft.file)
 	api.HandleFunc("GET /api/workspace/fs/table", draft.table)
 	api.HandleFunc("GET /api/workspace/fs/download", draft.download)
@@ -280,6 +286,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 
 	// 工作区面板数据面：文件树（depth≤2 一次返回，gitignore 过滤）与文件预览。
 	api.HandleFunc("GET /api/sessions/{id}/fs/entries", workspace.tree)
+	api.HandleFunc("GET /api/sessions/{id}/fs/watch", workspace.watch)
 	api.HandleFunc("GET /api/sessions/{id}/fs/file", workspace.file)
 	// 原样下载（右键「下载」）：与预览分开——预览会截断、二进制只标记。
 	api.HandleFunc("GET /api/sessions/{id}/fs/table", workspace.table)
