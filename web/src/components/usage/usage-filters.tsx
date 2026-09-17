@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { api } from "@/lib/api"
 import type { UsageQuery } from "@/types/usage"
-import { InfoIcon, RefreshCwIcon } from "lucide-react"
+import { CircleDollarSignIcon, InfoIcon, RefreshCwIcon } from "lucide-react"
 
 /** 时间范围的取值。 */
 export type UsageRange = "7d" | "14d" | "30d" | "90d" | "all"
@@ -26,6 +26,7 @@ export function UsageFilters({
   filters,
   onFilters,
   isOwner,
+  onEditPrices,
   onBackfilled,
 }: {
   range: UsageRange
@@ -33,6 +34,7 @@ export function UsageFilters({
   filters: UsageQuery
   onFilters: (f: UsageQuery) => void
   isOwner: boolean
+  onEditPrices: () => void
   onBackfilled: () => void
 }) {
   const { t } = useTranslation()
@@ -83,6 +85,12 @@ export function UsageFilters({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
+        {isOwner && (
+          <Button variant="outline" size="sm" onClick={onEditPrices}>
+            <CircleDollarSignIcon data-icon="inline-start" />
+            {t("usage.prices.edit")}
+          </Button>
+        )}
         {isOwner && (
           <Button
             variant="outline"

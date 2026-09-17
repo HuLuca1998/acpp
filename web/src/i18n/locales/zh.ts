@@ -572,6 +572,27 @@ export default {
     colSession: "会话",
     colKind: "类别",
     colMessage: "原文",
+    prices: {
+      title: "折算单价表",
+      description:
+        "给没有实报费用的轮子（codex 一分钱都不报）算一个等价成本。实报永远优先，不会被折算盖掉。",
+      hint: "这里不预填任何价：模型 id 一个月里就能改，各家价目也在动——猜一个数字填进去，报表会拿它一路算下去，而没人知道它是编的。空着就是「未计价」，那是诚实的显示。单位是美元 / 百万 token。",
+      byFlavor: "按工具（兜底价）",
+      byFlavorHint:
+        "claude 报的模型名多半只是档位（default），一个个配没有意义——认不出模型时用这一行。",
+      byModel: "按模型（精确价）",
+      byModelHint: "列的是这段时间里真实出现过的模型；填了就压过上面的兜底价。",
+      colTarget: "对象",
+      field: {
+        input: "输入",
+        output: "输出",
+        cacheRead: "缓存读",
+        cacheWrite: "缓存写",
+        thought: "思考",
+      },
+      saved: "已保存。已经记下的账不会跟着变——要对齐点「重算历史」。",
+      edit: "单价表",
+    },
     chartTitle: "每日用量与成本",
     chartDescription: "柱是 Token，线是等价成本（右轴）",
     metric: { tokens: "Token", cost: "成本", turns: "轮次" },

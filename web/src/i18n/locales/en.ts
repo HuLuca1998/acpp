@@ -599,6 +599,29 @@ export default {
     colSession: "Session",
     colKind: "Class",
     colMessage: "Message",
+    prices: {
+      title: "Price table",
+      description:
+        "Gives an equivalent cost to turns that report none (codex reports nothing). Reported spend always wins and is never overwritten.",
+      hint: "Nothing is pre-filled here on purpose: model ids change within a month and vendor pricing moves — a guessed number would be carried through every report with no way to tell it was invented. Left empty means unpriced, which is the honest reading. Units are USD per million tokens.",
+      byFlavor: "By tool (fallback)",
+      byFlavorHint:
+        "claude mostly reports a tier name (default) rather than a model, so per-model entries rarely apply — this row catches those.",
+      byModel: "By model (exact)",
+      byModelHint:
+        "These are the models that actually showed up in this range; filling one overrides the fallback above.",
+      colTarget: "Target",
+      field: {
+        input: "Input",
+        output: "Output",
+        cacheRead: "Cache read",
+        cacheWrite: "Cache write",
+        thought: "Thinking",
+      },
+      saved:
+        "Saved. Existing rows keep the price they were recorded at — use Recompute history to align them.",
+      edit: "Prices",
+    },
     chartTitle: "Daily usage and cost",
     chartDescription:
       "Bars are tokens, the line is equivalent cost (right axis)",
