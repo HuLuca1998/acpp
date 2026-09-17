@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { UsageBreakdown } from "@/components/usage/usage-breakdown"
 import { UsageChart, type ChartMetric } from "@/components/usage/usage-chart"
 import { UsageComposition } from "@/components/usage/usage-composition"
+import { UsageHealth } from "@/components/usage/usage-health"
 import { UsageFilters, type UsageRange } from "@/components/usage/usage-filters"
 import { UsageKpis } from "@/components/usage/usage-kpis"
 import {
@@ -15,7 +17,7 @@ import {
 import { useAsyncData } from "@/hooks/use-async-data"
 import { useIsOwner } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
-import type { UsageQuery } from "@/types/usage"
+import type { UsageDimension, UsageQuery } from "@/types/usage"
 import { ChartColumnIcon } from "lucide-react"
 
 /** 时间范围的天数；"all" 是全量（后端认 from=0）。 */
@@ -54,6 +56,7 @@ export function Usage() {
   const [range, setRange] = useState<UsageRange>("14d")
   const [metric, setMetric] = useState<ChartMetric>("tokens")
   const [filters, setFilters] = useState<UsageQuery>({})
+  const [dimension, setDimension] = useState<UsageDimension>("project")
 
   const query = useMemo<UsageQuery>(
     () => ({ ...filters, ...rangeQuery(range) }),
@@ -68,6 +71,23 @@ export function Usage() {
     () => api.usage.series({ ...query, bucket: "day" }),
     [key]
   )
+  const breakdown = useAsyncData(
+    () => api.usage.breakdown({ ...query, by: dimension }),
+    [key, dimension]
+  )
+  const errors = useAsyncData(() => api.usage.errors({ ...query }), [key])
+  // 身份那一栏要显示名字而不是 id。租客看不到这个维度，也就不必拉。
+  const tenants = useAsyncData(
+    () => (isOwner ? api.tenants.list() : Promise.resolve(null)),
+    [isOwner]
+  )
+  const tenantNames = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const tenant of tenants.data?.items ?? []) {
+      m.set(String(tenant.id), tenant.name)
+    }
+    return m
+  }, [tenants.data])
 
   const error = summary.error ?? series.error
   if (error) {
@@ -134,10 +154,32 @@ export function Usage() {
             />
             <UsageComposition totals={totals} />
           </div>
+          <div className="px-4 lg:px-6">
+            <UsageBreakdown
+              rows={breakdown.data?.items ?? null}
+              dimension={dimension}
+              onDimension={setDimension}
+              isOwner={isOwner}
+              tenantNames={tenantNames}
+              onDrill={(dim, value) => {
+                // 下钻成筛选条件：会话那一维是跳过去看对话，不是筛。
+                if (dim === "session") return
+                setFilters({ ...filters, [dimKey(dim)]: value })
+              }}
+            />
+          </div>
+          <div className="px-4 lg:px-6">
+            <UsageHealth totals={totals} errors={errors.data} />
+          </div>
         </>
       )}
     </PageShell>
   )
+}
+
+/** 分组维度 → 筛选条上的字段名。 */
+function dimKey(d: UsageDimension): keyof UsageQuery {
+  return d === "day" ? "from" : (d as keyof UsageQuery)
 }
 
 function PageShell({ children }: { children: React.ReactNode }) {
