@@ -23,6 +23,7 @@ import (
 	"acpp/server/internal/stream"
 	"acpp/server/internal/system"
 	"acpp/server/internal/titler"
+	"acpp/server/internal/usage"
 )
 
 // Services 是路由需要的全部业务服务，由装配层（cmd/server）构建后传入——
@@ -57,6 +58,8 @@ type Services struct {
 	Notices *stream.Hub
 	// Discord 是独立于会话的频道工作区子系统（adr-016），可为 nil（未装配）。
 	Discord *discord.Service
+	// Usage 是轮次用量账本，报表页读它。
+	Usage *usage.Ledger
 }
 
 // NewRouter 组装全部路由与中间件。
@@ -108,6 +111,16 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/github/issues", gh.issues)
 	api.HandleFunc("GET /api/github/repos", gh.repos)
 	api.HandleFunc("PUT /api/github/repos", gh.updateRepos)
+
+	// 用量报表：租户可用，范围由 Scope 收在查询条件里（只看得到自己的账）。
+	// 六个分组维度是同一条 SQL 换 group by，所以只有一个 breakdown 端点。
+	usageAPI := usageHandler{ledger: svcs.Usage}
+	api.HandleFunc("GET /api/usage/summary", usageAPI.summary)
+	api.HandleFunc("GET /api/usage/series", usageAPI.series)
+	api.HandleFunc("GET /api/usage/breakdown", usageAPI.breakdown)
+	api.HandleFunc("GET /api/usage/errors", usageAPI.errors)
+	// 重算历史是 owner 专属（isOwnerOnly 按方法判）。
+	api.HandleFunc("POST /api/usage/backfill", usageAPI.backfill)
 
 	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。
 	// ?files=1 时连同文件一起列（@ 文件引用用）。

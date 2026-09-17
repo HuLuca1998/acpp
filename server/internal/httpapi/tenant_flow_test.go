@@ -33,6 +33,7 @@ type flowEnv struct {
 	alice   *http.Cookie
 	bob     *http.Cookie
 	base    string
+	db      *gorm.DB
 }
 
 func newFlowEnv(t *testing.T) *flowEnv {
@@ -43,7 +44,7 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.Tenant{}, &model.DataSource{}); err != nil {
+	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.Tenant{}, &model.DataSource{}, &model.TokenUsage{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	if err := gdb.Create(&model.Agent{Name: "claude", Command: "claude-agent-acp"}).Error; err != nil {
@@ -68,8 +69,9 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	skillUsage := service.NewSkillUsageService(gdb, dir)
 	tenants := service.NewTenantService(gdb, base)
 	agents := service.NewAgentService(gdb)
-	chat := service.NewChatService(gdb, sessions, manager, transcripts, skillUsage, usage.NewLedger(gdb, transcripts))
-	env := &flowEnv{base: base}
+	ledger := usage.NewLedger(gdb, transcripts)
+	chat := service.NewChatService(gdb, sessions, manager, transcripts, skillUsage, ledger)
+	env := &flowEnv{base: base, db: gdb}
 	env.handler = NewRouter(config.Config{}, Services{
 		Agents:      agents,
 		Sessions:    sessions,
@@ -78,6 +80,7 @@ func newFlowEnv(t *testing.T) *flowEnv {
 		Tenants:     tenants,
 		Projects:    project.NewService(gdb),
 		DataSources: datasource.NewService(gdb, sessions, "127.0.0.1:48080"),
+		Usage:       ledger,
 	})
 
 	for _, name := range []string{"alice", "bob"} {
