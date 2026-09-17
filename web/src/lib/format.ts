@@ -80,6 +80,35 @@ export function formatTokens(n: number): string {
   return String(n)
 }
 
+/**
+ * 把整数微元（百万分之一美元）显示成金额。
+ *
+ * 账目一路用整数走到这里才除：几万行 float64 累加出来的合计会带误差
+ * 尾巴。非零但小于一分钱的显示成 `<$0.01`——直接四舍五入成 $0.00 会让
+ * 「有花销」和「没花销」长得一模一样。
+ */
+export function formatCost(micro: number): string {
+  const usd = micro / 1_000_000
+  if (usd === 0) return "$0.00"
+  if (Math.abs(usd) < 0.01) return "<$0.01"
+  if (Math.abs(usd) >= 1000) return `$${usd.toFixed(0)}`
+  return `$${usd.toFixed(2)}`
+}
+
+/**
+ * 把毫秒显示成人读的时长：超过一小时用小数小时（"20.7h"），分钟级带秒
+ * （"5m59s"），再短就只给秒。
+ *
+ * 报表里这一列是「agent 干了多久活」，量级从几秒跨到几小时，固定单位
+ * 总有一头不可读。
+ */
+export function formatDuration(ms: number): string {
+  const sec = Math.round(ms / 1000)
+  if (sec >= 3600) return `${(sec / 3600).toFixed(1)}h`
+  if (sec >= 60) return `${Math.floor(sec / 60)}m${sec % 60}s`
+  return `${sec}s`
+}
+
 /** 首字母大写：动态拼 i18n key（"idle" → "statusIdle"）用。 */
 export function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)

@@ -125,6 +125,7 @@ function ChartTooltipContent({
   labelFormatter,
   labelClassName,
   formatter,
+  valueFormatter,
   color,
   nameKey,
   labelKey,
@@ -135,6 +136,14 @@ function ChartTooltipContent({
     indicator?: "line" | "dot" | "dashed"
     nameKey?: string
     labelKey?: string
+    /**
+     * 只接管**值**那一段的显示（货币、字节、时长……），色块与名称照旧。
+     *
+     * 与 formatter 的分工：那个是整行都交给你画，为了换个单位重写一遍
+     * 色块与布局不划算，而单位恰恰是最常要改的东西。name 按系列区分
+     * （同一张图上 token 与金额的格式不同）。
+     */
+    valueFormatter?: (value: unknown, name: string) => React.ReactNode
   } & Omit<
     RechartsPrimitive.DefaultTooltipContentProps<
       TooltipValueType,
@@ -252,9 +261,14 @@ function ChartTooltipContent({
                       </div>
                       {item.value != null && (
                         <span className="font-mono font-medium text-foreground tabular-nums">
-                          {typeof item.value === "number"
-                            ? item.value.toLocaleString()
-                            : String(item.value)}
+                          {valueFormatter
+                            ? valueFormatter(
+                                item.value,
+                                String(item.name ?? "")
+                              )
+                            : typeof item.value === "number"
+                              ? item.value.toLocaleString()
+                              : String(item.value)}
                         </span>
                       )}
                     </div>
