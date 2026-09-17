@@ -166,7 +166,10 @@ func isOwnerOnly(r *http.Request) bool {
 		strings.HasPrefix(path, "/api/system"):
 		return true
 	case strings.HasPrefix(path, "/api/skills"),
-		strings.HasPrefix(path, "/api/agents"):
+		strings.HasPrefix(path, "/api/agents"),
+		// 用量报表对租户开放，但范围由 Scope 收在查询条件里（只看得到
+		// 自己的账）。重算历史是全库操作，与读一样按方法分：owner 才给。
+		strings.HasPrefix(path, "/api/usage"):
 		return r.Method != http.MethodGet
 	}
 	return false

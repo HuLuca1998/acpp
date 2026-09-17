@@ -301,6 +301,7 @@ func run() error {
 		APILogs:     apiLogs,
 		GitHub:      githubService,
 		Discord:     discordService,
+		Usage:       usageLedger,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
