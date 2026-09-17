@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -109,6 +110,29 @@ func (s *Store) ReadLines(key string, fn func(line []byte) bool) error {
 		}
 	}
 	return scanner.Err()
+}
+
+// Keys 列出磁盘上所有会话的转录 key（文件名去掉 .jsonl）。
+//
+// 给「把全部转录重扫一遍」的调用方用（用量回填就是）。读的是目录而不是
+// 数据库：**转录只增不减**，会话删了它还在，而这正是账目能重算的原因。
+func (s *Store) Keys() ([]string, error) {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list transcripts: %w", err)
+	}
+	keys := make([]string, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		keys = append(keys, strings.TrimSuffix(name, ".jsonl"))
+	}
+	return keys, nil
 }
 
 // Close 关闭该会话的文件句柄；会话进程回收时调用。

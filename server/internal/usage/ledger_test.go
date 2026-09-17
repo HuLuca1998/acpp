@@ -39,7 +39,7 @@ func ledgerFixture(t *testing.T) (*Ledger, uint) {
 	if err := gdb.Create(&sess).Error; err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	return NewLedger(gdb), sess.ID
+	return NewLedger(gdb, nil), sess.ID
 }
 
 // rowsOf 按轮序读出这条会话的全部账目。
