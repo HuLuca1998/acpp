@@ -59,6 +59,9 @@ const (
 // backfillFixture 建一条会话 + 一份转录，返回账本与会话 id。
 func backfillFixture(t *testing.T, lines ...string) (*Ledger, uint) {
 	t.Helper()
+	// 把家目录钉在临时目录里：单价表存 ~/.acpp/config.json，不隔离的话
+	// 跑一次测试就把开发机上真实的配置改了。
+	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	gdb, err := gorm.Open(sqlite.Open(filepath.Join(dir, "usage.db")), &gorm.Config{})
 	if err != nil {

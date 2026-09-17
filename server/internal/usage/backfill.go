@@ -89,9 +89,10 @@ func (l *Ledger) BackfillSession(ctx context.Context, sessionID uint) (int, erro
 	}
 
 	rows := make([]model.TokenUsage, 0, len(facts))
+	table := l.prices.get()
 	var prevCum int64
 	for i, f := range facts {
-		row := buildRow(sessionID, i+1, meta, f, prevCum)
+		row := buildRow(sessionID, i+1, meta, f, prevCum, table)
 		if row.CostSource == model.CostReported {
 			prevCum = row.CostCumMicro
 		}

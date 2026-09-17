@@ -20,6 +20,12 @@ type fileConfig struct {
 	// TitleModel 是生成会话标题用的外部小模型。放本机配置而不入库：它描述
 	// 的是「这台机器上有什么可用」，与租户和数据目录都无关。
 	TitleModel TitleModel `json:"titleModel,omitempty"`
+
+	// UsagePrices 是用量折算的单价表**原文**。这里存原样的 JSON 而不是
+	// 解出来的结构：它的形状归 internal/usage 定义，config 只是那份配置
+	// 文件的看门人——照 TitleModel 各存一份的先例，只是这块嵌套得多，
+	// 抄一遍结构不如不认识它。
+	UsagePrices json.RawMessage `json:"usagePrices,omitempty"`
 }
 
 // TitleModel 是会话标题生成的模型配置，字段与 internal/titler.Config 对齐。
@@ -87,6 +93,19 @@ func SavedTitleModel() TitleModel {
 func SaveTitleModel(tm TitleModel) error {
 	fc := readFileConfig()
 	fc.TitleModel = tm
+	return writeFileConfig(fc)
+}
+
+// SavedUsagePrices 读用量单价表的原文；没配过返回 nil（调用方按空表处理）。
+func SavedUsagePrices() []byte {
+	return readFileConfig().UsagePrices
+}
+
+// SaveUsagePrices 保存单价表原文。**已经记下的账不会跟着变**——那是记账
+// 当时的价，改价之后要重算的是「重算历史」。
+func SaveUsagePrices(raw []byte) error {
+	fc := readFileConfig()
+	fc.UsagePrices = raw
 	return writeFileConfig(fc)
 }
 

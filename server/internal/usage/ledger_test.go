@@ -18,6 +18,9 @@ import (
 // 会话，模型快照是 claude 实际会报的档位名 "default"。
 func ledgerFixture(t *testing.T) (*Ledger, uint) {
 	t.Helper()
+	// 把家目录钉在临时目录里：单价表存 ~/.acpp/config.json，不隔离的话
+	// 跑一次测试就把开发机上真实的配置改了。
+	t.Setenv("HOME", t.TempDir())
 	gdb, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "usage.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
