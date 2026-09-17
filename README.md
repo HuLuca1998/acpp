@@ -28,7 +28,7 @@ acpp/
 │   │   ├── App.tsx             # 路由表
 │   │   ├── routes/             # 页面，与路由表一一对应：overview / sessions /
 │   │   │                       #   session-chat（工作区宿主，草稿态共用）/ skills / skill-detail /
-│   │   │                       #   databases / servers（远程服务器）/ tools（MCP 工具台）/ jobs（定时任务）/ tenants（连接）/ github（issue 列表）/
+│   │   │                       #   usage（用量报表）/ databases / servers（远程服务器）/ tools（MCP 工具台）/ jobs（定时任务）/ tenants（连接）/ github（issue 列表）/
 │   │   │                       #   settings（系统 + claude/codex 工具分区）/ dashboard-layout /
 │   │   │                       #   placeholder / not-found
 │   │   ├── hooks/              # use-chat（SSE 状态机）/ use-draft-session /
@@ -45,6 +45,7 @@ acpp/
 │   │   │   ├── servers/        # 服务器：连接对话框、验证方式文案映射
 │   │   │   ├── tools/          # 工具台：工具清单、参数表单、响应视图、自定义请求、调用记录
 │   │   │   ├── overview/       # 概览页四张卡
+│   │   │   ├── usage/          # 用量报表：指标卡、曲线、Token 构成、分组明细、健康面板、单价表
 │   │   │   ├── settings/       # 设置页分区面板（内置工具 claude/codex 的配置面）
 │   │   │   └── *.tsx           # 跨域小组件：status-dot / diff-view / dir-picker / agent-icon / list-page-header / list-page-states
 │   │   ├── lib/                # 纯函数与客户端；README.md 是工具索引（脚本对账）
@@ -69,7 +70,7 @@ acpp/
         │   └── isolation.go    #   技能隔离注入
         ├── config/             # 环境变量配置、数据目录准备与迁移、路径工具
         ├── db/                 # GORM 连接 + AutoMigrate + LIKE 模式辅助
-        ├── model/              # Agent / Session / Message(重建 DTO) / SkillUsage / APILog …
+        ├── model/              # Agent / Session / Message(重建 DTO) / SkillUsage / TokenUsage / APILog …
         ├── apilog/             # HTTP 请求日志：中间件写、日志页读（留最近 5000 条，凭证抹掉，正文截断）
         ├── transcript/         # 会话转录 JSONL（对话内容唯一的持久化）
         ├── stream/             # SSE 事件形状与广播器（会话流的叶子包）
@@ -81,6 +82,7 @@ acpp/
         ├── discord/            # Discord 频道工作区（adr-016/017/018）：频道绑定、子区对话、工作树与数据库环境锁定；定时任务的运行管线与入口（adr-020）
         ├── schedule/           # 定时任务调度核心（adr-020）：任务与运行记录存储、cron 解析、整分钟扫描、失败退避与自动停用；Runner 与 Scope 由调用方注入
         ├── ask/                # 别的 AI 的同步问答面（adr-022）：/api/ask 的开会话→发一轮→等轮末→取回答
+        ├── usage/              # 轮次用量账本：轮末落账、照转录回填、聚合查询、折算单价表
         ├── service/
         │   ├── agent.go / session.go / broker.go / system.go / fs.go / terminal.go
         │   ├── tenant.go / guard.go # 多租户：租户 CRUD 与隔离范围（Scope）
@@ -393,6 +395,31 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 **看不见就不拉**：藏在 tab 后面的面板收到刷新广播只记一笔账，切回来那一刻补一次。文件树刷新不会把展开状态折回去（展开着的深层目录各自重读，旧内容先摆着、新的到手再换），查看器拿回一模一样的内容时也不会白重渲一遍。
 
 **AI 联动**：右键提交「让 AI 审查」、右键分支「让 AI 对比」、右键文件「让 AI 分析改动」，写好的 prompt **只填进输入框，不自动发送**——发消息是用户的动作。
+
+## 用量
+
+侧边栏的「用量」是 token 与费用的报表，**owner 与租客是同一个页面**：owner 看全部身份的合计，租客只看得到自己的（范围由后端按身份收在查询条件里，租客那边连「身份」筛选都不渲染）。
+
+**统计不靠埋点**。每一轮的 token 本来就写在 `session/prompt` 的响应里，账本只是把它读出来建的索引——所以
+
+- 轮末落一行 `token_usages`（见「数据模型」），写入是旁路，挂了不影响对话；
+- 任何时候都能**照转录重算**（页顶「重算历史」，owner 专属）：上线当天就有全部历史，记账逻辑改了重跑一次全部对齐，实时漏记的一轮也补得回来。实测 224 份转录 1.5 秒；会话记录已经没了的转录跳过并单独报数（账目必须有主人）。
+
+**金额是等价成本，不是账单**。两条 runtime 走的都是订阅登录，这里的钱是「同样的活按 API 价值多少」，分三档显示：
+
+| 档 | 谁 | 怎么来 |
+| --- | --- | --- |
+| 实报 | claude | agent 自报的会话累计费用，逐轮差分。不猜模型、不查单价，也不会因为价格调整失真 |
+| 折算 `≈` | codex | 模型 id × 单价表。与实报**分开合计** |
+| 未计价 | — | 既没实报、模型又不在表里。**不按零算**——零和「不知道」是两件事 |
+
+为什么不统一按模型单价算：**claude 有 89% 的轮次报的模型名是 `default`**（档位名），协议里看不到底下究竟跑的哪个模型；codex 反过来模型 id 精确却一分钱不报。两边正好互补。单价表在页顶「单价表」里填，**不预置任何默认价**（模型 id 一个月里就能改，猜一个填进去报表会拿它一路算下去）；改价不动已记的账，要对齐走重算。
+
+**四项 token 分开存**：实测缓存读占全部 token 的 96%，而它的单价只有普通输入的 1/10。合起来看不出问题，分开看才知道钱花在哪——缓存命中率因此上了指标卡。
+
+**异常分三层**，因为每层的责任人不一样：轮次中止（多半是人按了停止）、agent 报错（过载 / 额度 / 登录过期，要人管的那层）、工具调用失败（干活的一部分，AI 自己会重试）。糊成一个「错误率」这个判断就做不出来了。
+
+**看得到的边界**：Discord 频道与定时任务跑的会话有自己的 acp 会话池，既不进 `sessions` 表也不写转录（adr-016 的「与会话零耦合」），**因此不在这份账里**——它们的用量只有子区内 `/usage` 的内存态累计，服务一重启就清零。
 
 ## 数据库
 
