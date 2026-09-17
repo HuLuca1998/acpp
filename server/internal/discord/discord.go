@@ -144,6 +144,9 @@ type TurnStat struct {
 	Err        error
 	ToolCalls  int
 	ToolFailed int
+	// Model 是频道绑定的模型。子区不写会话的设置快照，账本取不到，
+	// 只能从这边给。
+	Model string
 }
 
 // AgentOption 是一个内置工具的可选项集合。

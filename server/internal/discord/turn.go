@@ -127,7 +127,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 
 	s.finalizeTurnCard(token, threadID, tc)
 	out := turnOutcome{reply: reply, final: final, err: err, stop: result.StopReason, tools: toolCount, tokens: tokens, elapsed: time.Since(started)}
-	s.recordTurn(ctx, sessionID, tc, started, result, err)
+	s.recordTurn(ctx, sessionID, tc, b.Model, started, result, err)
 
 	switch {
 	case unattended && isNoReport(final):
@@ -739,7 +739,7 @@ func isSnowflake(s string) bool {
 // 费用给的是 agent 报的**会话累计值**，本轮花了多少由账本自己差分——
 // 这里不算钱，算了两边口径就会分家。
 func (s *Service) recordTurn(ctx context.Context, sessionID uint, tc *threadChat,
-	started time.Time, result acp.PromptResult, turnErr error) {
+	model string, started time.Time, result acp.PromptResult, turnErr error) {
 	if s.deps.RecordTurn == nil || sessionID == 0 {
 		return
 	}
@@ -763,5 +763,6 @@ func (s *Service) recordTurn(ctx context.Context, sessionID uint, tc *threadChat
 		Err:        turnErr,
 		ToolCalls:  calls,
 		ToolFailed: failed,
+		Model:      model,
 	})
 }

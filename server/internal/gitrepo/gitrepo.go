@@ -39,13 +39,23 @@ func Name(url string) string {
 // 只读 `.git/config` 不 exec git：这条路径在项目列表与会话取数据源时都会
 // 走，每次 fork 一个 git 进程，项目一多就卡。
 //
-// 工作树的 `.git` 是指向真实 gitdir 的**文件**，那时 config 不在这个目录
-// 下——跟一跳去找。
+// 三种布局都要认，否则同一个仓库会因为落在哪儿而算成不同的项目：
+//
+//   - 普通克隆：config 就在 `<dir>/.git/config`；
+//   - 工作树：`.git` 是指向真实 gitdir 的**文件**，跟一跳去找；
+//   - **裸仓库容器**：discord 频道工作区是 `<项目>/.repo`（bare）+
+//     `<项目>/.worktree/<分支>`（adr-018）。剥掉工作树那一段之后落在
+//     `<项目>` 上，而那一层没有 `.git`——真正的仓库是它下面的 `.repo`。
+//     不认这一条的话，discord 的用量会挂在裸目录名（`pp-game`）上，与
+//     网页侧同一个仓库（`BDBGAME2024/pp-game`）在报表里分成两行。
 func OriginURL(dir string) string {
 	data, err := os.ReadFile(filepath.Join(dir, ".git", "config"))
 	if err != nil {
 		if resolved := gitDirOf(dir); resolved != "" {
 			data, err = os.ReadFile(filepath.Join(resolved, "config"))
+		}
+		if err != nil || len(data) == 0 {
+			data, err = os.ReadFile(filepath.Join(dir, bareRepoDir, "config"))
 		}
 		if err != nil || len(data) == 0 {
 			return ""
@@ -110,6 +120,10 @@ func gitDirOf(dir string) string {
 	}
 	return p
 }
+
+// bareRepoDir 是 discord 频道工作区放裸仓库的目录名（adr-018 的
+// `<项目>/.repo` + `<项目>/.worktree/<分支>` 布局）。
+const bareRepoDir = ".repo"
 
 // worktreeSegs 是「工作树容器目录」的名字：路径里出现它们，说明后面那一段
 // 是分支的检出，项目本身在它们**之前**。

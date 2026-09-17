@@ -251,3 +251,33 @@ func TestUsageRecordRejectsUnknownSession(t *testing.T) {
 		t.Errorf("err = %v，会话不存在时应是 ErrNotFound", err)
 	}
 }
+
+// 外部子系统（Discord）不写会话的设置快照，模型只能由那一侧直接给。
+// 给了就用它，不给才退回快照——两条路都要成立。
+func TestRecordTakesModelFromCaller(t *testing.T) {
+	ledger, sessionID := ledgerFixture(t)
+	ctx := context.Background()
+
+	if err := ledger.Record(ctx, TurnRecord{
+		SessionID: sessionID, StartedAt: time.Now(), EndedAt: time.Now(),
+		Usage: claudeTurn(), StopReason: string(acp.StopEndTurn),
+		Model: "opus[1m]",
+	}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if err := ledger.Record(ctx, TurnRecord{
+		SessionID: sessionID, StartedAt: time.Now(), EndedAt: time.Now(),
+		Usage: claudeTurn(), StopReason: string(acp.StopEndTurn),
+	}); err != nil {
+		t.Fatalf("Record 第二轮: %v", err)
+	}
+
+	rows := rowsOf(t, ledger, sessionID)
+	if rows[0].Model != "opus[1m]" {
+		t.Errorf("第一轮 Model = %q，调用方给了就该用它", rows[0].Model)
+	}
+	// ledgerFixture 的会话快照里是 "default"。
+	if rows[1].Model != "default" {
+		t.Errorf("第二轮 Model = %q，没给就该退回会话快照", rows[1].Model)
+	}
+}
