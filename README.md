@@ -324,7 +324,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 ## 数据模型
 
 - **Agent** — 可通过 stdio 启动的 agent 配置（`command` / `args` / `env` / `cwd`），`args` 与 `env` 以 JSON 文本存入 SQLite。产品形态上固定为内置的 claude / codex 两条记录（启动时缺失自动预置、按 name 判存不覆盖用户配置，见 adr-005），API 仍是通用的 `/api/agents`。`flavor` / `models` / `commands` / `skeleton` 是注册/更新后自动探测的缓存（拉临时会话读能力）：模型与命令供草稿态展示与 `/` 补全（条目带 `disabled` 标记，重探不清空取舍）；`skeleton` 是模型之外的设置骨架（efforts/levels/plan/fast 支持位），与模型清单一起构成未连接会话的完整降级设置视图。模型条目支持 `alias`（配置页起显示别名，所有模型下拉优先显示）；`fastPolicy` 是快速模式取舍（首探按 flavor 落默认：claude 因额外计费默认 off，其余 on；off 时快速开关不出现在任何界面）。`askModel` / `askEffort` 是别的 AI 经 `/api/ask` 问这个工具时新会话拨到的模型与思考深度（adr-022），配置页设、重探不清空，空=沿用 runtime 默认。
-- **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`origin` 标记会话是谁开的：空是界面里的人，`ask` 是别的 AI 经 `/api/ask` 问出来的（adr-022），侧栏据此分开摆。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`promptDigests` 是长提问的一句话摘要缓存（对话索引用，键是提问正文的内容指纹而不是消息 id——消息 id 是转录行号，重建逻辑一变就整体漂移），不出 API。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
+- **Session** — 对应一次 `session/new`，`acpSessionId` 是 agent 返回的 uuid v7，`stopReason` 记录上一轮的结束原因。`origin` 标记会话是谁开的：空是界面里的人、`ask` 是别的 AI 经 `/api/ask` 问出来的（adr-022）、`discord` 是子区里聊的、`cron` 是定时任务跑的（adr-016/020）。侧栏与用量报表据此分类——**每个入口都要有名字**，混在一起就说不清「这笔钱是谁花的」。`lastSettings` 是最后一次生效的统一设置当前值快照（用户改设置、或 agent 自己切档时写回；查看会话这类只读路径**不写**，它读到的可能正是一份还没拨回去的默认值），两个用途：未连接会话的工具栏靠它显示与断开前一致的当前值，**子进程重开后也按它把模型/思考深度/权限档拨回去**——这些是会话级运行时状态，跟着子进程一起死，不回放的话空闲回收一次，用户没做任何操作设置就变了；`lastUsage` 同理存最近一次上报的用量（`{used, size, cost?}`，轮末写一次）——上下文水位只经 `usage_update` 通知流过，没有这份快照的话会话一停、页面一刷新，占用比例就没了。`externalKey` 非空表示这条会话由外部子系统管着 acp 连接（现在只有 Discord 子区：`dc:<子区 id>`），登记靠它幂等；网页侧对这类会话只读。`promptDigests` 是长提问的一句话摘要缓存（对话索引用，键是提问正文的内容指纹而不是消息 id——消息 id 是转录行号，重建逻辑一变就整体漂移），不出 API。`state` 语义：`active` 只表示**有一轮正在跑**；空闲子进程超时会被回收（state 归 `idle`），服务重启时遗留的 `active` 也会归一——续聊时凭 `acpSessionId` 用 `session/load` 恢复上下文，进程挂不挂着不影响会话可用性。
 - **Message** — 会话内一条记录，`kind` 覆盖 `session/update` 的各类内容块，结构化内容放 `payload`。**不落库**（adr-003）：它是转录重建器的输出 DTO 与消息接口的响应契约，事实源是转录 JSONL。
 - **Tenant** — 一位局域网访客的身份与隔离单元（adr-007）：`name`（同时是 root 目录名，建后不可改）、`token`（邀请链接与 cookie 的凭证，只对 owner 可见）、`root`（最上层工作目录）、`disabled`、`githubLogin`（访客在 GitHub 上的用户名，owner 填；GitHub 页按它筛「分配给我」的 issue——issue 是用 owner 本机的 gh 登录态拉的，访客没有自己的凭证）。owner 刻意不入表——他由 loopback 判定，没有记录也就没有「把自己停用」这种事故。`Session.tenantId` 是会话归属（`0` = owner），隔离靠查询条件执行。
 - **GithubWatch** — 一个身份关注的 GitHub 仓库清单（adr-023）：`tenantId`（`0` = owner，与 Session 同一约定）+ `repos`（JSON 文本）。issue 本身不入库：按仓库缓存在内存里、后台刷新，进程重启就重拉。
@@ -419,7 +419,9 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 **异常分三层**，因为每层的责任人不一样：轮次中止（多半是人按了停止）、agent 报错（过载 / 额度 / 登录过期，要人管的那层）、工具调用失败（干活的一部分，AI 自己会重试）。糊成一个「错误率」这个判断就做不出来了。
 
-**看得到的边界**：Discord 频道与定时任务跑的会话有自己的 acp 会话池，既不进 `sessions` 表也不写转录（adr-016 的「与会话零耦合」），**因此不在这份账里**——它们的用量只有子区内 `/usage` 的内存态累计，服务一重启就清零。
+**Discord 也在这本账上**：子区烧的是同一个额度，所以它的对话同样登记一条会话记录（键是 `dc:<子区 id>`，幂等）、写同一份转录、轮末落同一行账目，靠 `origin` 分成 `discord`（人在子区里聊的）与 `cron`（定时任务自己跑的）。三个接口仍是 Deps 闭包，adr-016 的「与会话零耦合」继续成立。
+
+代价与边界：这些会话在网页里**只读**——它的 acp 连接在另一个会话池里，从这边发消息会给同一条记录开出第二份分叉的上下文，所以对话面板给提示条并禁用输入，要接着聊回子区。接进来之前的历史子区拿不回来（那时没有转录也没有账），从接入后的第一轮开始记。
 
 ## 数据库
 
