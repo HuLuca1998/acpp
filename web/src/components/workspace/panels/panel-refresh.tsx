@@ -60,9 +60,7 @@ export function PanelRefreshButton({
           onRefresh()
         }}
       >
-        <RotateCwIcon
-          className={cn("size-3.5", spinning && "animate-spin")}
-        />
+        <RotateCwIcon className={cn("size-3.5", spinning && "animate-spin")} />
       </button>
     </Hint>
   )

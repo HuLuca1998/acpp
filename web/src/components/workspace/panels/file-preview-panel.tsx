@@ -348,11 +348,7 @@ export const FilePreviewPanel = memo(function FilePreviewPanel(
             className="size-full border-0 bg-background"
           />
         ) : media ? (
-          <MediaPreview
-            kind={media}
-            src={inlineUrl}
-            name={path}
-          />
+          <MediaPreview kind={media} src={inlineUrl} name={path} />
         ) : error ? (
           // 预览失败（多半是文件太大或格式解析不了）不该是条死路：说清
           // 原因，同时把「交给浏览器」这条出路摆在旁边。
