@@ -23,6 +23,7 @@ import (
 	"acpp/server/internal/acp"
 	"acpp/server/internal/gitrepo"
 	"acpp/server/internal/model"
+	"acpp/server/internal/transcript"
 )
 
 // 可预期失败。httpapi 的 writeError 里映射状态码（与 service 的同义）。
@@ -34,10 +35,111 @@ var (
 // Ledger 是账本本体：写入、回填与聚合都挂在它上面。
 type Ledger struct {
 	db *gorm.DB
+	// transcripts 是回填的事实源。可为 nil，那时只有实时写入可用。
+	transcripts *transcript.Store
 }
 
-func NewLedger(db *gorm.DB) *Ledger {
-	return &Ledger{db: db}
+func NewLedger(db *gorm.DB, transcripts *transcript.Store) *Ledger {
+	return &Ledger{db: db, transcripts: transcripts}
+}
+
+// turnFacts 是一轮的全部事实，实时落账与历史回填共用的中间形状。
+//
+// 两条路最终要写出**一模一样的行**，否则「重算历史」就会把实时记的账改得
+// 面目全非。让它们都先归到这一个形状，是这份一致性唯一的保证点。
+type turnFacts struct {
+	StartedAt  time.Time
+	EndedAt    time.Time
+	Usage      *acp.Usage
+	CostCum    *acp.UsageCost
+	StopReason string
+	// Model 空表示这一路不知道模型，退回会话的设置快照。回填能从转录里
+	// 读出每一轮**当时**生效的模型，比快照准。
+	Model      string
+	ErrorCode  int
+	ErrorMsg   string
+	ToolCalls  int
+	ToolFailed int
+}
+
+// sessionMeta 是一条会话的归属信息，落账时定格进每一行。
+type sessionMeta struct {
+	TenantID uint
+	AgentID  uint
+	Flavor   string
+	Model    string
+	Project  string
+	Cwd      string
+	Origin   string
+}
+
+// sessionMeta 查出会话的归属。会话不存在时是 ErrNotFound——**账目必须有
+// 主人**：租户隔离靠 tenant_id 执行，凭空填一个都是错的。
+func (l *Ledger) sessionMeta(ctx context.Context, sessionID uint) (sessionMeta, error) {
+	// 用 Find 而不是 First：查不到是**预期内**的（回填会扫到会话早就删了
+	// 的转录），First 会把每一次都当成错误打进日志，重算一遍刷十几行。
+	var sess model.Session
+	if err := l.db.WithContext(ctx).Limit(1).Find(&sess, sessionID).Error; err != nil {
+		return sessionMeta{}, fmt.Errorf("usage: load session: %w", err)
+	}
+	if sess.ID == 0 {
+		return sessionMeta{}, fmt.Errorf("%w: session %d", ErrNotFound, sessionID)
+	}
+
+	meta := sessionMeta{
+		TenantID: sess.TenantID,
+		AgentID:  sess.AgentID,
+		Model:    settingsModel(sess.LastSettings),
+		Project:  gitrepo.ProjectOf(sess.Cwd),
+		Cwd:      sess.Cwd,
+		Origin:   normalizeOrigin(sess.Origin),
+	}
+	if sess.AgentID != 0 {
+		var agent model.Agent
+		if l.db.WithContext(ctx).Select("flavor").Limit(1).Find(&agent, sess.AgentID).Error == nil {
+			meta.Flavor = agent.Flavor
+		}
+	}
+	return meta, nil
+}
+
+// buildRow 把「归属 + 一轮的事实」组装成一行账目。
+// prevCum 是上一行留下的费用累计基准（没有上一行就传 0）。
+func buildRow(sessionID uint, seq int, meta sessionMeta, f turnFacts, prevCum int64) model.TokenUsage {
+	row := model.TokenUsage{
+		SessionID:  sessionID,
+		TurnSeq:    seq,
+		TenantID:   meta.TenantID,
+		AgentID:    meta.AgentID,
+		Flavor:     meta.Flavor,
+		Model:      meta.Model,
+		Project:    meta.Project,
+		Cwd:        meta.Cwd,
+		Origin:     meta.Origin,
+		StartedAt:  f.StartedAt,
+		EndedAt:    f.EndedAt,
+		StopReason: f.StopReason,
+		ErrorCode:  f.ErrorCode,
+		ErrorMsg:   f.ErrorMsg,
+		ToolCalls:  f.ToolCalls,
+		ToolFailed: f.ToolFailed,
+	}
+	if f.Model != "" {
+		row.Model = truncate(f.Model, 64)
+	}
+	if !f.EndedAt.IsZero() && !f.StartedAt.IsZero() {
+		row.DurationMs = f.EndedAt.Sub(f.StartedAt).Milliseconds()
+	}
+	if u := f.Usage; u != nil {
+		row.InputTokens = u.InputTokens
+		row.OutputTokens = u.OutputTokens
+		row.CacheReadTokens = u.CachedReadTokens
+		row.CacheWriteTokens = u.CachedWriteTokens
+		row.ThoughtTokens = u.ThoughtTokens
+		row.TotalTokens = u.TotalTokens
+	}
+	applyReportedCost(&row, f.CostCum, prevCum)
+	return row
 }
 
 // TurnRecord 是一轮结束时交给账本的原始事实。
@@ -72,64 +174,35 @@ func (l *Ledger) Record(ctx context.Context, rec TurnRecord) error {
 		return fmt.Errorf("%w: usage record without session", ErrInvalid)
 	}
 
-	var sess model.Session
-	if err := l.db.WithContext(ctx).First(&sess, rec.SessionID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("%w: session %d", ErrNotFound, rec.SessionID)
-		}
-		return fmt.Errorf("usage: load session: %w", err)
-	}
-
-	var flavor string
-	if sess.AgentID != 0 {
-		var agent model.Agent
-		if err := l.db.WithContext(ctx).Select("flavor").First(&agent, sess.AgentID).Error; err == nil {
-			flavor = agent.Flavor
-		}
+	meta, err := l.sessionMeta(ctx, rec.SessionID)
+	if err != nil {
+		return err
 	}
 
 	// 上一行给两样东西：轮序号的起点，与成本差分的基准。
+	// 同样用 Find：每条会话的第一轮都查不到上一行，那不是错。
 	var prev model.TokenUsage
-	hasPrev := l.db.WithContext(ctx).
-		Where("session_id = ?", rec.SessionID).
-		Order("turn_seq desc").First(&prev).Error == nil
+	if err := l.db.WithContext(ctx).Where("session_id = ?", rec.SessionID).
+		Order("turn_seq desc").Limit(1).Find(&prev).Error; err != nil {
+		return fmt.Errorf("usage: load previous turn: %w", err)
+	}
+	seq := prev.TurnSeq + 1
 
-	row := model.TokenUsage{
-		SessionID:  rec.SessionID,
-		TurnSeq:    prev.TurnSeq + 1,
-		TenantID:   sess.TenantID,
-		AgentID:    sess.AgentID,
-		Flavor:     flavor,
-		Model:      settingsModel(sess.LastSettings),
-		Project:    gitrepo.ProjectOf(sess.Cwd),
-		Cwd:        sess.Cwd,
-		Origin:     normalizeOrigin(sess.Origin),
+	facts := turnFacts{
 		StartedAt:  rec.StartedAt,
 		EndedAt:    rec.EndedAt,
+		Usage:      rec.Usage,
+		CostCum:    rec.CostCum,
 		StopReason: rec.StopReason,
 		ToolCalls:  rec.ToolCalls,
 		ToolFailed: rec.ToolFailed,
 	}
-	if !hasPrev {
-		row.TurnSeq = 1
-	}
-	if !rec.EndedAt.IsZero() && !rec.StartedAt.IsZero() {
-		row.DurationMs = rec.EndedAt.Sub(rec.StartedAt).Milliseconds()
-	}
-	if u := rec.Usage; u != nil {
-		row.InputTokens = u.InputTokens
-		row.OutputTokens = u.OutputTokens
-		row.CacheReadTokens = u.CachedReadTokens
-		row.CacheWriteTokens = u.CachedWriteTokens
-		row.ThoughtTokens = u.ThoughtTokens
-		row.TotalTokens = u.TotalTokens
-	}
 	if rec.Err != nil {
-		row.ErrorCode = acp.ErrorCode(rec.Err)
-		row.ErrorMsg = truncate(rec.Err.Error(), errMsgLimit)
+		facts.ErrorCode = acp.ErrorCode(rec.Err)
+		facts.ErrorMsg = truncate(rec.Err.Error(), errMsgLimit)
 	}
-	applyReportedCost(&row, rec.CostCum, prev.CostCumMicro)
 
+	row := buildRow(rec.SessionID, seq, meta, facts, prev.CostCumMicro)
 	return l.upsert(ctx, &row)
 }
 

@@ -204,7 +204,7 @@ func agentTitleFixture(t *testing.T, title string) (*ChatService, uint, *stream.
 	if err := gdb.Create(&session).Error; err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	svc := NewChatService(gdb, NewSessionService(gdb), nil, nil, nil, usage.NewLedger(gdb))
+	svc := NewChatService(gdb, NewSessionService(gdb), nil, nil, nil, usage.NewLedger(gdb, nil))
 	return svc, session.ID, stream.NewBroker()
 }
 

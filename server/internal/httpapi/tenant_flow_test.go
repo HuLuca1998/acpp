@@ -68,7 +68,7 @@ func newFlowEnv(t *testing.T) *flowEnv {
 	skillUsage := service.NewSkillUsageService(gdb, dir)
 	tenants := service.NewTenantService(gdb, base)
 	agents := service.NewAgentService(gdb)
-	chat := service.NewChatService(gdb, sessions, manager, transcripts, skillUsage, usage.NewLedger(gdb))
+	chat := service.NewChatService(gdb, sessions, manager, transcripts, skillUsage, usage.NewLedger(gdb, transcripts))
 	env := &flowEnv{base: base}
 	env.handler = NewRouter(config.Config{}, Services{
 		Agents:      agents,
