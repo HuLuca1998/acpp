@@ -585,7 +585,7 @@ func TestReadWireEntriesMatchesRebuildMessages(t *testing.T) {
 	}
 	viaEntries := RebuildMessages(1, entries)
 
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 	wire, err := svc.readWireEntries(1)
 	if err != nil {
 		t.Fatalf("readWireEntries: %v", err)

@@ -15,6 +15,7 @@ import (
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/stream"
+	"acpp/server/internal/usage"
 )
 
 // 本文件是「发起并跑完一轮」的全部环节：发送（Send）、执行（runTurn）、
@@ -322,6 +323,7 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 	// 用量快照落库放 defer：这一轮无论正常收尾、报错还是插话并入别的轮，
 	// 都该把最近的水位留下——恰恰是失败那轮最值得知道「还剩多少余量」。
 	defer s.saveUsageSnapshot(sessionID)
+	startedAt := time.Now()
 
 	// active 的语义是「有一轮正在跑」，只在这里出现，结束时归 idle/error。
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).
@@ -335,7 +337,8 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 		var followUp bool
 		result, followUp, err = s.manager.Interject(ctx, sessionKey(sessionID), blocks)
 		if err == nil && !followUp {
-			// 内容并入当前轮，收尾归当前轮的 runTurn，这里直接退场。
+			// 内容并入当前轮，收尾归当前轮的 runTurn，这里直接退场——
+			// 账也归那一轮记，不然一次插话会凭空多出一行零计量的账目。
 			return
 		}
 	}
@@ -344,6 +347,9 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 		// Interject 各自处理），走到这里的都是真实故障。
 		br.Publish(StreamEvent{Kind: "error", Error: err.Error()})
 		s.markSessionError(sessionID, err)
+		// 失败的轮同样记账：token 多半已经烧掉了，而「哪些轮报了什么错」
+		// 正是异常率要回答的问题。
+		s.recordTurnUsage(sessionID, startedAt, nil, err)
 		// 与正常收尾同理：还有别的轮在途时不发 turn_done。
 		if !s.manager.TurnActive(sessionKey(sessionID)) {
 			br.EndTurn()
@@ -361,6 +367,10 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 	if err := s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", sessionID).Updates(updates).Error; err != nil {
 		slog.Error("save stop reason", "session", sessionID, "err", err)
 	}
+
+	// 记账要赶在 stop_reason 写完之后、turn_done 之前：账本从会话读归属，
+	// 而前端收到 turn_done 就会来拉用量。
+	s.recordTurnUsage(sessionID, startedAt, &result, nil)
 
 	// claude 的引导轮（promptQueueing）与原轮是两个并行的 runTurn：
 	// 原轮先收尾时引导轮还在跑，此刻发 turn_done 会让前端误判「没有轮
@@ -390,6 +400,42 @@ func (s *ChatService) runTurn(sessionID uint, br *stream.Broker, blocks []acp.Co
 		s.refineTitle(sessionID, br, all)
 		s.digestTurnPrompt(sessionID, all)
 	}()
+}
+
+// recordTurnUsage 把这一轮记进用量账本。旁路：写挂了只记日志，绝不影响
+// 这一轮的回答（与转录同一条原则）。result 为 nil 表示这轮是报错收尾的。
+//
+// 成本取的是内存里最近一次 usage_update 报的**会话累计值**，差分留给账本
+// 自己算——它从上一行就能查到基准，不用任何跨轮的内存状态。依赖一个实测
+// 成立的顺序：agent 在 prompt 返回之前先推轮末的 usage_update（两者由同
+// 一条读循环按序交付）。万一颠倒，本轮的费用会记到下一轮头上，合计仍然
+// 对得上。
+func (s *ChatService) recordTurnUsage(sessionID uint, startedAt time.Time, result *acp.PromptResult, turnErr error) {
+	if s.ledger == nil {
+		return
+	}
+	calls, failed := s.takeToolStats(sessionID)
+	rec := usage.TurnRecord{
+		SessionID:  sessionID,
+		StartedAt:  startedAt,
+		EndedAt:    time.Now(),
+		Err:        turnErr,
+		ToolCalls:  calls,
+		ToolFailed: failed,
+	}
+	if result != nil {
+		rec.Usage = result.Usage
+		rec.StopReason = string(result.StopReason)
+	}
+	s.mu.Lock()
+	if snap := s.usage[sessionID]; snap != nil {
+		rec.CostCum = snap.Cost
+	}
+	s.mu.Unlock()
+
+	if err := s.ledger.Record(context.Background(), rec); err != nil {
+		slog.Warn("record turn usage", "session", sessionID, "err", err)
+	}
 }
 
 // ActiveTurnCount 数正在跑的轮——自更新前的「有人在干活」检查用。

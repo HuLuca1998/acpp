@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { DirPicker } from "@/components/dir-picker/dir-picker"
 import { api } from "@/lib/api"
-import type { SystemInfo } from "@/types/acp"
+import type { SystemInfo } from "@/types/system"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {

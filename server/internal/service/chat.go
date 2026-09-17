@@ -16,6 +16,7 @@ import (
 	"acpp/server/internal/model"
 	"acpp/server/internal/stream"
 	"acpp/server/internal/transcript"
+	"acpp/server/internal/usage"
 )
 
 // ChatService 把 ACP 会话、转录留存与浏览器推流接在一起。
@@ -28,6 +29,10 @@ type ChatService struct {
 	// skillUsage 记录技能被 AI 调用的次数，从 tool_call 事件计。可为 nil
 	//（不启用统计）。
 	skillUsage *SkillUsageService
+
+	// ledger 是轮次用量账本，每轮结束落一行。可为 nil（不记账，对话照跑）
+	// ——它和转录一样是旁路，写挂了绝不能影响这一轮的回答。
+	ledger *usage.Ledger
 
 	// sources 由装配层注入的数据源能力面：为会话挂 MCP 工具、把 @ 数据库
 	// 引用展开成 prompt 内容。用接口而不是直接 import 那个业务包——依赖
@@ -57,6 +62,11 @@ type ChatService struct {
 	// usage 是每会话最近一次上报的用量快照（内存态）。usage_update 一轮
 	// 能来几十次，逐条写库既无意义又吵——收在这里，轮末落一次。
 	usage map[uint]*UsageSnapshot
+	// turnTools 数本轮的工具调用终态（会话 → toolCallId → 终态），轮末
+	// 记进账本后清空。**按 id 收敛**：同一次调用会推来多条 update
+	//（pending → in_progress → completed），逐条累加数出来的是事件数
+	// 不是调用数。
+	turnTools map[uint]map[string]string
 	// derivedTitles 记着本进程刚给哪些会话写下了「首句派生标题」及其值。
 	// agent 推来的自动标题只允许覆盖这个值（见 adoptAgentTitle）——手改的
 	// 名字、已被 titler 升级过的标题都不在覆盖范围内。首轮升级后即删。
@@ -243,16 +253,18 @@ func (s *ChatService) SetTitler(t Titler) { s.titler = t }
 // SetNotifyHub 注入全局通知广播口（装配层调用）。
 func (s *ChatService) SetNotifyHub(h *stream.Hub) { s.notices = h }
 
-func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService) *ChatService {
+func NewChatService(db *gorm.DB, sessions *SessionService, manager *acp.Manager, transcripts *transcript.Store, skillUsage *SkillUsageService, ledger *usage.Ledger) *ChatService {
 	return &ChatService{
 		db:            db,
 		sessions:      sessions,
 		manager:       manager,
 		transcripts:   transcripts,
 		skillUsage:    skillUsage,
+		ledger:        ledger,
 		brokers:       make(map[uint]*stream.Broker),
 		tails:         make(map[uint]string),
 		usage:         make(map[uint]*UsageSnapshot),
+		turnTools:     make(map[uint]map[string]string),
 		derivedTitles: make(map[uint]string),
 		rebuilds:      make(map[uint]*rebuildCacheEntry),
 		rebuilding:    make(map[uint]*rebuildCall),
@@ -281,6 +293,48 @@ func (s *ChatService) rememberUsage(sessionID uint, used, size int64, cost *acp.
 	if cost != nil {
 		snap.Cost = cost
 	}
+}
+
+// rememberToolCall 记下本轮一次工具调用的终态（内存），轮末记进账本。
+//
+// 只收终态：中间态（pending / in_progress）随后会被同一个 id 的 update
+// 覆盖，提前记下来只是白占内存。
+//
+// 已知的不精确：claude 的排队轮与原轮是两个并行的 runTurn，先收尾的那个
+// 会把计数整个取走。工具失败率是趋势指标不是账目，这点偏差不值得为它
+// 再引入一层轮次归属。
+func (s *ChatService) rememberToolCall(sessionID uint, toolCallID, status string) {
+	if toolCallID == "" {
+		return
+	}
+	switch status {
+	case "completed", "failed", "cancelled":
+	default:
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID := s.turnTools[sessionID]
+	if byID == nil {
+		byID = make(map[string]string)
+		s.turnTools[sessionID] = byID
+	}
+	byID[toolCallID] = status
+}
+
+// takeToolStats 取走本轮的工具调用计数并清空。
+func (s *ChatService) takeToolStats(sessionID uint) (calls, failed int) {
+	s.mu.Lock()
+	byID := s.turnTools[sessionID]
+	delete(s.turnTools, sessionID)
+	s.mu.Unlock()
+	for _, status := range byID {
+		calls++
+		if status == "failed" {
+			failed++
+		}
+	}
+	return calls, failed
 }
 
 // saveUsageSnapshot 把内存里的最近用量写进会话记录，供未连接的会话展示。

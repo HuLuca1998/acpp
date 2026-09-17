@@ -33,6 +33,8 @@ func (s *ChatService) handleEvent(sessionID uint, br *stream.Broker, ev acp.Even
 		if s.skillUsage != nil {
 			s.skillUsage.Observe(ev)
 		}
+		// 工具调用的终态数进本轮计数，轮末落进用量账本（异常率第三层）。
+		s.rememberToolCall(sessionID, ev.ToolCallID, ev.Status)
 		// tool_call_update 除 toolCallId 外全是可选，只带变了的字段，前端按 id 合并。
 		br.Publish(StreamEvent{
 			Kind:       "tool_call",

@@ -29,6 +29,7 @@
 | mcpcall | MCP 工具调用的观测记录与统计：谁调的、传了什么、拿回什么、花多久。工具台读它，数据源工具面写它（经窄接口，两包不互相 import）。留存有上限，长文本落库前截断 | 业务 |
 | ask | 别的 AI 的同步问答面（adr-022）：本机 CLI 里的 claude / codex 经 `POST /api/ask` 把问题交给另一方——开会话（打 `origin=ask`）、拨权限档、发一轮、替人裁决权限与提问、阻塞到轮末、从转录取回答。同一会话不排队（409），失败的新会话即刻收掉。只是把 service 的会话/对话操作串成一条同步路径，不碰 db | 业务 |
 | service | 普通会话的业务规则：会话/对话/技能/工作区/终端/agent 配置；多租户身份与隔离范围（Scope） | 业务 |
+| usage | 轮次用量账本（token 与费用）：每轮末落一行 `token_usages`（`<会话, 轮序号>` 唯一，因此回填幂等）、成本按 agent 自报的会话累计值逐轮差分、归属（租户/项目/模型/来源）写入时从会话定格。**事实源仍是转录 JSONL**，这张表只是它的索引，随时可照转录重算；写入是旁路，挂了不影响对话。只 import 叶子包（model/acp/gitrepo），哨兵错误自带（writeError 里同义映射） | 业务 |
 | github | GitHub issue 页（adr-023）：每个身份的关注仓库清单（落库，owner 记 0）、经 gh 拉 issue 并用 GraphQL 补看板列与 Priority、按仓库缓存在内存里后台 3 分钟一刷、内存里过滤 / 排序 / 分页。租户可用；借 service 的哨兵错误与 Scope | 业务 |
 | project | 工作区项目（adr-007）：git 仓库发现、克隆（租户禁用凭证助手）、gh 远端仓库清单。磁盘即事实源，不入库；借 service 的哨兵错误与 Scope | 业务 |
 | datasource | 外部 MySQL 数据源（adr-008）：连接配置（项目 + 环境两级）、SSH 隧道（拨号在 sshdial，跳板机配置经 Servers 接口取自 remote）、库表探查、多段语句执行，以及挂给会话的 MCP 工具面。连接一次性、可见性按会话 cwd 所属项目过滤。借 service 的哨兵错误与 DefaultCwd | 业务 |

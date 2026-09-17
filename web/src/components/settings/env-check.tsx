@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { copyText } from "@/lib/clipboard"
 
 import { api } from "@/lib/api"
-import type { EnvDependency } from "@/types/acp"
+import type { EnvDependency } from "@/types/system"
 import { AgentIcon } from "@/components/agent-icon"
 import { StatusDot } from "@/components/status-dot"
 import { Alert, AlertDescription } from "@/components/ui/alert"

@@ -14,7 +14,7 @@ func TestOutlineAnchorsMatchMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 	const sessionID = 11
 	key := sessionKey(sessionID)
 
@@ -54,7 +54,7 @@ func TestOutlineEmptySession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 
 	outline, err := svc.Outline(404)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestOutlineFallsBackWithoutTitler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 	const sessionID = 12
 	key := sessionKey(sessionID)
 

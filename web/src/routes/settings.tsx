@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
-import type { SystemInfo } from "@/types/acp"
+import type { SystemInfo } from "@/types/system"
 import { cn } from "@/lib/utils"
 import { AgentIcon, DiscordIcon, OllamaIcon } from "@/components/agent-icon"
 import { DiscordConfigCard } from "@/components/settings/discord-config"
