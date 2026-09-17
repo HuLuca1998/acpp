@@ -13,6 +13,7 @@ import (
 	"acpp/server/internal/acp"
 	"acpp/server/internal/model"
 	"acpp/server/internal/stream"
+	"acpp/server/internal/usage"
 )
 
 // 内容块按 agent 声明的能力收敛：不支持内嵌上下文时 resource 降级为
@@ -203,7 +204,7 @@ func agentTitleFixture(t *testing.T, title string) (*ChatService, uint, *stream.
 	if err := gdb.Create(&session).Error; err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	svc := NewChatService(gdb, NewSessionService(gdb), nil, nil, nil)
+	svc := NewChatService(gdb, NewSessionService(gdb), nil, nil, nil, usage.NewLedger(gdb))
 	return svc, session.ID, stream.NewBroker()
 }
 

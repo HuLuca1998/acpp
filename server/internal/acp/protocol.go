@@ -50,6 +50,19 @@ func (e *rpcError) Is(target error) bool {
 	return target == ErrAuthRequired && e != nil && e.Code == authRequiredCode
 }
 
+// ErrorCode 取出 agent 报回的 JSON-RPC 错误码；不是协议错误时返回 0。
+//
+// 给上层分类用：**码是契约、文案不是**（两条 runtime 共用同一个错误库，
+// 实测报错清一色 -32603，具体原因只在文案里）。所以调用方按码判断「这是
+// 不是 agent 侧的错」，再拿文案做展示与细分，别反过来嗅探文案判类型。
+func ErrorCode(err error) int {
+	var rpc *rpcError
+	if errors.As(err, &rpc) && rpc != nil {
+		return rpc.Code
+	}
+	return 0
+}
+
 // ---- initialize ----
 
 type InitializeParams struct {
@@ -335,13 +348,20 @@ type UsageCost struct {
 	Currency string  `json:"currency"`
 }
 
-// Usage 是一轮的 token 计量，只保留两端 runtime 都报的交集字段
-// （claude 的 cachedWriteTokens/cost、codex 的 thoughtTokens 按交集规范废弃）。
+// Usage 是一轮的 token 计量。
+//
+// 前三项与总数两端都报；CachedWriteTokens（claude）与 ThoughtTokens
+// （codex）各只有一端有，**照样收下**——交集规范约束的是「对外承诺哪些
+// 能力」，不是「能记多少事实」。这两项是计价必需的：缓存写按普通输入的
+// 1.25 倍计、缓存读只要 1/10，合成一个数就再也算不准钱。缺的那端恒为 0，
+// 展示侧按零优雅降级即可。
 type Usage struct {
-	InputTokens      int `json:"inputTokens"`
-	OutputTokens     int `json:"outputTokens"`
-	CachedReadTokens int `json:"cachedReadTokens"`
-	TotalTokens      int `json:"totalTokens"`
+	InputTokens       int `json:"inputTokens"`
+	OutputTokens      int `json:"outputTokens"`
+	CachedReadTokens  int `json:"cachedReadTokens"`
+	CachedWriteTokens int `json:"cachedWriteTokens,omitempty"`
+	ThoughtTokens     int `json:"thoughtTokens,omitempty"`
+	TotalTokens       int `json:"totalTokens"`
 }
 
 // ---- session/cancel ----

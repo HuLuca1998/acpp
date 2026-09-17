@@ -15,8 +15,6 @@ import type {
   DirEntry,
   DirListing,
   FsPlace,
-  EnvInfo,
-  EnvInstallResult,
   GitBranchView,
   GitCommitDetail,
   GitCompare,
@@ -49,13 +47,9 @@ import type {
   SkillScriptRunResult,
   SkillUpdateInput,
   SkillUsage,
-  SystemInfo,
-  TitleModelConfig,
-  OllamaModel,
   Tenant,
   TerminalInfo,
   TreeListing,
-  UpdateInfo,
   WorkspaceFile,
   McpServer,
   McpInspectResult,
@@ -64,6 +58,14 @@ import type {
   SessionOrigin,
   SessionState,
 } from "@/types/acp"
+import type {
+  EnvInfo,
+  EnvInstallResult,
+  OllamaModel,
+  SystemInfo,
+  TitleModelConfig,
+  UpdateInfo,
+} from "@/types/system"
 import type { ApiLog } from "@/types/apilog"
 import type { GithubIssueResult, GithubRepo } from "@/types/github"
 

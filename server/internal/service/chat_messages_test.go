@@ -25,7 +25,7 @@ func TestMessagesReflectsTranscriptAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 	const sessionID = 42
 	key := sessionKey(sessionID)
 
@@ -68,7 +68,7 @@ func TestMessagesTailPaging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 	const sessionID = 7
 	key := sessionKey(sessionID)
 
@@ -116,7 +116,7 @@ func TestMessagesTruncatesHugeRawOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewChatService(nil, nil, nil, store, nil)
+	svc := NewChatService(nil, nil, nil, store, nil, nil)
 	const sessionID = 5
 	key := sessionKey(sessionID)
 

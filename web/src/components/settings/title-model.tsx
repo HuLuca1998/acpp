@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
-import type { OllamaModel, TitleModelConfig } from "@/types/acp"
+import type { OllamaModel, TitleModelConfig } from "@/types/system"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
