@@ -163,6 +163,10 @@ type TurnRecord struct {
 	Err        error
 	ToolCalls  int
 	ToolFailed int
+	// Model 是这一轮生效的模型。空表示调用方不知道，退回会话的设置快照
+	// ——网页会话的快照是轮末写的，而外部子系统（Discord）压根不写它，
+	// 只能由那一侧把绑定的模型直接给过来。
+	Model string
 }
 
 // errMsgLimit 是错误文案的留存长度。够看清是哪一类错误即可，原文完整
@@ -201,6 +205,7 @@ func (l *Ledger) Record(ctx context.Context, rec TurnRecord) error {
 		StopReason: rec.StopReason,
 		ToolCalls:  rec.ToolCalls,
 		ToolFailed: rec.ToolFailed,
+		Model:      rec.Model,
 	}
 	if rec.Err != nil {
 		facts.ErrorCode = acp.ErrorCode(rec.Err)

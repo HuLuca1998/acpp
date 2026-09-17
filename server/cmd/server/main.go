@@ -295,6 +295,7 @@ func run() error {
 				Err:        t.Err,
 				ToolCalls:  t.ToolCalls,
 				ToolFailed: t.ToolFailed,
+				Model:      t.Model,
 			}); err != nil {
 				slog.Warn("discord 轮次落账失败", "session", sessionID, "err", err)
 			}
