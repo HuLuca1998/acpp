@@ -101,6 +101,33 @@ export interface UsageQuery {
   session?: number
 }
 
+/**
+ * 一个模型（或一条 runtime 方言）的四项单价，单位是**美元 / 百万 token**。
+ *
+ * 四项分开而不是一个平均价：缓存读占 96% 却只要输入的 1/10，用平均价
+ * 折出来的数字离谱到没有参考价值。thought 是 codex 独有，留空按 output 计。
+ */
+export interface ModelPrice {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  thought?: number
+}
+
+/**
+ * 折算单价表。**没有内置默认价**——模型 id 一个月里就能改，猜一个填进去
+ * 报表会拿它一路算下去；没配就是「未计价」。
+ */
+export interface PriceTable {
+  /** 每保存一次加一，落进每一行账目，用来判断哪些行用的是老价。 */
+  rev: number
+  /** 按模型 id 精确匹配。 */
+  models?: Record<string, ModelPrice>
+  /** 按 runtime 方言的兜底价（claude / codex / generic）。 */
+  flavors?: Record<string, ModelPrice>
+}
+
 /** 重算历史的战果。 */
 export interface UsageBackfillResult {
   sessions: number

@@ -6,6 +6,7 @@
 
 import type { Paged } from "@/types/acp"
 import type {
+  PriceTable,
   UsageBackfillResult,
   UsageBucket,
   UsageDimension,
@@ -31,6 +32,17 @@ export const usageApi = {
       request<Paged<UsageGroupRow>>(`/usage/breakdown${pageQuery({ ...q })}`),
     errors: (q?: UsageQuery & { limit?: number }) =>
       request<UsageErrors>(`/usage/errors${pageQuery({ ...q })}`),
+    /** 折算单价表。读所有人可以，改是 owner 专属。 */
+    prices: () => request<PriceTable>("/usage/prices"),
+    /**
+     * 保存单价表。**已经记下的账不会跟着变**——那是记账当时的价，改完
+     * 要对齐得走 backfill。rev 由后端自增。
+     */
+    savePrices: (table: Omit<PriceTable, "rev">) =>
+      request<PriceTable>("/usage/prices", {
+        method: "PUT",
+        body: JSON.stringify(table),
+      }),
     /** 照转录重算全部历史账目（owner 专属）。幂等，可反复跑。 */
     backfill: () =>
       request<UsageBackfillResult>("/usage/backfill", { method: "POST" }),

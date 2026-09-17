@@ -7,6 +7,7 @@ import { UsageComposition } from "@/components/usage/usage-composition"
 import { UsageHealth } from "@/components/usage/usage-health"
 import { UsageFilters, type UsageRange } from "@/components/usage/usage-filters"
 import { UsageKpis } from "@/components/usage/usage-kpis"
+import { UsagePricesDialog } from "@/components/usage/usage-prices-dialog"
 import {
   Empty,
   EmptyDescription,
@@ -17,7 +18,7 @@ import {
 import { useAsyncData } from "@/hooks/use-async-data"
 import { useIsOwner } from "@/hooks/identity-context"
 import { api } from "@/lib/api"
-import type { UsageDimension, UsageQuery } from "@/types/usage"
+import type { PriceTable, UsageDimension, UsageQuery } from "@/types/usage"
 import { ChartColumnIcon } from "lucide-react"
 
 /** 时间范围的天数；"all" 是全量（后端认 from=0）。 */
@@ -57,6 +58,8 @@ export function Usage() {
   const [metric, setMetric] = useState<ChartMetric>("tokens")
   const [filters, setFilters] = useState<UsageQuery>({})
   const [dimension, setDimension] = useState<UsageDimension>("project")
+  const [pricesOpen, setPricesOpen] = useState(false)
+  const [prices, setPrices] = useState<PriceTable | null>(null)
 
   const query = useMemo<UsageQuery>(
     () => ({ ...filters, ...rangeQuery(range) }),
@@ -76,6 +79,18 @@ export function Usage() {
     [key, dimension]
   )
   const errors = useAsyncData(() => api.usage.errors({ ...query }), [key])
+  // 单价表与出现过的模型：编辑对话框要拿它们预置行，owner 才用得上。
+  const priceTable = useAsyncData(
+    () => (isOwner ? api.usage.prices() : Promise.resolve(null)),
+    [isOwner]
+  )
+  const seenModels = useAsyncData(
+    () =>
+      isOwner
+        ? api.usage.breakdown({ ...query, by: "model", limit: 40 })
+        : Promise.resolve(null),
+    [key, isOwner]
+  )
   // 身份那一栏要显示名字而不是 id。租客看不到这个维度，也就不必拉。
   const tenants = useAsyncData(
     () => (isOwner ? api.tenants.list() : Promise.resolve(null)),
@@ -120,9 +135,24 @@ export function Usage() {
           filters={filters}
           onFilters={setFilters}
           isOwner={isOwner}
+          onEditPrices={() => setPricesOpen(true)}
           onBackfilled={() => {
             summary.reload()
             series.reload()
+            breakdown.reload()
+          }}
+        />
+        <UsagePricesDialog
+          open={pricesOpen}
+          table={prices ?? priceTable.data}
+          models={(seenModels.data?.items ?? [])
+            .map((row) => row.key)
+            .filter(Boolean)}
+          onClose={() => setPricesOpen(false)}
+          onSaved={(saved) => {
+            setPrices(saved)
+            // 改价只影响之后记的账，已有的行要重算才对齐——所以这里不重拉，
+            // 免得界面看起来像「改完价数字没动」。提示里已经说了下一步。
           }}
         />
       </div>
