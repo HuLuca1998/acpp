@@ -37,6 +37,9 @@ type Ledger struct {
 	db *gorm.DB
 	// transcripts 是回填的事实源。可为 nil，那时只有实时写入可用。
 	transcripts *transcript.Store
+	// prices 是折算用的单价表（没有实报费用的那些轮）。默认是空表，
+	// 那时它们如实落「未计价」。
+	prices prices
 }
 
 func NewLedger(db *gorm.DB, transcripts *transcript.Store) *Ledger {
@@ -105,7 +108,7 @@ func (l *Ledger) sessionMeta(ctx context.Context, sessionID uint) (sessionMeta, 
 
 // buildRow 把「归属 + 一轮的事实」组装成一行账目。
 // prevCum 是上一行留下的费用累计基准（没有上一行就传 0）。
-func buildRow(sessionID uint, seq int, meta sessionMeta, f turnFacts, prevCum int64) model.TokenUsage {
+func buildRow(sessionID uint, seq int, meta sessionMeta, f turnFacts, prevCum int64, table PriceTable) model.TokenUsage {
 	row := model.TokenUsage{
 		SessionID:  sessionID,
 		TurnSeq:    seq,
@@ -139,6 +142,8 @@ func buildRow(sessionID uint, seq int, meta sessionMeta, f turnFacts, prevCum in
 		row.TotalTokens = u.TotalTokens
 	}
 	applyReportedCost(&row, f.CostCum, prevCum)
+	// 没有实报费用的按单价表折算；表里也没有就如实落「未计价」。
+	applyEstimatedCost(&row, table)
 	return row
 }
 
@@ -202,7 +207,7 @@ func (l *Ledger) Record(ctx context.Context, rec TurnRecord) error {
 		facts.ErrorMsg = truncate(rec.Err.Error(), errMsgLimit)
 	}
 
-	row := buildRow(rec.SessionID, seq, meta, facts, prev.CostCumMicro)
+	row := buildRow(rec.SessionID, seq, meta, facts, prev.CostCumMicro, l.prices.get())
 	return l.upsert(ctx, &row)
 }
 

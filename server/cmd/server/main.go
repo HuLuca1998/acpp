@@ -92,6 +92,8 @@ func run() error {
 	sessionService := service.NewSessionService(gdb)
 	skillUsage := service.NewSkillUsageService(gdb, cfg.DataDir)
 	usageLedger := usage.NewLedger(gdb, transcripts)
+	// 折算用的单价表（没配过就是空表，那时没有实报费用的轮子如实落「未计价」）。
+	usageLedger.LoadPrices()
 	chatService := service.NewChatService(gdb, sessionService, manager, transcripts, skillUsage, usageLedger)
 
 	// 内置工具（claude/codex）缺失时补建：清库/全新安装后开箱即有，

@@ -119,7 +119,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/usage/series", usageAPI.series)
 	api.HandleFunc("GET /api/usage/breakdown", usageAPI.breakdown)
 	api.HandleFunc("GET /api/usage/errors", usageAPI.errors)
-	// 重算历史是 owner 专属（isOwnerOnly 按方法判）。
+	api.HandleFunc("GET /api/usage/prices", usageAPI.prices)
+	// 改单价与重算历史都是 owner 专属（isOwnerOnly 按方法判）。
+	api.HandleFunc("PUT /api/usage/prices", usageAPI.updatePrices)
 	api.HandleFunc("POST /api/usage/backfill", usageAPI.backfill)
 
 	// 目录浏览：供工作目录/文件选择器导航本机目录（浏览器拿不到绝对路径）。

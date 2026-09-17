@@ -125,6 +125,28 @@ func (h usageHandler) errors(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, res)
 }
 
+// prices 读当前单价表。租户也能读：他看到的折算金额就是按这张表算的，
+// 知道单价没有坏处；改它是 owner 的事（isOwnerOnly 按方法判）。
+func (h usageHandler) prices(w http.ResponseWriter, r *http.Request) {
+	writeData(w, http.StatusOK, h.ledger.Prices())
+}
+
+// updatePrices 保存单价表。**已经记下的账不会跟着变**——那是记账当时的
+// 价，改完要重算的是「重算历史」。响应里带上新的 rev，界面据此提示。
+func (h usageHandler) updatePrices(w http.ResponseWriter, r *http.Request) {
+	var table usage.PriceTable
+	if err := decodeJSON(r, &table); err != nil {
+		writeError(w, err)
+		return
+	}
+	saved, err := h.ledger.SavePrices(table)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, saved)
+}
+
 // backfill 照转录重算全部历史账目。owner 专属（在前缀表里）。
 func (h usageHandler) backfill(w http.ResponseWriter, r *http.Request) {
 	res, err := h.ledger.Backfill(r.Context())
