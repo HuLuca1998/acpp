@@ -13,6 +13,7 @@
 | api.ts            | 后端 API 客户端，全部 HTTP/SSE/ws 地址的唯一出口；组件禁止裸 fetch    | `api`、`ApiError`、`Paged`                                           |
 | api-core.ts       | HTTP 地基：基址、`ApiError`、请求器、分页查询串。端点定义分了多个文件，它们都要用这几样，放 api.ts 会绕成环 | `request`、`pageQuery`、`ApiError`、`BASE`                            |
 | api-connections.ts | 连接类端点：远程服务器（adr-019）与数据库数据源（adr-008）。展开进 `api`，调用方仍写 `api.servers.*` | `connectionsApi`                                                     |
+| api-usage.ts      | 用量报表的端点（轮次账本的合计 / 曲线 / 分组 / 异常 / 重算）。展开进 `api`，调用方仍写 `api.usage.*` | `usageApi`                                                           |
 | chat/chat-events.ts | 聊天 SSE 事件 reducer（纯函数）与聊天状态类型；seq 去重在 use-chat  | `reduceChatEvent`、`ChatState`、`INITIAL_CHAT_STATE`、`mergeInputs`、`reconcileMessages`、`isToolActive` |
 | clipboard.ts      | 复制到剪贴板，返回成功与否；非安全上下文（局域网 http）退回 execCommand | `copyText`                                                           |
 | db-uri.ts         | 连接 URI 解析（Navicat 的 `navicat://` 与通用 `mysql://`）→ 表单字段；导出在后端 | `parseDbUri`、`ParsedUri`                                            |
@@ -22,7 +23,7 @@
 | chat/draft-store.ts | 输入框草稿的 ref 化 store（打字不重渲页面树，由输入卡自己订阅）    | `createDraftStore`、`DraftStore`                                     |
 | chat/first-send.ts | 草稿页 → 会话页的首发交棒：乐观用户消息、派发状态与失败通知          | `stashFirstSend`、`claimFirstSend`、`optimisticUserMessage`、`isOptimisticMessage` |
 | local-commands.ts | 本地斜杠命令（前端自己执行、不发给 agent）的解析与补全清单合并        | `parseLocalCommand`、`withLocalCommands`、`LOCAL_COMMANDS`          |
-| format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatClockTime`、`formatTokens`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
+| format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatClockTime`、`formatTokens`、`formatCost`、`formatDuration`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
 | git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | mcp-tool.ts       | MCP 工具的读法：破坏性判定、JSON-RPC 请求拼装、响应拆解（协议错误与工具错误分开）；工具台与调用记录共用 | `isDestructive`、`toolFullName`、`buildToolCall`、`buildRequest`、`initialArgs`、`coerceArgs`、`isRequired`、`readResponse`、`prettyJSON`、`parseJSON` |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |

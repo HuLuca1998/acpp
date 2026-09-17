@@ -36,6 +36,7 @@ const Jobs = page(() => import("@/routes/jobs"), "Jobs")
 const Settings = page(() => import("@/routes/settings"), "Settings")
 const Tenants = page(() => import("@/routes/tenants"), "Tenants")
 const Logs = page(() => import("@/routes/logs"), "Logs")
+const Usage = page(() => import("@/routes/usage"), "Usage")
 const Github = page(() => import("@/routes/github"), "Github")
 
 /** 尚未实现、但已在导航里占位的页面。 */
@@ -75,6 +76,7 @@ export function App() {
           <Route path="skills/new" element={<SkillDetail />} />
           <Route path="skills/:name" element={<SkillDetail />} />
           <Route path="sessions" element={<Sessions />} />
+          <Route path="usage" element={<Usage />} />
           {/* 新会话与老会话共用同一个页面：草稿态只是多了跨 ACP 模型选择
               与可编辑工作目录，首条消息落地才真正创建会话。 */}
           <Route path="sessions/new" element={<SessionChat />} />

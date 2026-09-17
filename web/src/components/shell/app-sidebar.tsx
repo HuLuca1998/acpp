@@ -26,6 +26,7 @@ import { groupSessionsByCwd } from "@/lib/session-groups"
 import type { Session } from "@/types/acp"
 import {
   CalendarClockIcon,
+  ChartColumnIcon,
   CircleDotIcon,
   DatabaseIcon,
   HardDriveIcon,
@@ -114,6 +115,11 @@ export function AppSidebar({
               icon: <MessagesSquareIcon />,
             },
             {
+              title: t("nav.usage"),
+              url: "/usage",
+              icon: <ChartColumnIcon />,
+            },
+            {
               title: t("nav.databases"),
               url: "/databases",
               icon: <DatabaseIcon />,
@@ -142,6 +148,11 @@ export function AppSidebar({
               title: t("nav.sessions"),
               url: "/sessions",
               icon: <MessagesSquareIcon />,
+            },
+            {
+              title: t("nav.usage"),
+              url: "/usage",
+              icon: <ChartColumnIcon />,
             },
             // GitHub issue 页对租户开放（adr-023）：看的是分配给他自己的 issue。
             { title: t("nav.github"), url: "/github", icon: <CircleDotIcon /> },

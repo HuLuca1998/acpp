@@ -312,6 +312,7 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
 export type WorkspaceScopeApi = ReturnType<typeof workspaceScopeApi>
 
 import { connectionsApi } from "./connections"
+import { usageApi } from "./usage"
 
 export const api = {
   health: () =>
@@ -749,6 +750,7 @@ export const api = {
   },
 
   ...connectionsApi,
+  ...usageApi,
 
   /**
    * 会话侧的服务器清单（@ 引用选择器用）。与 servers.list 的区别是它不在
