@@ -100,6 +100,50 @@ type Deps struct {
 	// SchedulePath 是定时任务的存储文件（<dataDir>/schedule.json）。空则
 	// 定时任务整体停用（工具面不挂、命令不响应）。
 	SchedulePath string
+
+	// 下面三个把子区对话接进「网页那一侧的会话」：登记一条会话记录、
+	// 线级消息进同一份转录、轮末落一行用量账目。
+	//
+	// 为什么要接：子区烧的是同一个额度，不接的话它在报表里查无此人，
+	// 对话也只存在于 Discord 里（服务一重启，/usage 的内存计数就清零）。
+	// 三个都是 nil-safe——没接上时子区照常能聊，只是不进统计。
+	//
+	// 形状仍然是闭包：discord 只 import 叶子包，会话与账本都由装配层桥接
+	// （adr-016 的零耦合在这里继续成立）。
+
+	// Session 幂等登记一个子区的会话记录，返回会话 id。
+	Session func(ctx context.Context, in SessionRef) (uint, error)
+	// Transcript 收一条线级消息进该会话的转录。有了它，子区的对话在网页
+	// 里能回看，用量也能照转录重算。
+	Transcript func(sessionID uint, dir string, msg json.RawMessage)
+	// RecordTurn 落一行轮次账目。
+	RecordTurn func(ctx context.Context, sessionID uint, t TurnStat)
+}
+
+// SessionRef 是一个子区在会话表里的身份。
+type SessionRef struct {
+	// Key 是幂等键：`dc:<子区 id>`。
+	Key string
+	// Agent 是内置工具名（claude / codex）。
+	Agent string
+	Title string
+	Cwd   string
+	// Origin 是会话来源：子区对话是 "discord"，定时任务的运行是 "cron"
+	// ——后者是机器自己开的，账该分开看。
+	Origin string
+}
+
+// TurnStat 是一轮跑完交给账本的事实。字段与 usage.TurnRecord 对齐，
+// 但这里不 import 那个包（同 SessionRef，桥接在装配层）。
+type TurnStat struct {
+	StartedAt  time.Time
+	EndedAt    time.Time
+	Usage      *acp.Usage
+	CostCum    *acp.UsageCost
+	StopReason string
+	Err        error
+	ToolCalls  int
+	ToolFailed int
 }
 
 // AgentOption 是一个内置工具的可选项集合。

@@ -1,6 +1,11 @@
 // Chat page and composer copy (mascot included). Split out because the main
 // locale file hit the line-count hard limit; split by domain, not by language.
 export const enChat = {
+  external: {
+    discord: "This conversation lives in a Discord thread",
+    cron: "This was one run of a scheduled task",
+    hint: "Read-only here — continue it in the thread. Its tokens and cost are already in Usage.",
+  },
   branch: {
     none: "No branch",
     notRepo: "Working directory is not a git repository",

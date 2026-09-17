@@ -39,7 +39,10 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 	tctx, endTurn := tc.beginTurn(ctx)
 	defer endTurn()
 	s.postTurnCard(token, threadID, tc)
-	sess, fresh, err := s.openChatSession(tctx, key, b, threadID, tc)
+	// 先把会话登记到网页那一侧：转录要按会话 id 分文件，账也要记在它名下。
+	// 登记不上不拦对话——子区照常能聊，只是这一轮不进统计。
+	sessionID := s.ensureSession(ctx, b, threadID)
+	sess, fresh, err := s.openChatSession(tctx, key, b, threadID, tc, sessionID)
 	if err != nil {
 		s.finalizeTurnCard(token, threadID, tc)
 		if tctx.Err() != nil {
@@ -124,6 +127,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 
 	s.finalizeTurnCard(token, threadID, tc)
 	out := turnOutcome{reply: reply, final: final, err: err, stop: result.StopReason, tools: toolCount, tokens: tokens, elapsed: time.Since(started)}
+	s.recordTurn(ctx, sessionID, tc, started, result, err)
 
 	switch {
 	case unattended && isNoReport(final):
@@ -154,7 +158,7 @@ func (s *Service) runTurn(ctx context.Context, token string, b Binding, threadID
 
 // openChatSession 打开（或复用）子区的 acp 会话，OnEvent 绑定到该子区的
 // 运行态；新拿到的 acpSessionId 落盘供重启后恢复。
-func (s *Service) openChatSession(ctx context.Context, key string, b Binding, threadID string, tc *threadChat) (*acp.Session, bool, error) {
+func (s *Service) openChatSession(ctx context.Context, key string, b Binding, threadID string, tc *threadChat, sessionID uint) (*acp.Session, bool, error) {
 	if sess, ok := s.acpMgr.Get(key); ok {
 		return sess, false, nil
 	}
@@ -206,6 +210,13 @@ func (s *Service) openChatSession(ctx context.Context, key string, b Binding, th
 		Cwd:     b.Workdir,
 		OnEvent: func(ev acp.Event) {
 			s.onChatEvent(token, threadID, tc, ev)
+		},
+		// 线级消息进同一份转录（按会话 id 分文件）：子区的对话因此能在
+		// 网页里回看，用量也能照转录重算——与网页会话同一条路。
+		WireTap: func(dir string, msg json.RawMessage) {
+			if s.deps.Transcript != nil && sessionID != 0 {
+				s.deps.Transcript(sessionID, dir, msg)
+			}
 		},
 		ResumeACPSessionID: resume,
 		MCPServers:         mcpServers,
@@ -281,31 +292,15 @@ func (s *Service) onChatEvent(token, threadID string, tc *threadChat, ev acp.Eve
 		tc.segStart = tc.buf.Len()
 		tc.mu.Unlock()
 		go s.noteToolCall(token, threadID, tc, ev)
+	case acp.EventUsage:
+		// 只收费用的累计值给账本（轮末落账时取）。上下文水位子区不显示，
+		// 收了也没地方摆。不带 cost 的那几条不能把已知费用冲掉。
+		if ev.Cost != nil {
+			tc.mu.Lock()
+			tc.costCum = ev.Cost
+			tc.mu.Unlock()
+		}
 	}
-}
-
-// turnSummary 是回合结束时的观察小字：耗时 + 工具数 + 改动文件数 +
-// token 用量。快问快答（<20s 且没动工具）不带尾巴——那种回合一眼就看
-// 完了，小结只是噪音。
-func turnSummary(d time.Duration, tools, touched int, usage *acp.Usage) string {
-	if d < 20*time.Second && tools == 0 {
-		return ""
-	}
-	t := fmt.Sprintf("%ds", int(d.Seconds()))
-	if d >= time.Minute {
-		t = fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
-	}
-	out := "-# ⏱ " + t
-	if tools > 0 {
-		out += fmt.Sprintf(" · 🔧 %d", tools)
-	}
-	if touched > 0 {
-		out += fmt.Sprintf(" · ✏️ %d 个文件", touched)
-	}
-	if usage != nil && usage.TotalTokens > 0 {
-		out += " · 🧮 " + fmtTokens(usage.TotalTokens)
-	}
-	return out
 }
 
 // fmtTokens 把 token 数缩成 12.3k 这种量级读法。
@@ -737,4 +732,36 @@ func isSnowflake(s string) bool {
 		}
 	}
 	return true
+}
+
+// recordTurn 把这一轮记进用量账本。旁路：记不上不影响对话本身。
+//
+// 费用给的是 agent 报的**会话累计值**，本轮花了多少由账本自己差分——
+// 这里不算钱，算了两边口径就会分家。
+func (s *Service) recordTurn(ctx context.Context, sessionID uint, tc *threadChat,
+	started time.Time, result acp.PromptResult, turnErr error) {
+	if s.deps.RecordTurn == nil || sessionID == 0 {
+		return
+	}
+	tc.mu.Lock()
+	costCum := tc.costCum
+	calls, failed := 0, 0
+	for _, e := range tc.toolLog {
+		calls++
+		if e.status == "failed" {
+			failed++
+		}
+	}
+	tc.mu.Unlock()
+
+	s.deps.RecordTurn(ctx, sessionID, TurnStat{
+		StartedAt:  started,
+		EndedAt:    time.Now(),
+		Usage:      result.Usage,
+		CostCum:    costCum,
+		StopReason: string(result.StopReason),
+		Err:        turnErr,
+		ToolCalls:  calls,
+		ToolFailed: failed,
+	})
 }

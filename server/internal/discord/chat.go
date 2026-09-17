@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"acpp/server/internal/acp"
 )
 
 // 子区对话的资源边界：discord 的并发子区不多，池子收紧；无人值守场景
@@ -56,6 +58,9 @@ type threadChat struct {
 	statTurns  int
 	statTools  int
 	statTokens int
+	// costCum 是 agent 最近一次报的**会话累计**费用（只有 claude 报）。
+	// 账本要的是这个累计值，本轮花了多少由它自己去差分——这里不该算钱。
+	costCum *acp.UsageCost
 	// lastUser 是最近一位发起输入的用户 id——权限/提问卡 @ 它，让
 	// 走开的人收到手机推送（无人值守场景的核心闭环）。
 	lastUser string

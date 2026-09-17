@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -267,6 +269,35 @@ func run() error {
 				return servers, meta, nil
 			}
 			return append(servers, rs...), service.MergeClaudeMounts(meta, rm), nil
+		},
+		// 把子区对话接进网页那一侧的会话：登记记录、写同一份转录、轮末
+		// 落账。子区烧的是同一个额度，不接的话它在报表里查无此人。
+		Session: func(ctx context.Context, in discord.SessionRef) (uint, error) {
+			return sessionService.EnsureExternal(ctx, service.ExternalSession{
+				Key:       in.Key,
+				AgentName: in.Agent,
+				Title:     in.Title,
+				Cwd:       in.Cwd,
+				Origin:    in.Origin,
+			})
+		},
+		Transcript: func(sessionID uint, dir string, msg json.RawMessage) {
+			transcripts.Append(strconv.FormatUint(uint64(sessionID), 10), dir, msg)
+		},
+		RecordTurn: func(ctx context.Context, sessionID uint, t discord.TurnStat) {
+			if err := usageLedger.Record(ctx, usage.TurnRecord{
+				SessionID:  sessionID,
+				StartedAt:  t.StartedAt,
+				EndedAt:    t.EndedAt,
+				Usage:      t.Usage,
+				CostCum:    t.CostCum,
+				StopReason: t.StopReason,
+				Err:        t.Err,
+				ToolCalls:  t.ToolCalls,
+				ToolFailed: t.ToolFailed,
+			}); err != nil {
+				slog.Warn("discord 轮次落账失败", "session", sessionID, "err", err)
+			}
 		},
 	})
 	if err != nil {

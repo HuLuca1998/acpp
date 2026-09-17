@@ -149,7 +149,7 @@ export interface Session {
    * 会话来源：空是界面里的人开的，`ask` 是别的 AI 经 /api/ask 问出来的
    *（adr-022）。侧栏据此把「AI 问 AI」的会话与自己的分开摆。
    */
-  origin?: "ask"
+  origin?: Exclude<SessionOrigin, "user">
   state: SessionState
   stopReason: string
   messageCount: number
@@ -530,7 +530,11 @@ export interface Paged<T> {
  * （AGENTS.md §2），`sort` 的取值是后端排序白名单里的**数据库列名**。
  */
 /** 会话列表的来源筛选：`ask` 只要别的 AI 问出来的，`user` 只要界面里开的。 */
-export type SessionOrigin = "ask" | "user"
+/**
+ * 会话来源。`user` 是列表筛选的伪值（后端翻成「origin 为空」），其余
+ * 与后端的 model.SessionOrigin* 一一对应。
+ */
+export type SessionOrigin = "ask" | "user" | "discord" | "cron"
 
 export interface PageQuery {
   page: number

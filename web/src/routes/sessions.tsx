@@ -216,18 +216,20 @@ export function Sessions() {
               label: t("sessions.origin"),
               className: "text-muted-foreground",
             },
-            // 只标出「AI 协作」这一种：绝大多数会话是界面里开的，每行都写一遍
-            // 「界面」只是噪音。
-            cell: ({ row }) =>
-              row.original.origin === "ask" ? (
+            // 界面开的那种压低存在感：绝大多数会话都是它，每行都写一遍
+            // 只是噪音；其余来源（AI 协作、Discord、定时任务）才标出来。
+            cell: ({ row }) => {
+              const origin = row.original.origin
+              return origin ? (
                 <span className="text-foreground">
-                  {t("sessions.originAsk")}
+                  {t(`sessions.origin_${origin}`)}
                 </span>
               ) : (
                 <span className="text-muted-foreground/50">
                   {t("sessions.originUser")}
                 </span>
-              ),
+              )
+            },
           },
         ] satisfies SessionColumn[])
       : []),
@@ -348,7 +350,9 @@ export function Sessions() {
                 onChange={(v) => search.set("origin", v)}
                 options={[
                   { value: "user", label: t("sessions.originUser") },
-                  { value: "ask", label: t("sessions.originAsk") },
+                  { value: "ask", label: t("sessions.origin_ask") },
+                  { value: "discord", label: t("sessions.origin_discord") },
+                  { value: "cron", label: t("sessions.origin_cron") },
                 ]}
               />
             ) : null}

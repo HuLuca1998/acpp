@@ -1,6 +1,11 @@
 // 对话页与输入卡的文案（含吉祥物）。独立成文件是因为主语言文件已到行数
 // 硬线——按域拆分，不是按语言再切一刀。
 export const zhChat = {
+  external: {
+    discord: "这条对话在 Discord 子区里",
+    cron: "这是定时任务的一次运行",
+    hint: "网页这边只能回看——接着聊请回子区。它的 token 与费用已经记在「用量」里。",
+  },
   branch: {
     none: "无分支",
     notRepo: "工作目录不是 git 仓库",

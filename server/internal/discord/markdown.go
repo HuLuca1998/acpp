@@ -1,8 +1,12 @@
 package discord
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
+	"time"
+
+	"acpp/server/internal/acp"
 )
 
 // agent 的回复是标准 markdown，而 Discord 只认一个小方言：表格完全不渲染
@@ -148,4 +152,28 @@ func displayWidth(s string) int {
 		}
 	}
 	return w
+}
+
+// turnSummary 是回合结束时的观察小字：耗时 + 工具数 + 改动文件数 +
+// token 用量。快问快答（<20s 且没动工具）不带尾巴——那种回合一眼就看
+// 完了，小结只是噪音。
+func turnSummary(d time.Duration, tools, touched int, usage *acp.Usage) string {
+	if d < 20*time.Second && tools == 0 {
+		return ""
+	}
+	t := fmt.Sprintf("%ds", int(d.Seconds()))
+	if d >= time.Minute {
+		t = fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	out := "-# ⏱ " + t
+	if tools > 0 {
+		out += fmt.Sprintf(" · 🔧 %d", tools)
+	}
+	if touched > 0 {
+		out += fmt.Sprintf(" · ✏️ %d 个文件", touched)
+	}
+	if usage != nil && usage.TotalTokens > 0 {
+		out += " · 🧮 " + fmtTokens(usage.TotalTokens)
+	}
+	return out
 }
