@@ -67,6 +67,13 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 		return nil, fmt.Errorf("%w: message content is required", ErrInvalid)
 	}
 
+	// 外部子系统管着的会话（Discord 子区）在网页里**只读**：它的 acp 连接
+	// 在另一个会话池里，从这边发消息会按会话 id 另开一条连接，同一条记录
+	// 就有了两份分叉的上下文——两边都看不出对方说了什么。要接着聊，回子区。
+	if err := s.guardExternal(ctx, sessionID); err != nil {
+		return nil, err
+	}
+
 	view, err := s.Open(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -123,6 +130,20 @@ func (s *ChatService) Send(ctx context.Context, sessionID uint, in SendInput) (*
 	go s.runTurn(sessionID, br, blocks)
 
 	return msg, nil
+}
+
+// guardExternal 挡住「在网页里对外部子系统的会话发消息」。
+// 理由见 Send 里的调用处。
+func (s *ChatService) guardExternal(ctx context.Context, sessionID uint) error {
+	var sess model.Session
+	if err := s.db.WithContext(ctx).Select("external_key", "origin").
+		Limit(1).Find(&sess, sessionID).Error; err != nil {
+		return fmt.Errorf("load session %d: %w", sessionID, err)
+	}
+	if sess.ExternalKey == "" {
+		return nil
+	}
+	return fmt.Errorf("%w: 这条对话在 Discord 子区里进行，网页这边只能回看", ErrInvalid)
 }
 
 // buildBlocks 把发送入参翻译成 prompt 内容块（见 BuildPromptBlocks），

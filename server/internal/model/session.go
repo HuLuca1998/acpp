@@ -12,8 +12,18 @@ const (
 	SessionError  SessionState = "error"
 )
 
-// SessionOriginAsk 是「别的 AI 经 /api/ask 开的会话」的来源标记。
-const SessionOriginAsk = "ask"
+// 会话来源（Session.Origin）：空是界面里的人开的，其余是各个入口自己的
+// 标记。**每个入口都要有名字**——账目与会话列表都按它分类，混在一起就
+// 再也说不清「这笔钱是谁花的」。
+const (
+	// SessionOriginAsk 是别的 AI 经 /api/ask 问出来的（adr-022）。
+	SessionOriginAsk = "ask"
+	// SessionOriginDiscord 是 Discord 子区里的对话（adr-016）。
+	SessionOriginDiscord = "discord"
+	// SessionOriginCron 是定时任务跑出来的那一次运行（adr-020）——它也
+	// 发生在 Discord 子区里，但**是机器自己开的**，与人聊出来的账该分开看。
+	SessionOriginCron = "cron"
+)
 
 // Session 对应 ACP 的一次 session/new，是消息流的容器。
 type Session struct {
@@ -64,9 +74,18 @@ type Session struct {
 	// Origin 标记会话是谁开的：空是界面里的人，"ask" 是别的 AI 经
 	// POST /api/ask 问出来的（adr-022）。界面据此把「AI 问 AI」的会话与
 	// 用户自己的分开摆，不让审查/咨询的流水混进日常列表。
-	Origin    string    `gorm:"size:16;index" json:"origin,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `gorm:"index" json:"updatedAt"`
+	Origin string `gorm:"size:16;index" json:"origin,omitempty"`
+	// ExternalKey 是外部子系统里的标识（现在只有 Discord 子区：`dc:<子区 id>`），
+	// 空表示这是网页里开的会话。登记靠它幂等——子区的状态文件丢了、或者
+	// 同一个子区被重复触发，都只会拿回同一条记录。
+	//
+	// 索引刻意不加 unique：绝大多数会话这里是空串，而 SQLite 的唯一索引
+	// 会把多个空串判成重复（与 MCPToken 同一个坑）。
+	//
+	// 不出 API：它是内部标识，界面要区分来源看 Origin 就够了。
+	ExternalKey string    `gorm:"size:64;index" json:"-"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `gorm:"index" json:"updatedAt"`
 
 	Agent *Agent `gorm:"foreignKey:AgentID" json:"-"`
 }

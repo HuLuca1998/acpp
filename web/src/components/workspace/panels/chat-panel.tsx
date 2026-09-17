@@ -66,6 +66,14 @@ export const ChatPanel = memo(function ChatPanel() {
   // 照状态机算会误报断线。
   const mascot = useMascotFace(isNew ? null : chat)
 
+  // 这条会话是不是由外部子系统管着的（Discord 子区 / 定时任务的运行）。
+  // 非 null 时网页这边只读——后端也会挡（service.guardExternal），这里
+  // 只是别让人对着一个注定失败的输入框打字。
+  const externalOrigin =
+    chat.session?.origin === "discord" || chat.session?.origin === "cron"
+      ? chat.session.origin
+      : null
+
   // 本地斜杠命令的结果（目前只有 /db）：浮在输入框上方，不进对话流。
   // null 表示没在看。
   const [localCommand, setLocalCommand] = useState<string | null>(null)
@@ -196,6 +204,16 @@ export const ChatPanel = memo(function ChatPanel() {
           ) : null}
         </div>
 
+        {/* 外部子系统管着的会话（Discord 子区、定时任务）在网页里只读：
+            它的 acp 连接在另一个会话池里，从这边发消息会给同一条记录开出
+            第二份分叉的上下文。能回看已经是这次改动的收获，接着聊回子区。 */}
+        {externalOrigin ? (
+          <Alert className="mt-2">
+            <AlertTitle>{t(`chat.external.${externalOrigin}`)}</AlertTitle>
+            <AlertDescription>{t("chat.external.hint")}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {(() => {
           const errorText = chat.error ?? newSession.error
           if (!errorText) return null
@@ -247,7 +265,10 @@ export const ChatPanel = memo(function ChatPanel() {
         onCancel={isNew ? undefined : () => void chat.cancel()}
         busy={chat.busy}
         pending={isNew && newSession.creating}
-        disabled={isNew && (newSession.agents === null || !newSession.selected)}
+        disabled={
+          externalOrigin !== null ||
+          (isNew && (newSession.agents === null || !newSession.selected))
+        }
         placeholder={t("chat.placeholder")}
         mascotState={mascot.state}
         mascotSpeech={mascot.speech}

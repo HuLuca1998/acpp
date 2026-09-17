@@ -1,9 +1,11 @@
 package discord
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -34,7 +36,11 @@ type Thread struct {
 	// 的挫败远多于误查，用户拍板改回默认挂载，/db off 显式关。
 	DBOff bool `json:"dbOff,omitempty"`
 	// JobID 非空表示这个子区是定时任务的一次运行开出来的。
-	JobID     string    `json:"jobId,omitempty"`
+	JobID string `json:"jobId,omitempty"`
+	// SessionID 是这个子区在会话表里的记录 id（Deps.Session 登记的）。
+	// 存一份是为了省掉每轮一次查库；丢了也不要紧——登记本身是幂等的，
+	// 下一轮会照 `dc:<子区 id>` 拿回同一条。
+	SessionID uint      `json:"sessionId,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -237,4 +243,57 @@ func (c *Config) upsertThread(t Thread) {
 		}
 	}
 	c.Threads = append(c.Threads, t)
+}
+
+// ---- 子区在会话表里的身份 ----
+//
+// 放在这里：登记的结果（会话 id）就是子区状态的一部分，与上面的读写是
+// 一回事。登记本身由 Deps.Session 完成——discord 不认识会话表。
+
+// ensureSession 把这个子区登记成一条会话记录，返回会话 id（登记不上返回 0）。
+//
+// 幂等：键是 `dc:<子区 id>`，子区的状态文件丢了也拿得回同一条。拿到的 id
+// 顺手存进 Thread，省掉每轮一次查库。
+func (s *Service) ensureSession(ctx context.Context, b Binding, threadID string) uint {
+	if s.deps.Session == nil {
+		return 0
+	}
+	cfg := s.store.config()
+	t, known := cfg.thread(threadID)
+	if known && t.SessionID != 0 {
+		return t.SessionID
+	}
+
+	// 定时任务开的子区是机器自己跑的，账与人聊出来的分开看。
+	origin := "discord"
+	if known && t.JobID != "" {
+		origin = "cron"
+	}
+	title := threadID
+	if known && t.Title != "" {
+		title = t.Title
+	}
+
+	id, err := s.deps.Session(ctx, SessionRef{
+		Key:    "dc:" + threadID,
+		Agent:  b.Agent,
+		Title:  title,
+		Cwd:    b.Workdir,
+		Origin: origin,
+	})
+	if err != nil || id == 0 {
+		if err != nil {
+			slog.Warn("子区会话登记失败，这一轮不进统计", "thread", threadID, "err", err)
+		}
+		return 0
+	}
+	if _, err := s.store.update(func(c *Config) {
+		if cur, ok := c.thread(threadID); ok {
+			cur.SessionID = id
+			c.upsertThread(cur)
+		}
+	}); err != nil {
+		slog.Warn("子区会话 id 落盘失败", "thread", threadID, "err", err)
+	}
+	return id
 }

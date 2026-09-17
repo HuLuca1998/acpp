@@ -88,7 +88,8 @@ const (
 // SessionFilter 是列表页的筛选条件，零值不过滤。
 type SessionFilter struct {
 	AgentID uint
-	// Origin 见 SessionOriginAny / SessionOriginUser / model.SessionOriginAsk。
+	// Origin 见 SessionOriginAny / SessionOriginUser 与 model.SessionOrigin*
+	//（ask / discord / cron）。
 	Origin string
 	// Keyword 对标题做子串匹配。
 	Keyword string
@@ -122,10 +123,10 @@ func (s *SessionService) List(ctx context.Context, scope Scope, f SessionFilter,
 	case SessionOriginUser:
 		// 加列之前的老会话这一格是 NULL，不是空串——它们当然也是界面里开的。
 		q = q.Where("COALESCE(origin, '') = ''")
-	case model.SessionOriginAsk:
-		q = q.Where("origin = ?", model.SessionOriginAsk)
+	case model.SessionOriginAsk, model.SessionOriginDiscord, model.SessionOriginCron:
+		q = q.Where("origin = ?", f.Origin)
 	default:
-		return nil, 0, fmt.Errorf("%w: origin must be ask or user", ErrInvalid)
+		return nil, 0, fmt.Errorf("%w: 认不出的会话来源 %q", ErrInvalid, f.Origin)
 	}
 
 	var total int64
@@ -325,6 +326,69 @@ func (s *SessionService) Create(ctx context.Context, scope Scope, in SessionInpu
 
 	session.Agent = &agent
 	return s.toView(&session, true), nil
+}
+
+// ExternalSession 是「对话不在网页里发生、acp 连接由外部子系统自己管」
+// 的那类会话（现在只有 Discord 子区与定时任务的运行）。
+type ExternalSession struct {
+	// Key 是外部子系统里的唯一标识（Discord 子区是 `dc:<子区 id>`）。
+	Key string
+	// AgentName 是内置工具名（claude / codex）——外部子系统认的是名字，
+	// 不是数据库 id。
+	AgentName string
+	Title     string
+	Cwd       string
+	// Origin 见 model.SessionOriginDiscord / SessionOriginCron。
+	Origin string
+}
+
+// EnsureExternal 登记一条外部子系统管理的会话，返回会话 id；**幂等**。
+//
+// 为什么这些对话也要落一条 Session 记录：账目、会话列表、转录重建全都
+// 以会话为单位组织，不登记的话 Discord 那一侧就是一片看不见的用量——
+// 它烧的是同一个额度，却在报表里查无此人。有了记录，靠 Origin 分类即可，
+// 不必为它们再造一套并行的统计。
+//
+// 归属固定是 owner（TenantID 0）：bot 是 owner 开的、跑在他的机器上、
+// 用他的登录态。Discord 用户是另一套身份空间，不是这里的租户。
+func (s *SessionService) EnsureExternal(ctx context.Context, in ExternalSession) (uint, error) {
+	if in.Key == "" {
+		return 0, fmt.Errorf("%w: external session key is required", ErrInvalid)
+	}
+
+	// 已登记就直接用。用 Find 不用 First：查不到是常态（第一次登记），
+	// First 会把每一次都当错误打进日志。
+	var found model.Session
+	if err := s.db.WithContext(ctx).Where("external_key = ?", in.Key).
+		Limit(1).Find(&found).Error; err != nil {
+		return 0, fmt.Errorf("lookup external session: %w", err)
+	}
+	if found.ID != 0 {
+		return found.ID, nil
+	}
+
+	var agent model.Agent
+	if err := s.db.WithContext(ctx).Where("name = ?", in.AgentName).
+		Limit(1).Find(&agent).Error; err != nil {
+		return 0, fmt.Errorf("lookup agent %q: %w", in.AgentName, err)
+	}
+	if agent.ID == 0 {
+		return 0, fmt.Errorf("%w: agent %q", ErrNotFound, in.AgentName)
+	}
+
+	session := model.Session{
+		AgentID:     agent.ID,
+		TenantID:    0,
+		Title:       in.Title,
+		Cwd:         in.Cwd,
+		Origin:      in.Origin,
+		ExternalKey: in.Key,
+		State:       model.SessionIdle,
+	}
+	if err := s.db.WithContext(ctx).Create(&session).Error; err != nil {
+		return 0, fmt.Errorf("create external session: %w", err)
+	}
+	return session.ID, nil
 }
 
 // EnsureMCPToken 懒生成会话专属的 MCP 端点令牌（agent 子进程带它回连拿
