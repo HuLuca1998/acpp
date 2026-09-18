@@ -602,7 +602,7 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 
 **为什么不直接关掉延迟加载**（2026-08-20 实测，claude-agent-acp 0.63.0 / agent-sdk 0.3.220）：SDK 没有这个开关。`tools` 显式数组会整体替换内置工具集（漏一个就废掉一项能力，且随版本漂移），`allowedTools` 里列出 `Task*` 不会加载 schema（实测无效），env `ENABLE_TOOL_SEARCH` 是内部 gate、设了不生效。所以只能在提示词里教它自己去取。
 
-codex 的 `CODEX_HOME` 隔离把家目录整体重定向到 `<dataDir>/codex-home`(codex 运行数据写这里,几 MB 量级),机器级技能连 `/skills` 都不再列出——比会话级禁用(`CODEX_CONFIG` 的 `enabled=false` 只挡使用不挡显示)彻底。家目录里 `auth.json` 软链系统的(静态 key、跟随登录态、不复制密钥),`config.toml` 复制系统副本(避免 codex 写回污染系统 config),`skills` 软链技能包。副作用:切换到本方案后,旧 codex 会话的 thread 存在系统 `~/.codex`、新 home 找不到,首次恢复会回退 `session/new`(丢一次上下文),之后正常。认证不隔离:claude 用系统钥匙串登录态、codex 用系统 `~/.codex` 的 auth/config。
+codex 的 `CODEX_HOME` 隔离把家目录整体重定向到 `<dataDir>/codex-home`(codex 运行数据写这里,几 MB 量级),机器级技能连 `/skills` 都不再列出——比会话级禁用(`CODEX_CONFIG` 的 `enabled=false` 只挡使用不挡显示)彻底。家目录里 `auth.json` 软链系统的(静态 key、跟随登录态、不复制密钥),`config.toml` 复制系统副本(避免 codex 写回污染系统 config;**只复制一次**,之后系统 `~/.codex/config.toml` 的改动不再同步——要给 acpp 的 codex 换模型/provider 就直接改这份副本,codex 自动写入的 `[projects.*]` 等段落留着不动),`skills` 软链技能包。副作用:切换到本方案后,旧 codex 会话的 thread 存在系统 `~/.codex`、新 home 找不到,首次恢复会回退 `session/new`(丢一次上下文),之后正常。认证不隔离:claude 用系统钥匙串登录态、codex 用系统 `~/.codex` 的 auth/config。
 
 ## 多语言
 
