@@ -48,7 +48,7 @@ export function MascotBubble({
   className,
 }: {
   speech: MascotSpeech | null
-  /** 球蹲在哪边——小尖角要指向它。 */
+  /** 球站在输入卡哪边——尖角落在底边靠球那一头，往下指着它。 */
   side?: "left" | "right"
   /** 鼠标正停在球上：不用沉，立刻说。 */
   reveal?: boolean
@@ -123,13 +123,11 @@ export function MascotBubble({
         "relative max-w-56 truncate rounded-xl border border-border/60 bg-popover/95",
         "px-2.5 py-1.5 text-xs text-foreground shadow-md backdrop-blur-md",
         "transition-[opacity,translate] duration-150 ease-snappy",
-        "starting:translate-x-1 starting:opacity-0 motion-reduce:starting:translate-x-0",
-        // 指向球的小尖角，跟着球在哪边换方向
-        "after:absolute after:top-1/2 after:size-2 after:-translate-y-1/2 after:rotate-45",
-        "after:border-border/60 after:bg-popover/95",
-        side === "right"
-          ? "after:-right-1 after:border-r after:border-b"
-          : "after:-left-1 after:border-t after:border-l",
+        "starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0",
+        // 底边的小尖角往下指着球：球 56px 宽，尖角中心对到球心（外缘往里 28px）。
+        "after:absolute after:-bottom-1 after:size-2 after:rotate-45",
+        "after:border-r after:border-b after:border-border/60 after:bg-popover/95",
+        side === "right" ? "after:right-6" : "after:left-6",
         className
       )}
     >

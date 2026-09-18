@@ -30,14 +30,15 @@ const QUIPS = ["a", "b", "c", "d"] as const
 const QUIP_MS = 4000
 
 /**
- * 吉祥物在输入卡上的落位与周边交互：蹲顶缘、气泡挨着它往里说、右键给一个
- * 小菜单（安静 / 换边 / 关掉）。
+ * 吉祥物在输入卡边上的落位与周边交互：站在输入卡左侧或右侧（与卡顶齐平）、
+ * 气泡在它头顶往卡的方向说、右键给一个小菜单（安静 / 换边 / 关掉）。
  *
  * 单独成一块而不是写在 composer 里：输入卡本身的职责是输入，吉祥物是挂在
  * 它边上的一整套东西（定位、气泡、偏好、手势），混在一起两边都读不清。
  *
- * 整条是 pointer-events-none，只有球自己可点——它浮在输入卡上方，吃掉指针
- * 事件就会挡住上面的消息流。
+ * 落在卡**外面**而不是压着顶缘：球是可点的，压在卡上就会盖住第一行文字和
+ * 右侧滚动条，鼠标选字、拖滚动条都被它吃掉（用户点名）。气泡仍是
+ * pointer-events-none——它伸到消息流上方，吃指针会挡住消息。
  */
 export function MascotPerch({
   state,
@@ -51,7 +52,7 @@ export function MascotPerch({
   speech: MascotSpeech | null
   /** 本轮 token 量：大活干完才撒花。 */
   tokens?: number
-  /** 输入卡上方被别的东西占了（补全菜单、排队条），先退场别叠在一起。 */
+  /** 输入卡上方被别的东西占了（补全菜单、排队条），气泡先闭嘴别叠上去。 */
   ducked?: boolean
 }) {
   const { t } = useTranslation()
@@ -107,14 +108,11 @@ export function MascotPerch({
   const other = prefs.side === "right" ? "left" : "right"
 
   return (
+    // DOM 里永远排在输入卡之后（Tab 先到输入框），换到左边靠 order 翻过去。
     <div
-      aria-hidden={ducked}
       className={cn(
-        "pointer-events-none absolute inset-x-0 top-0 flex h-14 items-center gap-2 px-5",
-        "-translate-y-[55%] transition-[opacity,translate] duration-150 ease-snappy",
-        // 左侧落位：DOM 顺序仍是「气泡在前」，靠 row-reverse 把球翻到外侧。
-        prefs.side === "left" ? "flex-row-reverse justify-end" : "justify-end",
-        ducked && "-translate-y-[20%] opacity-0 motion-reduce:translate-y-0"
+        "relative size-14 shrink-0",
+        prefs.side === "left" && "order-first"
       )}
     >
       <MascotBubble
@@ -122,9 +120,15 @@ export function MascotPerch({
         side={prefs.side}
         reveal={(hover || showNow) && !ducked}
         override={prefs.quiet || ducked ? null : quip}
+        className={cn(
+          // 头顶、贴球的外缘、往卡的方向伸：那片是消息流底部的渐隐区，
+          // 本来就没有可点的东西。
+          "absolute bottom-[calc(100%+0.375rem)]",
+          prefs.side === "right" ? "right-0" : "left-0"
+        )}
       />
       <ContextMenu>
-        <ContextMenuTrigger className="pointer-events-auto size-14 shrink-0">
+        <ContextMenuTrigger className="pointer-events-auto block size-14">
           <Mascot
             state={state}
             quiet={prefs.quiet}

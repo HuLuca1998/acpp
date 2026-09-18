@@ -151,38 +151,144 @@ export function Composer({
             blur 用 md 不用 xl：模糊成本随半径平方涨，常驻的 24px 毛玻璃是
             WKWebView 窗口缩放逐帧重采样的大头；半径减半 + 底色不透明度补偿，
             视觉几乎不变。 */}
-        <div
-          data-slot="composer-shell"
-          className="pointer-events-auto relative rounded-2xl border border-border/60 bg-card/90 backdrop-blur-md dark:border-border"
-        >
-          {menuOpen ? (
-            <div className="absolute inset-x-2 bottom-[calc(100%+0.5rem)] max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
-              {matches.map((cmd, index) => (
-                <button
-                  key={cmd.name}
-                  type="button"
-                  className={cn(
-                    "flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-sm",
-                    index === active
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-muted"
-                  )}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => pickCommand(cmd.name)}
+        <div className="flex items-start gap-2">
+          <div
+            data-slot="composer-shell"
+            className="pointer-events-auto relative min-w-0 flex-1 rounded-2xl border border-border/60 bg-card/90 backdrop-blur-md dark:border-border"
+          >
+            {menuOpen ? (
+              <div className="absolute inset-x-2 bottom-[calc(100%+0.5rem)] max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg transition-[opacity,translate] duration-150 ease-snappy starting:translate-y-1 starting:opacity-0 motion-reduce:starting:translate-y-0">
+                {matches.map((cmd, index) => (
+                  <button
+                    key={cmd.name}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                      index === active
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-muted"
+                    )}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => pickCommand(cmd.name)}
+                  >
+                    <SlashIcon className="size-3 shrink-0 self-center text-muted-foreground" />
+                    <span className="shrink-0 font-mono">{cmd.name}</span>
+                    {cmd.description ? (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {cmd.description}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {attachments}
+            <textarea
+              value={value}
+              rows={1}
+              placeholder={placeholder}
+              disabled={disabled}
+              className="[field-sizing:content] max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-1 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+              onChange={(e) => {
+                onChange(e.target.value)
+                setActiveIndex(0)
+              }}
+              onPaste={(e) => {
+                if (!onPasteImages) return
+                const files = imagesFromClipboard(e.clipboardData.items)
+                if (files.length > 0) {
+                  e.preventDefault()
+                  onPasteImages(files)
+                }
+              }}
+              onKeyDown={(e) => {
+                // 补全菜单打开时接管方向键与确认键。
+                if (menuOpen && !e.nativeEvent.isComposing) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault()
+                    setActiveIndex((active + 1) % matches.length)
+                    return
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault()
+                    setActiveIndex(
+                      (active - 1 + matches.length) % matches.length
+                    )
+                    return
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault()
+                    pickCommand(matches[active].name)
+                    return
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    onChange(value + " ")
+                    return
+                  }
+                }
+                // busy 时 Enter 也能发：消息会被插进正在跑的轮。
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault()
+                  if (canSend) onSubmit()
+                }
+                // Esc 中止当前轮：等价于点中止按钮，手不用离开键盘。
+                if (e.key === "Escape" && busy && onCancel) {
+                  e.preventDefault()
+                  onCancel()
+                }
+              }}
+            />
+            <div className="flex flex-wrap items-center gap-0.5 px-2 pb-2">
+              {children}
+              {busy && onCancel ? (
+                <Hint
+                  label={t("chat.stop")}
+                  desc={t("chat.stopDesc")}
+                  shortcut={<Kbd>Esc</Kbd>}
+                  align="end"
                 >
-                  <SlashIcon className="size-3 shrink-0 self-center text-muted-foreground" />
-                  <span className="shrink-0 font-mono">{cmd.name}</span>
-                  {cmd.description ? (
-                    <span className="truncate text-xs text-muted-foreground">
-                      {cmd.description}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    className="ml-auto rounded-full"
+                    aria-label={t("chat.stop")}
+                    onClick={onCancel}
+                  >
+                    <SquareIcon className="size-3.5" />
+                  </Button>
+                </Hint>
+              ) : (
+                <Hint
+                  label={t("chat.send")}
+                  desc={t("chat.sendDesc")}
+                  shortcut={<Kbd>↵</Kbd>}
+                  align="end"
+                >
+                  <Button
+                    size="icon-sm"
+                    className="ml-auto rounded-full"
+                    aria-label={t("chat.send")}
+                    disabled={!canSend}
+                    onClick={onSubmit}
+                  >
+                    {pending ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      <ArrowUpIcon className="size-4" />
+                    )}
+                  </Button>
+                </Hint>
+              )}
             </div>
-          ) : null}
-          {/* 吉祥物蹲在顶缘压着边线。落位与周边交互整块在 MascotPerch 里，
-              这里只把「该摆哪张脸」和「上方被占了」传进去。 */}
+          </div>
+          {/* 吉祥物站在输入卡外侧（左右由它自己的偏好定，DOM 顺序固定在卡之后）。
+            落位与周边交互整块在 MascotPerch 里，这里只把「该摆哪张脸」和
+            「上方被占了」传进去。 */}
           {mascotShown ? (
             <MascotPerch
               state={mascotShown}
@@ -191,107 +297,6 @@ export function Composer({
               ducked={mascotDucked}
             />
           ) : null}
-          {attachments}
-          <textarea
-            value={value}
-            rows={1}
-            placeholder={placeholder}
-            disabled={disabled}
-            className="[field-sizing:content] max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-1 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-            onChange={(e) => {
-              onChange(e.target.value)
-              setActiveIndex(0)
-            }}
-            onPaste={(e) => {
-              if (!onPasteImages) return
-              const files = imagesFromClipboard(e.clipboardData.items)
-              if (files.length > 0) {
-                e.preventDefault()
-                onPasteImages(files)
-              }
-            }}
-            onKeyDown={(e) => {
-              // 补全菜单打开时接管方向键与确认键。
-              if (menuOpen && !e.nativeEvent.isComposing) {
-                if (e.key === "ArrowDown") {
-                  e.preventDefault()
-                  setActiveIndex((active + 1) % matches.length)
-                  return
-                }
-                if (e.key === "ArrowUp") {
-                  e.preventDefault()
-                  setActiveIndex((active - 1 + matches.length) % matches.length)
-                  return
-                }
-                if (e.key === "Enter" || e.key === "Tab") {
-                  e.preventDefault()
-                  pickCommand(matches[active].name)
-                  return
-                }
-                if (e.key === "Escape") {
-                  e.preventDefault()
-                  onChange(value + " ")
-                  return
-                }
-              }
-              // busy 时 Enter 也能发：消息会被插进正在跑的轮。
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault()
-                if (canSend) onSubmit()
-              }
-              // Esc 中止当前轮：等价于点中止按钮，手不用离开键盘。
-              if (e.key === "Escape" && busy && onCancel) {
-                e.preventDefault()
-                onCancel()
-              }
-            }}
-          />
-          <div className="flex flex-wrap items-center gap-0.5 px-2 pb-2">
-            {children}
-            {busy && onCancel ? (
-              <Hint
-                label={t("chat.stop")}
-                desc={t("chat.stopDesc")}
-                shortcut={<Kbd>Esc</Kbd>}
-                align="end"
-              >
-                <Button
-                  size="icon-sm"
-                  variant="outline"
-                  className="ml-auto rounded-full"
-                  aria-label={t("chat.stop")}
-                  onClick={onCancel}
-                >
-                  <SquareIcon className="size-3.5" />
-                </Button>
-              </Hint>
-            ) : (
-              <Hint
-                label={t("chat.send")}
-                desc={t("chat.sendDesc")}
-                shortcut={<Kbd>↵</Kbd>}
-                align="end"
-              >
-                <Button
-                  size="icon-sm"
-                  className="ml-auto rounded-full"
-                  aria-label={t("chat.send")}
-                  disabled={!canSend}
-                  onClick={onSubmit}
-                >
-                  {pending ? (
-                    <Spinner className="size-4" />
-                  ) : (
-                    <ArrowUpIcon className="size-4" />
-                  )}
-                </Button>
-              </Hint>
-            )}
-          </div>
         </div>
         {footer ? (
           <div className="pointer-events-auto px-2 pt-1.5">{footer}</div>

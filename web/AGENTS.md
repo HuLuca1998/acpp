@@ -99,7 +99,7 @@ macOS 原生 app 质感（目标是打包为桌面应用）：系统字体栈（
 
 - **表情态**从 `ChatState` 纯派生（`lib/chat/mascot-state.ts`），**后端不加任何字段**；优先级与上表同源（出错 > 阻塞等人 > 运行中 > 其他），其中「运行中」压在「断线」之前，理由写在函数注释里，别照上表的字面顺序改回去。
 - **形象**交给第三方引擎（`vendor/grok-ball`，MIT）。球色与眼色走 `--mascot` / `--mascot-eye` 两个语义 token，**必须是 hex**（引擎要拿它算球面渐变），组件里现取不写死。引擎是共享 rAF 驱动的，页面进后台必须 `setActive(false)`。
-- **落位**在 `composer.tsx`（蹲在输入卡顶缘右侧）。形象与落位分开，换位置不用碰 mascot.tsx；输入卡上方被斜杠补全菜单或排队条占用时它要让位（`duckMascot`）。
+- **落位**在 `composer.tsx` + `mascot-perch.tsx`（站在输入卡**外侧**、与卡顶齐平，左右由偏好定；不压在卡上——球可点，压上去会挡住第一行文字与滚动条）。形象与落位分开，换位置不用碰 mascot.tsx；输入卡上方被斜杠补全菜单或排队条占用时气泡要闭嘴（`duckMascot`），球不动。
 
 加一个表情态的路径：mascot-state.ts 加态 → mascot.tsx 的 `EMOTION` 表补一个 grok-ball 表情 id → i18n 补读屏文案（zh/en）。
 
