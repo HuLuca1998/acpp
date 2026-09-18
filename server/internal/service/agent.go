@@ -21,6 +21,16 @@ var ErrInvalid = errors.New("invalid input")
 // AgentService 负责 agent 配置的读写。
 type AgentService struct {
 	db *gorm.DB
+	// OnCatalogChanged 在模型清单的取舍（禁用/别名）变了或 agent 被删后
+	// 被调，装配层用它通知拿清单快照的下游（discord 的 /model 下拉）。
+	// 可为 nil。探测写清单走 ChatService.ProbeAgent，那边有同名钩子。
+	OnCatalogChanged func()
+}
+
+func (s *AgentService) catalogChanged() {
+	if s.OnCatalogChanged != nil {
+		s.OnCatalogChanged()
+	}
 }
 
 func NewAgentService(db *gorm.DB) *AgentService {
@@ -230,6 +240,10 @@ func (s *AgentService) UpdateCatalog(ctx context.Context, id uint, in CatalogInp
 	if err := s.db.WithContext(ctx).Save(agent).Error; err != nil {
 		return nil, fmt.Errorf("update agent catalog %d: %w", id, err)
 	}
+	// 只有模型的取舍会改下游看到的清单；快速模式、AI 协作偏好与命令不算。
+	if in.Models != nil {
+		s.catalogChanged()
+	}
 	return agent, nil
 }
 
@@ -241,5 +255,6 @@ func (s *AgentService) Delete(ctx context.Context, id uint) error {
 	if res.RowsAffected == 0 {
 		return fmt.Errorf("agent %d: %w", id, ErrNotFound)
 	}
+	s.catalogChanged()
 	return nil
 }

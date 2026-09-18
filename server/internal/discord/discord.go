@@ -229,6 +229,13 @@ type Service struct {
 	st     Status
 	// registered 记录本次连接内已注册过 /init 的 guild，重连后清零重来。
 	registered map[string]bool
+	// gwCtx / gwToken 是当前这条 gateway 的上下文与 token（配置一变就换），
+	// RefreshCommands 用它们在连接存续期间重注册命令；没在跑时为空。
+	gwCtx   context.Context
+	gwToken string
+	// cmdMu 串行化命令注册的 PUT：GUILD_CREATE 的首注册与清单变化触发的
+	// 重注册可能撞在一起，乱序会让旧快照盖掉新的。
+	cmdMu sync.Mutex
 	// pending 是等着选分支的 /init（id → 中途状态），15 分钟过期
 	//（interaction token 的时效）。
 	pending map[string]pendingInit
@@ -343,11 +350,13 @@ func (s *Service) applyGateway() {
 	run := cfg.Enabled && cfg.BotToken != ""
 	s.st = Status{Running: run, Guilds: []Guild{}}
 	s.registered = map[string]bool{}
+	s.gwCtx, s.gwToken = nil, ""
 	if !run || s.parent == nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(s.parent)
 	s.cancel = cancel
+	s.gwCtx, s.gwToken = ctx, cfg.BotToken
 	go s.runLoop(ctx, cfg.BotToken)
 }
 

@@ -125,3 +125,41 @@ func TestAgentService_UpdateCatalog_AskPreferences(t *testing.T) {
 		})
 	}
 }
+
+// 契约：配置页动了模型取舍（禁用/别名）就通知下游清单变了；只改 AI 协作
+// 偏好这类不影响清单的项不吵下游。删 agent 同样通知。
+func TestAgentService_CatalogChangeHook(t *testing.T) {
+	svc := NewAgentService(agentDB(t))
+	fired := 0
+	svc.OnCatalogChanged = func() { fired++ }
+	created, err := svc.Create(t.Context(), AgentInput{Name: "codex", Command: "codex-acp"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	created.Models = model.AgentModelSlice{{ID: "gpt-5", Name: "GPT-5"}}
+	if err := svc.db.Save(created).Error; err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+
+	str := func(s string) *string { return &s }
+	if _, err := svc.UpdateCatalog(t.Context(), created.ID, CatalogInput{AskModel: str("gpt-5")}); err != nil {
+		t.Fatalf("update ask prefs: %v", err)
+	}
+	if fired != 0 {
+		t.Fatalf("只改 AI 协作偏好也触发了钩子 (%d 次)", fired)
+	}
+	if _, err := svc.UpdateCatalog(t.Context(), created.ID, CatalogInput{
+		Models: []CatalogItem{{Key: "gpt-5", Disabled: true}},
+	}); err != nil {
+		t.Fatalf("update models: %v", err)
+	}
+	if fired != 1 {
+		t.Fatalf("改模型取舍后钩子触发 %d 次, want 1", fired)
+	}
+	if err := svc.Delete(t.Context(), created.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if fired != 2 {
+		t.Fatalf("删 agent 后钩子触发 %d 次, want 2", fired)
+	}
+}

@@ -49,6 +49,10 @@ type ChatService struct {
 	// titler 生成会话标题；nil 或未启用时退回首句派生。
 	titler Titler
 
+	// OnCatalogChanged 在探测结果落库后被调（清单变了，探测失败清空也算），
+	// 装配层用它通知拿清单快照的下游（discord 的 /model 下拉）。可为 nil。
+	OnCatalogChanged func()
+
 	// notices 是全局通知广播口，供客户端决定要不要打扰用户。可为 nil
 	//（不广播，会话照常可用）。
 	notices *stream.Hub

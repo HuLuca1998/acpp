@@ -139,6 +139,9 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 	if err := s.db.WithContext(ctx).First(&agent, agentID).Error; err != nil {
 		return nil, fmt.Errorf("reload agent %d: %w", agentID, err)
 	}
+	if s.OnCatalogChanged != nil {
+		s.OnCatalogChanged()
+	}
 	return &agent, nil
 }
 

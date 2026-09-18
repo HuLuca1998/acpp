@@ -25,9 +25,13 @@ const (
 
 // registerCommands 注册 guild 级斜杠命令（即时生效；global 有传播延迟）。
 // 命令定义的唯一事实源是 commands.go 的 slashCommands 表；这里只做两件
-// 事：把表翻译成注册载荷，以及给 /model 注入 catalog 快照的 choices
-// （模型清单变了要重连或重启才刷新，换来原生下拉体验）。
+// 事：把表翻译成注册载荷，以及给 /model /db /server 注入清单快照的
+// choices（换来原生下拉体验）。快照过期由 RefreshCommands 兜：清单变了
+// 装配层会调它重注册，不必等重连或重启。
 func (s *Service) registerCommands(ctx context.Context, token, appID, guildID string) {
+	s.cmdMu.Lock()
+	defer s.cmdMu.Unlock()
+
 	var modelChoicesJSON []map[string]any
 	if s.deps.Catalog != nil {
 		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -103,6 +107,28 @@ func (s *Service) registerCommands(ctx context.Context, token, appID, guildID st
 	if err != nil {
 		slog.Error("注册斜杠命令失败", "guild", guildID, "err", err)
 	}
+}
+
+// RefreshCommands 给已连接的每个 guild 重注册斜杠命令。/model /db /server
+// 的 choices 是注册时拍的快照，清单变了（重探模型、改别名或禁用……）由
+// 装配层调这里刷新，不必等重连或重启。没连上时空转；后台执行，不阻塞
+// 调用方——探测接口本来就慢，别再叠一轮 Discord REST 在响应路径上。
+func (s *Service) RefreshCommands() {
+	s.mu.Lock()
+	ctx, token, appID := s.gwCtx, s.gwToken, s.st.AppID
+	guilds := make([]string, 0, len(s.st.Guilds))
+	for _, g := range s.st.Guilds {
+		guilds = append(guilds, g.ID)
+	}
+	s.mu.Unlock()
+	if ctx == nil || appID == "" || len(guilds) == 0 {
+		return
+	}
+	go func() {
+		for _, id := range guilds {
+			s.registerCommands(ctx, token, appID, id)
+		}
+	}()
 }
 
 // interactionEvent 只解本包用得到的字段。

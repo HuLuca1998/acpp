@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// apiBase 是 Discord REST 的根；测试里指到本地桩服务器。
+var apiBase = "https://discord.com/api/v10"
+
 // botREST 以 bot 身份调一次 Discord REST。out 为 nil 时丢弃响应体。
 // 调用量极低（配置面 + 每频道一次的 /init），不做限速队列；撞上 429 让
 // 错误浮出来按失败处理。
@@ -23,7 +26,7 @@ func botREST(ctx context.Context, token, method, path string, body, out any) err
 		}
 		reader = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "https://discord.com/api/v10"+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, apiBase+path, reader)
 	if err != nil {
 		return err
 	}
@@ -127,7 +130,7 @@ func botRESTFiles(ctx context.Context, token, channelID string, payload map[stri
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		"https://discord.com/api/v10/channels/"+channelID+"/messages", &buf)
+		apiBase+"/channels/"+channelID+"/messages", &buf)
 	if err != nil {
 		return err
 	}

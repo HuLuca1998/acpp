@@ -305,6 +305,10 @@ func run() error {
 		return err
 	}
 	defer discordService.Close()
+	// 模型清单一变（重探、改别名/禁用、删 agent）就让 discord 重注册斜杠
+	// 命令——/model 的下拉项是注册时拍的快照，不通知它就一直是旧的。
+	agentService.OnCatalogChanged = discordService.RefreshCommands
+	chatService.OnCatalogChanged = discordService.RefreshCommands
 
 	terminalService := service.NewTerminalService(cfg.MaxTerminals)
 	// 工作区终端的 pty 随服务退出统一回收，不留孤儿 shell。
