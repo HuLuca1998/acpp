@@ -46,8 +46,9 @@ export function DistributionChart({ stats }: { stats: OverviewStats | null }) {
           </>
         ) : (
           <>
-            <Donut title={t("overview.byAgent")} data={stats.byAgent} />
-            <Donut title={t("overview.byState")} data={stats.byState} />
+            {/* 兜住旧版后端：零会话时它给的是 null 而不是空数组。 */}
+            <Donut title={t("overview.byAgent")} data={stats.byAgent ?? []} />
+            <Donut title={t("overview.byState")} data={stats.byState ?? []} />
           </>
         )}
       </CardContent>

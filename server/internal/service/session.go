@@ -624,7 +624,10 @@ func (s *SessionService) countBy(ctx context.Context, scope Scope, column, join 
 	if join != "" {
 		q = q.Joins(join)
 	}
-	var out []NamedCount
+	// 非 nil 的空切片：JSON 里的列表永远是 `[]` 而不是 `null`。全新安装还
+	// 一条会话都没有时，nil 会序列化成 null，前端照契约对它做 .find() 就
+	// 整页崩掉——首屏白/黑屏，什么都点不了。
+	out := make([]NamedCount, 0)
 	err := q.Select(column + " as name, count(*) as count").
 		Group(column).
 		Order("count desc").

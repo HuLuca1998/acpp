@@ -37,7 +37,7 @@ export function StatCards({
   ).size
   // 「进行中」取全量口径（state=active），不是当前这几条的和。
   const activeCount =
-    overview?.byState.find((s) => s.name === "active")?.count ?? 0
+    overview?.byState?.find((s) => s.name === "active")?.count ?? 0
   const runningCount = sessions.filter((s) => s.running).length
   const sessionTotal = overview?.sessions ?? 0
   const messageCount = overview?.messages ?? 0
