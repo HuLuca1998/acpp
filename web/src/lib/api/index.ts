@@ -342,6 +342,11 @@ export const api = {
   /** discord 频道工作区（adr-016）：配置 + 状态 + 频道绑定，owner 专属。 */
   discord: {
     get: () => request<DiscordInfo>("/discord"),
+    /**
+     * 取回 bot token。换设备时要把同一个 bot 接到新机器上，而 token 只此
+     * 一份——看不到就只能去 Discord 后台重置，那会把现有连接踢下线。
+     */
+    secret: () => request<{ botToken: string }>("/discord/secret"),
     saveConfig: (patch: DiscordConfigPatch) =>
       request<DiscordInfo>("/discord/config", {
         method: "PUT",

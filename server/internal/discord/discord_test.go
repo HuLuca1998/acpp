@@ -763,3 +763,33 @@ func TestAddressesOthers(t *testing.T) {
 		}
 	}
 }
+
+// 契约：Info 里的列表在 JSON 里永远是 `[]` 而不是 `null`，哪怕刚开启、
+// 一个服务器都没连上。
+//
+// 这条被违反过：status.guilds 用 append([]Guild(nil), ...) 拷贝，空的时候
+// 就是 nil。前端按契约（types/discord.ts 声明的是数组）直接读
+// `status.guilds.length`，拿到 null 是 TypeError，React 整棵树挂掉——用户
+// 保存完 token 一开启，整个窗口变成纯黑，没有任何报错提示。而「刚开启还
+// 没连上」正是必经之路，不是边角情况。
+func TestService_Info_ListsAreNeverNull(t *testing.T) {
+	svc, err := New(filepath.Join(t.TempDir(), "discord.json"), Deps{})
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	raw, err := json.Marshal(svc.Info(context.Background()))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	body := string(raw)
+	for _, field := range []string{`"guilds":[]`, `"bindings":[]`, `"catalog":[]`} {
+		if !strings.Contains(body, field) {
+			t.Fatalf("fresh Info must serialize %s; got %s", field, body)
+		}
+	}
+	if strings.Contains(body, ":null") {
+		t.Fatalf("fresh Info still carries a null: %s", body)
+	}
+}

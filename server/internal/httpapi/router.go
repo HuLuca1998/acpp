@@ -198,6 +198,7 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	if svcs.Discord != nil {
 		dc := discordHandler{discord: svcs.Discord}
 		api.HandleFunc("GET /api/discord", dc.get)
+		api.HandleFunc("GET /api/discord/secret", dc.secret)
 		api.HandleFunc("PUT /api/discord/config", dc.saveConfig)
 		api.HandleFunc("PUT /api/discord/bindings/{channelId}", dc.updateBinding)
 		api.HandleFunc("DELETE /api/discord/bindings/{channelId}", dc.removeBinding)

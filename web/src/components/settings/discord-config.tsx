@@ -6,6 +6,7 @@ import { CopyIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
+import { PasswordInput } from "@/components/password-input"
 import { copyText } from "@/lib/clipboard"
 import type { DiscordInfo } from "@/types/acp"
 import { DiscordIcon } from "@/components/agent-icon"
@@ -172,7 +173,8 @@ export function DiscordConfigCard() {
               </Alert>
             ) : null}
 
-            {/* token：永不回显，已配置只给标记。 */}
+            {/* token 不随配置下发，但本人要拿得回去：换设备接同一个 bot
+                靠的就是它，重置 token 会把现有连接一起踢下线。 */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <Label htmlFor="discord-token">
@@ -184,18 +186,21 @@ export function DiscordConfigCard() {
                   </Badge>
                 ) : null}
               </div>
-              <Input
+              <PasswordInput
                 id="discord-token"
-                type="password"
-                autoComplete="off"
                 value={token}
-                onChange={(e) => setToken(e.target.value)}
+                onChange={setToken}
                 placeholder={
                   info.config.tokenSet
                     ? t("discord.settings.tokenReplacePlaceholder")
                     : t("discord.settings.tokenPlaceholder")
                 }
                 className="font-mono text-sm"
+                fetchStored={
+                  info.config.tokenSet
+                    ? async () => (await api.discord.secret()).botToken
+                    : undefined
+                }
               />
             </div>
 
@@ -253,13 +258,13 @@ export function DiscordConfigCard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {info.status.guilds.length === 0 ? (
+            {(info.status.guilds ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {t("discord.settings.noGuilds")}
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {info.status.guilds.map((g) => (
+                {(info.status.guilds ?? []).map((g) => (
                   <Badge key={g.id} variant="secondary">
                     {g.name || g.id}
                   </Badge>

@@ -472,11 +472,25 @@ func (s *Service) setDisconnected(err error) {
 
 // Info 汇配置视图 + 状态 + 绑定 + 选项清单（catalog 失败只记日志，
 // 不拖垮整个视图——配置页在 agent 探测未完成时也要能打开）。
+// BotToken 取回已存的 bot token。
+//
+// 与服务器密码、私钥同一条规矩：凭证不随常规接口下发，但**本人要拿得
+// 回去**——换台电脑要把同一个 bot 接上去，token 只此一份，看不到就只能
+// 去 Discord 后台重置，那会把现有连接一起踢下线。owner 专属（整个
+// /api/discord 前缀都是）。
+func (s *Service) BotToken() string {
+	return s.store.config().BotToken
+}
+
 func (s *Service) Info(ctx context.Context) Info {
 	cfg := s.store.config()
 	s.mu.Lock()
 	st := s.st
-	st.Guilds = append([]Guild(nil), s.st.Guilds...)
+	// 拷一份再出锁。**必须是非 nil 的空切片**：JSON 里的列表永远是 `[]`
+	// 而不是 `null`——前端按契约（types/discord.ts 声明的是数组）直接读
+	// `status.guilds.length`，拿到 null 就整页崩成黑屏。刚开启还没连上
+	// gateway 时正好一个服务器都没有，这是必经之路而不是边角情况。
+	st.Guilds = append(make([]Guild, 0, len(s.st.Guilds)), s.st.Guilds...)
 	s.mu.Unlock()
 
 	catalog := []AgentOption{}

@@ -277,6 +277,12 @@ func (h discordHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, h.discord.Info(r.Context()))
 }
 
+// secret 取回 bot token。换设备时要把同一个 bot 接到新机器上，而 token
+// 只此一份——看不到就只能去 Discord 后台重置，那会把现有连接踢下线。
+func (h discordHandler) secret(w http.ResponseWriter, r *http.Request) {
+	writeData(w, http.StatusOK, map[string]string{"botToken": h.discord.BotToken()})
+}
+
 func (h discordHandler) saveConfig(w http.ResponseWriter, r *http.Request) {
 	var in discord.ConfigPatch
 	if err := decodeJSON(r, &in); err != nil {
