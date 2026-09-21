@@ -1,10 +1,13 @@
 package service
 
 import (
+	"archive/zip"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -260,6 +263,213 @@ func (s *SkillService) setEnabled(name string, enabled bool) error {
 	}
 	if err := os.Symlink(filepath.Join("..", "..", "skills", name), link); err != nil {
 		return fmt.Errorf("link skill %s: %w", name, err)
+	}
+	return nil
+}
+
+// skillImportMaxBytes 是导入包解开后的总量上限。技能是给模型读的文本加少量
+// 模板，超过这个量说明包里装的不是技能——挡的是解压炸弹。
+const skillImportMaxBytes int64 = 32 << 20
+
+// ExportZip 把技能打成 zip 写进 w：name 为空导出整个技能库（换设备搬家用），
+// 否则只导出那一个。包内结构就是技能库的结构（`<name>/SKILL.md` + 附属
+// 文件），到新机器上导入即原样落回。
+func (s *SkillService) ExportZip(name string, w io.Writer) error {
+	if err := s.ensure(); err != nil {
+		return err
+	}
+	var names []string
+	if name != "" {
+		if err := s.check(name); err != nil {
+			return err
+		}
+		if _, err := os.Stat(s.skillFile(name)); err != nil {
+			return fmt.Errorf("skill %s: %w", name, ErrNotFound)
+		}
+		names = []string{name}
+	} else {
+		list, err := s.List()
+		if err != nil {
+			return err
+		}
+		for _, sk := range list {
+			names = append(names, sk.Name)
+		}
+		if len(names) == 0 {
+			return fmt.Errorf("%w: the skill library is empty", ErrNotFound)
+		}
+	}
+
+	zw := zip.NewWriter(w)
+	var total int64
+	for _, n := range names {
+		// 复用工作区打包那对函数：跳过点文件与符号链接的规矩在那边，技能
+		// 目录要的正是同一套。
+		if err := zipAddDir(zw, filepath.Join(s.srcDir, n), n, &total); err != nil {
+			return fmt.Errorf("pack skill %s: %w", n, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("finish skill archive: %w", err)
+	}
+	return nil
+}
+
+// SkillImportResult 是导入结果：进来了哪些、跳过了哪些。
+type SkillImportResult struct {
+	Imported []string          `json:"imported"`
+	Skipped  []SkillImportSkip `json:"skipped"`
+}
+
+// SkillImportSkip 是一条没能导入的技能。Reason 是原因码（`exists` /
+// `invalid_name` / `no_doc`），用户可见的文案由前端按语言给。
+type SkillImportSkip struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// ImportZip 从 zip 还原技能到源目录，**一律停用**：技能会注入每条会话，
+// 导入回来的内容得由人在页面上看过再打开。已存在的同名技能跳过而不是覆盖
+// ——那是用户自己的东西，只由用户自己改。名字归一到 kebab-case。
+func (s *SkillService) ImportZip(r io.ReaderAt, size int64) (*SkillImportResult, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("%w: not a zip archive (%s)", ErrInvalid, err)
+	}
+	groups, err := groupSkillEntries(zr.File)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensure(); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res := &SkillImportResult{Imported: []string{}, Skipped: []SkillImportSkip{}}
+	tops := make([]string, 0, len(groups))
+	for top := range groups {
+		tops = append(tops, top)
+	}
+	sort.Strings(tops)
+
+	var total int64
+	for _, top := range tops {
+		entries := groups[top]
+		name := slugSkillName(top)
+		switch {
+		case name == "":
+			res.Skipped = append(res.Skipped, SkillImportSkip{Name: top, Reason: "invalid_name"})
+			continue
+		case !hasSkillDoc(entries):
+			// 没有 SKILL.md 的目录不是技能——可能是包里夹带的别的东西。
+			res.Skipped = append(res.Skipped, SkillImportSkip{Name: name, Reason: "no_doc"})
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(s.srcDir, name)); err == nil {
+			res.Skipped = append(res.Skipped, SkillImportSkip{Name: name, Reason: "exists"})
+			continue
+		}
+		if err := s.writeSkillEntries(name, entries, &total); err != nil {
+			return nil, err
+		}
+		res.Imported = append(res.Imported, name)
+	}
+	return res, nil
+}
+
+// skillZipEntry 是 zip 里一条属于某个技能的文件。
+type skillZipEntry struct {
+	rel  string // 技能目录内的相对路径（'/' 分隔）
+	file *zip.File
+}
+
+// groupSkillEntries 把 zip 条目按顶层目录（= 技能名）分组。
+//
+// 路径一律 path.Clean 后校验：带 `..` 或绝对路径的条目让整包失败，不是跳过
+// ——一条 `../../.ssh/authorized_keys` 就能写到技能库外面去（zip slip），
+// 出现它说明这个包不可信。目录条目、点开头的段与顶层散文件跳过。
+func groupSkillEntries(files []*zip.File) (map[string][]skillZipEntry, error) {
+	groups := map[string][]skillZipEntry{}
+	for _, f := range files {
+		if strings.HasSuffix(f.Name, "/") {
+			continue
+		}
+		// zip 规范里分隔符是 '/'，但 Windows 上打的包见过反斜杠。
+		name := path.Clean(strings.ReplaceAll(f.Name, "\\", "/"))
+		if path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+			return nil, fmt.Errorf("%w: archive escapes the skill library (%s)", ErrInvalid, f.Name)
+		}
+		segs := strings.Split(name, "/")
+		if len(segs) < 2 {
+			continue
+		}
+		stray := false
+		for _, seg := range segs {
+			if seg == "" || strings.HasPrefix(seg, ".") {
+				stray = true
+			}
+		}
+		if stray {
+			continue
+		}
+		groups[segs[0]] = append(groups[segs[0]], skillZipEntry{
+			rel:  path.Join(segs[1:]...),
+			file: f,
+		})
+	}
+	return groups, nil
+}
+
+func hasSkillDoc(entries []skillZipEntry) bool {
+	for _, e := range entries {
+		if e.rel == "SKILL.md" {
+			return true
+		}
+	}
+	return false
+}
+
+// writeSkillEntries 把一个技能的条目解压进源目录，并把 frontmatter 的 name
+// 对齐到目录名。总量边写边算：解压炸弹不能靠「写完再看多大」来防。
+func (s *SkillService) writeSkillEntries(name string, entries []skillZipEntry, total *int64) error {
+	dir := filepath.Join(s.srcDir, name)
+	for _, e := range entries {
+		*total += int64(e.file.UncompressedSize64)
+		if *total > skillImportMaxBytes {
+			return fmt.Errorf("%w: archive is too large (limit %d MiB)", ErrInvalid, skillImportMaxBytes>>20)
+		}
+		target := filepath.Join(dir, filepath.FromSlash(e.rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return fmt.Errorf("create dir for skill %s: %w", name, err)
+		}
+		rc, err := e.file.Open()
+		if err != nil {
+			return fmt.Errorf("read %s from archive: %w", e.file.Name, err)
+		}
+		data, err := io.ReadAll(io.LimitReader(rc, skillImportMaxBytes))
+		rc.Close()
+		if err != nil {
+			return fmt.Errorf("read %s from archive: %w", e.file.Name, err)
+		}
+		if err := os.WriteFile(target, data, 0o644); err != nil {
+			return fmt.Errorf("write skill file %s: %w", target, err)
+		}
+	}
+
+	// 两端都按目录名发现技能，frontmatter 的 name 不一致会让「列表里叫 A、
+	// AI 眼里叫 B」。导入时顺手纠正，不必等用户首次编辑。
+	raw, err := os.ReadFile(s.skillFile(name))
+	if err != nil {
+		return fmt.Errorf("read imported skill %s: %w", name, err)
+	}
+	doc := parseSkillDoc(string(raw))
+	if doc.name == name {
+		return nil
+	}
+	doc.name = name
+	if err := os.WriteFile(s.skillFile(name), []byte(doc.assemble()), 0o644); err != nil {
+		return fmt.Errorf("write imported skill %s: %w", name, err)
 	}
 	return nil
 }

@@ -227,6 +227,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | GET/PUT/DELETE | `/api/skills/{name}` | 技能详情（`body` 为 frontmatter 之后的正文）/ 更新（`{description?, body?, enabled?}` 逐项可选，启停即建/删 skillpack 符号链接）/ 删除（连源目录带分发链接） |
 | GET/PUT/DELETE | `/api/skills/{name}/files/{path...}` | 附属文件（`references/` / `assets/` 等）读 / 写 / 删；文本可编辑、二进制只列出，路径限制在技能目录内 |
 | GET | `/api/skills/{name}/files` | 附属文件清单（带 size / binary / 修改时间） |
+| GET | `/api/skills/export` | 导出技能为 zip（换设备搬家）：整库一个包，`/api/skills/{name}/export` 只导那一个。包内结构就是技能库的结构（`<name>/SKILL.md` + 附属文件） |
+| POST | `/api/skills/import` | 从 zip 导入（multipart `file`）：还原回来的技能**一律停用**，同名的跳过而不覆盖，目录名归一到 kebab-case 并对齐 frontmatter 的 name；带路径穿越的包整包拒绝。回 `{imported:[名字], skipped:[{name, reason}]}`，reason 是 `exists` / `invalid_name` / `no_doc` |
 | GET | `/api/skills/{name}/scripts` | `scripts/` 下脚本的头部元信息（`desc/usage/arg/opt/env` 注释解析成参数控件描述） |
 | POST | `/api/skills/{name}/scripts/run` | 传参试运行脚本（`{path, args, opts, env}`）：以技能目录为 cwd、60s 超时、输出各 256KB 截断，返回退出码与 stdout/stderr |
 | GET/POST/DELETE | `/api/uploads` | 本机文件上传：列出传过的 / 上传（multipart `file`，单个 ≤32 MiB）/ 删除（`?hash=&name=`）。落点是各自身份的家目录（owner 是工作区根，访客是自己的 root）下的 `.acpp-uploads/<内容 hash 前 12 位>/<原名>`——**隔离由路径本身给**，不需要再加一层归属过滤；同内容不重复写盘 |
@@ -583,6 +585,8 @@ SSE 事件的 `kind`：`user_message`、`message_chunk`、`thought_chunk`、`too
 - **SKILL.md 走结构化编辑**：前端只提交 `name` / `description` / `body`，frontmatter 由后端组装并对 description 做 YAML 转义——手写一个冒号就能弄坏的东西不交给手写。name 与 description 之外的 frontmatter 行（第三方技能的 `license` 等）编辑时原样保留。
 - **附属文件**（`references/` / `scripts/` / `assets/`）在详情页就地读写，路径限制在技能目录内，二进制只列出。
 - **脚本头部规范**：`scripts/` 下脚本用注释键值声明元信息（`desc` / `usage` / `arg` / `opt` / `env`），页面据此渲染参数控件并支持传参试运行（以技能目录为 cwd、60s 超时、非零退出码是结果不是错误）。规范细则见 [.claude/skills/skills-manage](.claude/skills/skills-manage/SKILL.md)。
+- **对话里建的技能会被收录**：codex 自带的 `skill-creator` 写死把新技能建到 `$CODEX_HOME/skills`，而那条路径被技能隔离软链到了分发目录——这类技能于是落成 `skillpack/skills/<name>` 真实目录，管理页看不见（列表只遍历源目录）却已对每条会话生效。启动时与技能列表前各**纳管**一遍：真实目录搬回源目录、原位置补回软链，启用状态与附属文件都不变；目录名归一到 kebab-case，与已有技能撞名时加 `-codex` 后缀，绝不覆盖用户自己写的那份。codex 自己铺的 `.system` 系列（它的运行数据）跳过。acpp 自带的 `create-skill` 技能教 AI 直接写 `<dataDir>/skills/<name>/`，那条路本来就在源目录里。
+- **换设备搬家走导出/导入 zip**（见上表两个端点）：技能库不跟着 app 分发，也没有云同步——在旧机器上「导出全部」，到新机器上「导入」。导入的技能一律停用，页面上看过再开；同名的跳过而不是覆盖。
 - 一切变更**只对新会话生效**——agent 在 `session/new` 时读取一次，进行中的会话不重载。
 
 **会话注入(已落地)**:每条会话在 `session/new` 与 `session/load` 都注入技能隔离,差异全部在 adapter 的 `Isolation` 里:

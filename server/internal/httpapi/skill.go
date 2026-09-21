@@ -2,12 +2,19 @@ package httpapi
 
 import (
 	"cmp"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
 
 	"acpp/server/internal/service"
 )
+
+// maxSkillImportBytes 是导入包上传的上限（压缩态）。解开后的总量另有上限，
+// 在 service 那边——两处都要挡：小包也能解出几个 G。
+const maxSkillImportBytes = 64 << 20
 
 type skillHandler struct {
 	skills *service.SkillService
@@ -93,6 +100,56 @@ func (h skillHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, skill)
+}
+
+// export 下发 zip：路径带 name 就是那一个技能，不带就是整个技能库（换设备
+// 搬家用）。
+func (h skillHandler) export(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	filename := "acpp-skills.zip"
+	if name != "" {
+		filename = name + ".zip"
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	setAttachment(w, filename)
+	if err := h.skills.ExportZip(name, w); err != nil {
+		// 开始写 body 之后状态码就改不了了，只能落日志——客户端拿到的是一个
+		// 不完整的 zip。头还没发时正常报错。
+		writeError(w, err)
+		slog.Warn("export skills", "skill", name, "err", err)
+	}
+}
+
+// importZip 从上传的 zip 还原技能。导入的技能一律停用，由用户确认后再开。
+func (h skillHandler) importZip(w http.ResponseWriter, r *http.Request) {
+	// MaxBytesReader 兜在最外层：ParseMultipartForm 的上限只管内存里那部分，
+	// 超出的会落到临时文件，光靠它挡不住一个超大的 body。
+	r.Body = http.MaxBytesReader(w, r.Body, maxSkillImportBytes)
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, fmt.Errorf("%w: upload: %s", service.ErrInvalid, err))
+		return
+	}
+	defer file.Close()
+
+	// zip 要随机读：multipart.File 在小文件时是内存缓冲、大文件时是临时文件，
+	// 两种都能 Seek，所以用它量出大小再从头读。
+	size, err := file.Seek(0, io.SeekEnd)
+	if err != nil {
+		writeError(w, fmt.Errorf("%w: upload is not seekable: %s", service.ErrInvalid, err))
+		return
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		writeError(w, fmt.Errorf("%w: upload is not seekable: %s", service.ErrInvalid, err))
+		return
+	}
+
+	res, err := h.skills.ImportZip(file, size)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, res)
 }
 
 func (h skillHandler) remove(w http.ResponseWriter, r *http.Request) {

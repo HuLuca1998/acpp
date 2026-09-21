@@ -209,6 +209,11 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/skills/{name}", skills.get)
 	api.HandleFunc("PUT /api/skills/{name}", skills.update)
 	api.HandleFunc("DELETE /api/skills/{name}", skills.remove)
+	// 换设备搬家：整库导出成一个 zip，到新机器上导入（导入的一律停用，由
+	// 用户确认后再开）。精确路径优先于 {name}，所以 export 不会被当成技能名。
+	api.HandleFunc("GET /api/skills/export", skills.export)
+	api.HandleFunc("POST /api/skills/import", skills.importZip)
+	api.HandleFunc("GET /api/skills/{name}/export", skills.export)
 	// 技能附属文件（references/ scripts/ 等）：文本文件可读写，二进制只列出。
 	// 脚本头部元信息（desc/usage/arg/opt/env 注释键值）驱动前端控件与试运行。
 	api.HandleFunc("GET /api/skills/{name}/scripts", skills.listScripts)

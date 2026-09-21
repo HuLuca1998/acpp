@@ -4,6 +4,7 @@ import { Link } from "react-router"
 import { toast } from "sonner"
 
 import { Hint } from "@/components/hint"
+import { SkillTransfer } from "@/components/skills/skill-transfer"
 import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { usePagedData } from "@/hooks/use-paged-data"
@@ -250,10 +251,13 @@ export function Skills() {
         }
         fetching={fetching}
         actions={
-          <Button size="sm" render={<Link to="/skills/new" />}>
-            <PlusIcon data-icon="inline-start" />
-            {t("skills.add")}
-          </Button>
+          <>
+            <Button size="sm" render={<Link to="/skills/new" />}>
+              <PlusIcon data-icon="inline-start" />
+              {t("skills.add")}
+            </Button>
+            <SkillTransfer onImported={reload} />
+          </>
         }
         onReload={reload}
         onPage={setPage}

@@ -33,7 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Hint } from "@/components/hint"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronLeftIcon, PuzzleIcon } from "lucide-react"
+import { ChevronLeftIcon, DownloadIcon, PuzzleIcon } from "lucide-react"
 
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
@@ -182,6 +182,16 @@ export function SkillDetail() {
             </Hint>
           )}
           <div className="ml-auto flex items-center gap-3">
+            {!isDraft && (
+              <Button
+                size="sm"
+                variant="outline"
+                render={<a href={api.skills.exportUrl(name)} download />}
+              >
+                <DownloadIcon data-icon="inline-start" />
+                {t("skills.export")}
+              </Button>
+            )}
             {isDraft
               ? draftName !== "" &&
                 !NAME_RE.test(draftName) && (

@@ -36,17 +36,7 @@ import type {
   SessionOutline,
   SessionSettings,
   SettingsPatch,
-  Skill,
-  SkillCreateInput,
-  SkillDetail,
-  SkillFile,
-  SkillFileContent,
-  SkillScript,
-  SkillScriptRunInput,
   TableView,
-  SkillScriptRunResult,
-  SkillUpdateInput,
-  SkillUsage,
   Tenant,
   TerminalInfo,
   TreeListing,
@@ -312,6 +302,7 @@ export function workspaceScopeApi(prefix: string, draftCwd?: string) {
 export type WorkspaceScopeApi = ReturnType<typeof workspaceScopeApi>
 
 import { connectionsApi } from "./connections"
+import { skillsApi } from "./skills"
 import { usageApi } from "./usage"
 
 export const api = {
@@ -582,48 +573,6 @@ export const api = {
     ...workspaceScopeApi("/sessions"),
   },
 
-  skills: {
-    /** enabled 用 "1" / "0" 三态，不传不过滤（pageQuery 会把空串丢掉）。 */
-    list: (params?: Partial<PageQuery> & { q?: string; enabled?: string }) =>
-      request<Paged<Skill>>(`/skills${pageQuery(params)}`),
-    get: (name: string) => request<SkillDetail>(`/skills/${name}`),
-    create: (input: SkillCreateInput) =>
-      request<SkillDetail>("/skills", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    update: (name: string, input: SkillUpdateInput) =>
-      request<SkillDetail>(`/skills/${name}`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
-    remove: (name: string) =>
-      request<{ deleted: boolean }>(`/skills/${name}`, { method: "DELETE" }),
-
-    files: (name: string) => request<Paged<SkillFile>>(`/skills/${name}/files`),
-    file: (name: string, path: string) =>
-      request<SkillFileContent>(`/skills/${name}/files/${path}`),
-    putFile: (name: string, path: string, content: string) =>
-      request<SkillFile>(`/skills/${name}/files/${path}`, {
-        method: "PUT",
-        body: JSON.stringify({ content }),
-      }),
-    removeFile: (name: string, path: string) =>
-      request<{ deleted: boolean }>(`/skills/${name}/files/${path}`, {
-        method: "DELETE",
-      }),
-
-    usage: () => request<Paged<SkillUsage>>("/skills/usage"),
-
-    scripts: (name: string) =>
-      request<Paged<SkillScript>>(`/skills/${name}/scripts`),
-    runScript: (name: string, input: SkillScriptRunInput) =>
-      request<SkillScriptRunResult>(`/skills/${name}/scripts/run`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-  },
-
   /** 身份（adr-007）。凭证是 HttpOnly cookie，请求不用手动带。 */
   auth: {
     /**
@@ -750,6 +699,7 @@ export const api = {
   },
 
   ...connectionsApi,
+  ...skillsApi,
   ...usageApi,
 
   /**

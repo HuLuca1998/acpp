@@ -190,6 +190,18 @@ export default {
     deleteTitle: "删除技能",
     deleteBody: "技能目录 {{name}} 将被整个删除，包括附属文件，不可恢复。",
     deleted: "技能已删除",
+    export: "导出",
+    exportAll: "导出全部",
+    import: "导入",
+    imported: "已导入 {{count}} 个技能",
+    importDisabled: "导入的技能默认停用，确认内容后再打开。",
+    importSkipped: "另有 {{count}} 个被跳过。",
+    importNothing: "没有技能被导入",
+    importSkip: {
+      exists: "同名技能已存在，未覆盖",
+      invalid_name: "目录名不合命名规范",
+      no_doc: "目录里没有 SKILL.md",
+    },
     create: {
       nameHint: "kebab-case，创建后不可改名",
       namePlaceholder: "code-review-guide",

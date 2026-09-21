@@ -196,6 +196,19 @@ export default {
     deleteBody:
       "The whole {{name}} directory, including bundled files, will be removed. This cannot be undone.",
     deleted: "Skill deleted",
+    export: "Export",
+    exportAll: "Export all",
+    import: "Import",
+    imported: "Imported {{count}} skill(s)",
+    importDisabled:
+      "Imported skills start disabled — review them, then turn them on.",
+    importSkipped: "{{count}} more were skipped.",
+    importNothing: "Nothing was imported",
+    importSkip: {
+      exists: "a skill with that name already exists; not overwritten",
+      invalid_name: "the directory name is not a valid skill name",
+      no_doc: "no SKILL.md in the directory",
+    },
     create: {
       nameHint: "kebab-case; cannot be renamed later",
       namePlaceholder: "code-review-guide",

@@ -577,6 +577,12 @@ export interface SkillUpdateInput {
   enabled?: boolean
 }
 
+/** 导入结果：进来了哪些、跳过了哪些（reason 是原因码，文案由前端给）。 */
+export interface SkillImportResult {
+  imported: string[]
+  skipped: { name: string; reason: "exists" | "invalid_name" | "no_doc" }[]
+}
+
 export interface SkillFile {
   path: string
   size: number
