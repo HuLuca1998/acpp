@@ -71,6 +71,9 @@ type SkillUpdateInput struct {
 // skillNameRe 同时是命名规范与路径安全闸：不匹配的一律拒绝，杜绝穿越。
 var skillNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
+// dashRunRe 压缩归一化后留下的连续连字符。
+var dashRunRe = regexp.MustCompile(`-+`)
+
 // ensure 幂等搭好目录骨架。plugin.json 的 name 决定两端技能的显示前缀
 // （acpp:<name>）；.agents/skills 链接是 codex extraRoots 的固定发现入口。
 func (s *SkillService) ensure() error {
@@ -98,6 +101,11 @@ func (s *SkillService) ensure() error {
 func (s *SkillService) List() ([]Skill, error) {
 	if err := s.ensure(); err != nil {
 		return nil, err
+	}
+	// codex 侧建的技能落在分发目录里（见 AdoptStrays），列表前先纳管一遍，
+	// 否则它们只对会话生效、在页面上永远看不见。收养失败不该挡住列表。
+	if err := s.AdoptStrays(); err != nil {
+		slog.Warn("adopt stray skills", "err", err)
 	}
 	entries, err := os.ReadDir(s.srcDir)
 	if err != nil {
@@ -254,6 +262,91 @@ func (s *SkillService) setEnabled(name string, enabled bool) error {
 		return fmt.Errorf("link skill %s: %w", name, err)
 	}
 	return nil
+}
+
+// AdoptStrays 把分发目录里的游离技能搬回源目录，再建回启用链接。
+//
+// 起因：codex 自带的 skill-creator 写死把新技能建到 $CODEX_HOME/skills，
+// 而技能隔离把那条路径软链到了 skillpack/skills——codex 会话里建的技能
+// 于是落成分发目录下的真实目录：管理页看不见（列表只遍历源目录），却对
+// 每条会话都已经生效。搬回源目录后页面可编辑可删，启用状态用链接保留：
+// 它此前住在分发目录里，本就等于启用。
+//
+// 点开头的项跳过——那是 codex 自己铺的系统技能（.system）与标记文件，
+// 属于它的运行数据，不是用户技能。
+func (s *SkillService) AdoptStrays() error {
+	if err := s.ensure(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	packSkills := filepath.Join(s.packDir, "skills")
+	entries, err := os.ReadDir(packSkills)
+	if err != nil {
+		return fmt.Errorf("scan skillpack: %w", err)
+	}
+	for _, e := range entries {
+		// 符号链接是正常的启用状态（ReadDir 不跟随，链接的 IsDir 为假）。
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		name := s.freeSkillName(slugSkillName(e.Name()))
+		if name == "" {
+			slog.Warn("stray skill not adoptable", "dir", e.Name())
+			continue
+		}
+		if err := os.Rename(filepath.Join(packSkills, e.Name()), filepath.Join(s.srcDir, name)); err != nil {
+			return fmt.Errorf("adopt stray skill %s: %w", e.Name(), err)
+		}
+		// 搬走后原位置空出来，补回链接，注入面对 agent 不中断。
+		if err := s.setEnabled(name, true); err != nil {
+			return err
+		}
+		slog.Info("adopted stray skill", "dir", e.Name(), "name", name)
+	}
+	return nil
+}
+
+// slugSkillName 把外部来源的目录名归一到技能命名规范（kebab-case）：大写
+// 转小写，下划线、空格、点转连字符，其余字符丢弃。归一不出合法名字时返回
+// 空串——名字就是路径，不能凑。
+func slugSkillName(raw string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(raw) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-', r == '_', r == ' ', r == '.':
+			b.WriteByte('-')
+		}
+	}
+	slug := strings.Trim(dashRunRe.ReplaceAllString(b.String(), "-"), "-")
+	if !skillNameRe.MatchString(slug) {
+		return ""
+	}
+	return slug
+}
+
+// freeSkillName 在源目录里找一个没被占用的名字。同名技能已存在时加 -codex
+// 后缀（游离技能只会来自 codex 侧），仍冲突则续加序号——绝不覆盖用户已有
+// 的技能。实在找不到返回空串，由调用方跳过。
+func (s *SkillService) freeSkillName(name string) string {
+	if name == "" {
+		return ""
+	}
+	candidate := name
+	for i := 0; i < 20; i++ {
+		if _, err := os.Lstat(filepath.Join(s.srcDir, candidate)); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+		if i == 0 {
+			candidate = name + "-codex"
+			continue
+		}
+		candidate = fmt.Sprintf("%s-codex-%d", name, i+1)
+	}
+	return ""
 }
 
 // read 尽力解析一个技能目录：frontmatter 坏了也要出现在列表里让用户修，

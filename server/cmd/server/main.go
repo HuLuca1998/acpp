@@ -93,6 +93,13 @@ func run() error {
 	agentService := service.NewAgentService(gdb)
 	sessionService := service.NewSessionService(gdb)
 	skillUsage := service.NewSkillUsageService(gdb, cfg.DataDir)
+	skillService := service.NewSkillService(cfg.DataDir, skillUsage)
+	// codex 自带的 skill-creator 把新技能建到 $CODEX_HOME/skills，那条路径
+	// 被技能隔离软链到了分发目录——启动时纳管一遍，这类技能在页面上才看得见
+	// （技能列表也会兜一次，见 SkillService.AdoptStrays）。
+	if err := skillService.AdoptStrays(); err != nil {
+		slog.Warn("adopt stray skills", "err", err)
+	}
 	usageLedger := usage.NewLedger(gdb, transcripts)
 	// 折算用的单价表（没配过就是空表，那时没有实报费用的轮子如实落「未计价」）。
 	usageLedger.LoadPrices()
@@ -325,7 +332,7 @@ func run() error {
 		Ask:         ask.NewService(agentService, sessionService, chatService, 0),
 		Terminals:   terminalService,
 		System:      system.NewService(gdb, cfg),
-		Skills:      service.NewSkillService(cfg.DataDir, skillUsage),
+		Skills:      skillService,
 		SkillUsage:  skillUsage,
 		Notices:     noticeHub,
 		Update:      updateService,
