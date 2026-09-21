@@ -14,6 +14,7 @@ import {
 import { api } from "@/lib/api"
 import type { Server } from "@/types/acp"
 import { Hint } from "@/components/hint"
+import { ConnectionTransfer } from "@/components/connection-transfer"
 import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { authLabelKey } from "@/components/servers/auth-label"
@@ -126,10 +127,13 @@ export function Servers() {
         }
         fetching={fetching}
         actions={
-          <Button size="sm" onClick={() => openEdit(null)}>
-            <PlusIcon data-icon="inline-start" />
-            {t("server.add")}
-          </Button>
+          <>
+            <Button size="sm" onClick={() => openEdit(null)}>
+              <PlusIcon data-icon="inline-start" />
+              {t("server.add")}
+            </Button>
+            <ConnectionTransfer onImported={reload} />
+          </>
         }
         onReload={reload}
         onPage={setPage}

@@ -21,6 +21,7 @@
 | fswatch | 工作目录的文件变动监视：递归 watch（排除 .git / node_modules 一类产物与自留地）、成串事件合帧成一声「变了」、按目录共用监视器的 Hub。树太大即放弃（ErrTooManyDirs），调用方降级。不 import 本项目其他包 | 叶子 |
 | titler | 会话标题生成：把首句派生的标题换成本机小模型（ollama）给的概括。两端 agent 的自动标题都长在各自 CLI 层，ACP 通道取不到，所以由本项目自己算。不 import 本项目其他包 | 叶子 |
 | schedule | 定时任务的调度核心：任务与运行记录的单文件存储、cron 表达式解析（robfig/cron 的 parser，5 段 + IANA 时区）、整分钟扫描、同任务不重入、失败退避与自动停用、一次性任务。不知道任务怎么跑（Runner 注入）也不知道属于谁（Scope 不透明）。不 import 本项目其他包 | 叶子 |
+| transfer | 连接配置的换设备搬家：服务器（SSH 跳板与观察目标）+ 数据源（MySQL 连接）导出成 jsonl、再导回来。**不含凭证**（model 上就打着 `json:"-"`），跳板机按名字引用而不是 id（id 换台机器必然对不上）。编排 remote 与 datasource，不碰 db | 业务 |
 | stream | SSE 事件形状（Event）与广播器（Broker）：多订阅者、轮内重放、慢订阅丢弃。会话流（service）用 | 叶子 |
 | mcp | 我方 MCP server 的协议外壳：JSON-RPC 信封、工具声明与分发（initialize/ping/tools.list/tools.call），外加非会话调用方的回连凭证 PeerTokens（datasource/report 共用）。业务包提供工具集，协议外壳与之解耦 | 叶子 |
 | webshot | 页面 → 整页 PNG：驱动本机 Chrome（headless + 自带的 mini CDP 客户端），discord 报告长图用。找不到 Chrome 由调用方降级 | 叶子 |

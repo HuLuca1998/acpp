@@ -266,6 +266,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用。**turn 进行中也能改**：界面在轮里只放开权限档与思考深度（前者是就地管住 agent 的唯一手段，后者给下一轮预约），模型/plan/fast 锁到轮末。生效时机两端不同——权限档 claude 立刻对本轮生效、codex 要等下一轮（档位是轮开始时的快照），思考深度两端一律下一轮；控件的悬停说明照实写明 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消）。卡片挂起最长 **30 分钟**（等真人点选的反向调用统一这个时限，含交互式提问；机器应答的 fs 读写仍是 1 分钟），超时按 cancelled 回给 agent，那一步工具调用随即失败 |
 | GET/POST | `/api/servers` | 服务器列表（`?q=`名称或主机关键词）/ 新建（`{name, host, port, user, auth, password?, keyPath?, passphrase?, note?}`；凭证永不下发，响应只给 `hasPassword` / `hasPassphrase` 标志位） |
+| GET | `/api/connections/export` | 连接配置的换设备搬家：服务器 + 数据源导出成 jsonl（一行一条，`kind` 区分）。**不含凭证**——密码与私钥口令在本项目永不出 API，搬家也不破例；跳板机按**名字**引用而不是 id（id 是本机自增的，换台机器必然对不上） |
+| POST | `/api/connections/import` | 从 jsonl 导入（multipart `file`）：同名的跳过而不覆盖，引用了不存在跳板机的数据源跳过并说明，坏行只跳过自己。回 `{imported, skipped:[{name,reason}], needSecret}`——`needSecret` 是还缺密码、连不通的那些 |
 | GET/PUT/DELETE | `/api/servers/{id}` | 服务器详情 / 更新（凭证留空=不改） / 删除（被数据源当跳板机用着的不让删） |
 | POST | `/api/servers/probe` | 测一份还没保存的配置（新建对话框的按钮） |
 | POST | `/api/servers/{id}/test` | 测一条已存记录；请求体带表单内容则先合并再测，传 `{}` 表示就测这条 |

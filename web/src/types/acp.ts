@@ -577,6 +577,19 @@ export interface SkillUpdateInput {
   enabled?: boolean
 }
 
+/**
+ * 连接配置（服务器 + 数据源）的导入结果。needSecret 列出还缺凭证的条目
+ * ——导出不带密码，补上之前这些连接连不通。
+ */
+export interface ConnectionImportResult {
+  imported: string[]
+  skipped: {
+    name: string
+    reason: "exists" | "invalid" | "unknown_kind" | "unknown_server"
+  }[]
+  needSecret: string[]
+}
+
 /** 导入结果：进来了哪些、跳过了哪些（reason 是原因码，文案由前端给）。 */
 export interface SkillImportResult {
   imported: string[]

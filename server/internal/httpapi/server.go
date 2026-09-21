@@ -2,17 +2,56 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
 	"acpp/server/internal/model"
 	"acpp/server/internal/remote"
+	"acpp/server/internal/service"
+	"acpp/server/internal/transfer"
 )
+
+// maxConfigImportBytes 是连接配置导入的上限。一条记录几百字节，这个量级
+// 足够几千条，超了就不是我们导出的文件。
+const maxConfigImportBytes = 8 << 20
 
 // serverHandler 是远程服务器的管理面（owner 专属，前缀已在 isOwnerOnly
 // 覆盖——这些记录里躺着生产机的 SSH 凭证）。
 type serverHandler struct {
 	servers *remote.Service
+	// transfer 是连接配置（服务器 + 数据源）的搬家面。两张表一起走：数据源
+	// 的跳板机就在服务器表里，分开导会在新机器上接不回去。
+	transfer *transfer.Service
+}
+
+// exportConfig 下发 jsonl：服务器 + 数据源，**不含凭证**（见 transfer 包）。
+func (h serverHandler) exportConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	setAttachment(w, "acpp-connections.jsonl")
+	if err := h.transfer.Export(r.Context(), w); err != nil {
+		// 开始写 body 之后状态码改不了了，只能落日志——客户端会拿到一份
+		// 不完整的文件。头还没发时正常报错。
+		writeError(w, err)
+	}
+}
+
+// importConfig 从 jsonl 还原连接配置。同名的跳过而不覆盖，凭证由人补。
+func (h serverHandler) importConfig(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigImportBytes)
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, fmt.Errorf("%w: upload: %s", service.ErrInvalid, err))
+		return
+	}
+	defer file.Close()
+
+	res, err := h.transfer.Import(r.Context(), file)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, res)
 }
 
 // list 不分页：服务器是个位数量级的配置，翻页只会让前端多一层状态。

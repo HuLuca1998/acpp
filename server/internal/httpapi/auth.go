@@ -165,6 +165,9 @@ func isOwnerOnly(r *http.Request) bool {
 		strings.HasPrefix(path, "/api/ask"),
 		strings.HasPrefix(path, "/api/system"):
 		return true
+	case strings.HasPrefix(path, "/api/connections"):
+		// 连接配置的搬家面：导出的是生产机与数据库的连法，读写都只给 owner。
+		return true
 	case strings.HasPrefix(path, "/api/skills"),
 		strings.HasPrefix(path, "/api/agents"),
 		// 用量报表对租户开放，但范围由 Scope 收在查询条件里（只看得到

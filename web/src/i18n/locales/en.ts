@@ -171,6 +171,22 @@ export default {
   db: enDb,
   server: enServer,
   discord: enDiscord,
+  connections: {
+    export: "Export config",
+    import: "Import config",
+    imported: "Imported {{count}} connection(s)",
+    needSecret:
+      "{{count}} of them still need a password before they can connect (exports carry no credentials).",
+    importSkipped: "{{count}} more were skipped.",
+    importNothing: "Nothing was imported",
+    importSkip: {
+      exists: "a config with that name already exists; not overwritten",
+      invalid: "that line holds no readable config",
+      unknown_kind: "unrecognized record type",
+      unknown_server:
+        "its jump host is neither on this machine nor in the file",
+    },
+  },
   skills: {
     title: "Skills",
     description:

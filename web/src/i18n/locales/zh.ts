@@ -169,6 +169,20 @@ export default {
   db: zhDb,
   server: zhServer,
   discord: zhDiscord,
+  connections: {
+    export: "导出配置",
+    import: "导入配置",
+    imported: "已导入 {{count}} 条连接配置",
+    needSecret: "其中 {{count}} 条需要补密码才能连通（导出不含凭证）。",
+    importSkipped: "另有 {{count}} 条被跳过。",
+    importNothing: "没有配置被导入",
+    importSkip: {
+      exists: "同名配置已存在，未覆盖",
+      invalid: "这一行读不出有效配置",
+      unknown_kind: "认不出的记录类型",
+      unknown_server: "它依赖的跳板机不在本机也不在这份文件里",
+    },
+  },
   skills: {
     title: "技能",
     description:

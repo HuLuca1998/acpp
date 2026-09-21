@@ -14,14 +14,39 @@ import type {
   DbTableDetail,
   Paged,
   PageQuery,
+  ConnectionImportResult,
   Server,
   ServerInput,
   SqlExecResult,
 } from "@/types/acp"
 
-import { pageQuery, request } from "./core"
+import { ApiError, BASE, pageQuery, request } from "./core"
 
 export const connectionsApi = {
+  /**
+   * 连接配置的换设备搬家：服务器与数据源一起走（数据源的跳板机就在服务器
+   * 表里，分开搬会在新机器上接不回去）。导出的 jsonl **不含凭证**。
+   */
+  connections: {
+    /** 导出地址。交给浏览器原生下载：带 cookie、不占内存。 */
+    exportUrl: () => `${BASE}/connections/export`,
+    importJsonl: async (file: File) => {
+      const body = new FormData()
+      body.append("file", file)
+      // 不设 Content-Type：multipart 的 boundary 得让浏览器自己填。
+      const res = await fetch(`${BASE}/connections/import`, {
+        method: "POST",
+        body,
+      })
+      const json = (await res.json()) as {
+        data?: ConnectionImportResult
+        error?: string
+      }
+      if (!res.ok) throw new ApiError(res.status, json.error ?? res.statusText)
+      return json.data as ConnectionImportResult
+    },
+  },
+
   /**
    * 远程服务器（adr-019）。owner 专属：这些记录里躺着生产机的 SSH 凭证。
    * 它同时是数据源的拨号跳板与 AI 只读观察的目标——两处用的是同一份配置。

@@ -23,6 +23,7 @@ import (
 	"acpp/server/internal/stream"
 	"acpp/server/internal/system"
 	"acpp/server/internal/titler"
+	"acpp/server/internal/transfer"
 	"acpp/server/internal/usage"
 )
 
@@ -336,7 +337,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	// 数据库数据源：管理面是 owner 专属（isOwnerOnly 按前缀覆盖），
 	// 会话面按 cwd 所属项目过滤——界面能看到的范围与 AI 能操作的范围
 	// 是同一个（datasource.Service.ForCwd 是唯一执行点）。
-	servers := serverHandler{servers: svcs.Servers}
+	servers := serverHandler{servers: svcs.Servers, transfer: transfer.New(svcs.Servers, svcs.DataSources)}
+	// 连接配置的换设备搬家（服务器 + 数据源一起走，不含凭证）。精确路径
+	// 优先于 {id}，所以 export 不会被当成服务器 id。
+	api.HandleFunc("GET /api/connections/export", servers.exportConfig)
+	api.HandleFunc("POST /api/connections/import", servers.importConfig)
+
 	api.HandleFunc("GET /api/servers", servers.list)
 	api.HandleFunc("POST /api/servers", servers.create)
 	api.HandleFunc("POST /api/servers/probe", servers.probe)

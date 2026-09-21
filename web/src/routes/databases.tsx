@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import { toast } from "sonner"
 
 import { Hint } from "@/components/hint"
+import { ConnectionTransfer } from "@/components/connection-transfer"
 import { ListPageHeader } from "@/components/list-page-header"
 import { ListPageStates } from "@/components/list-page-states"
 import { DataSourceDialog } from "@/components/db/datasource-dialog"
@@ -227,10 +228,13 @@ export function Databases() {
         }
         fetching={fetching}
         actions={
-          <Button size="sm" onClick={() => openEdit(null)}>
-            <PlusIcon data-icon="inline-start" />
-            {t("db.add")}
-          </Button>
+          <>
+            <Button size="sm" onClick={() => openEdit(null)}>
+              <PlusIcon data-icon="inline-start" />
+              {t("db.add")}
+            </Button>
+            <ConnectionTransfer onImported={reload} />
+          </>
         }
         onReload={reload}
         onPage={setPage}
