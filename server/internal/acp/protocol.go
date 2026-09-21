@@ -35,7 +35,39 @@ func (e *rpcError) Error() string {
 	if e == nil {
 		return ""
 	}
+	// 带上 data 里的细节。agent 的 message 常常只有一句 "Internal error"，
+	// 真正能指导用户的那句（claude 的 "Unable to validate model: ..."）全在
+	// data 里——丢掉它，界面上就只剩「内部错误」，谁也不知道该去改什么。
+	if detail := errorDetail(e.Data); detail != "" {
+		return e.Message + ": " + detail
+	}
 	return e.Message
+}
+
+// maxErrorDetail 是带进错误文本的 data 长度上限。错误会落进 agent 记录的
+// lastError（1024 字节）与日志，留够一句话就行。
+const maxErrorDetail = 400
+
+// errorDetail 从 JSON-RPC 错误的 data 里挑出人能读的那句话：claude 放在
+// {"details": ...}，别的 runtime 形状不定——认不出就把 data 原样带上，
+// 总比一句「内部错误」强。
+func errorDetail(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var obj struct {
+		Details string `json:"details"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		if obj.Details != "" {
+			return truncate(obj.Details, maxErrorDetail)
+		}
+		if obj.Message != "" {
+			return truncate(obj.Message, maxErrorDetail)
+		}
+	}
+	return truncate(string(raw), maxErrorDetail)
 }
 
 // ErrAuthRequired 表示 agent 报了 -32000（Authentication required）：
