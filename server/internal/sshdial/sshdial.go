@@ -46,7 +46,10 @@ type Config struct {
 	User     string
 	Auth     string // password / key / both，空按 password
 	Password string
-	// KeyPath 支持 `~` 展开。key/both 档下留空表示走 ssh-agent——
+	// KeyData 是私钥 PEM 内容。优先于 KeyPath——私钥库里选中的那把是明确
+	// 的选择，路径是历史配法。
+	KeyData string
+	// KeyPath 支持 `~` 展开。KeyData 与 KeyPath 都留空表示走 ssh-agent——
 	// 那是把 `ssh` 命令能连上的场景原样搬过来，不逼用户再填一遍路径。
 	KeyPath    string
 	Passphrase string
@@ -132,11 +135,11 @@ func authMethods(cfg Config) ([]ssh.AuthMethod, error) {
 	}
 
 	if mode == AuthKey || mode == AuthBoth {
-		if path := strings.TrimSpace(cfg.KeyPath); path != "" {
-			raw, err := os.ReadFile(ExpandHome(path))
-			if err != nil {
-				return nil, fmt.Errorf("%w: 读私钥失败: %v", ErrInvalid, err)
-			}
+		raw, err := privateKeyBytes(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) > 0 {
 			var signer ssh.Signer
 			if cfg.Passphrase != "" {
 				signer, err = ssh.ParsePrivateKeyWithPassphrase(raw, []byte(cfg.Passphrase))
@@ -154,7 +157,7 @@ func authMethods(cfg Config) ([]ssh.AuthMethod, error) {
 			}
 			auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(conn).Signers))
 		} else {
-			return nil, fmt.Errorf("%w: 公钥验证需要填私钥路径（或让 ssh-agent 跑起来）", ErrInvalid)
+			return nil, fmt.Errorf("%w: 公钥验证需要选一把私钥或填私钥路径（或让 ssh-agent 跑起来）", ErrInvalid)
 		}
 	}
 
@@ -165,6 +168,23 @@ func authMethods(cfg Config) ([]ssh.AuthMethod, error) {
 		auths = append(auths, ssh.Password(cfg.Password))
 	}
 	return auths, nil
+}
+
+// privateKeyBytes 取私钥内容：库里选中的那把优先，其次是本机路径，都没有
+// 就返回空（调用方退到 ssh-agent）。
+func privateKeyBytes(cfg Config) ([]byte, error) {
+	if data := strings.TrimSpace(cfg.KeyData); data != "" {
+		return []byte(data), nil
+	}
+	path := strings.TrimSpace(cfg.KeyPath)
+	if path == "" {
+		return nil, nil
+	}
+	raw, err := os.ReadFile(ExpandHome(path))
+	if err != nil {
+		return nil, fmt.Errorf("%w: 读私钥失败: %v", ErrInvalid, err)
+	}
+	return raw, nil
 }
 
 // ValidAuth 报告验证方式是不是认得的三档之一（空串不算，调用方自己兜底）。

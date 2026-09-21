@@ -17,6 +17,8 @@ import type {
   ConnectionImportResult,
   Server,
   ServerInput,
+  SSHKey,
+  SSHKeyInput,
   SqlExecResult,
 } from "@/types/acp"
 
@@ -51,6 +53,35 @@ export const connectionsApi = {
    * 远程服务器（adr-019）。owner 专属：这些记录里躺着生产机的 SSH 凭证。
    * 它同时是数据源的拨号跳板与 AI 只读观察的目标——两处用的是同一份配置。
    */
+  /**
+   * 私钥库：一把钥匙开好几台机器是常态，所以私钥独立成表、服务器引用它。
+   * owner 专属——这里躺着能登进生产机的东西。
+   */
+  sshKeys: {
+    // 私钥是个位数量级的配置，后端一次返回全部；分页参数照发不误，
+    // 列表页的协议对所有端点是同一套。
+    list: (params?: Partial<PageQuery> & { q?: string }) =>
+      request<Paged<SSHKey>>(`/ssh-keys${pageQuery(params)}`),
+    get: (id: number) => request<SSHKey>(`/ssh-keys/${id}`),
+    create: (input: SSHKeyInput) =>
+      request<SSHKey>("/ssh-keys", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    update: (id: number, input: SSHKeyInput) =>
+      request<SSHKey>(`/ssh-keys/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      }),
+    remove: (id: number) =>
+      request<{ deleted: boolean }>(`/ssh-keys/${id}`, { method: "DELETE" }),
+    /** 取回私钥内容：装到别的机器上，或核对是不是那一把。 */
+    secret: (id: number) =>
+      request<{ privateKey: string; passphrase: string }>(
+        `/ssh-keys/${id}/secret`
+      ),
+  },
+
   servers: {
     // 服务器是个位数量级的配置，后端一次返回全部；分页参数照发不误，
     // 好让列表页与别处共用同一个分页 hook（后端忽略它们）。

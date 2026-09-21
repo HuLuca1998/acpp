@@ -343,6 +343,15 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/connections/export", servers.exportConfig)
 	api.HandleFunc("POST /api/connections/import", servers.importConfig)
 
+	// 私钥库（adr-025）：一把钥匙开好几台机器是常态，私钥独立成表、服务器
+	// 引用它。私钥内容入库是为了让连接配置能整套搬到另一台电脑。
+	api.HandleFunc("GET /api/ssh-keys", servers.listKeys)
+	api.HandleFunc("POST /api/ssh-keys", servers.createKey)
+	api.HandleFunc("GET /api/ssh-keys/{id}", servers.getKey)
+	api.HandleFunc("PUT /api/ssh-keys/{id}", servers.updateKey)
+	api.HandleFunc("DELETE /api/ssh-keys/{id}", servers.removeKey)
+	api.HandleFunc("GET /api/ssh-keys/{id}/secret", servers.keySecret)
+
 	api.HandleFunc("GET /api/servers", servers.list)
 	api.HandleFunc("POST /api/servers", servers.create)
 	api.HandleFunc("POST /api/servers/probe", servers.probe)

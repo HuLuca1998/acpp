@@ -1,7 +1,7 @@
 import { enChat } from "./en-chat"
 import { enWorkspace } from "./en-workspace"
 import { enSettings } from "./en-settings"
-import { enServer } from "./en-server"
+import { enServer, enSSHKeys } from "./en-server"
 import { enNotify } from "./en-notify"
 import { enDb } from "./en-db"
 import { enDiscord } from "./en-discord"
@@ -45,6 +45,7 @@ export default {
     sessions: "Sessions",
     databases: "Databases",
     servers: "Servers",
+    sshKeys: "SSH keys",
     tools: "Tools",
     usage: "Usage",
     logs: "Logs",
@@ -170,13 +171,15 @@ export default {
   },
   db: enDb,
   server: enServer,
+  sshKeys: enSSHKeys,
   discord: enDiscord,
   connections: {
     export: "Export config",
+    exportHint: "The export carries passwords and private keys — keep it safe",
     import: "Import config",
     imported: "Imported {{count}} connection(s)",
     needSecret:
-      "{{count}} of them still need a password before they can connect (exports carry no credentials).",
+      "{{count}} still need credentials — no password carried, or they rely on a local key path (switch them to the key library to make it travel).",
     importSkipped: "{{count}} more were skipped.",
     importNothing: "Nothing was imported",
     importSkip: {

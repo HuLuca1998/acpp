@@ -19,7 +19,7 @@ func testService(t *testing.T) (*Service, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.AutoMigrate(&model.Server{}, &model.DataSource{}); err != nil {
+	if err := gdb.AutoMigrate(&model.Server{}, &model.DataSource{}, &model.SSHKey{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return NewService(gdb, nil, "127.0.0.1:48080"), gdb

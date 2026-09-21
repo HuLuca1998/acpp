@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { FolderOpenIcon } from "lucide-react"
 
 import { api } from "@/lib/api"
+import { useAsyncData } from "@/hooks/use-async-data"
 import type { Server, ServerInput, SSHAuth } from "@/types/acp"
 import { Hint } from "@/components/hint"
 import { PasswordInput } from "@/components/password-input"
@@ -18,7 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -100,6 +106,7 @@ function ServerForm({
     // 凭证从不下发，编辑时永远从空开始——留空即「不修改」。预填是例外：
     // 那是用户刚粘进来的 URI 自带的，本来就该原样进表单。
     password: prefill?.password ?? "",
+    keyId: server?.keyId ?? 0,
     keyPath: server?.keyPath ?? prefill?.keyPath ?? "",
     passphrase: prefill?.passphrase ?? "",
     note: server?.note ?? prefill?.note ?? "",
@@ -108,6 +115,9 @@ function ServerForm({
   const [saving, setSaving] = useState(false)
   const [test, setTest] = useState<TestState>({ status: "idle" })
   const [keyPickerOpen, setKeyPickerOpen] = useState(false)
+  // 私钥库：选一把钥匙比填路径可靠——路径只在这台机器上有效，钥匙跟着
+  // 配置走。拉不到清单（比如租户身份）时退回填路径，不挡住保存。
+  const { data: keys } = useAsyncData(() => api.sshKeys.list(), [])
 
   const set = <K extends keyof ServerInput>(key: K, value: ServerInput[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -235,28 +245,57 @@ function ServerForm({
         {form.auth !== "password" ? (
           <>
             <Field>
-              <FieldLabel htmlFor="srv-key">{t("server.keyPath")}</FieldLabel>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="srv-key"
-                  className="flex-1 font-mono"
-                  value={form.keyPath}
-                  placeholder={t("server.keyPathPlaceholder")}
-                  onChange={(e) => set("keyPath", e.target.value)}
-                />
-                <Hint label={t("server.keyBrowse")} align="end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label={t("server.keyBrowse")}
-                    onClick={() => setKeyPickerOpen(true)}
-                  >
-                    <FolderOpenIcon />
-                  </Button>
-                </Hint>
-              </div>
+              <FieldLabel htmlFor="srv-key-id">{t("server.sshKey")}</FieldLabel>
+              <Select
+                value={String(form.keyId ?? 0)}
+                onValueChange={(v) => set("keyId", Number(v))}
+              >
+                <SelectTrigger id="srv-key-id">
+                  <SelectValue>
+                    {(v) =>
+                      String(v) === "0"
+                        ? t("server.sshKeyNone")
+                        : (keys?.items.find((k) => String(k.id) === String(v))
+                            ?.name ?? String(v))
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">{t("server.sshKeyNone")}</SelectItem>
+                  {(keys?.items ?? []).map((key) => (
+                    <SelectItem key={key.id} value={String(key.id)}>
+                      {key.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>{t("server.sshKeyHint")}</FieldDescription>
             </Field>
+            {(form.keyId ?? 0) === 0 ? (
+              <Field>
+                <FieldLabel htmlFor="srv-key">{t("server.keyPath")}</FieldLabel>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="srv-key"
+                    className="flex-1 font-mono"
+                    value={form.keyPath}
+                    placeholder={t("server.keyPathPlaceholder")}
+                    onChange={(e) => set("keyPath", e.target.value)}
+                  />
+                  <Hint label={t("server.keyBrowse")} align="end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label={t("server.keyBrowse")}
+                      onClick={() => setKeyPickerOpen(true)}
+                    >
+                      <FolderOpenIcon />
+                    </Button>
+                  </Hint>
+                </div>
+              </Field>
+            ) : null}
             <Field>
               <FieldLabel htmlFor="srv-passphrase">
                 {t("server.passphrase")}

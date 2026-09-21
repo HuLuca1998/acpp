@@ -165,6 +165,9 @@ func isOwnerOnly(r *http.Request) bool {
 		strings.HasPrefix(path, "/api/ask"),
 		strings.HasPrefix(path, "/api/system"):
 		return true
+	case strings.HasPrefix(path, "/api/ssh-keys"):
+		// 私钥库：读写都只给 owner，这里躺着能登进生产机的东西。
+		return true
 	case strings.HasPrefix(path, "/api/connections"):
 		// 连接配置的搬家面：导出的是生产机与数据库的连法，读写都只给 owner。
 		return true

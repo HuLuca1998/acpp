@@ -30,6 +30,7 @@ const Sessions = page(() => import("@/routes/sessions"), "Sessions")
 const SessionChat = page(() => import("@/routes/session-chat"), "SessionChat")
 const Databases = page(() => import("@/routes/databases"), "Databases")
 const Servers = page(() => import("@/routes/servers"), "Servers")
+const SSHKeys = page(() => import("@/routes/ssh-keys"), "SSHKeys")
 const Tools = page(() => import("@/routes/tools"), "Tools")
 const Discord = page(() => import("@/routes/discord"), "Discord")
 const Jobs = page(() => import("@/routes/jobs"), "Jobs")
@@ -84,6 +85,7 @@ export function App() {
           {/* 数据库连接（adr-008）：按项目 + 环境管理，会话侧只看得到本项目的。 */}
           <Route path="databases" element={<Databases />} />
           <Route path="servers" element={<Servers />} />
+          <Route path="ssh-keys" element={<SSHKeys />} />
           {/* 工具台：我方 MCP server 暴露给 agent 的工具，人工查看与试运行。 */}
           <Route path="tools" element={<Tools />} />
           {/* discord 频道工作区绑定管理（adr-016），与会话体系完全独立。 */}

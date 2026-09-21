@@ -17,7 +17,9 @@ export interface Server {
   port: number
   user: string
   auth: SSHAuth
-  /** 私钥路径；key/both 档下留空表示走 ssh-agent。 */
+  /** 私钥库里那把钥匙的 id（0 = 没选）。推荐配法：私钥内容跟着配置走。 */
+  keyId: number
+  /** 私钥路径（早于私钥库的配法）；两者都空表示走 ssh-agent。 */
   keyPath: string
   /** 用途说明，**会随工具清单给 AI 看**。 */
   note: string
@@ -41,6 +43,8 @@ export interface ServerInput {
   user: string
   auth?: SSHAuth
   password?: string
+  /** 选私钥库里的一把钥匙；0 表示不用库里的。 */
+  keyId?: number
   keyPath?: string
   passphrase?: string
   note?: string
@@ -53,4 +57,33 @@ export interface ServerTest {
   /** 对端的版本横幅，如 `SSH-2.0-OpenSSH_9.6p1`。 */
   version?: string
   error?: string
+}
+
+/**
+ * 私钥库里的一把钥匙。私钥内容与通行短语永不下发（要看走 secret 端点），
+ * 指纹与公钥随列表返回——前者用来认出是哪一把，后者直接复制去装进目标
+ * 机器的 authorized_keys。
+ */
+export interface SSHKey {
+  id: number
+  name: string
+  fingerprint: string
+  publicKey: string
+  note: string
+  hasPassphrase: boolean
+  /** 用这把钥匙的服务器台数，删之前看得见影响谁。 */
+  usedBy: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** 新建/更新私钥的入参。三条路：生成、粘贴内容、从本机文件导入。 */
+export interface SSHKeyInput {
+  name: string
+  note?: string
+  /** 生成一把新的 ed25519（忽略 privateKey / keyPath）。 */
+  generate?: boolean
+  privateKey?: string
+  keyPath?: string
+  passphrase?: string
 }

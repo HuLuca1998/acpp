@@ -25,11 +25,20 @@ type serverHandler struct {
 	transfer *transfer.Service
 }
 
-// exportConfig 下发 jsonl：服务器 + 数据源，**不含凭证**（见 transfer 包）。
+// exportConfig 下发 jsonl：私钥 + 服务器 + 数据源。
+//
+// **默认带凭证**——搬家的目的是到了新机器就能连，少了密码等于没搬。文件名
+// 因此标出 `-secrets`：那份文件等同一串明文凭证，看名字就该知道要收好。
+// `?secrets=0` 导一份不带凭证的（发给别人看配置时用）。
 func (h serverHandler) exportConfig(w http.ResponseWriter, r *http.Request) {
+	secrets := r.URL.Query().Get("secrets") != "0"
+	name := "acpp-connections.jsonl"
+	if secrets {
+		name = "acpp-connections-secrets.jsonl"
+	}
 	w.Header().Set("Content-Type", "application/x-ndjson")
-	setAttachment(w, "acpp-connections.jsonl")
-	if err := h.transfer.Export(r.Context(), w); err != nil {
+	setAttachment(w, name)
+	if err := h.transfer.Export(r.Context(), w, secrets); err != nil {
 		// 开始写 body 之后状态码改不了了，只能落日志——客户端会拿到一份
 		// 不完整的文件。头还没发时正常报错。
 		writeError(w, err)
@@ -182,6 +191,96 @@ func (h serverHandler) secret(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, map[string]string{
 		"password":   srv.Password,
 		"passphrase": srv.Passphrase,
+	})
+}
+
+// ---- 私钥库（owner 专属；这里躺着的是能登进生产机的东西）----
+
+func (h serverHandler) listKeys(w http.ResponseWriter, r *http.Request) {
+	keys, err := h.servers.ListKeys(r.Context(), r.URL.Query().Get("q"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, newPage(keys))
+}
+
+func (h serverHandler) getKey(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	key, err := h.servers.GetKey(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, key)
+}
+
+func (h serverHandler) createKey(w http.ResponseWriter, r *http.Request) {
+	var in remote.KeyInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	key, err := h.servers.CreateKey(r.Context(), in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusCreated, key)
+}
+
+func (h serverHandler) updateKey(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var in remote.KeyInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	key, err := h.servers.UpdateKey(r.Context(), id, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, key)
+}
+
+func (h serverHandler) removeKey(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := h.servers.DeleteKey(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+// keySecret 取回私钥内容与通行短语。与服务器密码同一条规矩：存进来的凭证，
+// 本人要拿得回去——装到别的机器上，或者核对是不是那一把。
+func (h serverHandler) keySecret(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	priv, phrase, err := h.servers.KeySecret(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]string{
+		"privateKey": priv,
+		"passphrase": phrase,
 	})
 }
 

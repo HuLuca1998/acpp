@@ -39,7 +39,7 @@ func newStack(t *testing.T) (*Service, *remote.Service, *datasource.Service) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := gdb.AutoMigrate(&model.Server{}, &model.DataSource{}); err != nil {
+	if err := gdb.AutoMigrate(&model.Server{}, &model.DataSource{}, &model.SSHKey{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	servers := remote.NewService(gdb, nil, "127.0.0.1:48080")
@@ -53,9 +53,17 @@ func ptr[T any](v T) *T { return &v }
 func seed(t *testing.T, servers *remote.Service, sources *datasource.Service) {
 	t.Helper()
 	ctx := context.Background()
+	// 生成一把真钥匙：私钥库是推荐配法，导出要带着它一起走。
+	key, err := servers.CreateKey(ctx, remote.KeyInput{
+		Name: "deploy-key", Generate: true, Note: "部署机通用钥匙",
+	})
+	if err != nil {
+		t.Fatalf("create ssh key: %v", err)
+	}
 	pw := "hunter2"
 	in := jumpHost
 	in.Password = &pw
+	in.KeyID = &key.ID
 	srv, err := servers.Create(ctx, in)
 	if err != nil {
 		t.Fatalf("create server: %v", err)
@@ -73,10 +81,10 @@ func seed(t *testing.T, servers *remote.Service, sources *datasource.Service) {
 	}
 }
 
-func exportLines(t *testing.T, svc *Service) []string {
+func exportLines(t *testing.T, svc *Service, secrets bool) []string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := svc.Export(context.Background(), &buf); err != nil {
+	if err := svc.Export(context.Background(), &buf, secrets); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 	return strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -88,10 +96,10 @@ func TestService_Export_ServersComeBeforeSources(t *testing.T) {
 	svc, servers, sources := newStack(t)
 	seed(t, servers, sources)
 
-	lines := exportLines(t, svc)
+	lines := exportLines(t, svc, true)
 
-	if len(lines) != 3 {
-		t.Fatalf("got %d lines, want 3:\n%s", len(lines), strings.Join(lines, "\n"))
+	if len(lines) != 4 {
+		t.Fatalf("got %d lines, want 4 (key + server + 2 sources):\n%s", len(lines), strings.Join(lines, "\n"))
 	}
 	var kinds []string
 	for _, l := range lines {
@@ -103,30 +111,54 @@ func TestService_Export_ServersComeBeforeSources(t *testing.T) {
 		}
 		kinds = append(kinds, head.Kind)
 	}
-	if kinds[0] != KindServer {
-		t.Fatalf("kinds = %v, want the server first", kinds)
+	if kinds[0] != KindKey {
+		t.Fatalf("kinds = %v, want the ssh key first", kinds)
 	}
-	if kinds[1] != KindSource || kinds[2] != KindSource {
-		t.Fatalf("kinds = %v, want both data sources after it", kinds)
+	if kinds[1] != KindServer {
+		t.Fatalf("kinds = %v, want the server after its key", kinds)
+	}
+	if kinds[2] != KindSource || kinds[3] != KindSource {
+		t.Fatalf("kinds = %v, want both data sources last", kinds)
 	}
 }
 
-// 契约：导出**不含凭证**。密码与私钥口令在这个项目里永不出 API，搬家文件
-// 会被人随手丢进网盘或聊天窗口，更不能带。
-func TestService_Export_CarriesNoSecrets(t *testing.T) {
+// 契约：默认带凭证——搬家的目的是到了新机器就能连，少了密码等于没搬。
+// 私钥内容也在里面，那正是「路径搬不走」的解法。
+func TestService_Export_CarriesSecretsByDefault(t *testing.T) {
 	svc, servers, sources := newStack(t)
 	seed(t, servers, sources)
 
-	body := strings.Join(exportLines(t, svc), "\n")
+	body := strings.Join(exportLines(t, svc, true), "\n")
 
-	for _, secret := range []string{"hunter2", "s3cret", "password", "passphrase"} {
-		if strings.Contains(strings.ToLower(body), strings.ToLower(secret)) {
+	for _, want := range []string{"hunter2", "s3cret", "OPENSSH PRIVATE KEY"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("export is missing %q — it would not be usable on the new machine", want)
+		}
+	}
+	if !strings.Contains(body, "203.0.113.24") || !strings.Contains(body, "reader") {
+		t.Fatalf("export lost the connection facts:\n%s", body)
+	}
+}
+
+// 契约：secrets=false 导一份不带凭证的——发给别人看配置、或只想搬结构时用。
+// 连接事实留着，密码与私钥内容一个不带；指纹照样带，到了新机器能看出该补
+// 哪一把钥匙。
+func TestService_Export_WithoutSecretsOmitsThem(t *testing.T) {
+	svc, servers, sources := newStack(t)
+	seed(t, servers, sources)
+
+	body := strings.Join(exportLines(t, svc, false), "\n")
+
+	for _, secret := range []string{"hunter2", "s3cret", "PRIVATE KEY"} {
+		if strings.Contains(body, secret) {
 			t.Fatalf("export leaked %q:\n%s", secret, body)
 		}
 	}
-	// 但连得到哪儿、用哪个账号要留着，否则搬过去等于没搬。
-	if !strings.Contains(body, "203.0.113.24") || !strings.Contains(body, "reader") {
+	if !strings.Contains(body, "203.0.113.24") {
 		t.Fatalf("export lost the connection facts:\n%s", body)
+	}
+	if !strings.Contains(body, "SHA256:") {
+		t.Fatalf("export should keep the key fingerprint:\n%s", body)
 	}
 }
 
@@ -136,7 +168,7 @@ func TestService_ImportZipRoundTrip_RelinksJumpHostByName(t *testing.T) {
 	src, servers, sources := newStack(t)
 	seed(t, servers, sources)
 	var buf bytes.Buffer
-	if err := src.Export(context.Background(), &buf); err != nil {
+	if err := src.Export(context.Background(), &buf, true); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -153,8 +185,8 @@ func TestService_ImportZipRoundTrip_RelinksJumpHostByName(t *testing.T) {
 		t.Fatalf("import: %v", err)
 	}
 
-	if len(res.Imported) != 3 {
-		t.Fatalf("imported = %v, want 3 records", res.Imported)
+	if len(res.Imported) != 4 {
+		t.Fatalf("imported = %v, want 4 records (key + server + 2 sources)", res.Imported)
 	}
 	list, _, err := dstSources.List(context.Background(), datasource.ListFilter{Keyword: "shop_main"}, 1, 20, "")
 	if err != nil || len(list) != 1 {
@@ -171,18 +203,36 @@ func TestService_ImportZipRoundTrip_RelinksJumpHostByName(t *testing.T) {
 	if jump.Name != "shop-live" {
 		t.Fatalf("tunnel points at %q, want shop-live", jump.Name)
 	}
+	// 私钥也按名字接回去了：这正是「路径搬不走、内容搬得走」的意义。
+	if jump.KeyID == 0 {
+		t.Fatal("imported server lost its ssh key link")
+	}
+	key, err := dstServers.GetKey(context.Background(), jump.KeyID)
+	if err != nil {
+		t.Fatalf("resolve ssh key: %v", err)
+	}
+	if key.Name != "deploy-key" {
+		t.Fatalf("server points at key %q, want deploy-key", key.Name)
+	}
+	priv, _, err := dstServers.KeySecret(context.Background(), jump.KeyID)
+	if err != nil {
+		t.Fatalf("read imported key: %v", err)
+	}
+	if !strings.Contains(priv, "OPENSSH PRIVATE KEY") {
+		t.Fatalf("imported key has no private material:\n%s", priv)
+	}
 	if got.Host != "127.0.0.1" || got.User != "reader" || got.Database != "shop_main" {
 		t.Fatalf("connection facts changed: %+v", got)
 	}
 }
 
-// 契约：导入回来的条目都要补凭证——导出不带密码，不说清楚的话人会以为
+// 契约：用不带凭证的包导入时，needSecret 要说清楚还差哪些——否则人会以为
 // 搬完就能连。
 func TestService_Import_ReportsWhatStillNeedsSecrets(t *testing.T) {
 	src, servers, sources := newStack(t)
 	seed(t, servers, sources)
 	var buf bytes.Buffer
-	if err := src.Export(context.Background(), &buf); err != nil {
+	if err := src.Export(context.Background(), &buf, false); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -193,7 +243,7 @@ func TestService_Import_ReportsWhatStillNeedsSecrets(t *testing.T) {
 	}
 
 	joined := strings.Join(res.NeedSecret, " ")
-	for _, want := range []string{"server:shop-live", "datasource:shop/prod", "datasource:shop/local"} {
+	for _, want := range []string{"sshkey:deploy-key", "datasource:shop/prod", "datasource:shop/local"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("needSecret = %v, missing %s", res.NeedSecret, want)
 		}
@@ -205,7 +255,7 @@ func TestService_Import_SkipsExisting(t *testing.T) {
 	src, servers, sources := newStack(t)
 	seed(t, servers, sources)
 	var buf bytes.Buffer
-	if err := src.Export(context.Background(), &buf); err != nil {
+	if err := src.Export(context.Background(), &buf, true); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -220,8 +270,8 @@ func TestService_Import_SkipsExisting(t *testing.T) {
 	if len(res.Imported) != 0 {
 		t.Fatalf("imported = %v, want nothing", res.Imported)
 	}
-	if len(res.Skipped) != 3 {
-		t.Fatalf("skipped = %+v, want all three", res.Skipped)
+	if len(res.Skipped) != 4 {
+		t.Fatalf("skipped = %+v, want all four", res.Skipped)
 	}
 	for _, s := range res.Skipped {
 		if s.Reason != "exists" {

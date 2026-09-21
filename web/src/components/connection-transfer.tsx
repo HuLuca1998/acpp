@@ -45,12 +45,18 @@ export function ConnectionTransfer({ onImported }: { onImported: () => void }) {
   }
 
   return (
-    <TransferButtons
-      exportUrl={api.connections.exportUrl()}
-      exportLabel={t("connections.export")}
-      importLabel={t("connections.import")}
-      accept=".jsonl,application/x-ndjson,application/json"
-      onPick={handle}
-    />
+    <>
+      <TransferButtons
+        exportUrl={api.connections.exportUrl()}
+        exportLabel={t("connections.export")}
+        importLabel={t("connections.import")}
+        accept=".jsonl,application/x-ndjson,application/json"
+        onPick={handle}
+      />
+      {/* 导出的是明文凭证，按钮旁边就得说清楚——文件名也标了 -secrets。 */}
+      <span className="text-xs text-muted-foreground">
+        {t("connections.exportHint")}
+      </span>
+    </>
   )
 }

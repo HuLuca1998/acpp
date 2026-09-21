@@ -30,8 +30,13 @@ type Server struct {
 	// Password / Passphrase 永不出 API：响应里只给 Has* 布尔位，
 	// 编辑时留空表示不修改。
 	Password string `gorm:"size:512" json:"-"`
-	// KeyPath 是私钥文件路径（不把私钥内容搬进库，权限跟着文件系统走）。
-	// key/both 档下留空则走 ssh-agent。
+	// KeyID 指向私钥库里的一把钥匙（SSHKey）。这是**推荐的配法**：私钥内容
+	// 跟着配置走，换台电脑整套搬过去就能用。
+	KeyID uint `gorm:"index" json:"keyId"`
+	// KeyPath 是私钥文件路径，早于私钥库存在的配法，继续支持：路径只在这台
+	// 机器上有意义，搬不走，但对「就在本机用」的场景最省事。
+	// KeyID 与 KeyPath 都留空时（key/both 档）走 ssh-agent。
+	// 两者都填时以 KeyID 为准——库里那把是明确选的，路径是历史遗留。
 	KeyPath    string `gorm:"size:512" json:"keyPath"`
 	Passphrase string `gorm:"size:512" json:"-"`
 	// Note 是用途说明，**会随工具清单给 AI 看**——「pp-game 生产机，
@@ -41,6 +46,11 @@ type Server struct {
 	Disabled  bool      `gorm:"not null;default:false" json:"disabled"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `gorm:"index" json:"updatedAt"`
+
+	// KeyData 是 KeyID 指向的那把私钥的内容，由读取路径（remote 的 Get /
+	// ByName）填充，**不入库也不出 API**。拨号的两条路——服务器观察与数据源
+	// 隧道——都经过那里，填在一处两边都拿得到。
+	KeyData string `gorm:"-" json:"-"`
 
 	// 以下不入库：给前端表单的「有没有配」标志位——凭证本身不出 API，
 	// 但界面必须能区分「没设」与「设了但看不见」。

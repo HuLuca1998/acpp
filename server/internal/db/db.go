@@ -58,7 +58,7 @@ func Migrate(gdb *gorm.DB) error {
 	// 退役（adr-012）：旧库里已存在的表不动，这里不再创建。
 	if err := gdb.AutoMigrate(&model.Agent{}, &model.Session{}, &model.SkillUsage{},
 		&model.Tenant{}, &model.DataSource{}, &model.MCPCall{}, &model.Server{}, &model.APILog{},
-		&model.GithubWatch{}, &model.TokenUsage{}); err != nil {
+		&model.GithubWatch{}, &model.TokenUsage{}, &model.SSHKey{}); err != nil {
 		return fmt.Errorf("automigrate: %w", err)
 	}
 	return nil

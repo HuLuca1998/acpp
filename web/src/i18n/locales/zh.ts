@@ -1,7 +1,7 @@
 import { zhChat } from "./zh-chat"
 import { zhWorkspace } from "./zh-workspace"
 import { zhSettings } from "./zh-settings"
-import { zhServer } from "./zh-server"
+import { zhServer, zhSSHKeys } from "./zh-server"
 import { zhNotify } from "./zh-notify"
 import { zhDb } from "./zh-db"
 import { zhDiscord } from "./zh-discord"
@@ -45,6 +45,7 @@ export default {
     sessions: "会话",
     databases: "数据库",
     servers: "服务器",
+    sshKeys: "私钥",
     tools: "工具",
     usage: "用量",
     logs: "日志",
@@ -168,12 +169,15 @@ export default {
   },
   db: zhDb,
   server: zhServer,
+  sshKeys: zhSSHKeys,
   discord: zhDiscord,
   connections: {
     export: "导出配置",
+    exportHint: "导出文件含密码与私钥，收好它",
     import: "导入配置",
     imported: "已导入 {{count}} 条连接配置",
-    needSecret: "其中 {{count}} 条需要补密码才能连通（导出不含凭证）。",
+    needSecret:
+      "其中 {{count}} 条还缺凭证：没带密码，或用的是本机私钥路径（改用私钥库就能跟着走）。",
     importSkipped: "另有 {{count}} 条被跳过。",
     importNothing: "没有配置被导入",
     importSkip: {

@@ -30,10 +30,11 @@ import {
   CircleDotIcon,
   DatabaseIcon,
   HardDriveIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   MessagesSquareIcon,
-  ScrollTextIcon,
   PuzzleIcon,
+  ScrollTextIcon,
   WrenchIcon,
 } from "lucide-react"
 
@@ -128,6 +129,11 @@ export function AppSidebar({
               title: t("nav.servers"),
               url: "/servers",
               icon: <HardDriveIcon />,
+            },
+            {
+              title: t("nav.sshKeys"),
+              url: "/ssh-keys",
+              icon: <KeyRoundIcon />,
             },
             { title: t("nav.tools"), url: "/tools", icon: <WrenchIcon /> },
             {

@@ -79,12 +79,15 @@ func mcpBaseURL(addr string) string {
 // Input 是新建/更新的入参。凭证类字段用指针表示「没传就不改」——
 // 密码留空要能表达「保持原样」，而不是「清空」。
 type Input struct {
-	Name       string  `json:"name"`
-	Host       string  `json:"host"`
-	Port       int     `json:"port"`
-	User       string  `json:"user"`
-	Auth       string  `json:"auth"`
-	Password   *string `json:"password"`
+	Name     string  `json:"name"`
+	Host     string  `json:"host"`
+	Port     int     `json:"port"`
+	User     string  `json:"user"`
+	Auth     string  `json:"auth"`
+	Password *string `json:"password"`
+	// KeyID 选私钥库里的一把钥匙（0 = 不用库里的）。推荐配法：私钥内容跟着
+	// 配置走，换台电脑整套搬过去就能用。
+	KeyID      *uint   `json:"keyId"`
 	KeyPath    string  `json:"keyPath"`
 	Passphrase *string `json:"passphrase"`
 	Note       string  `json:"note"`
@@ -172,6 +175,7 @@ func (s *Service) Get(ctx context.Context, id uint) (*model.Server, error) {
 		return nil, fmt.Errorf("get server: %w", err)
 	}
 	decorate(&srv)
+	s.attachKey(ctx, &srv)
 	return &srv, nil
 }
 
@@ -179,6 +183,26 @@ func (s *Service) Get(ctx context.Context, id uint) (*model.Server, error) {
 // 与 Get 的差别只在语义——这条路上的调用方不是人而是拨号逻辑。
 func (s *Service) ServerByID(ctx context.Context, id uint) (*model.Server, error) {
 	return s.Get(ctx, id)
+}
+
+// attachKey 把 KeyID 指向的私钥内容填进记录。拨号路径全经过 Get / ByName，
+// 填在这里两边（服务器观察、数据源隧道）自动拿到，不必各自再查一遍。
+//
+// 钥匙被删了就什么都不填：拨号时会明确报「没有可用的认证方式」，比在这里
+// 抛错好——列表与编辑页不该因为一把钥匙没了就打不开。
+func (s *Service) attachKey(ctx context.Context, srv *model.Server) {
+	if srv == nil || srv.KeyID == 0 {
+		return
+	}
+	var key model.SSHKey
+	if err := s.db.WithContext(ctx).First(&key, srv.KeyID).Error; err != nil {
+		return
+	}
+	srv.KeyData = key.PrivateKey
+	// 服务器自己没填短语时用钥匙自带的——短语本来就属于钥匙。
+	if srv.Passphrase == "" {
+		srv.Passphrase = key.Passphrase
+	}
 }
 
 // ByName 按名字取一台机器（AI 调工具时填的就是名字）。
@@ -192,6 +216,7 @@ func (s *Service) ByName(ctx context.Context, name string) (*model.Server, error
 		return nil, fmt.Errorf("get server by name: %w", err)
 	}
 	decorate(&srv)
+	s.attachKey(ctx, &srv)
 	return &srv, nil
 }
 
@@ -283,6 +308,7 @@ func configOf(srv *model.Server) sshdial.Config {
 		User:       srv.User,
 		Auth:       srv.Auth,
 		Password:   srv.Password,
+		KeyData:    srv.KeyData,
 		KeyPath:    srv.KeyPath,
 		Passphrase: srv.Passphrase,
 	}
@@ -303,6 +329,9 @@ func apply(srv *model.Server, in Input) error {
 	srv.Host = strings.TrimSpace(in.Host)
 	srv.User = strings.TrimSpace(in.User)
 	srv.KeyPath = strings.TrimSpace(in.KeyPath)
+	if in.KeyID != nil {
+		srv.KeyID = *in.KeyID
+	}
 	srv.Note = strings.TrimSpace(in.Note)
 	if a := strings.TrimSpace(in.Auth); a != "" {
 		srv.Auth = a

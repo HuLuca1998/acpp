@@ -1,10 +1,12 @@
 // Package transfer 负责连接配置的换设备搬家：把服务器（SSH 跳板与观察目标）
 // 与数据源（MySQL 连接）两张表导出成 jsonl，再从 jsonl 导回来。
 //
-// **不含凭证**。密码、私钥口令在这个项目里永不出 API（model 上就打着
-// `json:"-"`），搬家也不破这条规矩：导出的是「连到哪儿、用什么账号、走不走
-// 跳板」，到了新机器由人把密码补上。私钥本身也不搬——KeyPath 记的是路径，
-// 文件权限跟着文件系统走。
+// **默认带凭证**（密码、私钥内容与通行短语）：搬家的目的就是到了新机器就能
+// 连，少了密码等于没搬。代价是那份文件等同一串明文凭证——所以导出时文件名
+// 会标出来（`-secrets`），端点也支持 `?secrets=0` 导一份不带凭证的。
+//
+// 这不是新开的口子：owner 本来就能经 `/api/servers/{id}/secret` 取回自己存
+// 的密码，批量导出只是同一条能力的另一种形态，且同样收在 owner 专属前缀里。
 //
 // 选 jsonl 不选 json 数组：一行一条记录，坏掉一行不影响其余，人也能直接用
 // grep 看里面有什么。
@@ -26,6 +28,7 @@ import (
 
 // 记录种类。每行开头的 kind 决定其余字段怎么读。
 const (
+	KindKey    = "sshkey"
 	KindServer = "server"
 	KindSource = "datasource"
 )
@@ -34,17 +37,34 @@ const (
 // 超过说明这不是我们导出的文件。
 const maxLineBytes = 256 << 10
 
+// KeyRecord 是导出的一把私钥。排在服务器之前：服务器按名字引用它。
+type KeyRecord struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	Note string `json:"note,omitempty"`
+	// PrivateKey / Passphrase 只在带凭证导出时有值。
+	PrivateKey string `json:"privateKey,omitempty"`
+	Passphrase string `json:"passphrase,omitempty"`
+	// Fingerprint 即使不带凭证也导出：到了新机器能看出该补哪一把。
+	Fingerprint string `json:"fingerprint,omitempty"`
+}
+
 // ServerRecord 是导出的一台服务器。
 type ServerRecord struct {
-	Kind     string `json:"kind"`
-	Name     string `json:"name"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Auth     string `json:"auth"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
+	User string `json:"user"`
+	Auth string `json:"auth"`
+	// Key 是私钥库里那把钥匙的**名字**（id 换台机器对不上）。
+	Key      string `json:"key,omitempty"`
 	KeyPath  string `json:"keyPath,omitempty"`
 	Note     string `json:"note,omitempty"`
 	Disabled bool   `json:"disabled,omitempty"`
+	// Password / Passphrase 只在带凭证导出时有值。
+	Password   string `json:"password,omitempty"`
+	Passphrase string `json:"passphrase,omitempty"`
 }
 
 // SourceRecord 是导出的一条数据源。
@@ -64,6 +84,8 @@ type SourceRecord struct {
 	Disabled   bool   `json:"disabled,omitempty"`
 	SSHEnabled bool   `json:"sshEnabled,omitempty"`
 	Server     string `json:"server,omitempty"`
+	// Password 只在带凭证导出时有值。
+	Password string `json:"password,omitempty"`
 }
 
 // Result 是导入结果：进来了哪些、跳过了哪些。形状与技能库导入一致，
@@ -71,13 +93,14 @@ type SourceRecord struct {
 type Result struct {
 	Imported []string `json:"imported"`
 	Skipped  []Skip   `json:"skipped"`
-	// NeedSecret 是导入后还缺凭证的条目——导出不带密码，这些连接在补上
-	// 之前连不通。界面据此提醒，省得人以为搬完就能用。
+	// NeedSecret 是导入后还缺凭证的条目。带凭证的包导进来时这里是空的；
+	// 用 `?secrets=0` 导的包才会有内容，界面据此提醒去补密码。
 	NeedSecret []string `json:"needSecret"`
 }
 
 // Skip 是一条没能导入的记录。Reason 是原因码（`exists` / `invalid` /
-// `unknown_kind` / `unknown_server`），用户可见的文案由前端按语言给。
+// `unknown_kind` / `unknown_server` / `no_secret`），用户可见的文案由前端
+// 按语言给。
 type Skip struct {
 	Name   string `json:"name"`
 	Reason string `json:"reason"`
@@ -93,21 +116,47 @@ func New(servers *remote.Service, sources *datasource.Service) *Service {
 	return &Service{servers: servers, sources: sources}
 }
 
-// Export 把两张表写成 jsonl。**服务器在前、数据源在后**：导入是顺序读的，
-// 这样数据源引用的跳板机已经先建好了。
-func (s *Service) Export(ctx context.Context, w io.Writer) error {
+// Export 把三张表写成 jsonl。顺序是**私钥 → 服务器 → 数据源**：导入顺序读，
+// 后面的靠名字引用前面的，这个次序让引用永远指得到。
+//
+// secrets 为真时带上密码、私钥内容与通行短语——那正是「搬过去就能用」的
+// 前提，也意味着这份文件等同一串明文凭证。
+func (s *Service) Export(ctx context.Context, w io.Writer, secrets bool) error {
+	enc := json.NewEncoder(w)
+	keys, err := s.servers.ListKeys(ctx, "")
+	if err != nil {
+		return fmt.Errorf("list ssh keys: %w", err)
+	}
+	keyNameByID := make(map[uint]string, len(keys))
+	for _, key := range keys {
+		keyNameByID[key.ID] = key.Name
+		rec := KeyRecord{
+			Kind: KindKey, Name: key.Name, Note: key.Note, Fingerprint: key.Fingerprint,
+		}
+		if secrets {
+			rec.PrivateKey = key.PrivateKey
+			rec.Passphrase = key.Passphrase
+		}
+		if err := enc.Encode(rec); err != nil {
+			return fmt.Errorf("write ssh key %s: %w", key.Name, err)
+		}
+	}
+
 	servers, err := s.servers.List(ctx, "")
 	if err != nil {
 		return fmt.Errorf("list servers: %w", err)
 	}
-	enc := json.NewEncoder(w)
 	nameByID := make(map[uint]string, len(servers))
 	for _, srv := range servers {
 		nameByID[srv.ID] = srv.Name
 		rec := ServerRecord{
 			Kind: KindServer, Name: srv.Name, Host: srv.Host, Port: srv.Port,
-			User: srv.User, Auth: srv.Auth, KeyPath: srv.KeyPath,
-			Note: srv.Note, Disabled: srv.Disabled,
+			User: srv.User, Auth: srv.Auth, Key: keyNameByID[srv.KeyID],
+			KeyPath: srv.KeyPath, Note: srv.Note, Disabled: srv.Disabled,
+		}
+		if secrets {
+			rec.Password = srv.Password
+			rec.Passphrase = srv.Passphrase
 		}
 		if err := enc.Encode(rec); err != nil {
 			return fmt.Errorf("write server %s: %w", srv.Name, err)
@@ -124,6 +173,9 @@ func (s *Service) Export(ctx context.Context, w io.Writer) error {
 			Port: ds.Port, User: ds.User, Database: ds.Database, Params: ds.Params,
 			Note: ds.Note, ReadOnly: ds.ReadOnly, Disabled: ds.Disabled,
 			SSHEnabled: ds.SSHEnabled, Server: nameByID[ds.ServerID],
+		}
+		if secrets {
+			rec.Password = ds.Password
 		}
 		if err := enc.Encode(rec); err != nil {
 			return fmt.Errorf("write data source %s/%s: %w", ds.Project, ds.Env, err)
@@ -161,6 +213,14 @@ func (s *Service) Import(ctx context.Context, r io.Reader) (*Result, error) {
 	for _, srv := range known {
 		idByName[srv.Name] = srv.ID
 	}
+	keys, err := s.servers.ListKeys(ctx, "")
+	if err != nil {
+		return nil, fmt.Errorf("list ssh keys: %w", err)
+	}
+	keyIDByName := make(map[string]uint, len(keys))
+	for _, key := range keys {
+		keyIDByName[key.Name] = key.ID
+	}
 	sources, err := s.allSources(ctx)
 	if err != nil {
 		return nil, err
@@ -187,8 +247,10 @@ func (s *Service) Import(ctx context.Context, r io.Reader) (*Result, error) {
 			continue
 		}
 		switch head.Kind {
+		case KindKey:
+			s.importKey(ctx, line, keyIDByName, res)
 		case KindServer:
-			s.importServer(ctx, line, idByName, res)
+			s.importServer(ctx, line, idByName, keyIDByName, res)
 		case KindSource:
 			s.importSource(ctx, line, idByName, seenSource, res)
 		default:
@@ -201,7 +263,36 @@ func (s *Service) Import(ctx context.Context, r io.Reader) (*Result, error) {
 	return res, nil
 }
 
-func (s *Service) importServer(ctx context.Context, line []byte, idByName map[string]uint, res *Result) {
+// importKey 还原一把私钥。不带私钥内容的记录（`?secrets=0` 导出的）直接
+// 跳过——建一把空壳钥匙只会让引用它的服务器连不上，还看不出为什么。
+func (s *Service) importKey(ctx context.Context, line []byte, idByName map[string]uint, res *Result) {
+	var rec KeyRecord
+	if err := json.Unmarshal(line, &rec); err != nil || rec.Name == "" {
+		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "invalid"})
+		return
+	}
+	if _, ok := idByName[rec.Name]; ok {
+		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "exists"})
+		return
+	}
+	if rec.PrivateKey == "" {
+		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "no_secret"})
+		res.NeedSecret = append(res.NeedSecret, KindKey+":"+rec.Name)
+		return
+	}
+	key, err := s.servers.CreateKey(ctx, remote.KeyInput{
+		Name: rec.Name, PrivateKey: rec.PrivateKey,
+		Passphrase: &rec.Passphrase, Note: rec.Note,
+	})
+	if err != nil {
+		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "invalid"})
+		return
+	}
+	idByName[rec.Name] = key.ID
+	res.Imported = append(res.Imported, KindKey+":"+rec.Name)
+}
+
+func (s *Service) importServer(ctx context.Context, line []byte, idByName, keyIDByName map[string]uint, res *Result) {
 	var rec ServerRecord
 	if err := json.Unmarshal(line, &rec); err != nil || rec.Name == "" {
 		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "invalid"})
@@ -211,20 +302,46 @@ func (s *Service) importServer(ctx context.Context, line []byte, idByName map[st
 		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "exists"})
 		return
 	}
-	srv, err := s.servers.Create(ctx, remote.Input{
+	in := remote.Input{
 		Name: rec.Name, Host: rec.Host, Port: rec.Port, User: rec.User,
 		Auth: rec.Auth, KeyPath: rec.KeyPath, Note: rec.Note,
 		Disabled: &rec.Disabled,
-	})
+	}
+	if rec.Password != "" {
+		in.Password = &rec.Password
+	}
+	if rec.Passphrase != "" {
+		in.Passphrase = &rec.Passphrase
+	}
+	if rec.Key != "" {
+		// 钥匙没跟过来就照原样建：服务器本身的配置是对的，缺的只是那把钥匙，
+		// 在 needSecret 里说清楚比整条跳过有用。
+		if id, ok := keyIDByName[rec.Key]; ok {
+			in.KeyID = &id
+		}
+	}
+	srv, err := s.servers.Create(ctx, in)
 	if err != nil {
 		res.Skipped = append(res.Skipped, Skip{Name: rec.Name, Reason: "invalid"})
 		return
 	}
 	idByName[rec.Name] = srv.ID
 	res.Imported = append(res.Imported, KindServer+":"+rec.Name)
-	// password / key 档都要凭证；key 档留空是走 ssh-agent，那种不用补。
-	if rec.Auth != "key" || rec.KeyPath != "" {
+	if serverNeedsSecret(rec, in.KeyID != nil) {
 		res.NeedSecret = append(res.NeedSecret, KindServer+":"+rec.Name)
+	}
+}
+
+// serverNeedsSecret 判断这台机器还差不差凭证：密码档看密码带没带；公钥档
+// 只要接上了库里的钥匙（或走 ssh-agent）就不差。
+func serverNeedsSecret(rec ServerRecord, linked bool) bool {
+	switch rec.Auth {
+	case "key":
+		return !linked && rec.KeyPath != ""
+	case "both":
+		return rec.Password == "" || (!linked && rec.KeyPath != "")
+	default:
+		return rec.Password == ""
 	}
 }
 
@@ -244,6 +361,9 @@ func (s *Service) importSource(ctx context.Context, line []byte, idByName map[st
 		User: rec.User, Database: rec.Database, Params: rec.Params, Note: rec.Note,
 		ReadOnly: &rec.ReadOnly, Disabled: &rec.Disabled, SSHEnabled: &rec.SSHEnabled,
 	}
+	if rec.Password != "" {
+		in.Password = &rec.Password
+	}
 	if rec.SSHEnabled {
 		id, ok := idByName[rec.Server]
 		if !ok {
@@ -260,7 +380,9 @@ func (s *Service) importSource(ctx context.Context, line []byte, idByName map[st
 	}
 	seen[key] = true
 	res.Imported = append(res.Imported, KindSource+":"+key)
-	res.NeedSecret = append(res.NeedSecret, KindSource+":"+key)
+	if rec.Password == "" {
+		res.NeedSecret = append(res.NeedSecret, KindSource+":"+key)
+	}
 }
 
 // preview 给坏行一个能认出来的名字：让人知道是文件里的哪一行出了问题。
