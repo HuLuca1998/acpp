@@ -205,6 +205,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/system/title-model` | 存标题模型配置，热更生效（启用时必须选模型） |
 | GET | `/api/system/title-model/models` | 列某个 ollama 端点上已装的模型（`?baseUrl=`，为空取默认地址） |
 | POST | `/api/system/title-model/test` | 用给定配置当场生成一个标题看效果，不落盘 |
+| GET/PUT | `/api/system/codex-home` · `/api/system/codex-home/file?name=` | codex 隔离 home 的两个文件：`config.toml`（系统配置的一次性副本，给这里的 codex 换模型/provider 改的就是它）与 `auth.json`（软链系统登录态，写它等于改系统那一份）。只认这两个名字，不是文件管理器 |
+| POST | `/api/system/codex-home/reveal` | 在访达里打开 codex home 目录（仅 macOS） |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查）。`pending` 带当前版本与最新版本之间**全部待更新版本**的日志（最多 5 条，更早的计入 `pendingMore`）——跨版本更新时中间几版改了什么也要看得到 |
 | POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
 | GET | `/api/discord` | discord 频道工作区总览（adr-016，bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)，owner 专属）：`{config:{enabled,tokenSet,workRoot}, status:{running,connected,botUser,guilds…}, bindings, catalog}`；token 永不回传 |
@@ -266,7 +268,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | PUT | `/api/sessions/{id}/settings` | 统一设置（`{model?, effort?, level?, plan?, fast?}` 逐项可选），响应带最新 `Settings`；未连接的老会话会先幂等拉起进程再应用。**turn 进行中也能改**：界面在轮里只放开权限档与思考深度（前者是就地管住 agent 的唯一手段，后者给下一轮预约），模型/plan/fast 锁到轮末。生效时机两端不同——权限档 claude 立刻对本轮生效、codex 要等下一轮（档位是轮开始时的快照），思考深度两端一律下一轮；控件的悬停说明照实写明 |
 | POST | `/api/sessions/{id}/permission` | 回传权限裁决（`{permissionId, optionId}`，optionId 空=取消）。卡片挂起最长 **30 分钟**（等真人点选的反向调用统一这个时限，含交互式提问；机器应答的 fs 读写仍是 1 分钟），超时按 cancelled 回给 agent，那一步工具调用随即失败 |
 | GET/POST | `/api/servers` | 服务器列表（`?q=`名称或主机关键词）/ 新建（`{name, host, port, user, auth, password?, keyPath?, passphrase?, note?}`；凭证永不下发，响应只给 `hasPassword` / `hasPassphrase` 标志位） |
-| GET | `/api/connections/export` | 连接配置的换设备搬家：服务器 + 数据源导出成 jsonl（一行一条，`kind` 区分）。**不含凭证**——密码与私钥口令在本项目永不出 API，搬家也不破例；跳板机按**名字**引用而不是 id（id 是本机自增的，换台机器必然对不上） |
+| GET | `/api/connections/export` | 连接配置的换设备搬家：私钥 + 服务器 + 数据源导出成 jsonl（一行一条，`kind` 区分，按这个次序写，后面的靠名字引用前面的）。**默认带凭证**（密码、私钥内容与通行短语）——搬过去就能连是这件事的意义所在；文件名标 `-secrets`，`?secrets=0` 导一份不带的。跳板机与私钥都按**名字**引用而不是 id（id 是本机自增的，换台机器必然对不上） |
 | POST | `/api/connections/import` | 从 jsonl 导入（multipart `file`）：同名的跳过而不覆盖，引用了不存在跳板机的数据源跳过并说明，坏行只跳过自己。回 `{imported, skipped:[{name,reason}], needSecret}`——`needSecret` 是还缺密码、连不通的那些 |
 | GET/PUT/DELETE | `/api/servers/{id}` | 服务器详情 / 更新（凭证留空=不改） / 删除（被数据源当跳板机用着的不让删） |
 | POST | `/api/servers/probe` | 测一份还没保存的配置（新建对话框的按钮） |

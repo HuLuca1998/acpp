@@ -161,3 +161,20 @@ export const enSettings = {
     done: "Migration complete — restart the server to apply",
   },
 } as const
+
+// codex's isolated home: the two files worth editing are hidden by that
+// isolation, so the settings page surfaces them.
+export const enCodexHome = {
+  title: "codex home directory",
+  description:
+    "acpp gives codex its own home, so the machine-level ~/.codex never enters a session. config.toml is a one-time copy of your system config — it is the file to edit when switching this codex to another model or provider.",
+  reveal: "Reveal in Finder",
+  meta: "{{size}} · updated {{time}}",
+  missing:
+    "Not there yet: config.toml is copied on the first codex session, and auth.json appears once you have logged in.",
+  symlinkWarning:
+    "This is a symlink to {{target}}. Saving here edits that system file.",
+  unsaved: "Unsaved",
+  saved: "Saved",
+  effectNote: "Changes apply to new sessions; running ones are unaffected.",
+} as const

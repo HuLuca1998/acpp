@@ -151,3 +151,19 @@ export const zhSettings = {
     done: "迁移完成，重启后端后生效",
   },
 } as const
+
+// codex 的隔离 home：那两个要改的文件被隔离藏起来了，设置页里摆出来。
+export const zhCodexHome = {
+  title: "codex 的 home 目录",
+  description:
+    "acpp 给 codex 单开了一个 home，机器级 ~/.codex 不在会话视野里。config.toml 是系统配置的一次性副本——给这里的 codex 换模型或 provider，改的就是它。",
+  reveal: "在访达中打开",
+  meta: "{{size}} · 更新于 {{time}}",
+  missing:
+    "还没生成：config.toml 在第一次起 codex 会话时才被复制出来，auth.json 要登录过才有。",
+  symlinkWarning:
+    "这是一条软链，指向 {{target}}。在这里保存等于改系统那一份登录态。",
+  unsaved: "未保存",
+  saved: "已保存",
+  effectNote: "改动对之后新建的会话生效，进行中的会话不受影响。",
+} as const

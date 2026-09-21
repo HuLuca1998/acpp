@@ -49,6 +49,7 @@ import type {
   SessionState,
 } from "@/types/acp"
 import type {
+  CodexHomeInfo,
   EnvInfo,
   EnvInstallResult,
   OllamaModel,
@@ -386,6 +387,26 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ workspaceDir }),
       }),
+    /**
+     * codex 的隔离 home：config.toml 与 auth.json 的读写，外加在访达里
+     * 打开那个目录。只认这两个名字——这个面是为了「那两个文件不好找」，
+     * 不是一个文件管理器。
+     */
+    codexHome: () => request<CodexHomeInfo>("/system/codex-home"),
+    codexFile: (name: string) =>
+      request<{ name: string; content: string }>(
+        `/system/codex-home/file?name=${encodeURIComponent(name)}`
+      ),
+    saveCodexFile: (name: string, content: string) =>
+      request<CodexHomeInfo>(
+        `/system/codex-home/file?name=${encodeURIComponent(name)}`,
+        { method: "PUT", body: JSON.stringify({ content }) }
+      ),
+    revealCodexHome: () =>
+      request<{ opened: boolean }>("/system/codex-home/reveal", {
+        method: "POST",
+      }),
+
     /** 迁移数据目录（拷贝式，重启后端后生效）。 */
     migrateDataDir: (dataDir: string) =>
       request<SystemInfo>("/system/data-dir", {

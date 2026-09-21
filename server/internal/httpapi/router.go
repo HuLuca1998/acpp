@@ -171,6 +171,12 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 
 	// 系统配置：数据目录查看 / 迁移（拷贝式，重启后生效）。
 	api.HandleFunc("GET /api/system", system.get)
+	// codex 的隔离 home：config.toml（系统配置的一次性副本，换模型改它）
+	// 与 auth.json（软链系统登录态）在这里读写，外加在访达里打开目录。
+	api.HandleFunc("GET /api/system/codex-home", system.codexHome)
+	api.HandleFunc("GET /api/system/codex-home/file", system.codexFile)
+	api.HandleFunc("PUT /api/system/codex-home/file", system.saveCodexFile)
+	api.HandleFunc("POST /api/system/codex-home/reveal", system.revealCodexHome)
 	api.HandleFunc("PUT /api/system/data-dir", system.migrate)
 	// 工作区根：agent 干活的地方与租户 root 的父目录，立刻生效。
 	api.HandleFunc("PUT /api/system/workspace-dir", system.workspaceDir)

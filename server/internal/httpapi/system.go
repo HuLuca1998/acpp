@@ -28,6 +28,49 @@ type systemHandler struct {
 	busyTurns func() int
 }
 
+// ---- codex 的隔离 home ----
+//
+// 那两个真正要改的文件（config.toml 与 auth.json）被隔离藏起来了，这里开
+// 一个窄口子：只认白名单里的名字，外加在访达里打开目录。
+
+func (h systemHandler) codexHome(w http.ResponseWriter, r *http.Request) {
+	writeData(w, http.StatusOK, h.system.CodexHome())
+}
+
+func (h systemHandler) codexFile(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	content, err := h.system.ReadCodexFile(name)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]string{"name": name, "content": content})
+}
+
+func (h systemHandler) saveCodexFile(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Content string `json:"content"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, err)
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if err := h.system.WriteCodexFile(name, in.Content); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, h.system.CodexHome())
+}
+
+func (h systemHandler) revealCodexHome(w http.ResponseWriter, r *http.Request) {
+	if err := h.system.RevealCodexHome(); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]bool{"opened": true})
+}
+
 func (h systemHandler) updateInfo(w http.ResponseWriter, r *http.Request) {
 	force := r.URL.Query().Get("force") == "1"
 	writeData(w, http.StatusOK, h.update.Info(r.Context(), force))

@@ -1,6 +1,6 @@
 import { enChat } from "./en-chat"
 import { enWorkspace } from "./en-workspace"
-import { enSettings } from "./en-settings"
+import { enCodexHome, enSettings } from "./en-settings"
 import { enServer, enSSHKeys } from "./en-server"
 import { enNotify } from "./en-notify"
 import { enDb } from "./en-db"
@@ -171,6 +171,7 @@ export default {
   },
   db: enDb,
   server: enServer,
+  codexHome: enCodexHome,
   sshKeys: enSSHKeys,
   discord: enDiscord,
   connections: {

@@ -108,3 +108,24 @@ export interface UpdateInfo {
   /** 是否支持一键更新重启（仅桌面版 .app 内为真）。 */
   canApply: boolean
 }
+
+/**
+ * codex 的隔离 home（<dataDir>/codex-home）里那两个要改的文件。
+ *
+ * config.toml 是系统配置的一次性副本——给 acpp 的 codex 换模型/provider
+ * 改的就是它；auth.json 软链系统的登录态，改它等于改系统那一份。
+ */
+export interface CodexFile {
+  name: string
+  /** 还没生成时为 false（config.toml 要第一次起 codex 会话才被复制出来）。 */
+  exists: boolean
+  size: number
+  updatedAt: string
+  symlink: boolean
+  target?: string
+}
+
+export interface CodexHomeInfo {
+  dir: string
+  files: CodexFile[]
+}

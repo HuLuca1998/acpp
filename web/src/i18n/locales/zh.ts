@@ -1,6 +1,6 @@
 import { zhChat } from "./zh-chat"
 import { zhWorkspace } from "./zh-workspace"
-import { zhSettings } from "./zh-settings"
+import { zhCodexHome, zhSettings } from "./zh-settings"
 import { zhServer, zhSSHKeys } from "./zh-server"
 import { zhNotify } from "./zh-notify"
 import { zhDb } from "./zh-db"
@@ -169,6 +169,7 @@ export default {
   },
   db: zhDb,
   server: zhServer,
+  codexHome: zhCodexHome,
   sshKeys: zhSSHKeys,
   discord: zhDiscord,
   connections: {

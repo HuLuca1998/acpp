@@ -15,6 +15,7 @@ import { DesktopLaunchCard } from "@/components/settings/desktop-launch"
 import { NotificationsCard } from "@/components/settings/notifications"
 import { MascotPrefsCard } from "@/components/settings/mascot-prefs"
 import { NotifyPrefsCard } from "@/components/settings/notify-prefs"
+import { CodexHomeCard } from "@/components/settings/codex-home"
 import { AgentToolConfig } from "@/components/settings/agent-tool-config"
 import { EnvCheck } from "@/components/settings/env-check"
 import { TitleModelCard } from "@/components/settings/title-model"
@@ -173,8 +174,11 @@ export function Settings() {
       ) : section !== "system" ? (
         /* 工具分区：内置 claude / codex 的配置面。这条是兜底分支，
            新分区必须排在它前面，否则会被当成 agent 名传下去。 */
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
           <AgentToolConfig name={section} />
+          {/* codex 的隔离 home 把 config.toml 与 auth.json 藏起来了，
+              在它自己的分区里摆出来。 */}
+          {section === "codex" ? <CodexHomeCard /> : null}
         </div>
       ) : (
         <div className="flex min-w-0 flex-1 flex-col gap-4">
