@@ -91,6 +91,19 @@ export const enSettings = {
     busyDescription:
       "{{count}} session(s) are waiting for the AI to reply. Updating now restarts the app and interrupts them — the in-flight turns never get their results and show as interrupted in history. Consider letting them finish first.",
     busyConfirm: "Update anyway",
+    progress: {
+      downloading: "Downloading v{{version}}",
+      unpacking: "Unpacking",
+      installing: "Replacing the app",
+      restarting: "Installed — restarting shortly",
+      done: "Installed",
+      failed: "Update failed",
+      stats: "{{done}} / {{total}} · {{speed}}/s · about {{eta}} left",
+      statsNoEta: "{{done}} / {{total}} · {{speed}}/s",
+      statsUnknown: "{{done}} downloaded · {{speed}}/s",
+      retry: "Retry",
+      dismiss: "Back",
+    },
   },
   env: {
     connTitle: "Connection test",

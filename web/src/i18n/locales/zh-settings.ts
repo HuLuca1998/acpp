@@ -84,6 +84,19 @@ export const zhSettings = {
     busyDescription:
       "{{count}} 个会话正在等 AI 回复。现在更新会重启应用并中断它们——正在生成的这轮拿不到结果，历史里会标记为中断。建议等它们跑完再更新。",
     busyConfirm: "仍要更新",
+    progress: {
+      downloading: "正在下载 v{{version}}",
+      unpacking: "正在解包",
+      installing: "正在替换应用",
+      restarting: "已安装，应用即将自动重启",
+      done: "已安装",
+      failed: "更新失败",
+      stats: "{{done}} / {{total}} · {{speed}}/s · 剩余约 {{eta}}",
+      statsNoEta: "{{done}} / {{total}} · {{speed}}/s",
+      statsUnknown: "已下载 {{done}} · {{speed}}/s",
+      retry: "重试",
+      dismiss: "返回",
+    },
   },
   env: {
     connTitle: "连接测试",

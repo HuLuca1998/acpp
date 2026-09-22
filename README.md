@@ -209,7 +209,8 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/system/codex-home/reveal` | 在访达里打开 codex home 目录（仅 macOS） |
 | GET | `/api/system/quota?flavor=claude\|codex` | **套餐用量**：本机登录账号在订阅上的限额水位（5 小时窗 / 周窗 / 按模型的周窗，各带已用百分比与重置时刻），**不是本地账本**——账本记这台机器花了多少，水位是账号在服务端还剩多少。claude 借 CLI 的 `/usage` 数据面取（`claude -p` 的 stream-json 控制请求，令牌过期由 CLI 自己刷新，本项目不碰钥匙串）；codex 用 `auth.json` 的登录态打 ChatGPT 的 usage 接口，另带额度余额与「这里的 codex 是否走第三方 provider」。`status` 非 `ok`（`expired` / `not_logged_in` / `unavailable` / `error`）时窗口为空、界面给引导。后端缓存一分钟，`?refresh=1` 绕过。**对租户开放**（花的是同一份额度）。取舍见 [docs/adr-025](docs/adr-025-套餐用量取数路径.md) |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查）。`pending` 带当前版本与最新版本之间**全部待更新版本**的日志（最多 5 条，更早的计入 `pendingMore`）——跨版本更新时中间几版改了什么也要看得到 |
-| POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
+| POST | `/api/system/update/apply` | 一键更新：**后台**下载最新 release 替换 .app 并自动重启（仅桌面版）。立即返回 `{applied:true, progress}`，进行中再调只回同一份进度（不会开第二份下载）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
+| GET | `/api/system/update/progress` | 一键更新的进行态：`phase`（`idle` / `downloading` / `unpacking` / `installing` / `restarting` / `done` 装好了但要手动重开 / `failed`）、`downloaded` / `total` 字节、`speed`（最近 3 秒平均，字节/秒）、`message` / `error`。前端下载期间每 0.5 秒轮询，页面刷新后也能接着看 |
 | GET | `/api/discord` | discord 频道工作区总览（adr-016，bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)，owner 专属）：`{config:{enabled,tokenSet,workRoot}, status:{running,connected,botUser,guilds…}, bindings, catalog}`；token 永不回传 |
 | PUT | `/api/discord/config` | 存 discord 配置（`{enabled?, botToken?, workRoot?}`，token 空串=清除），gateway 即时起停 |
 | PUT | `/api/discord/bindings/{channelId}` | 改频道绑定的模型/思考深度（换仓库、换绑数据库走频道里的 `/init` 与 `/db source`） |

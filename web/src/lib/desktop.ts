@@ -1,3 +1,5 @@
+import type { UpdatePhase } from "@/types/system"
+
 /**
  * 桌面壳（macOS app）的原生通道。
  *
@@ -110,4 +112,15 @@ export const desktopNotify = {
     bridge<{ posted: boolean }>({ action: "notify", ...notice }),
   dismiss: (id: string) =>
     bridge<{ dismissed: boolean }>({ action: "dismissNotify", id }),
+}
+
+/**
+ * 桌面版自更新（替换 .app 并重启）的阶段是否还在进行中——这些阶段要
+ * 轮询后端、界面上要转圈。restarting 不算：进程马上就没了，再轮询只会
+ * 拿到断连。放在这里是因为一键更新只有桌面版才有。
+ */
+export function isUpdateActive(phase: UpdatePhase): boolean {
+  return (
+    phase === "downloading" || phase === "unpacking" || phase === "installing"
+  )
 }

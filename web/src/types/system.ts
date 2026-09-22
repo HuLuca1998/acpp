@@ -109,6 +109,33 @@ export interface UpdateInfo {
   canApply: boolean
 }
 
+/** 一键更新的阶段：idle 没在更新；restarting 之后进程随即被换掉；done 是装好了但要手动重开。 */
+export type UpdatePhase =
+  | "idle"
+  | "downloading"
+  | "unpacking"
+  | "installing"
+  | "restarting"
+  | "done"
+  | "failed"
+
+/** 一键更新的进行态（后端后台跑，前端下载期间轮询）。 */
+export interface UpdateProgress {
+  phase: UpdatePhase
+  version?: string
+  /** 字节数；total 为 0 表示服务端没给长度。 */
+  downloaded: number
+  total: number
+  /** 最近几秒的平均下载速度（字节/秒），下载阶段之外为 0。 */
+  speed: number
+  startedAt?: string
+  updatedAt?: string
+  /** restarting / done 的说明。 */
+  message?: string
+  /** failed 的原因。 */
+  error?: string
+}
+
 /**
  * codex 的隔离 home（<dataDir>/codex-home）里那两个要改的文件。
  *

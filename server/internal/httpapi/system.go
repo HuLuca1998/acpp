@@ -105,12 +105,18 @@ func (h systemHandler) updateApply(w http.ResponseWriter, r *http.Request) {
 		writeData(w, http.StatusOK, map[string]any{"applied": false, "runningTurns": busy})
 		return
 	}
-	message, err := h.update.Apply(r.Context())
+	// 下载安装在后台跑，这里只拿到起步的进度；之后前端轮询 progress。
+	progress, err := h.update.Apply(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeData(w, http.StatusOK, map[string]any{"applied": true, "message": message})
+	writeData(w, http.StatusOK, map[string]any{"applied": true, "progress": progress})
+}
+
+// updateProgress 是一键更新的进行态：阶段、已下载 / 总字节、速度。
+func (h systemHandler) updateProgress(w http.ResponseWriter, _ *http.Request) {
+	writeData(w, http.StatusOK, h.update.Progress())
 }
 
 func (h systemHandler) get(w http.ResponseWriter, _ *http.Request) {

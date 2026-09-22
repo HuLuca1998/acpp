@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"acpp/server/internal/config"
@@ -66,13 +63,20 @@ type Updater struct {
 	// apiBase 可注入以便测试，默认 GitHub 官方 API。
 	apiBase string
 
+	// bundlePath 定位当前进程所在的 .app（不在 bundle 里就报错，即开发态）。
+	// 可注入以便测试：测试进程是 go test 二进制，装进一个临时目录里的假 bundle。
+	bundlePath func() (string, error)
+
 	mu       sync.Mutex
 	cached   UpdateInfo
 	assetURL string
+	// progress 是一键更新的进行态，meter 算下载速度，见 update_apply.go。
+	progress UpdateProgress
+	meter    speedMeter
 }
 
 func NewUpdater(repo string) *Updater {
-	return &Updater{repo: repo, apiBase: "https://api.github.com"}
+	return &Updater{repo: repo, apiBase: "https://api.github.com", bundlePath: currentBundlePath}
 }
 
 // StartPeriodicCheck 启动即查一次，之后按 interval 周期刷新缓存。
@@ -125,7 +129,7 @@ func (s *Updater) refresh(ctx context.Context) {
 		CurrentVersion: config.Version,
 		Repo:           s.repo,
 		CheckedAt:      time.Now().Format(time.RFC3339),
-		CanApply:       runningInAppBundle(),
+		CanApply:       s.canApply(),
 	}
 	assetURL := ""
 
@@ -217,88 +221,6 @@ func (s *Updater) fetchReleases(ctx context.Context) ([]githubRelease, error) {
 	return out, nil
 }
 
-// Apply 下载最新 release 的 zip，原地替换 .app bundle，然后拉起分离的
-// 重启器（先让壳走正常退出回收子进程，再 open 新包）。只在桌面版可用。
-func (s *Updater) Apply(ctx context.Context) (string, error) {
-	s.mu.Lock()
-	info, assetURL := s.cached, s.assetURL
-	s.mu.Unlock()
-
-	if !info.HasUpdate || assetURL == "" {
-		return "", fmt.Errorf("%w: no update available", service.ErrInvalid)
-	}
-	if !runningInAppBundle() {
-		return "", fmt.Errorf("%w: 一键更新仅桌面版支持，开发态请 git pull 后重启", service.ErrInvalid)
-	}
-	bundle, err := currentBundlePath()
-	if err != nil {
-		return "", err
-	}
-
-	// 1. 下载
-	tmpDir, err := os.MkdirTemp("", "acpp-update-*")
-	if err != nil {
-		return "", fmt.Errorf("create temp dir: %w", err)
-	}
-	zipPath := filepath.Join(tmpDir, "update.zip")
-	if err := downloadFile(ctx, assetURL, zipPath); err != nil {
-		return "", err
-	}
-
-	// 2. 解包并校验形状（ditto 保留签名与扩展属性）
-	unpackDir := filepath.Join(tmpDir, "unpacked")
-	if out, err := exec.CommandContext(ctx, "/usr/bin/ditto", "-xk", zipPath, unpackDir).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("unpack failed: %s: %w", tailString(string(out), 500), err)
-	}
-	newBundle, err := findAppBundle(unpackDir)
-	if err != nil {
-		return "", err
-	}
-
-	// 3. 原地替换：旧包先挪走，ditto 拷入新包，失败回滚
-	backup := bundle + ".old"
-	_ = os.RemoveAll(backup)
-	if err := os.Rename(bundle, backup); err != nil {
-		return "", fmt.Errorf("move old bundle: %w", err)
-	}
-	if out, err := exec.CommandContext(ctx, "/usr/bin/ditto", newBundle, bundle).CombinedOutput(); err != nil {
-		_ = os.Rename(backup, bundle)
-		return "", fmt.Errorf("install new bundle: %s: %w", tailString(string(out), 500), err)
-	}
-	_ = os.RemoveAll(backup)
-	_ = os.RemoveAll(tmpDir)
-
-	// 4. 分离重启器：TERM 让壳走正常退出路径（回收本进程与 agent 子进程），
-	//    随后 open 新包。Setsid 保证它不随本进程一起死。
-	//
-	//    必须**等壳真正退出**再 open：壳的退出要回收 acp-server 连带全部
-	//    agent 子进程，耗时轻松超过固定 sleep；旧实例还活着时 open 只会
-	//    「激活」它而不启动新进程，结果就是只更新不重启。上限 60 秒，
-	//    超时 SIGKILL 兜底（孤儿端口下次启动由壳的清理逻辑接管）。
-	shellPID := shellProcessID(bundle)
-	if shellPID <= 0 {
-		// 找不到壳就绝不乱发信号：早先这里直接用 getppid()，server 一旦
-		// 孤儿化（父进程死过一轮，ppid 变成 1）就成了对 launchd 发 TERM，
-		// 杀不动也等不到它退出，界面只能空转满 60 秒。宁可让用户手动重启。
-		slog.Warn("apply update: 找不到壳进程，跳过自动重启", "bundle", bundle)
-		return "更新已安装，但没找到应用进程——请手动退出并重新打开 ACPP", nil
-	}
-	script := fmt.Sprintf(
-		"sleep 1; kill -TERM %[1]d 2>/dev/null; "+
-			"i=0; while kill -0 %[1]d 2>/dev/null; do "+
-			"i=$((i+1)); if [ $i -ge 120 ]; then kill -KILL %[1]d 2>/dev/null; sleep 1; break; fi; "+
-			"sleep 0.5; done; "+
-			"sleep 1; /usr/bin/open %[2]s",
-		shellPID, strconv.Quote(bundle))
-	restarter := exec.Command("/bin/sh", "-c", script)
-	restarter.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := restarter.Start(); err != nil {
-		slog.Error("start restarter", "err", err)
-		return "更新已安装，但自动重启失败——请手动退出并重新打开 ACPP", nil
-	}
-	return fmt.Sprintf("已更新到 %s，应用即将自动重启", info.LatestVersion), nil
-}
-
 // shellPIDEnv 是壳启动 acp-server 时注入的自身 PID。
 const shellPIDEnv = "ACPP_SHELL_PID"
 
@@ -371,10 +293,10 @@ func versionLess(a, b string) bool {
 	return false
 }
 
-// runningInAppBundle 判断当前进程是否住在 .app 里（桌面版打包形态）。
-func runningInAppBundle() bool {
-	exe, err := os.Executable()
-	return err == nil && strings.Contains(exe, ".app/Contents/MacOS/")
+// canApply 报告当前进程是否住在 .app 里（桌面版打包形态）；开发态只能看不能装。
+func (s *Updater) canApply() bool {
+	_, err := s.bundlePath()
+	return err == nil
 }
 
 func currentBundlePath() (string, error) {
@@ -405,31 +327,4 @@ func findAppBundle(dir string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("release asset 里没有 .app bundle")
-}
-
-func downloadFile(ctx context.Context, url, dest string) error {
-	dlCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("build download request: %w", err)
-	}
-	req.Header.Set("User-Agent", "acpp-updater")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("download update: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download update: %s", resp.Status)
-	}
-	f, err := os.Create(dest)
-	if err != nil {
-		return fmt.Errorf("create download file: %w", err)
-	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return fmt.Errorf("write download file: %w", err)
-	}
-	return nil
 }

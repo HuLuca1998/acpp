@@ -1,9 +1,12 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
+import { isUpdateActive } from "@/lib/desktop"
+import type { UpdateProgress } from "@/types/system"
+import { UpdateProgressCard } from "@/components/settings/update-progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -29,9 +32,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
+/** 下载期间的轮询间隔：进度条与速度要看得出在动，半秒够了。 */
+const PROGRESS_POLL_MS = 500
+
 /**
  * 关于与更新分区：当前版本、GitHub Releases 检查（后端每日自查缓存）、
- * 一键更新（下载 → 替换 .app → 自动重启；仅桌面版）。
+ * 一键更新（后台下载 → 替换 .app → 自动重启；仅桌面版）。更新一旦发起就
+ * 由进度卡接管：下载有字节数与速度，解包安装是不定态，失败可原地重试。
  */
 export function AboutUpdate() {
   const { t, i18n } = useTranslation()
@@ -42,7 +49,34 @@ export function AboutUpdate() {
   } = useAsyncData(() => api.system.update(), [])
   const [checking, setChecking] = useState(false)
   const [applying, setApplying] = useState(false)
-  const [restarting, setRestarting] = useState<string | null>(null)
+  // 更新进行态：非空即由进度卡接管整个分区。刷新页面也能接着看——
+  // 挂载时先问一次后端，下载是在后端跑的，不随页面走。
+  const [progress, setProgress] = useState<UpdateProgress | null>(null)
+  const polling = progress ? isUpdateActive(progress.phase) : false
+
+  useEffect(() => {
+    api.system
+      .updateProgress()
+      .then((p) => {
+        if (p.phase !== "idle") setProgress(p)
+      })
+      .catch(() => {
+        // 老后端没有这个端点：当没在更新。
+      })
+  }, [])
+
+  useEffect(() => {
+    if (!polling) return
+    const timer = setInterval(() => {
+      api.system
+        .updateProgress()
+        .then(setProgress)
+        .catch(() => {
+          // 后端在重启阶段会失联：留着最后一帧，版本哨兵会接手提示刷新。
+        })
+    }, PROGRESS_POLL_MS)
+    return () => clearInterval(timer)
+  }, [polling])
   // 有会话正在生成回复时后端会把更新拦下来，这里存计数弹确认框。
   const [busyTurns, setBusyTurns] = useState<number | null>(null)
 
@@ -68,22 +102,25 @@ export function AboutUpdate() {
         setApplying(false)
         return
       }
-      // 后端随即杀壳重启，这个页面马上会失联——把结果钉在界面上。
-      setRestarting(res.message ?? "")
+      // 下载在后端后台跑，这里拿到的是起步进度；之后按 polling 轮询。
+      setProgress(res.progress ?? null)
     } catch (err) {
       toast.error((err as Error).message)
+    } finally {
       setApplying(false)
     }
   }
 
-  if (restarting) {
+  if (progress && progress.phase !== "idle") {
     return (
-      <Alert>
-        <AlertDescription className="flex items-center gap-2">
-          <Spinner className="size-4" />
-          {restarting}
-        </AlertDescription>
-      </Alert>
+      <UpdateProgressCard
+        progress={progress}
+        onRetry={() => {
+          setProgress(null)
+          void apply()
+        }}
+        onDismiss={() => setProgress(null)}
+      />
     )
   }
 
