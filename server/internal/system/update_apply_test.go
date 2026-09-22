@@ -213,3 +213,32 @@ func TestSpeedMeter_AveragesOverRecentWindow(t *testing.T) {
 		t.Errorf("rate after stall = %v B/s, want ~%v", got, want)
 	}
 }
+
+// 契约：下载失败的条件是**停滞**（连续一段时间没有新字节），不是总时长——
+// 慢链路只要还在动就不掐；一旦停住，报出的是停滞而不是一句 deadline exceeded。
+func TestUpdater_Apply_StalledDownloadFailsWithReason(t *testing.T) {
+	hang := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1048576")
+		_, _ = w.Write(bytes.Repeat([]byte("x"), 4096))
+		w.(http.Flusher).Flush()
+		<-hang
+	}))
+	// 先放行卡住的 handler 再关服务器：srv.Close 会等在途请求结束，顺序反了就死锁。
+	defer srv.Close()
+	defer close(hang)
+	u := fakeUpdater(srv.URL+"/asset.zip", filepath.Join(t.TempDir(), "Fake.app"))
+	u.stall = 300 * time.Millisecond
+
+	if _, err := u.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	final := waitSettled(t, u)
+	t.Logf("final: %+v", final)
+	if final.Phase != "failed" || !strings.Contains(final.Error, "停滞") {
+		t.Fatalf("progress = %+v, want failed with a stall explanation", final)
+	}
+	if final.Downloaded != 4096 || final.Total != 1048576 {
+		t.Errorf("downloaded/total = %d/%d, want 4096/1048576 kept for the user to see how far it got", final.Downloaded, final.Total)
+	}
+}

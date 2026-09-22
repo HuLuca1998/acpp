@@ -73,6 +73,8 @@ type Updater struct {
 	// progress 是一键更新的进行态，meter 算下载速度，见 update_apply.go。
 	progress UpdateProgress
 	meter    speedMeter
+	// stall 是下载停滞判定时长的覆盖值（0 用默认），测试注入短值。
+	stall time.Duration
 }
 
 func NewUpdater(repo string) *Updater {

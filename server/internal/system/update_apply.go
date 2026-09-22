@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,8 +24,16 @@ import (
 // 转圈，网络慢时用户分不清是在下还是卡死了；请求一断（切页、断网）下载
 // 也跟着作废。
 
-// applyTimeout 是一次更新从下载到装完的上限。
-const applyTimeout = 15 * time.Minute
+// applyCap 是一次更新从下载到装完的安全网上限。它不是给正常慢链路用的
+// ——那由停滞检测管：实测 130–300 KB/s 的代理链路上 129MB 要 7–17 分钟，
+// 以前 10 分钟的硬上限把两次下载都在 10m0s 整掐断了。
+const applyCap = 2 * time.Hour
+
+// downloadStallTimeout 是「多久没有新字节就算下载死了」。速度慢不是错，
+// 完全不动才是。
+const downloadStallTimeout = 90 * time.Second
+
+var errDownloadStalled = errors.New("download stalled")
 
 // UpdateProgress 是一键更新的进行态快照。
 type UpdateProgress struct {
@@ -136,7 +145,7 @@ func (s *Updater) reportDownload(n, total int64) {
 // run 是后台的更新流水线。每一步失败都落成 failed 并保留原因，界面据此
 // 给出重试；成功的终态是 restarting（进程随即被壳的退出带走）或 done。
 func (s *Updater) run(ctx context.Context, version, assetURL, bundle string) {
-	ctx, cancel := context.WithTimeout(ctx, applyTimeout)
+	ctx, cancel := context.WithTimeout(ctx, applyCap)
 	defer cancel()
 
 	// 1. 下载
@@ -147,7 +156,7 @@ func (s *Updater) run(ctx context.Context, version, assetURL, bundle string) {
 	}
 	defer os.RemoveAll(tmpDir)
 	zipPath := filepath.Join(tmpDir, "update.zip")
-	if err := downloadFile(ctx, assetURL, zipPath, s.reportDownload); err != nil {
+	if err := downloadFile(ctx, assetURL, zipPath, s.stallTimeout(), s.reportDownload); err != nil {
 		s.finish("failed", "", err)
 		return
 	}
@@ -213,9 +222,28 @@ func (s *Updater) run(ctx context.Context, version, assetURL, bundle string) {
 	s.finish("restarting", fmt.Sprintf("已更新到 %s，应用即将自动重启", version), nil)
 }
 
+// stallTimeout 是停滞判定时长；测试注入短值。
+func (s *Updater) stallTimeout() time.Duration {
+	if s.stall > 0 {
+		return s.stall
+	}
+	return downloadStallTimeout
+}
+
 // downloadFile 下载到 dest，每写一块就回调一次 (已下载字节, 总字节)；
-// 服务端没给 Content-Length 时 total 为 0。
-func downloadFile(ctx context.Context, url, dest string, report func(n, total int64)) error {
+// 服务端没给 Content-Length 时 total 为 0。失败条件是**停滞**而不是总时长：
+// 连续 stall 没有新字节才中断，慢链路只要还在动就让它下完。
+func downloadFile(ctx context.Context, url, dest string, stall time.Duration, report func(n, total int64)) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	watchdog := time.AfterFunc(stall, func() { cancel(errDownloadStalled) })
+	defer watchdog.Stop()
+	// 每来一块字节就把看门狗往后拨；停滞的判定只看字节，不看请求握手。
+	onWrite := func(n, total int64) {
+		watchdog.Reset(stall)
+		report(n, total)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build download request: %w", err)
@@ -235,8 +263,11 @@ func downloadFile(ctx context.Context, url, dest string, report func(n, total in
 		return fmt.Errorf("create download file: %w", err)
 	}
 	defer f.Close()
-	report(0, total)
-	if _, err := io.Copy(&countingWriter{w: f, total: total, report: report}, resp.Body); err != nil {
+	onWrite(0, total)
+	if _, err := io.Copy(&countingWriter{w: f, total: total, report: onWrite}, resp.Body); err != nil {
+		if errors.Is(context.Cause(ctx), errDownloadStalled) {
+			return fmt.Errorf("下载停滞超过 %s 没有新数据，已中断——网络太慢或代理不稳，稍后重试", stall)
+		}
 		return fmt.Errorf("write download file: %w", err)
 	}
 	return nil
