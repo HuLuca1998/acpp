@@ -146,6 +146,10 @@ func isPublicPath(path string) bool {
 func isOwnerOnly(r *http.Request) bool {
 	path := r.URL.Path
 	switch {
+	case path == "/api/system/quota":
+		// 套餐水位对租户开放：他们用的是同一个账号，额度见底时得知道
+		// 为什么发不出去。回的只有套餐名与百分比，没有账号信息。
+		return false
 	case strings.HasPrefix(path, "/api/tenants"),
 		// 数据库连接里躺着生产库凭证，整个面（含只读的库表浏览）都是
 		// owner 的；会话侧那几条按项目过滤的另有 owner 判定。

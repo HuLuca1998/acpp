@@ -19,6 +19,8 @@ type Service struct {
 	cfg config.Config
 	// latest 缓存依赖的最新版查询结果，见 env_latest.go。
 	latest latestChecker
+	// quota 缓存两家账号的套餐水位，见 quota.go。
+	quota quotaCache
 }
 
 func NewService(gdb *gorm.DB, cfg config.Config) *Service {

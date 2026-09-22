@@ -71,6 +71,18 @@ func (h systemHandler) revealCodexHome(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, map[string]bool{"opened": true})
 }
 
+// quota 是套餐用量：本机登录账号在订阅上的限额水位（5 小时窗 / 周窗），
+// 不是本地账本。`?flavor=` 必填，`?refresh=1` 绕过一分钟缓存。
+func (h systemHandler) quota(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	res, err := h.system.PlanQuota(r.Context(), q.Get("flavor"), q.Get("refresh") == "1")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, res)
+}
+
 func (h systemHandler) updateInfo(w http.ResponseWriter, r *http.Request) {
 	force := r.URL.Query().Get("force") == "1"
 	writeData(w, http.StatusOK, h.update.Info(r.Context(), force))

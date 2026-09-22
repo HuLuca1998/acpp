@@ -15,7 +15,7 @@ Agent Client Protocol 的本地管理面板：注册 agent、发起会话、与 
 acpp/
 ├── AGENTS.md                   # 通用工程规范（人与 AI 协作者共同遵守，CLAUDE.md 指向它）
 ├── Makefile                    # 常用命令入口，make help 查看；make check 一键全量验证
-├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；adr-022 别的 AI 的同步问答面；adr-023 GitHub issue 页；性能优化-2026-08 全栈盘点）
+├── docs/                       # 决策记录（adr-001 差异收敛；adr-002 工作区多面板；adr-003 messages 表退役；adr-004 macOS 桌面壳；adr-007 多租户隔离与项目管理；adr-008 数据库数据源；adr-009 子代理转录；adr-010 租户会话能力与 owner 对齐；adr-011 ACP 能力面补全；adr-012 编排与角色下线；adr-013 通知体系；adr-014 消息重试与上下文回退；adr-015 桌面壳换 Electron；adr-016~018 Discord；adr-019 服务器观察能力；adr-020 Discord 定时任务；adr-021 租户只读数据库 HTTP 面；adr-022 别的 AI 的同步问答面；adr-023 GitHub issue 页；adr-025 套餐用量取数路径；性能优化-2026-08 全栈盘点）
 ├── scripts/                    # 开发辅助脚本（dev.sh 服务管理；check-structure.sh 结构检查；acp-probe.py 协议探针；build-macos-app.sh 桌面版打包）
 ├── build/                      # 编译产物：build/web（vite）+ build/server/acp-server + build/app（macOS 桌面版），不入库
 ├── desktop/                    # macOS 桌面壳
@@ -207,6 +207,7 @@ claude 与 codex 两个工具是**内置的**（后端启动时自动预置记�
 | POST | `/api/system/title-model/test` | 用给定配置当场生成一个标题看效果，不落盘 |
 | GET/PUT | `/api/system/codex-home` · `/api/system/codex-home/file?name=` | codex 隔离 home 的两个文件：`config.toml`（系统配置的一次性副本，给这里的 codex 换模型/provider 改的就是它）与 `auth.json`（软链系统登录态，写它等于改系统那一份）。只认这两个名字，不是文件管理器 |
 | POST | `/api/system/codex-home/reveal` | 在访达里打开 codex home 目录（仅 macOS） |
+| GET | `/api/system/quota?flavor=claude\|codex` | **套餐用量**：本机登录账号在订阅上的限额水位（5 小时窗 / 周窗 / 按模型的周窗，各带已用百分比与重置时刻），**不是本地账本**——账本记这台机器花了多少，水位是账号在服务端还剩多少。claude 借 CLI 的 `/usage` 数据面取（`claude -p` 的 stream-json 控制请求，令牌过期由 CLI 自己刷新，本项目不碰钥匙串）；codex 用 `auth.json` 的登录态打 ChatGPT 的 usage 接口，另带额度余额与「这里的 codex 是否走第三方 provider」。`status` 非 `ok`（`expired` / `not_logged_in` / `unavailable` / `error`）时窗口为空、界面给引导。后端缓存一分钟，`?refresh=1` 绕过。**对租户开放**（花的是同一份额度）。取舍见 [docs/adr-025](docs/adr-025-套餐用量取数路径.md) |
 | GET | `/api/system/update` | 版本检查（GitHub Releases 缓存，后台每日刷新；`?force=1` 现查）。`pending` 带当前版本与最新版本之间**全部待更新版本**的日志（最多 5 条，更早的计入 `pendingMore`）——跨版本更新时中间几版改了什么也要看得到 |
 | POST | `/api/system/update/apply` | 一键更新：下载最新 release 替换 .app 并自动重启（仅桌面版）。有会话正在生成回复时返回 `{applied:false, runningTurns}` 供前端弹确认，body 带 `{force:true}` 才真装 |
 | GET | `/api/discord` | discord 频道工作区总览（adr-016，bot 申请与双 bot 隔离见 [docs/discord-bot-setup.md](docs/discord-bot-setup.md)，owner 专属）：`{config:{enabled,tokenSet,workRoot}, status:{running,connected,botUser,guilds…}, bindings, catalog}`；token 永不回传 |

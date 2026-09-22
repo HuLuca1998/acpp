@@ -184,7 +184,8 @@ func TestAuth_OwnerOnlySurfaces(t *testing.T) {
 
 	// 共享资源的读不该被身份层拦下（这里没装对应服务，走到 handler 会
 	// 500——只要不是 401/403 就说明身份层放行了）。
-	for _, path := range []string{"/api/skills", "/api/agents"} {
+	// 套餐水位是 /api/system 前缀下唯一对租户开放的读面（花的是同一份额度）。
+	for _, path := range []string{"/api/skills", "/api/agents", "/api/system/quota"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.AddCookie(cookie)
 		if got := do(handler, req).Code; got == http.StatusForbidden || got == http.StatusUnauthorized {

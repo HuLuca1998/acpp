@@ -178,6 +178,9 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("PUT /api/system/codex-home/file", system.saveCodexFile)
 	api.HandleFunc("POST /api/system/codex-home/reveal", system.revealCodexHome)
 	api.HandleFunc("PUT /api/system/data-dir", system.migrate)
+	// 套餐用量：claude / codex 账号在订阅上的限额水位（对话页用量面板用）。
+	// 对租户也开放（isOwnerOnly 里单列）：他们花的是同一份额度。
+	api.HandleFunc("GET /api/system/quota", system.quota)
 	// 工作区根：agent 干活的地方与租户 root 的父目录，立刻生效。
 	api.HandleFunc("PUT /api/system/workspace-dir", system.workspaceDir)
 	// 环境体检与一键安装：依赖清单是后端白名单，安装命令不接受用户输入。
