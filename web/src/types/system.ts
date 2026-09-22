@@ -129,3 +129,44 @@ export interface CodexHomeInfo {
   dir: string
   files: CodexFile[]
 }
+
+/** 套餐用量（plan quota）能不能用：非 ok 时 windows 为空，界面按状态给引导。 */
+export type QuotaStatus =
+  "ok" | "expired" | "not_logged_in" | "unavailable" | "error"
+
+/**
+ * 一个限额窗口。kind 认得的有 session（5 小时滚动窗）/ weekly（每周全模型）/
+ * weekly_model（每周按模型，model 给型号名）；认不出的按 windowSeconds 说长度。
+ */
+export interface QuotaWindow {
+  kind: "session" | "weekly" | "weekly_model" | "window" | (string & {})
+  model?: string
+  windowSeconds?: number
+  /** 已用比例 0–100。 */
+  percent: number
+  /** 下次归零的时刻，服务端没给就没有。 */
+  resetsAt?: string
+  /** 当前真正卡着的那个窗口（claude 的 is_active）。 */
+  active?: boolean
+}
+
+/**
+ * 本机登录账号在订阅套餐上的限额水位，与 server/internal/system 的 PlanQuota
+ * 对齐。它与「用量报表」是两回事：报表记这台机器花了多少，水位是账号在
+ * 服务端还剩多少——后者只有服务端知道。
+ */
+export interface PlanQuota {
+  flavor: "claude" | "codex"
+  status: QuotaStatus
+  /** 套餐名（max / pro / prolite …），原样透传。 */
+  plan?: string
+  windows: QuotaWindow[]
+  /** codex 的额度余额（套餐窗口之外按量计费的部分）。 */
+  credits?: { balance: string; unlimited: boolean }
+  /** claude 的额外用量（套餐之外的付费额度），没开就没有。 */
+  extra?: { percent: number; used: number; limit: number; currency?: string }
+  /** 非空表示这里的 codex 走的是第三方 provider，消耗的不是这份额度。 */
+  provider?: string
+  fetchedAt: string
+  error?: string
+}

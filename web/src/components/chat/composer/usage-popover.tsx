@@ -1,9 +1,13 @@
 import { useTranslation } from "react-i18next"
 
 import { formatTokens } from "@/lib/format"
-import type { SessionUsageTotals } from "@/lib/chat/usage"
+import {
+  quotaFlavorOf,
+  usageTone,
+  type SessionUsageTotals,
+} from "@/lib/chat/usage"
 import type { ContextUsage } from "@/hooks/use-chat"
-import type { TurnUsage } from "@/types/acp"
+import type { AgentFlavor, TurnUsage } from "@/types/acp"
 import { cn } from "@/lib/utils"
 import {
   Popover,
@@ -16,17 +20,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-
-/**
- * 占用色阶：越满越显眼。低位用品牌色（安静的存在感），过半转注意色，
- * 逼近上限转危险色——那时用户真该考虑开新会话或压缩上下文了。
- */
-function usageTone(percent: number): { stroke: string; fill: string } {
-  if (percent >= 85)
-    return { stroke: "stroke-destructive", fill: "bg-destructive" }
-  if (percent >= 60) return { stroke: "stroke-warning", fill: "bg-warning" }
-  return { stroke: "stroke-primary", fill: "bg-primary" }
-}
+import { QuotaSection } from "@/components/chat/composer/quota-section"
+import { UsageBar } from "@/components/chat/composer/usage-bar"
 
 /** 货币格式化器缓存：语言 + 币种就那么几组，没必要每次重建。 */
 const moneyFormatters = new Map<string, Intl.NumberFormat | null>()
@@ -80,29 +75,9 @@ function Row({
   )
 }
 
-/**
- * 上下文占用条。手写而不是装 shadcn 的 progress：这里要的是一根两像素的
- * 装饰线，progress 组件的 root+indicator 两层结构与 aria 语义在这儿都用不上
- * ——占比数字就在旁边，读屏用户从文字拿到的信息比进度条更准。
- * 接近占满时转 warning 色，那是唯一需要被看见的时刻。
- */
-function ContextBar({ percent }: { percent: number }) {
-  return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-      <div
-        className={cn(
-          "h-full rounded-full transition-[width,background-color] duration-300 ease-fluid",
-          usageTone(percent).fill
-        )}
-        style={{ width: `${Math.min(100, Math.max(2, percent))}%` }}
-      />
-    </div>
-  )
-}
-
 /** 环形占用指示器：状态栏上唯一的用量入口，直径 16px。
- *  没有水位数据（刷新后 SSE 事件还没来）时只画底环，按钮照常可点——
- *  面板里还有从转录重建出来的累计数据。 */
+ *  没有水位数据（刷新后 SSE 事件还没来、或会话还没开始）时只画底环，按钮
+ *  照常可点——面板里还有从转录重建出来的累计数据与账号的套餐水位。 */
 function UsageRing({ percent, active }: { percent: number; active: boolean }) {
   const r = 6
   const circumference = 2 * Math.PI * r
@@ -140,23 +115,28 @@ function UsageRing({ percent, active }: { percent: number; active: boolean }) {
 /**
  * 用量详情面板：点状态栏的上下文占比展开。
  *
- * 只呈现协议真给的数据——上下文水位、最近一轮明细、会话累计（各轮相加）、
- * 以及 claude 才有的累计费用。额度/重置时间那类 ACP 没有，不臆造。
+ * 自上而下：上下文水位 → 账号的套餐限额（claude / codex 才有，向服务端取）
+ * → 最近一轮明细 → 会话累计（各轮相加）→ claude 才有的累计费用。前两段说的
+ * 是「还能用多少」，后三段说的是「已经用了多少」。
  */
 export function UsagePopover({
   usage,
   lastUsage,
   totals,
+  flavor,
   className,
 }: {
   /** 上下文水位；SSE 事件态，刷新后为空——那时面板改用累计做入口。 */
   usage?: ContextUsage | null
   lastUsage?: TurnUsage | null
   totals?: SessionUsageTotals | null
+  /** 会话的 agent 方言：claude / codex 才查得到套餐限额，其余不显示那一段。 */
+  flavor?: AgentFlavor
   className?: string
 }) {
   const { t, i18n } = useTranslation()
   const percent = usage && usage.size > 0 ? (usage.used / usage.size) * 100 : 0
+  const quotaFlavor = quotaFlavorOf(flavor)
 
   // 悬停摘要：一行说清最要紧的——占用比例（有水位时）或会话累计，
   // 有费用就缀在后面。明细留给点开的面板。
@@ -216,13 +196,22 @@ export function UsagePopover({
                   {Math.round(percent)}%
                 </span>
               </div>
-              <ContextBar percent={percent} />
+              <UsageBar percent={percent} />
             </section>
+          ) : null}
+
+          {quotaFlavor ? (
+            <>
+              {usage ? <Separator /> : null}
+              {/* 弹层关了就卸载，所以「打开即拉取」由它自己的挂载完成；
+                  按方言加 key，换 agent 即重挂。 */}
+              <QuotaSection key={quotaFlavor} flavor={quotaFlavor} />
+            </>
           ) : null}
 
           {lastUsage ? (
             <>
-              {usage ? <Separator /> : null}
+              {usage || quotaFlavor ? <Separator /> : null}
               <section className="flex flex-col gap-1.5">
                 <div className="text-xs font-medium">
                   {t("chat.usage.lastTurn")}

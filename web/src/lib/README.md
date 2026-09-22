@@ -24,11 +24,11 @@
 | chat/draft-store.ts | 输入框草稿的 ref 化 store（打字不重渲页面树，由输入卡自己订阅）    | `createDraftStore`、`DraftStore`                                     |
 | chat/first-send.ts | 草稿页 → 会话页的首发交棒：乐观用户消息、派发状态与失败通知          | `stashFirstSend`、`claimFirstSend`、`optimisticUserMessage`、`isOptimisticMessage` |
 | local-commands.ts | 本地斜杠命令（前端自己执行、不发给 agent）的解析与补全清单合并        | `parseLocalCommand`、`withLocalCommands`、`LOCAL_COMMANDS`          |
-| format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatClockTime`、`formatTokens`、`formatCost`、`formatDuration`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
+| format.ts         | 时间/数字/字符串格式化纯函数                                          | `formatRelativeTime`、`formatDateTime`、`formatClockTime`、`formatTokens`、`formatCost`、`formatDuration`、`formatCountdown`、`formatBytes`、`capitalize`、`displayPath`、`relativePath` |
 | git-status.ts     | git 变更 → 文件树着色：绝对路径映射与目录汇总（新增/修改/删除）       | `buildChangeMap`、`dirChangeKind`、`CHANGE_TONE`                     |
 | mcp-tool.ts       | MCP 工具的读法：破坏性判定、JSON-RPC 请求拼装、响应拆解（协议错误与工具错误分开）；工具台与调用记录共用 | `isDestructive`、`toolFullName`、`buildToolCall`、`buildRequest`、`initialArgs`、`coerceArgs`、`isRequired`、`readResponse`、`prettyJSON`、`parseJSON` |
 | line-diff.ts      | 行级 diff（LCS 对齐，大文件退化保护）                                 | `lineDiff`                                                           |
-| chat/usage.ts     | 会话累计用量：把历史各轮的 turnUsage 相加（用量面板用）              | `sumSessionUsage`、`SessionUsageTotals`                              |
+| chat/usage.ts     | 用量面板的纯逻辑：历史各轮 turnUsage 相加、占用色阶（上下文与套餐限额共用）、哪些方言有套餐额度可查 | `sumSessionUsage`、`SessionUsageTotals`、`usageTone`、`quotaFlavorOf`、`QuotaFlavor` |
 | chat/message-blocks.ts | 消息列表按类型聚合成渲染块（过程性消息折叠）与块的身份/轮首判定 | `groupMessages`、`blockKey`、`turnStartsOf`                          |
 | chat/mascot-state.ts | 聊天状态 → 输入卡吉祥物的表情态（grok-ball 表情 id 的映射在组件里）；纯派生，后端不加字段 | `mascotStateOf`、`MascotState`、`MascotInput`、`MASCOT_BUSY` |
 | chat/mascot-prefs.ts | 输入卡吉祥物的本地偏好（localStorage）：开关、安静模式、蹲哪边；带模块级广播 | `getMascotPrefs`、`saveMascotPrefs`、`subscribeMascotPrefs`、`MascotPrefs`、`MascotSide` |
@@ -57,6 +57,7 @@
 | use-search-draft.ts | 列表页搜索区的草稿 / 已提交两份状态：set 改草稿、commit 提交、reset 清空 | `useSearchDraft` |
 | use-min-loading.ts | 把「正在请求」变成「该亮指示器」：亮起后至少扫完一整趟（500ms）才灭，快请求不闪 | `useMinLoading`、`LOADING_CYCLE_MS`、`remainingMs` |
 | use-active-sessions.ts | 订阅会话活跃态广播（侧边栏状态点呼吸用）                                    | `useActiveSessions`                            |
+| use-plan-quota.ts    | 套餐用量（claude / codex 账号的限额水位）的拉取：模块级缓存一分钟，面板反复开合不闪骨架屏；refresh 绕过前后端缓存 | `usePlanQuota`                                 |
 | use-chat.ts          | 会话流状态机：bootstrap、SSE 订阅、发送/排队/中止、设置与交互裁决                                               | `useChat`                                      |
 | identity-context.ts  | 身份上下文与读取 hook（adr-007）：owner / 租户 / 被停用三态，provider 在 components/shell/identity-provider.tsx | `IdentityContext`、`useIdentity`、`useIsOwner` |
 | use-draft-session.ts | 草稿态会话：agent/模型选择与首条消息落地建会话                                                                  | `useDraftSession`                              |

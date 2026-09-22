@@ -1,12 +1,12 @@
 import { useTranslation } from "react-i18next"
 
 import type { ContextUsage } from "@/hooks/use-chat"
-import type { SessionUsageTotals } from "@/lib/chat/usage"
+import { quotaFlavorOf, type SessionUsageTotals } from "@/lib/chat/usage"
 import { Hint } from "@/components/hint"
 import { UsagePopover } from "@/components/chat/composer/usage-popover"
 import { useIdentity } from "@/hooks/identity-context"
 import { displayPath } from "@/lib/format"
-import type { TurnUsage } from "@/types/acp"
+import type { AgentFlavor, TurnUsage } from "@/types/acp"
 import { FolderIcon, GitBranchIcon, PencilIcon } from "lucide-react"
 
 /**
@@ -23,6 +23,7 @@ export function ComposerStatus({
   usage,
   lastUsage,
   totals,
+  flavor,
   onPickCwd,
 }: {
   cwd?: string
@@ -36,6 +37,9 @@ export function ComposerStatus({
   lastUsage?: TurnUsage | null
   /** 会话累计用量（历史各轮相加），点开用量面板时展示。 */
   totals?: SessionUsageTotals | null
+  /** agent 方言：claude / codex 能查账号的套餐限额，圆环因此在草稿态也在——
+   *  发第一句之前就该看得到这周还剩多少。 */
+  flavor?: AgentFlavor
   /** 草稿态：点击工作目录打开目录选择器；老会话不传，纯展示。 */
   onPickCwd?: () => void
 }) {
@@ -43,6 +47,7 @@ export function ComposerStatus({
   const { identity } = useIdentity()
   // 访客看到的是 `~/...`：完整路径里带着这台机器主人的用户名，对他没用。
   const shownCwd = displayPath(cwd ?? "", identity?.root)
+  const quotaFlavor = quotaFlavorOf(flavor)
   if (
     !cwd &&
     !gitBranch &&
@@ -50,7 +55,8 @@ export function ComposerStatus({
     !worktreeSlot &&
     !usage &&
     !lastUsage &&
-    !totals
+    !totals &&
+    !quotaFlavor
   )
     return null
 
@@ -87,13 +93,14 @@ export function ComposerStatus({
           </span>
         ) : null)}
       {worktreeSlot}
-      {/* 右侧只留一个环形按钮：占用比例一眼可见，明细（本轮/累计/费用）
-          悬停给摘要、点击展开面板——状态栏不该被一串数字占满。 */}
-      {(usage && usage.size > 0) || totals ? (
+      {/* 右侧只留一个环形按钮：占用比例一眼可见，明细（套餐限额/本轮/累计/
+          费用）悬停给摘要、点击展开面板——状态栏不该被一串数字占满。 */}
+      {(usage && usage.size > 0) || totals || quotaFlavor ? (
         <UsagePopover
           usage={usage}
           lastUsage={lastUsage}
           totals={totals}
+          flavor={flavor}
           className="ml-auto"
         />
       ) : null}

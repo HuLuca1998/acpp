@@ -339,6 +339,11 @@ export const ChatPanel = memo(function ChatPanel() {
             usage={isNew ? null : chat.contextUsage}
             lastUsage={isNew ? null : (chat.lastUsage ?? usageStats?.last)}
             totals={isNew ? null : usageStats?.totals}
+            flavor={
+              isNew
+                ? newSession.selectedAgent?.flavor
+                : chat.session?.agentFlavor
+            }
             onPickCwd={isNew ? openCwdPicker : undefined}
           />
         }

@@ -1,4 +1,26 @@
-import type { Message, TurnUsage } from "@/types/acp"
+import type { AgentFlavor, Message, TurnUsage } from "@/types/acp"
+
+/** 有套餐额度可查的方言：只有这两家的账号有「5 小时 / 每周」这种限额窗口。 */
+export type QuotaFlavor = "claude" | "codex"
+
+/** 会话的 agent 方言 → 能查套餐额度的方言；generic 与未知给 null，界面不显示那一段。 */
+export function quotaFlavorOf(
+  flavor: AgentFlavor | undefined
+): QuotaFlavor | null {
+  return flavor === "claude" || flavor === "codex" ? flavor : null
+}
+
+/**
+ * 占用色阶：越满越显眼。低位用品牌色（安静的存在感），过半转注意色，
+ * 逼近上限转危险色——那时用户真该考虑开新会话、压缩上下文，或者等窗口重置。
+ * 上下文水位与套餐限额共用同一套色阶：同一个面板里两种「几成满」不该各说各话。
+ */
+export function usageTone(percent: number): { stroke: string; fill: string } {
+  if (percent >= 85)
+    return { stroke: "stroke-destructive", fill: "bg-destructive" }
+  if (percent >= 60) return { stroke: "stroke-warning", fill: "bg-warning" }
+  return { stroke: "stroke-primary", fill: "bg-primary" }
+}
 
 /** 会话累计用量：把历史各轮的 token 计量加起来。 */
 export interface SessionUsageTotals {

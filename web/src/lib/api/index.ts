@@ -53,6 +53,7 @@ import type {
   EnvInfo,
   EnvInstallResult,
   OllamaModel,
+  PlanQuota,
   SystemInfo,
   TitleModelConfig,
   UpdateInfo,
@@ -411,6 +412,14 @@ export const api = {
       request<{ opened: boolean }>("/system/codex-home/reveal", {
         method: "POST",
       }),
+    /**
+     * 套餐用量：claude / codex 账号在订阅上的限额水位（不是本地账本）。
+     * 后端缓存一分钟，refresh 绕过它重取。
+     */
+    quota: (flavor: "claude" | "codex", refresh = false) =>
+      request<PlanQuota>(
+        `/system/quota?flavor=${flavor}${refresh ? "&refresh=1" : ""}`
+      ),
 
     /** 迁移数据目录（拷贝式，重启后端后生效）。 */
     migrateDataDir: (dataDir: string) =>

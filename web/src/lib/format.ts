@@ -109,6 +109,23 @@ export function formatDuration(ms: number): string {
   return `${sec}s`
 }
 
+/**
+ * 「还要等多久」的倒计时："3d 7h"、"4h 42m"、"42m"；不到一分钟给 "<1m"。
+ *
+ * 与 formatDuration 分开：那个说的是「干了多久」，小数小时够用；重置时间
+ * 这种要掐着点等的位置，"4.7h" 不如 "4h 42m" 好用。
+ */
+export function formatCountdown(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / 60_000))
+  if (minutes < 1) return "<1m"
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const mins = minutes % 60
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
+  if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
+  return `${mins}m`
+}
+
 /** 首字母大写：动态拼 i18n key（"idle" → "statusIdle"）用。 */
 export function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)

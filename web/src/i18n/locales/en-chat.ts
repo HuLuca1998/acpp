@@ -177,6 +177,27 @@ export const enChat = {
     cost: "Cost so far",
     costNote: "Reported by the agent; Claude only.",
   },
+  quota: {
+    title: "Plan usage",
+    fiveHour: "5-hour limit",
+    weekly: "Weekly · all models",
+    weeklyModel: "Weekly · {{model}}",
+    window: "{{hours}}-hour window",
+    resetsIn: "Resets in {{time}}",
+    extra: "Extra usage",
+    credits: "Credit balance {{balance}}",
+    creditsUnlimited: "Unlimited credits",
+    providerNote:
+      "codex here runs through {{provider}}; it does not draw on this quota.",
+    updated: "Updated {{time}}",
+    refresh: "Refresh",
+    noWindows: "The server reported no limit windows.",
+    expired: "Sign-in expired: run {{cli}} once in a terminal to renew it.",
+    notLoggedIn: "{{cli}} is not signed in.",
+    unavailable:
+      "No plan quota for this sign-in method (API key or third-party provider).",
+    error: "Could not fetch plan usage: {{error}}",
+  },
   toolStatus: {
     pending: "Pending",
     in_progress: "Running",
