@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { RotateCcwIcon } from "lucide-react"
+import { PauseIcon, PlayIcon, RotateCcwIcon, Trash2Icon } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -17,16 +17,22 @@ import { isUpdateActive } from "@/lib/desktop"
 import type { UpdateProgress } from "@/types/system"
 
 /**
- * 一键更新的进度卡：下载阶段给真进度（字节、速度、剩余时间），解包与
- * 安装没有字节数可数就给不定态条，重启与失败各有终态。失败可原地重试。
+ * 一键更新的进度卡：下载阶段给真进度（字节、速度、剩余时间）并可暂停，
+ * 暂停态能继续（续传）或放弃（删半成品），解包与安装没有字节数可数就给
+ * 不定态条，重启与失败各有终态。失败重试即续传。
  */
 export function UpdateProgressCard({
   progress,
   onRetry,
+  onPause,
+  onDiscard,
   onDismiss,
 }: {
   progress: UpdateProgress
+  /** 失败重试与暂停后继续走同一个动作：再发一次 apply 就是续传。 */
   onRetry: () => void
+  onPause: () => void
+  onDiscard: () => void
   onDismiss: () => void
 }) {
   const { t } = useTranslation()
@@ -45,6 +51,10 @@ export function UpdateProgressCard({
         return t("settingsPage.about.progress.installing")
       case "restarting":
         return t("settingsPage.about.progress.restarting")
+      case "paused":
+        return t("settingsPage.about.progress.paused", {
+          version: p.version ?? "",
+        })
       case "failed":
         return t("settingsPage.about.progress.failed")
       default:
@@ -55,7 +65,7 @@ export function UpdateProgressCard({
   // 下载阶段按字节算百分比；服务端没给总长时走不定态。解包 / 安装没有
   // 字节数，也是不定态；终态铺满。
   const value =
-    p.phase === "downloading"
+    p.phase === "downloading" || p.phase === "paused"
       ? p.total > 0
         ? Math.min(100, (p.downloaded / p.total) * 100)
         : null
@@ -64,6 +74,11 @@ export function UpdateProgressCard({
         : 100
 
   const stats = (() => {
+    if (p.phase === "paused")
+      return t("settingsPage.about.progress.statsPaused", {
+        done: formatBytes(p.downloaded),
+        total: formatBytes(p.total),
+      })
     if (p.phase !== "downloading") return null
     const done = formatBytes(p.downloaded)
     const speed = formatBytes(Math.max(0, p.speed))
@@ -88,7 +103,7 @@ export function UpdateProgressCard({
           {busy ? <Spinner className="size-4" /> : null}
           <span className={busy ? "text-shimmer" : undefined}>{title}</span>
         </CardTitle>
-        {p.message && p.phase !== "failed" ? (
+        {p.message && p.phase !== "failed" && p.phase !== "paused" ? (
           <CardDescription>{p.message}</CardDescription>
         ) : null}
       </CardHeader>
@@ -98,6 +113,26 @@ export function UpdateProgressCard({
         ) : null}
         {stats ? (
           <p className="text-xs text-muted-foreground tabular-nums">{stats}</p>
+        ) : null}
+        {p.phase === "downloading" ? (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={onPause}>
+              <PauseIcon data-icon="inline-start" />
+              {t("settingsPage.about.progress.pause")}
+            </Button>
+          </div>
+        ) : null}
+        {p.phase === "paused" ? (
+          <div className="flex gap-2">
+            <Button size="sm" onClick={onRetry}>
+              <PlayIcon data-icon="inline-start" />
+              {t("settingsPage.about.progress.resume")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onDiscard}>
+              <Trash2Icon data-icon="inline-start" />
+              {t("settingsPage.about.progress.discard")}
+            </Button>
+          </div>
         ) : null}
         {p.phase === "failed" ? (
           <>

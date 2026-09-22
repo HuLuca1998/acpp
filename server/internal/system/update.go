@@ -67,18 +67,32 @@ type Updater struct {
 	// 可注入以便测试：测试进程是 go test 二进制，装进一个临时目录里的假 bundle。
 	bundlePath func() (string, error)
 
+	// cacheDir 放下载的半成品（<dataDir>/updates），进程重启后还能续传。
+	cacheDir string
+
 	mu       sync.Mutex
 	cached   UpdateInfo
 	assetURL string
 	// progress 是一键更新的进行态，meter 算下载速度，见 update_apply.go。
+	// running 表示后台流水线还在跑（phase 已是 paused 时它可能还在收尾），
+	// cancel 带原因地停掉它（暂停 / 放弃）。
 	progress UpdateProgress
 	meter    speedMeter
-	// stall 是下载停滞判定时长的覆盖值（0 用默认），测试注入短值。
-	stall time.Duration
+	running  bool
+	cancel   context.CancelCauseFunc
+	// 下面三个是测试注入的短值（0 用默认）：停滞判定时长、连续无进展的
+	// 重连上限、重连间隔。
+	stall     time.Duration
+	retries   int
+	retryWait time.Duration
 }
 
-func NewUpdater(repo string) *Updater {
-	return &Updater{repo: repo, apiBase: "https://api.github.com", bundlePath: currentBundlePath}
+// NewUpdater 建更新器；dataDir 下的 updates/ 存下载半成品。
+func NewUpdater(repo, dataDir string) *Updater {
+	return &Updater{
+		repo: repo, apiBase: "https://api.github.com", bundlePath: currentBundlePath,
+		cacheDir: filepath.Join(dataDir, "updates"),
+	}
 }
 
 // StartPeriodicCheck 启动即查一次，之后按 interval 周期刷新缓存。

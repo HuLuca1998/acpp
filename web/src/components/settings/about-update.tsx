@@ -111,14 +111,32 @@ export function AboutUpdate() {
     }
   }
 
+  // 暂停：后端停掉下载、留着半成品，回来的就是 paused 态的进度。
+  async function pause() {
+    try {
+      setProgress(await api.system.updatePause())
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+
+  // 放弃：删半成品回到 idle，卡片收起、更新按钮重新出现。
+  async function discard() {
+    try {
+      await api.system.updateDiscard()
+      setProgress(null)
+    } catch (err) {
+      toast.error((err as Error).message)
+    }
+  }
+
   if (progress && progress.phase !== "idle") {
     return (
       <UpdateProgressCard
         progress={progress}
-        onRetry={() => {
-          setProgress(null)
-          void apply()
-        }}
+        onRetry={() => void apply()}
+        onPause={() => void pause()}
+        onDiscard={() => void discard()}
         onDismiss={() => setProgress(null)}
       />
     )

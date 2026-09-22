@@ -322,7 +322,7 @@ func run() error {
 	defer terminalService.Shutdown()
 
 	// 版本检查：启动即查一次，此后每天刷新；结果缓存在内存供设置页读取。
-	updateService := system.NewUpdater(cfg.UpdateRepo)
+	updateService := system.NewUpdater(cfg.UpdateRepo, cfg.DataDir)
 	updateService.StartPeriodicCheck(context.Background(), 24*time.Hour)
 
 	handler := httpapi.NewRouter(cfg, httpapi.Services{

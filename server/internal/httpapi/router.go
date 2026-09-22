@@ -196,6 +196,8 @@ func NewRouter(cfg config.Config, svcs Services) http.Handler {
 	api.HandleFunc("GET /api/system/update", system.updateInfo)
 	api.HandleFunc("POST /api/system/update/apply", system.updateApply)
 	api.HandleFunc("GET /api/system/update/progress", system.updateProgress)
+	api.HandleFunc("POST /api/system/update/pause", system.updatePause)
+	api.HandleFunc("POST /api/system/update/discard", system.updateDiscard)
 
 	// discord 频道工作区（adr-016）：配置面 + 频道绑定管理，owner 专属
 	// （isOwnerOnly 按前缀覆盖）。绑定的创建只发生在 Discord 侧的 /init。

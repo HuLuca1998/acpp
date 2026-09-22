@@ -119,6 +119,25 @@ func (h systemHandler) updateProgress(w http.ResponseWriter, _ *http.Request) {
 	writeData(w, http.StatusOK, h.update.Progress())
 }
 
+// updatePause 暂停下载，半成品留着；再 POST apply 就是续传。
+func (h systemHandler) updatePause(w http.ResponseWriter, _ *http.Request) {
+	progress, err := h.update.Pause()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, progress)
+}
+
+// updateDiscard 放弃这次更新：停掉下载并删掉半成品。
+func (h systemHandler) updateDiscard(w http.ResponseWriter, _ *http.Request) {
+	if err := h.update.Discard(); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]bool{"discarded": true})
+}
+
 func (h systemHandler) get(w http.ResponseWriter, _ *http.Request) {
 	writeData(w, http.StatusOK, h.withLanBase(h.system.Info()))
 }

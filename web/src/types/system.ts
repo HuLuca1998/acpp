@@ -109,10 +109,15 @@ export interface UpdateInfo {
   canApply: boolean
 }
 
-/** 一键更新的阶段：idle 没在更新；restarting 之后进程随即被换掉；done 是装好了但要手动重开。 */
+/**
+ * 一键更新的阶段：idle 没在更新；paused 是下载停着、半成品留着（再点继续
+ * 就续传，进程重启后也认得）；restarting 之后进程随即被换掉；done 是装好了
+ * 但要手动重开；failed 重试即续传。
+ */
 export type UpdatePhase =
   | "idle"
   | "downloading"
+  | "paused"
   | "unpacking"
   | "installing"
   | "restarting"
@@ -123,14 +128,14 @@ export type UpdatePhase =
 export interface UpdateProgress {
   phase: UpdatePhase
   version?: string
-  /** 字节数；total 为 0 表示服务端没给长度。 */
+  /** 字节数（续传时从上次的位置起算）；total 为 0 表示还不知道总长。 */
   downloaded: number
   total: number
   /** 最近几秒的平均下载速度（字节/秒），下载阶段之外为 0。 */
   speed: number
   startedAt?: string
   updatedAt?: string
-  /** restarting / done 的说明。 */
+  /** 给人看的一句话：断线续传中、已暂停、装好了怎么重启…… */
   message?: string
   /** failed 的原因。 */
   error?: string

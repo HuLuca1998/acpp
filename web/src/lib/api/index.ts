@@ -477,6 +477,14 @@ export const api = {
       }),
     /** 一键更新的进行态：阶段、已下载 / 总字节、速度。下载期间轮询。 */
     updateProgress: () => request<UpdateProgress>("/system/update/progress"),
+    /** 暂停下载，半成品留着；再调 updateApply 就是续传。 */
+    updatePause: () =>
+      request<UpdateProgress>("/system/update/pause", { method: "POST" }),
+    /** 放弃这次更新：停掉下载并删掉半成品。 */
+    updateDiscard: () =>
+      request<{ discarded: boolean }>("/system/update/discard", {
+        method: "POST",
+      }),
   },
 
   /**

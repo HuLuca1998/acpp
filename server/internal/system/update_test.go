@@ -56,7 +56,7 @@ func TestUpdater_Info_ParsesLatestRelease(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := NewUpdater("HuLuca1998/acpp")
+	svc := NewUpdater("HuLuca1998/acpp", t.TempDir())
 	svc.apiBase = srv.URL
 
 	info := svc.Info(context.Background(), true)
@@ -78,7 +78,7 @@ func TestUpdater_Info_NoReleaseYet(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := NewUpdater("HuLuca1998/acpp")
+	svc := NewUpdater("HuLuca1998/acpp", t.TempDir())
 	svc.apiBase = srv.URL
 
 	info := svc.Info(context.Background(), true)
@@ -89,7 +89,7 @@ func TestUpdater_Info_NoReleaseYet(t *testing.T) {
 
 // 契约：开发态（进程不在 .app bundle 里）拒绝一键更新；无可用更新同样拒绝。
 func TestUpdater_Apply_RejectsOutsideBundle(t *testing.T) {
-	svc := NewUpdater("HuLuca1998/acpp")
+	svc := NewUpdater("HuLuca1998/acpp", t.TempDir())
 	if _, err := svc.Apply(context.Background()); !errors.Is(err, service.ErrInvalid) {
 		t.Errorf("无更新时 err = %v, want service.ErrInvalid", err)
 	}
@@ -126,7 +126,7 @@ func TestUpdater_Info_CollectsPendingNotes(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := NewUpdater("HuLuca1998/acpp")
+	svc := NewUpdater("HuLuca1998/acpp", t.TempDir())
 	svc.apiBase = srv.URL
 	info := svc.Info(context.Background(), true)
 

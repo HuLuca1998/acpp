@@ -4,12 +4,15 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,8 +45,9 @@ func fakeAppZip(t *testing.T, name string) []byte {
 }
 
 // fakeUpdater 造一个「有更新可装、bundle 在临时目录里」的 Updater。
-func fakeUpdater(assetURL, bundle string) *Updater {
-	u := NewUpdater("HuLuca1998/acpp")
+func fakeUpdater(t *testing.T, assetURL, bundle string) *Updater {
+	t.Helper()
+	u := NewUpdater("HuLuca1998/acpp", t.TempDir())
 	u.bundlePath = func() (string, error) { return bundle, nil }
 	u.mu.Lock()
 	u.cached = UpdateInfo{HasUpdate: true, LatestVersion: "99.0.0"}
@@ -89,7 +93,7 @@ func TestUpdater_Apply_InstallsInBackgroundAndReportsProgress(t *testing.T) {
 	if err := os.WriteFile(oldServer, []byte("old-server"), 0o755); err != nil {
 		t.Fatalf("write old server: %v", err)
 	}
-	u := fakeUpdater(srv.URL+"/asset.zip", bundle)
+	u := fakeUpdater(t, srv.URL+"/asset.zip", bundle)
 
 	first, err := u.Apply(context.Background())
 	if err != nil {
@@ -129,7 +133,7 @@ func TestUpdater_Apply_IsIdempotentWhileRunning(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	u := fakeUpdater(srv.URL+"/asset.zip", filepath.Join(t.TempDir(), "Fake.app"))
+	u := fakeUpdater(t, srv.URL+"/asset.zip", filepath.Join(t.TempDir(), "Fake.app"))
 
 	if _, err := u.Apply(context.Background()); err != nil {
 		t.Fatalf("first Apply: %v", err)
@@ -162,7 +166,7 @@ func TestUpdater_Apply_FailureIsReportedAndRetryable(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer srv.Close()
-	u := fakeUpdater(srv.URL+"/missing.zip", filepath.Join(t.TempDir(), "Fake.app"))
+	u := fakeUpdater(t, srv.URL+"/missing.zip", filepath.Join(t.TempDir(), "Fake.app"))
 
 	if _, err := u.Apply(context.Background()); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -183,7 +187,7 @@ func TestUpdater_Apply_FailureIsReportedAndRetryable(t *testing.T) {
 
 // 契约：Progress 在从没更新过时报 idle，而不是空阶段。
 func TestUpdater_Progress_IdleBeforeAnyApply(t *testing.T) {
-	if got := NewUpdater("HuLuca1998/acpp").Progress().Phase; got != "idle" {
+	if got := NewUpdater("HuLuca1998/acpp", t.TempDir()).Progress().Phase; got != "idle" {
 		t.Fatalf("phase = %q, want idle", got)
 	}
 }
@@ -227,8 +231,10 @@ func TestUpdater_Apply_StalledDownloadFailsWithReason(t *testing.T) {
 	// 先放行卡住的 handler 再关服务器：srv.Close 会等在途请求结束，顺序反了就死锁。
 	defer srv.Close()
 	defer close(hang)
-	u := fakeUpdater(srv.URL+"/asset.zip", filepath.Join(t.TempDir(), "Fake.app"))
+	u := fakeUpdater(t, srv.URL+"/asset.zip", filepath.Join(t.TempDir(), "Fake.app"))
 	u.stall = 300 * time.Millisecond
+	// 这条只验停滞判定；断线重连另有契约，这里让它一次就放弃。
+	u.retries, u.retryWait = 1, 10*time.Millisecond
 
 	if _, err := u.Apply(context.Background()); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -240,5 +246,183 @@ func TestUpdater_Apply_StalledDownloadFailsWithReason(t *testing.T) {
 	}
 	if final.Downloaded != 4096 || final.Total != 1048576 {
 		t.Errorf("downloaded/total = %d/%d, want 4096/1048576 kept for the user to see how far it got", final.Downloaded, final.Total)
+	}
+}
+
+// oldBundle 在临时目录里放一个待替换的旧 .app（只需 acp-server 一个标记文件）。
+func oldBundle(t *testing.T) (bundle, serverFile string) {
+	t.Helper()
+	bundle = filepath.Join(t.TempDir(), "Fake.app")
+	serverFile = filepath.Join(bundle, "Contents", "MacOS", "acp-server")
+	if err := os.MkdirAll(filepath.Dir(serverFile), 0o755); err != nil {
+		t.Fatalf("mkdir old bundle: %v", err)
+	}
+	if err := os.WriteFile(serverFile, []byte("old-server"), 0o755); err != nil {
+		t.Fatalf("write old server: %v", err)
+	}
+	return bundle, serverFile
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+// rangeRecorder 记下每次请求带的 Range 头，续传契约就看它。
+type rangeRecorder struct {
+	mu     sync.Mutex
+	ranges []string
+}
+
+func (r *rangeRecorder) add(v string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ranges = append(r.ranges, v)
+}
+
+func (r *rangeRecorder) all() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.ranges...)
+}
+
+// 契约：暂停后半成品留着、进度不丢；再 Apply 是续传——第二次请求带着
+// Range 从断点接着下，拼出来的包完整可装。
+func TestUpdater_PauseAndResume_ContinuesWithRange(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("安装流程依赖 /usr/bin/ditto")
+	}
+	asset := fakeAppZip(t, "Fake")
+	cut := len(asset) / 3
+	var hits atomic.Int32
+	var rec rangeRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec.add(r.Header.Get("Range"))
+		if hits.Add(1) == 1 {
+			// 第一次只给三分之一，然后挂着，直到客户端断开（暂停就是断开）。
+			w.Header().Set("Content-Length", strconv.Itoa(len(asset)))
+			_, _ = w.Write(asset[:cut])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		http.ServeContent(w, r, "ACPP-99.0.0.zip", time.Time{}, bytes.NewReader(asset))
+	}))
+	defer srv.Close()
+	bundle, serverFile := oldBundle(t)
+	u := fakeUpdater(t, srv.URL+"/asset.zip", bundle)
+
+	if _, err := u.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	waitFor(t, "first third downloaded", func() bool { return u.Progress().Downloaded >= int64(cut) })
+	paused, err := u.Pause()
+	if err != nil || paused.Phase != "paused" {
+		t.Fatalf("Pause = %+v, %v; want paused", paused, err)
+	}
+	waitFor(t, "pipeline to stop", func() bool {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		return !u.running
+	})
+	if got := u.Progress(); got.Phase != "paused" || got.Downloaded != int64(cut) || got.Total != int64(len(asset)) {
+		t.Fatalf("after pause = %+v, want paused at %d/%d", got, cut, len(asset))
+	}
+
+	resumed, err := u.Apply(context.Background())
+	if err != nil {
+		t.Fatalf("resume Apply: %v", err)
+	}
+	if resumed.Phase != "downloading" || resumed.Downloaded != int64(cut) {
+		t.Fatalf("resume progress = %+v, want downloading from %d", resumed, cut)
+	}
+	final := waitSettled(t, u)
+	if final.Phase != "done" || final.Downloaded != int64(len(asset)) {
+		t.Fatalf("final = %+v, want done with the full asset", final)
+	}
+	if installed, _ := os.ReadFile(serverFile); string(installed) != "new-server" {
+		t.Errorf("installed acp-server = %q, want new-server (resumed zip must be intact)", installed)
+	}
+	if ranges := rec.all(); len(ranges) != 2 || ranges[0] != "" || ranges[1] != fmt.Sprintf("bytes=%d-", cut) {
+		t.Errorf("Range headers = %q, want [\"\" \"bytes=%d-\"]", ranges, cut)
+	}
+}
+
+// 契约：连接中途断掉不算失败——按已下到的位置自动续传，直到下完。
+func TestUpdater_Download_ResumesAfterDisconnect(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("安装流程依赖 /usr/bin/ditto")
+	}
+	asset := fakeAppZip(t, "Fake")
+	cut := len(asset) / 2
+	var hits atomic.Int32
+	var rec rangeRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec.add(r.Header.Get("Range"))
+		if hits.Add(1) == 1 {
+			// 宣称全长却只发一半就收工：客户端会看到 unexpected EOF。
+			w.Header().Set("Content-Length", strconv.Itoa(len(asset)))
+			_, _ = w.Write(asset[:cut])
+			return
+		}
+		http.ServeContent(w, r, "ACPP-99.0.0.zip", time.Time{}, bytes.NewReader(asset))
+	}))
+	defer srv.Close()
+	bundle, serverFile := oldBundle(t)
+	u := fakeUpdater(t, srv.URL+"/asset.zip", bundle)
+	u.retryWait = 10 * time.Millisecond
+
+	if _, err := u.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	final := waitSettled(t, u)
+	if final.Phase != "done" || final.Downloaded != int64(len(asset)) {
+		t.Fatalf("final = %+v, want done after resuming", final)
+	}
+	if installed, _ := os.ReadFile(serverFile); string(installed) != "new-server" {
+		t.Errorf("installed acp-server = %q, want new-server", installed)
+	}
+	if ranges := rec.all(); len(ranges) != 2 || ranges[1] != fmt.Sprintf("bytes=%d-", cut) {
+		t.Errorf("Range headers = %q, want a resume from %d on the second request", ranges, cut)
+	}
+}
+
+// 契约：进程重启后磁盘上的半成品仍然认得——Progress 报 paused 并带上
+// 下到哪、总共多长；地址对不上的半截不算数；放弃则清掉回到 idle。
+func TestUpdater_Progress_RecognizesLeftoverPartAndDiscards(t *testing.T) {
+	assetURL := "https://example.com/ACPP-99.0.0.zip"
+	u := fakeUpdater(t, assetURL, filepath.Join(t.TempDir(), "Fake.app"))
+	part := u.partPath("99.0.0")
+	if err := os.MkdirAll(filepath.Dir(part), 0o755); err != nil {
+		t.Fatalf("mkdir cache: %v", err)
+	}
+	if err := os.WriteFile(part, bytes.Repeat([]byte("x"), 4096), 0o644); err != nil {
+		t.Fatalf("write part: %v", err)
+	}
+	writeMeta(part, partMeta{URL: assetURL, Total: 1 << 20})
+
+	if got := u.Progress(); got.Phase != "paused" || got.Downloaded != 4096 || got.Total != 1<<20 || got.Version != "99.0.0" {
+		t.Fatalf("Progress = %+v, want paused 4096/1048576 for 99.0.0", got)
+	}
+	writeMeta(part, partMeta{URL: "https://example.com/other.zip", Total: 1 << 20})
+	if got := u.Progress(); got.Phase != "idle" {
+		t.Fatalf("Progress with foreign part = %+v, want idle", got)
+	}
+	writeMeta(part, partMeta{URL: assetURL, Total: 1 << 20})
+	if err := u.Discard(); err != nil {
+		t.Fatalf("Discard: %v", err)
+	}
+	if _, err := os.Stat(part); !os.IsNotExist(err) {
+		t.Errorf("part still exists after discard (err=%v)", err)
+	}
+	if got := u.Progress(); got.Phase != "idle" {
+		t.Errorf("Progress after discard = %+v, want idle", got)
 	}
 }
