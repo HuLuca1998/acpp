@@ -3,11 +3,12 @@ import { flushSync } from "react-dom"
 import type { NoticeEvent } from "@/types/acp"
 
 /**
- * 通知的种类。`update` 是前端自己产生的（版本哨兵发现后端换了版本），
+ * 通知的种类。`update` 与 `release` 是前端自己产生的：前者是版本哨兵发现
+ * 后端换了版本（该刷新页面），后者是 GitHub 上有了新版本（该去设置里更新）。
  * 其余几种来自后端广播——但对用户来说都是「有件事等你处理」，摆在一起才
  * 有意义，所以并进同一个列表。
  */
-export type NoticeKind = NoticeEvent | "update"
+export type NoticeKind = NoticeEvent | "update" | "release"
 
 /** 通知中心里的一条。 */
 export interface Notice {
@@ -35,6 +36,9 @@ const LIMIT = 20
  */
 const PRIORITY: Record<NoticeKind, number> = {
   update: 0,
+  // 有新版本可装：不阻塞谁，但它是 owner 该主动去做的事，排在会话通知前面
+  // 才不会被一串「答完了」压到折叠垫层里去。
+  release: 1,
   permission: 1,
   elicitation: 1,
   error: 2,

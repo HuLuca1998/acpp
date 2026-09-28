@@ -4,6 +4,8 @@ export const zhNotify = {
   elicitation: "有问题要问你",
   turnEnd: "回答完成",
   error: "出错了",
+  release: "有可用更新",
+  releaseGo: "前往更新",
   center: {
     title: "通知中心",
     clearAll: "全部清除",

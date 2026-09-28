@@ -3,6 +3,8 @@ export const enNotify = {
   permission: "Needs your decision",
   elicitation: "A question for you",
   turnEnd: "Answer ready",
+  release: "New version available",
+  releaseGo: "Update now",
   error: "Something went wrong",
   center: {
     title: "Notification Center",
