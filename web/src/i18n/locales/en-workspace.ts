@@ -176,6 +176,8 @@ export const enWorkspace = {
     aheadBehind: "{{ahead}} ahead · {{behind}} behind",
     noCommits: "No commits",
     noChanges: "No changes",
+    trackedChanges: "Tracked changes",
+    untrackedFiles: "Untracked files",
     loadMore: "Load earlier",
     askReview: "Ask AI to review this commit",
     askCompare: "Ask AI to compare these branches",

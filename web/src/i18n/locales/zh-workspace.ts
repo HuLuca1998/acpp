@@ -170,6 +170,8 @@ export const zhWorkspace = {
     aheadBehind: "领先 {{ahead}} · 落后 {{behind}}",
     noCommits: "没有提交记录",
     noChanges: "没有变更",
+    trackedChanges: "已跟踪文件的变更",
+    untrackedFiles: "未跟踪的文件",
     loadMore: "加载更早",
     askReview: "让 AI 审查这条提交",
     askCompare: "让 AI 对比这两条分支",

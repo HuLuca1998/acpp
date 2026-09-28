@@ -8,6 +8,8 @@ export interface GitFileChange {
   status: string
   added: number
   deleted: number
+  /** git 尚未跟踪的新文件；只在工作区视图里出现。 */
+  untracked?: boolean
 }
 
 export interface GitCommit {

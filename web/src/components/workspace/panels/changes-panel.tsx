@@ -5,11 +5,11 @@ import { toast } from "sonner"
 
 import { useVisibleLoad } from "@/hooks/use-panel-visible"
 
+import { GitPanelHeader } from "@/components/workspace/panels/git-parts"
 import {
-  ChangeStat,
-  GitPanelHeader,
-  StatusLetter,
-} from "@/components/workspace/panels/git-parts"
+  ChangeGroup,
+  ChangeTree,
+} from "@/components/workspace/panels/change-tree"
 import { PanelEmptyState } from "@/components/workspace/panels/panel-empty-state"
 import {
   GitConfirmDialog,
@@ -21,24 +21,10 @@ import {
   useGitSelection,
   useWorkspace,
 } from "@/components/workspace/workspace-context"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
-import { buildPathTree, countFiles, type PathTreeNode } from "@/lib/path-tree"
-import { cn } from "@/lib/utils"
+import { buildPathTree } from "@/lib/path-tree"
 import type { GitFileChange } from "@/types/acp"
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  FileIcon,
-  FolderIcon,
-} from "lucide-react"
 
 /**
  * 变更面板（右上）。取代了原来的 diff 面板——它们是同一个东西的两种
@@ -113,13 +99,26 @@ export const ChangesPanel = memo(function ChangesPanel(
   useVisibleLoad(props.api, ws.onWorkspaceRefresh, load)
 
   // 工作区模式下用共享的 gitStore，避免同一份数据两处拉。
-  const list = comparing || selection.sha ? files : (git.data?.files ?? null)
+  const workingTree = !comparing && !selection.sha
+  const list = workingTree ? (git.data?.files ?? null) : files
   // 树只在文件清单变化时重建：大变更集（几百个文件）每次渲染重建一遍纯属
   // 浪费，而这个面板会被选择态与 git 刷新频繁带着重渲染。
-  const tree = useMemo(
-    () => (list ? buildPathTree(list, (file) => file.path) : null),
-    [list]
-  )
+  //
+  // 看工作区时分两组：已跟踪文件的改动与 git 还没跟踪的新文件是两类事——
+  // 前者是「改了什么」，后者常是忘了 ignore 的产物，混在一棵树里互相淹没。
+  // 提交/对比里不存在未跟踪文件，只有一组、不画组头。
+  const groups = useMemo(() => {
+    if (!list) return null
+    const build = (items: GitFileChange[]) =>
+      buildPathTree(items, (file) => file.path)
+    if (!workingTree) return [{ key: "all", files: list, tree: build(list) }]
+    const tracked = list.filter((file) => !file.untracked)
+    const untracked = list.filter((file) => file.untracked)
+    return [
+      { key: "tracked", files: tracked, tree: build(tracked) },
+      { key: "untracked", files: untracked, tree: build(untracked) },
+    ].filter((group) => group.files.length > 0)
+  }, [list, workingTree])
 
   if (!ws.ready) {
     return (
@@ -192,25 +191,45 @@ export const ChangesPanel = memo(function ChangesPanel(
         }}
       />
       <ScrollArea className="min-h-0 flex-1 py-1">
-        {list === null || tree === null ? (
+        {list === null || groups === null ? (
           <div className="flex items-center justify-center py-6">
             <Spinner className="size-4 text-muted-foreground" />
           </div>
         ) : list.length === 0 ? (
           <PanelEmptyState title={t("workspace.git.noChanges")} />
         ) : (
-          <ChangeTree
-            node={tree}
-            depth={0}
-            onOpen={openDiff}
-            onAsk={askAboutFile}
-            onReference={ws.addReference}
-            onPreview={ws.openPreview}
-            onDownload={ws.downloadFile}
-            onCopy={(value) => void copyText(value)}
-            onDiscard={comparing || selection.sha ? undefined : discardFile}
-            onAskDir={(dir) => ws.askAI(t("workspace.git.promptDir", { dir }))}
-          />
+          groups.map((group) => {
+            const tree = (
+              <ChangeTree
+                node={group.tree}
+                depth={0}
+                onOpen={openDiff}
+                onAsk={askAboutFile}
+                onReference={ws.addReference}
+                onPreview={ws.openPreview}
+                onDownload={ws.downloadFile}
+                onCopy={(value) => void copyText(value)}
+                onDiscard={workingTree ? discardFile : undefined}
+                onAskDir={(dir) =>
+                  ws.askAI(t("workspace.git.promptDir", { dir }))
+                }
+              />
+            )
+            if (!workingTree) return <div key={group.key}>{tree}</div>
+            return (
+              <ChangeGroup
+                key={group.key}
+                title={
+                  group.key === "untracked"
+                    ? t("workspace.git.untrackedFiles")
+                    : t("workspace.git.trackedChanges")
+                }
+                count={group.files.length}
+              >
+                {tree}
+              </ChangeGroup>
+            )
+          })
         )}
       </ScrollArea>
 
@@ -218,138 +237,3 @@ export const ChangesPanel = memo(function ChangesPanel(
     </div>
   )
 })
-
-/**
- * 变更树的一层：目录可折叠（默认展开——变更集通常不大，一进来就该看见
- * 全部文件），文件行点开进查看器的 diff 模式。
- */
-function ChangeTree({
-  node,
-  depth,
-  onOpen,
-  onAsk,
-  onReference,
-  onPreview,
-  onDownload,
-  onCopy,
-  onDiscard,
-  onAskDir,
-}: {
-  node: PathTreeNode<GitFileChange>
-  depth: number
-  onOpen: (path: string) => void
-  onAsk: (path: string) => void
-  onReference: (path: string) => void
-  onPreview: (path: string) => void
-  onDownload: (path: string) => void
-  onCopy: (value: string) => void
-  /** 只有看工作区时才给：提交里的改动没什么可丢的。 */
-  onDiscard?: (path: string) => void
-  onAskDir: (dir: string) => void
-}) {
-  const { t } = useTranslation()
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-
-  return (
-    <div>
-      {node.dirs.map((dir) => {
-        const isCollapsed = collapsed[dir.path]
-        return (
-          <div key={dir.path}>
-            <button
-              type="button"
-              title={dir.path}
-              className="flex w-full items-center gap-1.5 py-1 pr-2.5 text-left text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
-              style={{ paddingLeft: `${depth * 12 + 8}px` }}
-              onClick={() =>
-                setCollapsed((prev) => ({
-                  ...prev,
-                  [dir.path]: !prev[dir.path],
-                }))
-              }
-            >
-              {isCollapsed ? (
-                <ChevronRightIcon className="size-3.5 shrink-0" />
-              ) : (
-                <ChevronDownIcon className="size-3.5 shrink-0" />
-              )}
-              <FolderIcon className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate font-mono">
-                {dir.name}
-              </span>
-              <span className="shrink-0 text-muted-foreground/60 tabular-nums">
-                {countFiles(dir)}
-              </span>
-            </button>
-            {isCollapsed ? null : (
-              <ChangeTree
-                node={dir}
-                depth={depth + 1}
-                onOpen={onOpen}
-                onAsk={onAsk}
-                onReference={onReference}
-                onPreview={onPreview}
-                onDownload={onDownload}
-                onCopy={onCopy}
-                onDiscard={onDiscard}
-                onAskDir={onAskDir}
-              />
-            )}
-          </div>
-        )
-      })}
-
-      {node.files.map(({ name, item }) => (
-        <ContextMenu key={item.path}>
-          <ContextMenuTrigger
-            render={
-              <button
-                type="button"
-                title={item.path}
-                className={cn(
-                  "flex w-full items-center gap-2 py-1 pr-2.5 text-left text-xs transition-colors duration-150 hover:bg-accent"
-                )}
-                style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                onClick={() => onOpen(item.path)}
-              />
-            }
-          >
-            <StatusLetter status={item.status} />
-            <FileIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-            <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
-            <ChangeStat added={item.added} deleted={item.deleted} />
-          </ContextMenuTrigger>
-          <ContextMenuContent className="w-56">
-            <ContextMenuItem onClick={() => onAsk(item.path)}>
-              {t("workspace.git.askFile")}
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={() => onPreview(item.path)}>
-              {t("workspace.git.openCurrent")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onReference(item.path)}>
-              {t("workspace.refMenu.addReference")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onDownload(item.path)}>
-              {t("workspace.refMenu.download")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onCopy(item.path)}>
-              {t("workspace.git.copyPath")}
-            </ContextMenuItem>
-            {onDiscard ? (
-              <>
-                <ContextMenuSeparator />
-                <ContextMenuItem
-                  variant="destructive"
-                  onClick={() => onDiscard(item.path)}
-                >
-                  {t("workspace.git.discardFile")}
-                </ContextMenuItem>
-              </>
-            ) : null}
-          </ContextMenuContent>
-        </ContextMenu>
-      ))}
-    </div>
-  )
-}
