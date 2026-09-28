@@ -25,6 +25,9 @@ type GitFileChange struct {
 	Status  string `json:"status"`
 	Added   int    `json:"added"`
 	Deleted int    `json:"deleted"`
+	// Untracked 标记 git 尚未跟踪的新文件（status 里的 `??`）。Status 仍记
+	// A，界面据此把「已跟踪的改动」与「未跟踪的新文件」分两组显示。
+	Untracked bool `json:"untracked,omitempty"`
 }
 
 // GitCommit 是未推送列表里的一条提交。
@@ -193,7 +196,9 @@ func gitOverview(ctx context.Context, cwd string) (*GitOverview, error) {
 		"branch":   {"rev-parse", "--abbrev-ref", "HEAD"},
 		"upstream": {"rev-parse", "--abbrev-ref", "@{u}"},
 		"counts":   {"rev-list", "--left-right", "--count", "@{u}...HEAD"},
-		"status":   {"status", "--porcelain", "-z"},
+		// --untracked-files=all：默认模式把整个未跟踪目录折成一条 "dir/"，
+		// 面板里既看不到里面的文件也数不了行。
+		"status":   {"status", "--porcelain", "-z", "--untracked-files=all"},
 		"numstat":  {"diff", "--numstat", "-z", "HEAD", "--"},
 		"unpushed": append(slices.Clone(unpushedLogArgs), "@{u}..HEAD"),
 		"recent":   append(slices.Clone(unpushedLogArgs), "-n", "20"),
@@ -224,7 +229,12 @@ func gitOverview(ctx context.Context, cwd string) (*GitOverview, error) {
 
 	statusOut, _ := res["status"].ok()
 	numstatOut, _ := res["numstat"].ok()
-	overview.Files = parseStatusFiles(cwd, statusOut, numstatOut)
+	// status 的路径相对仓库根，数行要按根拼路径（cwd 可能是子目录）。
+	root := cwd
+	if overview.Root != "" {
+		root = overview.Root
+	}
+	overview.Files = parseStatusFiles(root, statusOut, numstatOut)
 
 	// 无 upstream 时退化为最近 20 条（前端据 Upstream 空标注）。
 	logKey := "unpushed"
@@ -367,13 +377,17 @@ func finishDiffView(view *GitDiffView) {
 // 行数统计并入 numstat；untracked 文件现场数行（有上限），比显示"未知"更有用。
 //
 // 只解析不执行：两条命令由调用方并发跑完再把输出递进来（见 runGitParallel）。
-func parseStatusFiles(cwd, statusOut, numstatOut string) []GitFileChange {
+//
+// 数行要读文件，只给前 maxCountedUntracked 个未跟踪文件数：忘了 ignore 的
+// 大目录能展开出上万个文件，全读一遍会把整个 overview 拖慢。
+func parseStatusFiles(root, statusOut, numstatOut string) []GitFileChange {
 	if statusOut == "" {
 		return []GitFileChange{}
 	}
 	stats := parseNumstat(numstatOut)
 
 	files := []GitFileChange{}
+	counted := 0
 	out := statusOut
 	fields := strings.Split(out, "\x00")
 	for i := 0; i < len(fields); i++ {
@@ -388,9 +402,12 @@ func parseStatusFiles(cwd, statusOut, numstatOut string) []GitFileChange {
 		}
 		change := GitFileChange{Path: path, Status: status, Added: -1, Deleted: -1}
 		if xy == "??" {
-			change.Status = "A"
-			change.Added = countFileLines(filepath.Join(cwd, path))
-			change.Deleted = 0
+			change.Status, change.Untracked = "A", true
+			if counted < maxCountedUntracked {
+				counted++
+				change.Added = countFileLines(filepath.Join(root, path))
+				change.Deleted = 0
+			}
 		} else if s, ok := stats.byPath[path]; ok {
 			change.Added, change.Deleted = s[0], s[1]
 		}
@@ -460,6 +477,9 @@ func parseNumstat(out string) numstat {
 	}
 	return result
 }
+
+// maxCountedUntracked 是 overview 里现场数行的未跟踪文件上限，超出的行数记 -1。
+const maxCountedUntracked = 500
 
 // countFileLines 数 untracked 文件的行数；二进制或超限返回 -1。
 func countFileLines(path string) int {

@@ -38,15 +38,17 @@ export function GitPanelHeader({
   )
 }
 
-/** 变更类型字母：A 新增 / D 删除 / 其余修改类，色调与 DiffView 呼应。 */
+/**
+ * 变更类型字母：A 新增 / U 未跟踪 / D 删除 / 其余修改类，色调与 DiffView 呼应。
+ */
 export function StatusLetter({ status }: { status: string }) {
   return (
     <span
       className={cn(
         "w-3 shrink-0 text-center",
-        status === "A" && "text-primary",
+        (status === "A" || status === "U") && "text-primary",
         status === "D" && "text-destructive",
-        status !== "A" && status !== "D" && "text-muted-foreground"
+        !["A", "U", "D"].includes(status) && "text-muted-foreground"
       )}
     >
       {status}

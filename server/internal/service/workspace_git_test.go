@@ -49,6 +49,13 @@ func TestWorkspaceGitOverview_ReportsBranchAndChanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("a\nb\nc\n"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+	// 未跟踪的新目录必须展开成逐个文件，而不是折成一条 "pkg/"。
+	if err := os.MkdirAll(filepath.Join(dir, "pkg", "sub"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pkg", "sub", "deep.txt"), []byte("x\ny\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 
 	view, err := WorkspaceGitOverview(context.Background(), dir)
 	if err != nil {
@@ -85,9 +92,46 @@ func TestWorkspaceGitOverview_ReportsBranchAndChanges(t *testing.T) {
 	if !ok {
 		t.Fatalf("改动清单缺未跟踪的 new.txt：%+v", view.Files)
 	}
-	if added.Status != "A" || added.Added != 3 {
-		t.Errorf("new.txt = status %q +%d, want A +3", added.Status, added.Added)
+	if added.Status != "A" || added.Added != 3 || !added.Untracked {
+		t.Errorf("new.txt = status %q +%d untracked=%v, want A +3 untracked", added.Status, added.Added, added.Untracked)
 	}
+	if readme.Untracked {
+		t.Error("README.md 是已跟踪文件，不该标 untracked")
+	}
+	deep, ok := byPath["pkg/sub/deep.txt"]
+	if !ok {
+		t.Fatalf("未跟踪目录没展开到文件：%+v", view.Files)
+	}
+	if !deep.Untracked || deep.Added != 2 {
+		t.Errorf("pkg/sub/deep.txt = +%d untracked=%v, want +2 untracked", deep.Added, deep.Untracked)
+	}
+}
+
+// 契约：会话 cwd 是仓库子目录时，未跟踪文件的行数照样数得出来
+// （status 路径相对仓库根，不能按 cwd 拼）。
+func TestWorkspaceGitOverview_CountsUntrackedFromSubdir(t *testing.T) {
+	dir := gitRepo(t)
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "a.txt"), []byte("1\n2\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	view, err := WorkspaceGitOverview(context.Background(), sub)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	for _, f := range view.Files {
+		if f.Path == "sub/a.txt" {
+			if f.Added != 2 {
+				t.Errorf("sub/a.txt Added = %d, want 2", f.Added)
+			}
+			return
+		}
+	}
+	t.Fatalf("改动清单缺 sub/a.txt：%+v", view.Files)
 }
 
 // 契约：有 upstream 时报出 upstream 名与领先/落后数，提交列表只含未推送的那些。
