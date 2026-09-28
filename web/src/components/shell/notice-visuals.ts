@@ -1,4 +1,5 @@
 import {
+  ArrowUpCircleIcon,
   CircleCheckIcon,
   MessageCircleQuestionMarkIcon,
   OctagonXIcon,
@@ -32,6 +33,11 @@ export const STYLES = {
     tile: "bg-destructive/15",
   },
   update: { Icon: RefreshCwIcon, tone: "text-warning", tile: "bg-warning/15" },
+  release: {
+    Icon: ArrowUpCircleIcon,
+    tone: "text-primary",
+    tile: "bg-primary/15",
+  },
   // 撤回信号不会进列表，列在这里只是让类型收口。
   permission_done: {
     Icon: CircleCheckIcon,
@@ -51,6 +57,7 @@ export const TITLE_KEYS = {
   turn_end: "notify.turnEnd",
   error: "notify.error",
   update: "backend.updateAvailable",
+  release: "notify.release",
   permission_done: "notify.turnEnd",
   elicitation_done: "notify.turnEnd",
 } as const

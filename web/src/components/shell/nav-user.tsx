@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router"
 import {
+  ArrowUpCircleIcon,
   ChevronsUpDownIcon,
   HistoryIcon,
   LanguagesIcon,
@@ -14,6 +15,11 @@ import {
 
 import { api } from "@/lib/api"
 import { useVersionWatch } from "@/hooks/use-version-watch"
+import {
+  RELEASE_SETTINGS_PATH,
+  useReleaseWatch,
+} from "@/hooks/use-release-watch"
+import { dismissNotice } from "@/lib/notify/store"
 import { AppearanceMenuItems } from "@/components/shell/appearance-switcher"
 import { LanguageMenuItems } from "@/components/shell/language-switcher"
 import { StatusDot } from "@/components/status-dot"
@@ -48,6 +54,8 @@ type Health =
  *
  * 后端换版本后菜单底部的状态行变成「刷新」入口；通知中心里那张
  * update 卡是主入口，这里是常驻的兜底（通知可以被划掉，状态不该跟着丢）。
+ * GitHub 上有新版本可装时同理：release 卡是主入口，菜单里常驻一条「前往
+ * 更新」（owner 才有）。
  */
 export function NavUser({
   whoami,
@@ -59,6 +67,7 @@ export function NavUser({
   const { t } = useTranslation()
   const [health, setHealth] = useState<Health>(null)
   const updated = useVersionWatch()
+  const release = useReleaseWatch(isOwner)
 
   useEffect(() => {
     let cancelled = false
@@ -76,11 +85,12 @@ export function NavUser({
     }
   }, [])
 
-  const tone = updated
-    ? ("warning" as const)
-    : health?.status === "ok"
-      ? ("success" as const)
-      : ("destructive" as const)
+  const tone =
+    updated || release
+      ? ("warning" as const)
+      : health?.status === "ok"
+        ? ("success" as const)
+        : ("destructive" as const)
 
   return (
     <SidebarMenu>
@@ -91,7 +101,10 @@ export function NavUser({
               <UserRoundIcon className="size-3.5 text-muted-foreground" />
             </span>
             <span className="flex-1 truncate text-sm">{whoami}</span>
-            <StatusDot tone={tone} pulse={tone === "success"} />
+            <StatusDot
+              tone={tone}
+              pulse={tone === "success" || Boolean(release)}
+            />
             <ChevronsUpDownIcon className="size-3.5 text-muted-foreground" />
           </DropdownMenuTrigger>
 
@@ -160,6 +173,19 @@ export function NavUser({
                   {t("backend.changelog")}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
+            ) : null}
+
+            {release ? (
+              <DropdownMenuItem
+                render={<Link to={RELEASE_SETTINGS_PATH} />}
+                onClick={() => dismissNotice("release")}
+              >
+                <ArrowUpCircleIcon className="text-primary" />
+                <span className="flex-1">{t("notify.releaseGo")}</span>
+                <span className="font-mono text-xs tabular-nums">
+                  v{release}
+                </span>
+              </DropdownMenuItem>
             ) : null}
 
             {/* 后端状态：有更新时是可点的刷新项，其余是纯信息行。 */}

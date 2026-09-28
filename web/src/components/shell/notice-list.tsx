@@ -7,6 +7,7 @@ import { clearNotices, type Notice } from "@/lib/notify/store"
 import { cn } from "@/lib/utils"
 import { useNotices } from "@/hooks/use-notices"
 import { useNoticeLeave } from "@/hooks/use-notice-leave"
+import { RELEASE_SETTINGS_PATH } from "@/hooks/use-release-watch"
 import { STYLES, TITLE_KEYS } from "@/components/shell/notice-visuals"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -103,6 +104,16 @@ export function NoticeAction({
         className={className}
         aria-label={t("backend.reload")}
         onClick={() => window.location.reload()}
+      />
+    )
+  }
+  if (notice.kind === "release") {
+    return (
+      <Link
+        to={RELEASE_SETTINGS_PATH}
+        aria-label={t("notify.releaseGo")}
+        className={className}
+        onClick={onAct}
       />
     )
   }
