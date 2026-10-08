@@ -173,11 +173,17 @@ func (s envSpec) staleNpm(path string) bool {
 
 // npmOwned 判断可执行文件是否由 npm 全局安装管理：npm 在 <prefix>/bin 下建的
 // 是指向 <prefix>/lib/node_modules/... 的软链，解析到底必然经过 node_modules；
-// Homebrew 装的则落在 Cellar/ 或 Caskroom/ 里，一眼可分。解析不了（断链、
-// 或压根不是软链）一律当作不是 npm 的——宁可漏报也不误伤。
+// Homebrew 装的则落在 Cellar/ 或 Caskroom/ 里。解析不了（断链、或压根不是
+// 软链）一律当作不是 npm 的——宁可漏报也不误伤。
+// 先认 brew 再认 node_modules：codex-acp 这类 formula 本身就是 Node 包，
+// 解析到底是 Cellar/<pkg>/<ver>/libexec/lib/node_modules/...，只看
+// node_modules 会把 brew 正装误报成 npm 遗留，用户照着 npm uninstall 永远清不掉。
 func npmOwned(path string) bool {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
+		return false
+	}
+	if strings.Contains(real, "/Cellar/") || strings.Contains(real, "/Caskroom/") {
 		return false
 	}
 	return strings.Contains(real, "/node_modules/")

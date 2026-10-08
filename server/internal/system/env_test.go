@@ -175,6 +175,18 @@ func TestService_EnvCheck_FlagsStaleNpmInstall(t *testing.T) {
 	writeScript(t, bin, "brew", "#!/bin/sh\necho \"brew called: $@\"\n")
 	// codex 是 brew 装的形状（普通文件），不该被误判成 npm 遗留。
 	writeScript(t, bin, "codex", "#!/bin/sh\necho codex-cli 0.153.4\n")
+	// codex-acp 的 brew formula 本身是 Node 包：软链解析到
+	// Cellar/<pkg>/<ver>/libexec/lib/node_modules/...，路径里也有 node_modules，
+	// 但它归 brew 管，同样不能报遗留（mini1 实测踩到的误报）。
+	cellar := filepath.Join(root, "Cellar", "codex-acp", "1.12.0", "libexec", "lib",
+		"node_modules", "@agentclientprotocol", "codex-acp", "dist")
+	if err := os.MkdirAll(cellar, 0o755); err != nil {
+		t.Fatalf("mkdir cellar: %v", err)
+	}
+	acpReal := writeScript(t, cellar, "index.js", "#!/bin/sh\necho 1.12.0\n")
+	if err := os.Symlink(acpReal, filepath.Join(bin, "codex-acp")); err != nil {
+		t.Fatalf("symlink codex-acp: %v", err)
+	}
 	t.Setenv("PATH", bin)
 
 	svc := envSvc(t)
@@ -188,6 +200,9 @@ func TestService_EnvCheck_FlagsStaleNpmInstall(t *testing.T) {
 	}
 	if got := byKey["codex"].MigrateHint; got != "" {
 		t.Errorf("codex.MigrateHint = %q, want 空（brew 装的不算遗留）", got)
+	}
+	if got := byKey["codex-acp"].MigrateHint; got != "" {
+		t.Errorf("codex-acp.MigrateHint = %q, want 空（Cellar 里的 node_modules 归 brew）", got)
 	}
 
 	if _, err := svc.EnvInstall(context.Background(), "claude"); !errors.Is(err, service.ErrInvalid) {
