@@ -45,16 +45,28 @@ const listEl = document.getElementById("list")
 const countEl = document.getElementById("count")
 const metaEl = document.getElementById("meta")
 const refreshBtn = document.getElementById("refresh")
+const sortEl = document.getElementById("sort")
+const pagerEl = document.getElementById("pager")
+const pageEl = document.getElementById("page")
+const prevBtn = document.getElementById("prev")
+const nextBtn = document.getElementById("next")
+
+/** 最近一次画的快照：翻页按钮要拿当前页码。 */
+let current = null
 
 function render(snap) {
+  current = snap
   listEl.replaceChildren()
   const items = snap.items ?? []
-  countEl.textContent = items.length
-    ? snap.total > items.length
-      ? `${snap.total} · 前 ${items.length}`
-      : String(snap.total)
-    : ""
+  countEl.textContent = items.length ? String(snap.total) : ""
   metaEl.textContent = snap.running ? relTime(snap.fetchedAt) : ""
+  for (const b of sortEl.querySelectorAll("button")) b.classList.toggle("on", b.dataset.sort === snap.sort)
+
+  const pages = Math.max(1, Math.ceil((snap.total ?? 0) / (snap.pageSize || 15)))
+  pagerEl.hidden = !snap.running || pages <= 1
+  pageEl.textContent = `${snap.page ?? 1} / ${pages}`
+  prevBtn.disabled = (snap.page ?? 1) <= 1
+  nextBtn.disabled = (snap.page ?? 1) >= pages
 
   if (!snap.running) {
     listEl.append(el("div", "info", "服务未运行——右键菜单栏图标可重启"))
@@ -112,10 +124,26 @@ refreshBtn.addEventListener("click", async () => {
     refreshBtn.classList.remove("spin")
   }
 })
+sortEl.addEventListener("click", async (e) => {
+  const sort = e.target.closest("button")?.dataset.sort
+  if (!sort || sort === current?.sort) return
+  render(await window.acppTray.sort(sort))
+})
+
+/** 翻页：换页后列表回到顶部。 */
+async function turn(delta) {
+  if (!current) return
+  render(await window.acppTray.page((current.page ?? 1) + delta))
+  listEl.scrollTop = 0
+}
+prevBtn.addEventListener("click", () => void turn(-1))
+nextBtn.addEventListener("click", () => void turn(1))
 document.getElementById("open-app").addEventListener("click", () => void window.acppTray.openApp())
 document.getElementById("open-all").addEventListener("click", () => void window.acppTray.openApp("/github"))
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") void window.acppTray.hide()
+  else if (e.key === "ArrowLeft" && !prevBtn.disabled && !pagerEl.hidden) void turn(-1)
+  else if (e.key === "ArrowRight" && !nextBtn.disabled && !pagerEl.hidden) void turn(1)
 })
 
 window.acppTray.onSnapshot(render)

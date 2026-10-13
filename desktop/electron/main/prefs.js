@@ -22,6 +22,8 @@ const DEFAULTS = {
   windowBounds: { width: 1280, height: 820 },
   /** 菜单栏点 issue 时用哪个 Chrome 账号打开（profile 目录名），空 = 不指定。 */
   chromeProfile: "",
+  /** 菜单栏 issue 的排序：status（状态 → 优先级，默认）/ priority / updated。 */
+  issueSort: "status",
   /** 迁移标记：只从 UserDefaults 搬一次，之后用户在新壳里的选择说了算。 */
   migratedFromDefaults: false,
 }
@@ -102,6 +104,13 @@ export const prefs = {
   },
   set chromeProfile(dir) {
     load().chromeProfile = dir || ""
+    save()
+  },
+  get issueSort() {
+    return load().issueSort || DEFAULTS.issueSort
+  },
+  set issueSort(sort) {
+    load().issueSort = sort
     save()
   },
   get windowBounds() {

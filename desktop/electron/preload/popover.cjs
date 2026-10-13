@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("acppTray", {
   copy: (text) => call("copy", { text }),
   open: (url) => call("open", { url }),
   refresh: () => call("refresh"),
+  sort: (sort) => call("sort", { sort }),
+  page: (page) => call("page", { page }),
   openApp: (route) => call("openApp", { route }),
   size: (height) => call("size", { height }),
   hide: () => call("hide"),
