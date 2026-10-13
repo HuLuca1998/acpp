@@ -14,7 +14,7 @@ import { PORT } from "./server.js"
 export const PAGE_SIZE = 15
 
 /**
- * 可选的排序 → 后端查询参数。状态排序按看板列从左到右（待处理在前），
+ * 可选的排序 → 后端查询参数。状态排序是进行中 → 待处理 → 待验收，
  * 同列再按优先级；更新时间只有「最近的在前」一个方向有用。
  */
 export const SORTS = {
