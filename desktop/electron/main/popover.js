@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { BrowserWindow, clipboard, ipcMain, screen } from "electron"
 
 import { openURL } from "./browser.js"
+import { PAGE_SIZE } from "./issues.js"
 import { prefs } from "./prefs.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -92,6 +93,7 @@ export class PopoverWindow {
     const win = this.ensureWindow()
     this.trayBounds = trayBounds
     this.place(win.getSize()[1])
+    this.issues.page = 1
     void this.issues.refresh()
     this.pushSnapshot()
     win.show()
@@ -115,7 +117,13 @@ export class PopoverWindow {
   }
 
   snapshot() {
-    return { ...this.issues.snapshot, running: this.issues.server.state === "running" }
+    return {
+      ...this.issues.snapshot,
+      running: this.issues.server.state === "running",
+      page: this.issues.page,
+      pageSize: PAGE_SIZE,
+      sort: this.issues.sort,
+    }
   }
 
   pushSnapshot() {
@@ -138,6 +146,12 @@ export class PopoverWindow {
           return null
         case "refresh":
           await this.issues.refresh({ force: true })
+          return this.snapshot()
+        case "sort":
+          await this.issues.setSort(String(body.sort ?? ""))
+          return this.snapshot()
+        case "page":
+          await this.issues.goto(Number(body.page))
           return this.snapshot()
         case "openApp":
           this.hide()

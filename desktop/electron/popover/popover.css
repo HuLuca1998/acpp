@@ -72,8 +72,26 @@ button {
   align-self: center;
 }
 .icon-btn:hover { background: var(--btn-hover); color: var(--fg); }
+.icon-btn:disabled { opacity: 0.3; background: none; color: var(--fg2); }
 .icon-btn.spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 排序的分段切换：小字、当前项加底，跟标题行同一基线区。 */
+.seg {
+  display: flex;
+  align-self: center;
+  padding: 1px;
+  border-radius: 5px;
+  background: var(--btn);
+}
+.seg button {
+  font-size: 11px;
+  color: var(--fg2);
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+.seg button:hover { color: var(--fg); }
+.seg button.on { background: var(--btn-hover); color: var(--fg); font-weight: 600; }
 
 .list { max-height: 540px; overflow-y: auto; }
 
@@ -159,3 +177,17 @@ button {
   color: var(--fg2);
 }
 .foot-btn:hover { background: var(--hover); color: var(--fg); }
+
+.pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pager[hidden] { display: none; }
+.pager-text {
+  min-width: 40px;
+  text-align: center;
+  font: 500 11px ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--fg2);
+}
