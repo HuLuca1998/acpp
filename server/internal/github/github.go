@@ -235,7 +235,7 @@ func (s *Service) Issues(ctx context.Context, scope service.Scope, login string,
 		}
 	}
 
-	items, total := q.apply(all, priorities.rank())
+	items, total := q.apply(all, priorities.rank(), statuses.rank())
 	labelList := make([]string, 0, len(labels))
 	for l := range labels {
 		labelList = append(labelList, l)

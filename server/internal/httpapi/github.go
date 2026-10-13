@@ -17,7 +17,7 @@ type githubHandler struct {
 func (h githubHandler) issues(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	pageNum, pageSize := pageParams(r)
-	sort := sortParams(r, "priority", "updated")
+	sort := sortParams(r, "priority", "status", "updated")
 	query := github.Query{
 		Repos:    splitList(q.Get("repos")),
 		Keyword:  q.Get("q"),

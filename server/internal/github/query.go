@@ -25,7 +25,8 @@ type Query struct {
 	// Priority / Label 精确匹配一个档 / 一个标签。
 	Priority string
 	Label    string
-	// Sort 是 priority（默认）或 updated；Desc 控制方向。
+	// Sort 是 priority（默认）、status（看板列序 → 优先级）或 updated；
+	// Desc 控制方向。
 	Sort string
 	Desc bool
 	// Refresh 为 true 时先刷新缓存再查。
@@ -44,15 +45,16 @@ func IsDone(status string) bool {
 	return status != "" && doneStatusRe.MatchString(status)
 }
 
-// apply 过滤、排序并切页。priorityRank 是优先级名 → 位次（0 最紧急）。
-func (q Query) apply(all []Issue, priorityRank map[string]int) ([]Issue, int) {
+// apply 过滤、排序并切页。priorityRank 是优先级名 → 位次（0 最紧急），
+// statusRank 是看板列名 → 位次（0 是看板最左列，通常就是待处理）。
+func (q Query) apply(all []Issue, priorityRank, statusRank map[string]int) ([]Issue, int) {
 	out := make([]Issue, 0, len(all))
 	for _, is := range all {
 		if q.match(is) {
 			out = append(out, is)
 		}
 	}
-	q.sortIssues(out, priorityRank)
+	q.sortIssues(out, priorityRank, statusRank)
 
 	total := len(out)
 	page, size := q.Page, q.PageSize
@@ -137,13 +139,17 @@ func (q Query) match(is Issue) bool {
 // sortIssues 排序。优先级排序里没有优先级的排最后；同档按仓库、编号升序——
 // 编号就是 issue 的创建顺序，同一档里先建的先做，比「谁最近被碰过」更稳定，
 // 清单不会因为一条评论就重排。稳定排序，保证翻页时同一条不会在两页间跳。
-func (q Query) sortIssues(list []Issue, priorityRank map[string]int) {
-	rank := func(is Issue) int {
-		if r, ok := priorityRank[is.Priority]; ok && is.Priority != "" {
+//
+// 状态排序按看板列从左到右（升序 = 待处理在前，最该动手的先看），没挂
+// 看板的垫底；同列再按优先级紧急在前，不随方向翻转。
+func (q Query) sortIssues(list []Issue, priorityRank, statusRank map[string]int) {
+	rankOf := func(ranks map[string]int, name string) int {
+		if r, ok := ranks[name]; ok && name != "" {
 			return r
 		}
-		return len(priorityRank) + 1
+		return len(ranks) + 1
 	}
+	rank := func(is Issue) int { return rankOf(priorityRank, is.Priority) }
 	sort.SliceStable(list, func(i, j int) bool {
 		a, b := list[i], list[j]
 		if q.Sort == "updated" {
@@ -153,7 +159,18 @@ func (q Query) sortIssues(list []Issue, priorityRank map[string]int) {
 			return a.UpdatedAt.Before(b.UpdatedAt)
 		}
 		ra, rb := rank(a), rank(b)
-		if ra != rb {
+		if q.Sort == "status" {
+			sa, sb := rankOf(statusRank, a.Status), rankOf(statusRank, b.Status)
+			if sa != sb {
+				if q.Desc {
+					return sa > sb
+				}
+				return sa < sb
+			}
+			if ra != rb {
+				return ra < rb
+			}
+		} else if ra != rb {
 			// Desc 在优先级语义里是「紧急的在前」，也是默认方向。
 			if q.Desc || q.Sort == "" {
 				return ra < rb
