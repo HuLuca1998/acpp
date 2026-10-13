@@ -86,6 +86,8 @@ func sample() []Issue {
 
 var rank = map[string]int{"Urgent": 0, "High": 1, "Medium": 2, "Low": 3}
 
+var boardRank = map[string]int{"待处理": 0, "进行中": 1, "待验收": 2, "已完成": 3, "已取消": 4}
+
 func numbers(list []Issue) []int {
 	out := make([]int, 0, len(list))
 	for _, is := range list {
@@ -109,7 +111,7 @@ func equalInts(a, b []int) bool {
 // 契约：零值查询 = 分配给我 + open + 排除做完 / 取消的看板列 + 按优先级
 // 紧急在前、同档按仓库与编号升序、没优先级的垫底。
 func TestQuery_Defaults(t *testing.T) {
-	got, total := Query{Login: "luca"}.apply(sample(), rank)
+	got, total := Query{Login: "luca"}.apply(sample(), rank, boardRank)
 	want := []int{2, 1, 6}
 	if total != 3 || !equalInts(numbers(got), want) {
 		t.Fatalf("got %v (total %d), want %v", numbers(got), total, want)
@@ -135,10 +137,13 @@ func TestQuery_Filters(t *testing.T) {
 		{"按更新时间倒序", Query{Login: "luca", Sort: "updated", Desc: true}, []int{6, 2, 1}},
 		{"按更新时间正序", Query{Login: "luca", Sort: "updated"}, []int{1, 2, 6}},
 		{"优先级反向", Query{Login: "luca", Sort: "priority", Desc: false}, []int{6, 1, 2}},
+		// 待处理在前、没挂看板的垫底；同列按优先级紧急在前。
+		{"按状态", Query{Login: "luca", Assignee: "all", Sort: "status"}, []int{3, 1, 2, 6}},
+		{"按状态反向", Query{Login: "luca", Assignee: "all", Sort: "status", Desc: true}, []int{6, 2, 3, 1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, _ := tc.q.apply(sample(), rank)
+			got, _ := tc.q.apply(sample(), rank, boardRank)
 			if !equalInts(numbers(got), tc.want) {
 				t.Fatalf("got %v, want %v", numbers(got), tc.want)
 			}
@@ -148,11 +153,11 @@ func TestQuery_Filters(t *testing.T) {
 
 func TestQuery_Paging(t *testing.T) {
 	q := Query{Login: "luca", Board: "all", Page: 2, PageSize: 2}
-	got, total := q.apply(sample(), rank)
+	got, total := q.apply(sample(), rank, boardRank)
 	if total != 5 || !equalInts(numbers(got), []int{1, 4}) {
 		t.Fatalf("page 2 = %v (total %d)", numbers(got), total)
 	}
-	got, _ = Query{Login: "luca", Board: "all", Page: 9, PageSize: 2}.apply(sample(), rank)
+	got, _ = Query{Login: "luca", Board: "all", Page: 9, PageSize: 2}.apply(sample(), rank, boardRank)
 	if len(got) != 0 {
 		t.Fatalf("past the end should be empty, got %v", numbers(got))
 	}
