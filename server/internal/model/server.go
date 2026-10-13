@@ -60,3 +60,13 @@ type Server struct {
 	// ——否则要等到点了删除、被拒绝，才知道这台机器还被谁用着。
 	UsedBy int `gorm:"-" json:"usedBy"`
 }
+
+// DialKeyPath 是拨号时该用的私钥路径。选了私钥库的钥匙就不再看路径——
+// 路径多半是从别的机器同步来的旧配法，钥匙查不到时退回去读它只会换来
+// 「读私钥失败: 文件不存在」，掩盖了真正的问题（钥匙没了）。
+func (s *Server) DialKeyPath() string {
+	if s.KeyID != 0 {
+		return ""
+	}
+	return s.KeyPath
+}
