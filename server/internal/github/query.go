@@ -45,6 +45,10 @@ func IsDone(status string) bool {
 	return status != "" && doneStatusRe.MatchString(status)
 }
 
+// activeStatusRe 认出「正在做」的看板列：状态排序时它排在所有列之前——
+// 手上的活先收尾，再开新的。列名同样按常见写法认。
+var activeStatusRe = regexp.MustCompile(`(?i)进行中|开发中|处理中|doing|in progress`)
+
 // apply 过滤、排序并切页。priorityRank 是优先级名 → 位次（0 最紧急），
 // statusRank 是看板列名 → 位次（0 是看板最左列，通常就是待处理）。
 func (q Query) apply(all []Issue, priorityRank, statusRank map[string]int) ([]Issue, int) {
@@ -140,8 +144,9 @@ func (q Query) match(is Issue) bool {
 // 编号就是 issue 的创建顺序，同一档里先建的先做，比「谁最近被碰过」更稳定，
 // 清单不会因为一条评论就重排。稳定排序，保证翻页时同一条不会在两页间跳。
 //
-// 状态排序按看板列从左到右（升序 = 待处理在前，最该动手的先看），没挂
-// 看板的垫底；同列再按优先级紧急在前，不随方向翻转。
+// 状态排序：「正在做」的列最前，其余按看板列从左到右（典型看板即
+// 进行中 → 待处理 → 待验收），没挂看板的垫底；同列再按优先级紧急在前，
+// 不随方向翻转。
 func (q Query) sortIssues(list []Issue, priorityRank, statusRank map[string]int) {
 	rankOf := func(ranks map[string]int, name string) int {
 		if r, ok := ranks[name]; ok && name != "" {
@@ -150,6 +155,12 @@ func (q Query) sortIssues(list []Issue, priorityRank, statusRank map[string]int)
 		return len(ranks) + 1
 	}
 	rank := func(is Issue) int { return rankOf(priorityRank, is.Priority) }
+	statusOf := func(is Issue) int {
+		if is.Status != "" && activeStatusRe.MatchString(is.Status) {
+			return -1
+		}
+		return rankOf(statusRank, is.Status)
+	}
 	sort.SliceStable(list, func(i, j int) bool {
 		a, b := list[i], list[j]
 		if q.Sort == "updated" {
@@ -160,7 +171,7 @@ func (q Query) sortIssues(list []Issue, priorityRank, statusRank map[string]int)
 		}
 		ra, rb := rank(a), rank(b)
 		if q.Sort == "status" {
-			sa, sb := rankOf(statusRank, a.Status), rankOf(statusRank, b.Status)
+			sa, sb := statusOf(a), statusOf(b)
 			if sa != sb {
 				if q.Desc {
 					return sa > sb

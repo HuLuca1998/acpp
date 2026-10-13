@@ -137,9 +137,9 @@ func TestQuery_Filters(t *testing.T) {
 		{"按更新时间倒序", Query{Login: "luca", Sort: "updated", Desc: true}, []int{6, 2, 1}},
 		{"按更新时间正序", Query{Login: "luca", Sort: "updated"}, []int{1, 2, 6}},
 		{"优先级反向", Query{Login: "luca", Sort: "priority", Desc: false}, []int{6, 1, 2}},
-		// 待处理在前、没挂看板的垫底；同列按优先级紧急在前。
-		{"按状态", Query{Login: "luca", Assignee: "all", Sort: "status"}, []int{3, 1, 2, 6}},
-		{"按状态反向", Query{Login: "luca", Assignee: "all", Sort: "status", Desc: true}, []int{6, 2, 3, 1}},
+		// 进行中最前，其余按看板列序，没挂看板的垫底；同列按优先级紧急在前。
+		{"按状态", Query{Login: "luca", Assignee: "all", Sort: "status"}, []int{2, 3, 1, 6}},
+		{"按状态反向", Query{Login: "luca", Assignee: "all", Sort: "status", Desc: true}, []int{6, 3, 1, 2}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
