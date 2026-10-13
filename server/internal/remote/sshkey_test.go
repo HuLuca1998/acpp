@@ -162,3 +162,56 @@ func TestService_Get_SurvivesMissingKey(t *testing.T) {
 		t.Fatalf("expected no key material, got %q", srv.KeyData)
 	}
 }
+
+// 契约：AI 工具按名字挑服务器时同样带上私钥内容。曾经漏过：工具走列表查询，
+// 拿不到钥匙就退回读 KeyPath，从别的机器同步来的旧路径在本机读不到，
+// 报「读私钥失败」——即便服务器明明选了私钥库里的钥匙。
+func TestService_Pick_AttachesSelectedKeyMaterial(t *testing.T) {
+	s, _ := testService(t)
+	ctx := context.Background()
+	key, err := s.CreateKey(ctx, KeyInput{Name: "deploy-key", Generate: true})
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+	for _, name := range []string{"shop-live", "shop-staging"} {
+		if _, err := s.Create(ctx, Input{
+			Name: name, Host: "203.0.113.24", Port: 22, User: "deploy",
+			Auth: "key", KeyID: &key.ID, KeyPath: "/nonexistent/other-machine/key",
+		}); err != nil {
+			t.Fatalf("create server %s: %v", name, err)
+		}
+	}
+
+	srv, err := s.pick(ctx, Scope{}, "shop-live")
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+
+	if !strings.Contains(srv.KeyData, "OPENSSH PRIVATE KEY") {
+		t.Fatalf("picked server carries no key material: %q", srv.KeyData)
+	}
+}
+
+// 契约：选了钥匙却查不到（被删了）时，拨号配置不退回旧的 KeyPath——
+// 那条路径多半属于别的机器，读它只会报一个误导人的「文件不存在」。
+func TestService_Get_SelectedKeyIgnoresLegacyPath(t *testing.T) {
+	s, _ := testService(t)
+	ctx := context.Background()
+	missing := uint(404)
+	created, err := s.Create(ctx, Input{
+		Name: "shop-live", Host: "203.0.113.24", Port: 22, User: "deploy",
+		Auth: "key", KeyID: &missing, KeyPath: "/nonexistent/other-machine/key",
+	})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	srv, err := s.Get(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	if cfg := configOf(srv); cfg.KeyPath != "" {
+		t.Fatalf("dial config fell back to legacy key path %q", cfg.KeyPath)
+	}
+}

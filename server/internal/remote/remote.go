@@ -309,7 +309,7 @@ func configOf(srv *model.Server) sshdial.Config {
 		Auth:       srv.Auth,
 		Password:   srv.Password,
 		KeyData:    srv.KeyData,
-		KeyPath:    srv.KeyPath,
+		KeyPath:    srv.DialKeyPath(),
 		Passphrase: srv.Passphrase,
 	}
 }

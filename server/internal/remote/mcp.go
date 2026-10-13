@@ -134,6 +134,9 @@ func (s *Service) visible(ctx context.Context, sc Scope) ([]model.Server, error)
 
 // pick 按名字挑一台服务器。只配了一台时允许省略名字——那时没有歧义，
 // 让模型少写一个参数比让它多猜一次好。
+//
+// 挑中的那台要补上私钥内容：列表查询不带它，漏掉的话选了私钥库钥匙的
+// 服务器会退回去读 KeyPath——那多半是别的机器上的路径，换台机器就读不到。
 func (s *Service) pick(ctx context.Context, sc Scope, name string) (*model.Server, error) {
 	list, err := s.visible(ctx, sc)
 	if err != nil {
@@ -145,6 +148,7 @@ func (s *Service) pick(ctx context.Context, sc Scope, name string) (*model.Serve
 	name = strings.TrimSpace(name)
 	if name == "" {
 		if len(list) == 1 {
+			s.attachKey(ctx, &list[0])
 			return &list[0], nil
 		}
 		return nil, fmt.Errorf("有 %d 台服务器，要指定 server：%s",
@@ -152,6 +156,7 @@ func (s *Service) pick(ctx context.Context, sc Scope, name string) (*model.Serve
 	}
 	for i := range list {
 		if strings.EqualFold(list[i].Name, name) {
+			s.attachKey(ctx, &list[i])
 			return &list[i], nil
 		}
 	}

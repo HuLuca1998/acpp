@@ -79,7 +79,7 @@ func dialTunnel(ctx context.Context, srv *model.Server) (*tunnel, error) {
 		Auth:       srv.Auth,
 		Password:   srv.Password,
 		KeyData:    srv.KeyData,
-		KeyPath:    srv.KeyPath,
+		KeyPath:    srv.DialKeyPath(),
 		Passphrase: srv.Passphrase,
 		Timeout:    dialTimeout,
 	})
