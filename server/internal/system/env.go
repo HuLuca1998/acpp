@@ -144,9 +144,7 @@ func (s *Service) EnvCheck(ctx context.Context, refresh bool) EnvInfo {
 			dep.Installed = true
 			dep.Path = path
 			dep.Version = probeVersion(ctx, path)
-			if spec.staleNpm(path) {
-				dep.MigrateHint = "npm uninstall -g " + spec.npmPkg
-			}
+			dep.MigrateHint = spec.npmUninstallCmd(path)
 		}
 		info.Deps = append(info.Deps, dep)
 	}
@@ -165,28 +163,49 @@ func (s *Service) EnvCheck(ctx context.Context, refresh bool) EnvInfo {
 	return info
 }
 
-// staleNpm 报告 path 这个命令是不是本项遗留的 npm 全局安装——仅对已改由
-// brew 管的项有意义（两边都有包名）。
-func (s envSpec) staleNpm(path string) bool {
-	return s.brewPkg != "" && s.npmPkg != "" && npmOwned(path)
+// npmUninstallCmd 在 path 这个命令是本项遗留的 npm 全局安装时，返回腾位置
+// 的清理命令，否则返回空——仅对已改由 brew 管的项有意义（两边都有包名）。
+// 命令必须带 --prefix 指回安装时的前缀：机器上常有好几份 npm（brew 的 node、
+// nvm 的 node），终端里的 npm 未必是当初装它的那份，裸 `npm uninstall -g`
+// 删的是别的前缀，只会回一句 up to date，命令名纹丝不动。
+func (s envSpec) npmUninstallCmd(path string) string {
+	if s.brewPkg == "" || s.npmPkg == "" {
+		return ""
+	}
+	prefix := npmPrefix(path)
+	if prefix == "" {
+		return ""
+	}
+	return "npm uninstall -g --prefix " + shellQuote(prefix) + " " + s.npmPkg
 }
 
-// npmOwned 判断可执行文件是否由 npm 全局安装管理：npm 在 <prefix>/bin 下建的
-// 是指向 <prefix>/lib/node_modules/... 的软链，解析到底必然经过 node_modules；
-// Homebrew 装的则落在 Cellar/ 或 Caskroom/ 里。解析不了（断链、或压根不是
-// 软链）一律当作不是 npm 的——宁可漏报也不误伤。
+// npmPrefix 判断可执行文件是否由 npm 全局安装管理，是则返回其安装前缀：npm
+// 在 <prefix>/bin 下建的是指向 <prefix>/lib/node_modules/... 的软链，解析到底
+// 必然经过 node_modules；Homebrew 装的则落在 Cellar/ 或 Caskroom/ 里。解析不了
+// （断链、或压根不是软链）一律当作不是 npm 的——宁可漏报也不误伤。
 // 先认 brew 再认 node_modules：codex-acp 这类 formula 本身就是 Node 包，
 // 解析到底是 Cellar/<pkg>/<ver>/libexec/lib/node_modules/...，只看
 // node_modules 会把 brew 正装误报成 npm 遗留，用户照着 npm uninstall 永远清不掉。
-func npmOwned(path string) bool {
+func npmPrefix(path string) string {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return false
+		return ""
 	}
 	if strings.Contains(real, "/Cellar/") || strings.Contains(real, "/Caskroom/") {
-		return false
+		return ""
 	}
-	return strings.Contains(real, "/node_modules/")
+	if i := strings.Index(real, "/lib/node_modules/"); i > 0 {
+		return real[:i]
+	}
+	return ""
+}
+
+// shellQuote 给含空白或特殊字符的路径套单引号，让复制出去的命令能直接粘贴执行。
+func shellQuote(s string) string {
+	if !strings.ContainsAny(s, " \t'\"$`\\*?[]{}()&;|<>!#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // EnvInstall 一键安装白名单里的依赖，对已装的即升级到最新版（见 pkgArgs）。
@@ -214,9 +233,9 @@ func (s *Service) EnvInstall(ctx context.Context, key string) (*EnvInstallResult
 	// 的项——直接装下去只会撞一脸 EEXIST，不如把腾位置的命令告诉用户。
 	path, lookErr := exec.LookPath(spec.binary)
 	installed := lookErr == nil
-	if installed && spec.staleNpm(path) {
-		return nil, fmt.Errorf("%w: %s 现在是 npm 全局安装的（%s），与 Homebrew 争同一个命令名；请先在终端执行 npm uninstall -g %s，再回来安装",
-			service.ErrInvalid, key, path, spec.npmPkg)
+	if cmd := spec.npmUninstallCmd(path); installed && cmd != "" {
+		return nil, fmt.Errorf("%w: %s 现在是 npm 全局安装的（%s），与 Homebrew 争同一个命令名；请先在终端执行 %s，再回来安装",
+			service.ErrInvalid, key, path, cmd)
 	}
 
 	// brew install node 这类要下载编译产物，给足时间；超时靠 ctx 杀进程。

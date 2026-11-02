@@ -195,7 +195,9 @@ func TestService_EnvCheck_FlagsStaleNpmInstall(t *testing.T) {
 	for _, dep := range info.Deps {
 		byKey[dep.Key] = dep
 	}
-	if got := byKey["claude"].MigrateHint; got != "npm uninstall -g @anthropic-ai/claude-code" {
+	// 必须带上安装时的前缀：终端里的 npm 可能是另一份（nvm），裸 -g 删不到。
+	realRoot, _ := filepath.EvalSymlinks(root)
+	if got, want := byKey["claude"].MigrateHint, "npm uninstall -g --prefix "+realRoot+" @anthropic-ai/claude-code"; got != want {
 		t.Errorf("claude.MigrateHint = %q, want 清理旧 npm 安装的命令", got)
 	}
 	if got := byKey["codex"].MigrateHint; got != "" {
