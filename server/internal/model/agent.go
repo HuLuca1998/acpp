@@ -43,3 +43,17 @@ type Agent struct {
 
 	Sessions []Session `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 }
+
+// EffortsFor 返回 modelID 支持的思考深度：探测记下了这个模型自己的清单就
+// 用它，否则（空 id 即默认模型、旧探测记录、模型本身没报）退回骨架里那份
+// 默认模型的清单。
+func (a *Agent) EffortsFor(modelID string) []string {
+	if modelID != "" {
+		for _, m := range a.Models {
+			if m.ID == modelID && len(m.Efforts) > 0 {
+				return m.Efforts
+			}
+		}
+	}
+	return a.Skeleton.Efforts
+}

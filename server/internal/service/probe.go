@@ -58,6 +58,10 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
+		var modelEfforts map[string][]string
+		if serr == nil {
+			modelEfforts = s.probeModelEfforts(ctx, key, settings.Models)
+		}
 		_ = s.manager.Close(key)
 		if serr != nil {
 			return nil, serr
@@ -93,6 +97,7 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 				ID: m.ID, Name: m.Name, Description: m.Description,
 				Disabled: oldDisabled["m:"+m.ID],
 				Alias:    alias,
+				Efforts:  modelEfforts[m.ID],
 			})
 		}
 		cached := make(model.AgentCommandSlice, 0, len(commands))
@@ -143,6 +148,31 @@ func (s *ChatService) ProbeAgent(ctx context.Context, agentID uint) (*model.Agen
 		s.OnCatalogChanged()
 	}
 	return &agent, nil
+}
+
+// probeModelEfforts 在探测会话上把每个模型都拨一遍，记下各自支持的思考深度。
+// codex 的 reasoning_effort 选项随模型变：自定义 provider 的模型（如默认的
+// glm）不发这一项，gpt 系各档齐全，只看会话刚建好时的默认模型就会得出
+// 「没有思考深度」。拨模型只是本地配置切换，不调模型、不花钱；个别模型拨
+// 不过去（codex 对配置文件里的自定义默认模型就会拒）跳过即可。
+func (s *ChatService) probeModelEfforts(ctx context.Context, key string, models []acp.Model) map[string][]string {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out := make(map[string][]string, len(models))
+	for _, m := range models {
+		id := m.ID
+		st, err := s.manager.Apply(ctx, key, acp.SettingsPatch{Model: &id})
+		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		for _, e := range st.Efforts {
+			out[id] = append(out[id], string(e))
+		}
+	}
+	return out
 }
 
 // deriveModelAlias 从模型 id 派生短别名：去掉方括号后缀、首字母大写。

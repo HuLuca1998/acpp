@@ -63,6 +63,10 @@ type AgentModel struct {
 	// Alias 是用户在配置页起的显示名（runtime 原名往往太长），
 	// 空值即用原名；重探不清空。
 	Alias string `json:"alias,omitempty"`
+	// Efforts 是这个模型支持的思考深度（探测时逐个拨过去读的）。codex 的
+	// 深度清单随模型变（自定义 provider 的模型干脆没有），骨架里那份只是
+	// 默认模型的；空值表示探测没拿到，用的地方退回骨架。
+	Efforts []string `json:"efforts,omitempty"`
 }
 
 // AgentModelSlice 以 JSON 文本形式存进 sqlite 的模型清单。

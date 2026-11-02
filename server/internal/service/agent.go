@@ -220,10 +220,13 @@ func (s *AgentService) UpdateCatalog(ctx context.Context, id uint, in CatalogInp
 	}
 	if in.AskEffort != nil {
 		want := strings.TrimSpace(*in.AskEffort)
-		if want != "" && !slices.Contains(agent.Skeleton.Efforts, want) {
-			return nil, fmt.Errorf("%w: askEffort %q is not in the probed effort list", ErrInvalid, want)
+		if want != "" && !slices.Contains(agent.EffortsFor(agent.AskModel), want) {
+			return nil, fmt.Errorf("%w: askEffort %q is not supported by the ask model", ErrInvalid, want)
 		}
 		agent.AskEffort = want
+	} else if agent.AskEffort != "" && !slices.Contains(agent.EffortsFor(agent.AskModel), agent.AskEffort) {
+		// 只换了模型：新模型不支持原来的深度就退回默认，免得每次 ask 都拨失败。
+		agent.AskEffort = ""
 	}
 	if in.Commands != nil {
 		disabled := make(map[string]bool, len(in.Commands))

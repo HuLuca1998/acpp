@@ -126,6 +126,43 @@ func TestAgentService_UpdateCatalog_AskPreferences(t *testing.T) {
 	}
 }
 
+// 契约：codex 的思考深度随模型变，AI 协作的深度按选中模型自己的清单校验
+// （默认模型退回骨架）；只换模型时，新模型不支持原深度就退回默认。
+func TestAgentService_UpdateCatalog_AskEffortPerModel(t *testing.T) {
+	svc := NewAgentService(agentDB(t))
+	created, err := svc.Create(t.Context(), AgentInput{Name: "codex", Command: "codex-acp"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	created.Models = model.AgentModelSlice{
+		{ID: "gpt-6", Name: "GPT-6", Efforts: []string{"low", "high", "max"}},
+		{ID: "spark", Name: "Spark", Efforts: []string{"low", "high"}},
+	}
+	created.Skeleton = model.AgentSkeleton{} // 默认模型（自定义 provider）没有深度
+	if err := svc.db.Save(created).Error; err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+	str := func(s string) *string { return &s }
+
+	if _, err := svc.UpdateCatalog(t.Context(), created.ID, CatalogInput{AskEffort: str("high")}); err == nil {
+		t.Fatal("默认模型没有深度清单，却接受了 askEffort")
+	}
+	got, err := svc.UpdateCatalog(t.Context(), created.ID, CatalogInput{AskModel: str("gpt-6"), AskEffort: str("max")})
+	if err != nil {
+		t.Fatalf("选中模型支持的深度被拒: %v", err)
+	}
+	if got.AskEffort != "max" {
+		t.Fatalf("askEffort = %q, want max", got.AskEffort)
+	}
+	got, err = svc.UpdateCatalog(t.Context(), created.ID, CatalogInput{AskModel: str("spark")})
+	if err != nil {
+		t.Fatalf("换模型: %v", err)
+	}
+	if got.AskEffort != "" {
+		t.Fatalf("spark 不支持 max，askEffort 应退回默认，got %q", got.AskEffort)
+	}
+}
+
 // 契约：配置页动了模型取舍（禁用/别名）就通知下游清单变了；只改 AI 协作
 // 偏好这类不影响清单的项不吵下游。删 agent 同样通知。
 func TestAgentService_CatalogChangeHook(t *testing.T) {

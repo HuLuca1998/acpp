@@ -149,8 +149,12 @@ export function AgentToolConfig({ name }: { name: string }) {
 
   const enabledModels = agent.models.filter((m) => !m.disabled).length
   const enabledCommands = agent.commands.filter((c) => !c.disabled).length
-  const askEfforts = agent.skeleton?.efforts ?? []
   const askModel = agent.models.find((m) => m.id === agent.askModel)
+  // 深度清单随模型变（codex），与后端 Agent.EffortsFor 同一口径：选中模型
+  // 有自己的清单就用它，否则退回骨架里默认模型那份。
+  const askEfforts = askModel?.efforts?.length
+    ? askModel.efforts
+    : (agent.skeleton?.efforts ?? [])
   const askModelLabel = agent.askModel
     ? askModel?.alias || askModel?.name || agent.askModel
     : undefined

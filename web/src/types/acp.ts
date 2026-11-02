@@ -33,6 +33,8 @@ export interface UnifiedModel {
   disabled?: boolean
   /** 用户在配置页起的显示别名，空则用原名。 */
   alias?: string
+  /** 探测时记下的该模型支持的思考深度（codex 随模型变），空则看骨架。 */
+  efforts?: string[]
 }
 
 export interface Agent {
