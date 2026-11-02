@@ -18,7 +18,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import {
   Select,
   SelectContent,
@@ -149,6 +149,11 @@ export function AgentToolConfig({ name }: { name: string }) {
 
   const enabledModels = agent.models.filter((m) => !m.disabled).length
   const enabledCommands = agent.commands.filter((c) => !c.disabled).length
+  const askEfforts = agent.skeleton?.efforts ?? []
+  const askModel = agent.models.find((m) => m.id === agent.askModel)
+  const askModelLabel = agent.askModel
+    ? askModel?.alias || askModel?.name || agent.askModel
+    : undefined
   const commandDirty =
     commandDraft.trim() !== agent.command ||
     argsDraft.trim() !== agent.args.join(" ")
@@ -271,7 +276,11 @@ export function AgentToolConfig({ name }: { name: string }) {
               }}
             >
               <SelectTrigger id={`ask-model-${agent.id}`} className="w-full">
-                <SelectValue />
+                {/* Base UI 的 SelectValue 默认渲染原始值，占位值与模型 id
+                    都不该直接露给人看，标签自己给。 */}
+                <SelectValue>
+                  {askModelLabel ?? t("agents.detail.askDefault")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ASK_DEFAULT}>
@@ -293,25 +302,33 @@ export function AgentToolConfig({ name }: { name: string }) {
             </FieldLabel>
             <Select
               value={agent.askEffort || ASK_DEFAULT}
+              disabled={askEfforts.length === 0 && !agent.askEffort}
               onValueChange={(v) => {
                 if (typeof v !== "string") return
                 void mutateCatalog({ askEffort: v === ASK_DEFAULT ? "" : v })
               }}
             >
               <SelectTrigger id={`ask-effort-${agent.id}`} className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {agent.askEffort || t("agents.detail.askDefault")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ASK_DEFAULT}>
                   {t("agents.detail.askDefault")}
                 </SelectItem>
-                {(agent.skeleton?.efforts ?? []).map((e) => (
+                {askEfforts.map((e) => (
                   <SelectItem key={e} value={e}>
                     {e}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {askEfforts.length === 0 ? (
+              <FieldDescription>
+                {t("agents.detail.askEffortNone")}
+              </FieldDescription>
+            ) : null}
           </Field>
         </CardContent>
       </Card>

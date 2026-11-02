@@ -157,6 +157,8 @@ export default {
       askModel: "Model",
       askEffort: "Reasoning effort",
       askDefault: "Runtime default",
+      askEffortNone:
+        "This runtime reports no reasoning efforts. Older codex-acp builds fold effort into the model name; upgrade it and re-probe.",
     },
   },
   upload: {

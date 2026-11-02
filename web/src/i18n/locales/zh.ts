@@ -155,6 +155,8 @@ export default {
       askModel: "模型",
       askEffort: "思考深度",
       askDefault: "沿用默认",
+      askEffortNone:
+        "这个 runtime 没报告可选的思考深度。旧版 codex-acp 把深度塞在模型名里，升级后点「重新探测」即可。",
     },
   },
   upload: {
