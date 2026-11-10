@@ -157,8 +157,11 @@ export function AgentToolConfig({ name }: { name: string }) {
     ? askModel.efforts
     : (agent.skeleton?.efforts ?? [])
   // 快速模式被关掉或 runtime 不支持时，协作会话也拨不了，选项不出现。
-  const showAskFast =
-    agent.skeleton?.fastSupported === true && agent.fastPolicy !== "off"
+  // 快速模式被关掉时协作会话也拨不了，选项不出现。支持位随模型变（codex 的
+  // 自定义 provider 默认模型没有、gpt 系才有），与后端 Agent.FastFor 同口径。
+  const showAskFast = agent.fastPolicy !== "off"
+  const askFastSupported =
+    askModel?.fast ?? agent.skeleton?.fastSupported === true
   const askFastLabel =
     agent.askFast === "on"
       ? t("agents.detail.askFastOn")
@@ -356,6 +359,7 @@ export function AgentToolConfig({ name }: { name: string }) {
               </FieldLabel>
               <Select
                 value={agent.askFast || ASK_DEFAULT}
+                disabled={!askFastSupported && !agent.askFast}
                 onValueChange={(v) => {
                   if (v !== "on" && v !== "off" && v !== ASK_DEFAULT) return
                   void mutateCatalog({ askFast: v === ASK_DEFAULT ? "" : v })
@@ -376,6 +380,11 @@ export function AgentToolConfig({ name }: { name: string }) {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              {askFastSupported ? null : (
+                <FieldDescription>
+                  {t("agents.detail.askFastNone")}
+                </FieldDescription>
+              )}
             </Field>
           ) : null}
         </CardContent>

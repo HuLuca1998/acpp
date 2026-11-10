@@ -159,6 +159,8 @@ export default {
       askFast: "Fast mode",
       askFastOn: "On",
       askFastOff: "Off",
+      askFastNone:
+        "This model has no fast mode (common for Codex custom-provider models). Pick a supported model under Model first; if it stays unavailable, click Re-probe.",
       askDefault: "Runtime default",
       askEffortNone:
         "This model reports no reasoning efforts (common for custom-provider models). Pick a specific model above first; if it still stays empty, click Re-probe.",

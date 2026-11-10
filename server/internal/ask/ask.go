@@ -158,9 +158,10 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 	return out, nil
 }
 
-// fastAvailable 报告这个 agent 的快速模式能不能拨：runtime 支持且配置页没关。
+// fastAvailable 报告协作会话的快速模式能不能拨：配置页没关，且协作用的
+// 模型支持（codex 的 fast-mode 随模型变，默认的自定义 provider 模型没有）。
 func fastAvailable(agent *model.Agent) bool {
-	return agent.Skeleton.FastSupported && agent.FastPolicy != "off"
+	return agent.FastPolicy != "off" && agent.FastFor(agent.AskModel)
 }
 
 // askFast 把配置页的快速模式偏好翻成设置补丁；空、快速模式被关掉或
@@ -389,7 +390,7 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 	}
 	// 显式要快速模式却拨不了：开会话之前就拒，免得留一条空会话。
 	if in.Fast != nil && !fastAvailable(agent) {
-		return 0, nil, fmt.Errorf("%w: agent %q has no fast mode (unsupported or turned off in settings)", service.ErrInvalid, agent.Name)
+		return 0, nil, fmt.Errorf("%w: agent %q has no fast mode for its ask model (unsupported by the model, or turned off in settings)", service.ErrInvalid, agent.Name)
 	}
 
 	view, err := s.sessions.Create(ctx, scope, service.SessionInput{

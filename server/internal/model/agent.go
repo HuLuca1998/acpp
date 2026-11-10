@@ -60,3 +60,17 @@ func (a *Agent) EffortsFor(modelID string) []string {
 	}
 	return a.Skeleton.Efforts
 }
+
+// FastFor 报告 modelID 支持不支持快速模式，口径同 EffortsFor：探测记下了
+// 这个模型自己的支持位就用它，否则（空 id 即默认模型、旧探测记录）退回骨架。
+// 不看 FastPolicy——那是用户的取舍，由调用方另行判断。
+func (a *Agent) FastFor(modelID string) bool {
+	if modelID != "" {
+		for _, m := range a.Models {
+			if m.ID == modelID && m.Fast != nil {
+				return *m.Fast
+			}
+		}
+	}
+	return a.Skeleton.FastSupported
+}

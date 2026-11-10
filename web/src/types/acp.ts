@@ -36,6 +36,8 @@ export interface UnifiedModel {
   alias?: string
   /** 探测时记下的该模型支持的思考深度（codex 随模型变），空则看骨架。 */
   efforts?: string[]
+  /** 探测时记下的该模型支不支持快速模式（codex 随模型变），缺省看骨架。 */
+  fast?: boolean
 }
 
 export interface Agent {

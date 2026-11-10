@@ -157,6 +157,8 @@ export default {
       askFast: "快速模式",
       askFastOn: "开",
       askFastOff: "关",
+      askFastNone:
+        "这个模型不支持快速模式（codex 的自定义 provider 模型常见）。先在「模型」里选一个支持的；仍不可选就点「重新探测」。",
       askDefault: "沿用默认",
       askEffortNone:
         "这个模型没报告可选的思考深度（自定义 provider 的模型常见）。先在左边选一个具体模型；仍为空就点「重新探测」。",
