@@ -43,3 +43,30 @@ func TestReplyAfterLastPrompt(t *testing.T) {
 		})
 	}
 }
+
+// 契约：AI 协作的快速模式偏好只在「支持 fast 且没被关掉」时下发；空值不动，
+// 免得给不支持的 runtime 拨一个不存在的开关让整问失败。
+func TestAskFast(t *testing.T) {
+	supported := model.AgentSkeleton{FastSupported: true}
+	cases := []struct {
+		name  string
+		agent model.Agent
+		want  *bool
+	}{
+		{"开", model.Agent{AskFast: "on", Skeleton: supported}, ptr(true)},
+		{"关", model.Agent{AskFast: "off", Skeleton: supported}, ptr(false)},
+		{"空=沿用默认", model.Agent{Skeleton: supported}, nil},
+		{"快速模式被关掉", model.Agent{AskFast: "on", FastPolicy: "off", Skeleton: supported}, nil},
+		{"runtime 不支持", model.Agent{AskFast: "on"}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := askFast(&tc.agent)
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Fatalf("askFast = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func ptr(b bool) *bool { return &b }

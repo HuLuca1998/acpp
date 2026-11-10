@@ -112,6 +112,9 @@ func TestAgentService_UpdateCatalog_AskPreferences(t *testing.T) {
 		{"空串=沿用默认", CatalogInput{AskModel: str(""), AskEffort: str("")}, true},
 		{"清单外的模型", CatalogInput{AskModel: str("gpt-9")}, false},
 		{"清单外的深度", CatalogInput{AskEffort: str("ultra")}, false},
+		{"快速模式开", CatalogInput{AskFast: str("on")}, true},
+		{"快速模式空=沿用默认", CatalogInput{AskFast: str("")}, true},
+		{"快速模式非法值", CatalogInput{AskFast: str("yes")}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,6 +124,9 @@ func TestAgentService_UpdateCatalog_AskPreferences(t *testing.T) {
 			}
 			if err == nil && tc.in.AskModel != nil && got.AskModel != *tc.in.AskModel {
 				t.Fatalf("askModel = %q, want %q", got.AskModel, *tc.in.AskModel)
+			}
+			if err == nil && tc.in.AskFast != nil && got.AskFast != *tc.in.AskFast {
+				t.Fatalf("askFast = %q, want %q", got.AskFast, *tc.in.AskFast)
 			}
 		})
 	}

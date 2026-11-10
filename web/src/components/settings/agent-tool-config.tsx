@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 import { api } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import type { Agent, CatalogInput } from "@/types/acp"
 import { StatusDot } from "@/components/status-dot"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -155,6 +156,15 @@ export function AgentToolConfig({ name }: { name: string }) {
   const askEfforts = askModel?.efforts?.length
     ? askModel.efforts
     : (agent.skeleton?.efforts ?? [])
+  // 快速模式被关掉或 runtime 不支持时，协作会话也拨不了，选项不出现。
+  const showAskFast =
+    agent.skeleton?.fastSupported === true && agent.fastPolicy !== "off"
+  const askFastLabel =
+    agent.askFast === "on"
+      ? t("agents.detail.askFastOn")
+      : agent.askFast === "off"
+        ? t("agents.detail.askFastOff")
+        : t("agents.detail.askDefault")
   const askModelLabel = agent.askModel
     ? askModel?.alias || askModel?.name || agent.askModel
     : undefined
@@ -258,8 +268,8 @@ export function AgentToolConfig({ name }: { name: string }) {
         </CardContent>
       </Card>
 
-      {/* AI 协作（adr-022）：别的 AI 经 /api/ask 问这个工具时用什么模型与
-          思考深度。那种会话没有人在界面上挑，只能在这里预先定好。 */}
+      {/* AI 协作（adr-022）：别的 AI 经 /api/ask 问这个工具时用什么模型、
+          思考深度与快速模式。那种会话没有人在界面上挑，只能在这里预先定好。 */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
@@ -267,7 +277,12 @@ export function AgentToolConfig({ name }: { name: string }) {
           </CardTitle>
           <CardDescription>{t("agents.detail.askDesc")}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
+        <CardContent
+          className={cn(
+            "grid gap-3",
+            showAskFast ? "sm:grid-cols-3" : "sm:grid-cols-2"
+          )}
+        >
           <Field>
             <FieldLabel htmlFor={`ask-model-${agent.id}`}>
               {t("agents.detail.askModel")}
@@ -334,6 +349,35 @@ export function AgentToolConfig({ name }: { name: string }) {
               </FieldDescription>
             ) : null}
           </Field>
+          {showAskFast ? (
+            <Field>
+              <FieldLabel htmlFor={`ask-fast-${agent.id}`}>
+                {t("agents.detail.askFast")}
+              </FieldLabel>
+              <Select
+                value={agent.askFast || ASK_DEFAULT}
+                onValueChange={(v) => {
+                  if (v !== "on" && v !== "off" && v !== ASK_DEFAULT) return
+                  void mutateCatalog({ askFast: v === ASK_DEFAULT ? "" : v })
+                }}
+              >
+                <SelectTrigger id={`ask-fast-${agent.id}`} className="w-full">
+                  <SelectValue>{askFastLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ASK_DEFAULT}>
+                    {t("agents.detail.askDefault")}
+                  </SelectItem>
+                  <SelectItem value="on">
+                    {t("agents.detail.askFastOn")}
+                  </SelectItem>
+                  <SelectItem value="off">
+                    {t("agents.detail.askFastOff")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
         </CardContent>
       </Card>
 

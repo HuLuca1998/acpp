@@ -35,6 +35,10 @@ type Input struct {
 	Level acp.AccessLevel `json:"level,omitempty"`
 	// Thread 是要续聊的会话 id；省略即新开一条。
 	Thread uint `json:"thread,omitempty"`
+	// Fast 是这一问的快速模式，覆盖配置页的默认（Agent.AskFast）。省略时
+	// 新会话按配置页默认、续聊沿用会话现状。对方不支持快速模式或配置页
+	// 把它关掉了还显式传，直接报参数错，不静默忽略。
+	Fast *bool `json:"fast,omitempty"`
 }
 
 // Result 是一轮问答的结果。Text 是这一轮 agent 说的全部正文（工具调用
@@ -118,7 +122,7 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 		level := acp.AccessSafe
 		patch.Level = &level
 	}
-	// 新会话还要拨到配置页里给 AI 协作定的模型与思考深度（空=沿用默认）。
+	// 新会话还要拨到配置页里给 AI 协作定的模型、思考深度与快速模式（空=沿用默认）。
 	if created {
 		if m := strings.TrimSpace(agent.AskModel); m != "" {
 			patch.Model = &m
@@ -126,6 +130,10 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 		if e := acp.Effort(strings.TrimSpace(agent.AskEffort)); e != "" {
 			patch.Effort = &e
 		}
+		patch.Fast = askFast(agent)
+	}
+	if in.Fast != nil {
+		patch.Fast = in.Fast
 	}
 
 	stop, err := s.runTurn(ctx, sessionID, patch, in.Prompt)
@@ -148,6 +156,29 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 		out.StopReason = string(stop)
 	}
 	return out, nil
+}
+
+// fastAvailable 报告这个 agent 的快速模式能不能拨：runtime 支持且配置页没关。
+func fastAvailable(agent *model.Agent) bool {
+	return agent.Skeleton.FastSupported && agent.FastPolicy != "off"
+}
+
+// askFast 把配置页的快速模式偏好翻成设置补丁；空、快速模式被关掉或
+// runtime 本就不支持时返回 nil（不动），免得拨一个不存在的开关让整问失败。
+func askFast(agent *model.Agent) *bool {
+	if !fastAvailable(agent) {
+		return nil
+	}
+	var on bool
+	switch agent.AskFast {
+	case "on":
+		on = true
+	case "off":
+		on = false
+	default:
+		return nil
+	}
+	return &on
 }
 
 // acquire 把会话标成问答中；已在问答中、或界面那边正有一轮在跑，都算忙。
@@ -174,7 +205,7 @@ func (s *Service) runTurn(parent context.Context, sessionID uint, patch acp.Sett
 	// 裁决权限要知道**实际生效**的档位：续聊不带 level 时沿用会话现状，
 	// 那可能是 full——按空值当非 full 处理会把该放的请求拒掉。
 	var level acp.AccessLevel
-	if patch.Level != nil || patch.Model != nil || patch.Effort != nil {
+	if patch.Level != nil || patch.Model != nil || patch.Effort != nil || patch.Fast != nil {
 		settings, err := s.chat.ApplySettings(ctx, sessionID, patch)
 		if err != nil {
 			return "", err
@@ -355,6 +386,10 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 	}
 	if agent == nil {
 		return 0, nil, fmt.Errorf("agent %q: %w", in.Agent, service.ErrNotFound)
+	}
+	// 显式要快速模式却拨不了：开会话之前就拒，免得留一条空会话。
+	if in.Fast != nil && !fastAvailable(agent) {
+		return 0, nil, fmt.Errorf("%w: agent %q has no fast mode (unsupported or turned off in settings)", service.ErrInvalid, agent.Name)
 	}
 
 	view, err := s.sessions.Create(ctx, scope, service.SessionInput{

@@ -177,6 +177,8 @@ type CatalogInput struct {
 	// nil 不动，空串=沿用默认，非空必须在探测清单里。
 	AskModel  *string `json:"askModel,omitempty"`
 	AskEffort *string `json:"askEffort,omitempty"`
+	// AskFast 是 AI 协作会话的快速模式：nil 不动，空串=沿用默认，"on"/"off"。
+	AskFast *string `json:"askFast,omitempty"`
 }
 
 // UpdateCatalog 应用配置页的勾选：只改 disabled/alias 标记与快速模式
@@ -227,6 +229,14 @@ func (s *AgentService) UpdateCatalog(ctx context.Context, id uint, in CatalogInp
 	} else if agent.AskEffort != "" && !slices.Contains(agent.EffortsFor(agent.AskModel), agent.AskEffort) {
 		// 只换了模型：新模型不支持原来的深度就退回默认，免得每次 ask 都拨失败。
 		agent.AskEffort = ""
+	}
+	if in.AskFast != nil {
+		switch *in.AskFast {
+		case "", "on", "off":
+			agent.AskFast = *in.AskFast
+		default:
+			return nil, fmt.Errorf("%w: askFast must be empty, on or off", ErrInvalid)
+		}
 	}
 	if in.Commands != nil {
 		disabled := make(map[string]bool, len(in.Commands))
