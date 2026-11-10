@@ -36,8 +36,11 @@ type Agent struct {
 	// AskModel / AskEffort 是别的 AI 经 /api/ask 问这个 agent 时（adr-022）
 	// 新会话要拨到的模型与思考深度；空=沿用 runtime 默认。在配置页设，
 	// 重探不清空——ask 会话没有人在界面上挑模型，只能预先定好。
-	AskModel  string    `gorm:"size:128" json:"askModel"`
-	AskEffort string    `gorm:"size:32" json:"askEffort"`
+	AskModel  string `gorm:"size:128" json:"askModel"`
+	AskEffort string `gorm:"size:32" json:"askEffort"`
+	// AskFast 是 AI 协作新会话的快速模式："on"/"off"，空=沿用 runtime 默认。
+	// FastPolicy 为 off 或 runtime 不支持 fast 时不生效。
+	AskFast   string    `gorm:"size:8" json:"askFast"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 

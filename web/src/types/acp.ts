@@ -16,9 +16,10 @@ export interface CatalogInput {
   commands?: { key: string; disabled: boolean }[]
   /** 快速模式取舍；缺省不动。 */
   fastPolicy?: "on" | "off"
-  /** AI 协作会话的模型 / 思考深度（adr-022）：缺省不动，空串=沿用默认。 */
+  /** AI 协作会话的模型 / 思考深度 / 快速模式（adr-022）：缺省不动，空串=沿用默认。 */
   askModel?: string
   askEffort?: string
+  askFast?: "" | "on" | "off"
 }
 
 /** runtime 方言，由后端从 agent 身份识别；generic 表示未知 runtime。 */
@@ -70,6 +71,8 @@ export interface Agent {
    */
   askModel?: string
   askEffort?: string
+  /** AI 协作新会话的快速模式；空=沿用默认，fastPolicy 为 off 时不生效。 */
+  askFast?: "" | "on" | "off"
   createdAt: string
   updatedAt: string
 }

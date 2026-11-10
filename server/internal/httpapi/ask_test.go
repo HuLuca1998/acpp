@@ -25,6 +25,9 @@ func TestAsk_RejectsBadInput(t *testing.T) {
 		{"权限档不认识", `{"agent":"claude","cwd":"/tmp","prompt":"hi","level":"yolo"}`, http.StatusBadRequest},
 		{"agent 不存在", `{"agent":"gemini","cwd":"/tmp","prompt":"hi"}`, http.StatusNotFound},
 		{"未知字段", `{"agent":"claude","cwd":"/tmp","prompt":"hi","model":"x"}`, http.StatusBadRequest},
+		{"fast 不是布尔", `{"agent":"claude","cwd":"/tmp","prompt":"hi","fast":"on"}`, http.StatusBadRequest},
+		// 未探测的 agent 骨架里没有 fast 支持位：显式要快速模式就开会话前拒掉。
+		{"对方没有快速模式", `{"agent":"claude","cwd":"/tmp","prompt":"hi","fast":true}`, http.StatusBadRequest},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

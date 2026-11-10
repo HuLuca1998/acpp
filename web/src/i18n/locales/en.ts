@@ -153,9 +153,12 @@ export default {
         "When off, the Fast toggle is hidden; Claude's fast mode bills extra and defaults to off.",
       askTitle: "AI collab",
       askDesc:
-        "Model and reasoning effort for sessions another AI opens via /api/ask; leave empty to use the runtime default.",
+        "Model, reasoning effort and fast mode for sessions another AI opens via /api/ask; leave empty to use the runtime default.",
       askModel: "Model",
       askEffort: "Reasoning effort",
+      askFast: "Fast mode",
+      askFastOn: "On",
+      askFastOff: "Off",
       askDefault: "Runtime default",
       askEffortNone:
         "This model reports no reasoning efforts (common for custom-provider models). Pick a specific model above first; if it still stays empty, click Re-probe.",

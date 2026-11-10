@@ -151,9 +151,12 @@ export default {
         "关闭后「快速」按钮不再出现；claude 的快速模式额外计费，默认关闭。",
       askTitle: "AI 协作",
       askDesc:
-        "别的 AI 经 /api/ask 问这个工具时，新会话用的模型与思考深度；留空沿用默认。",
+        "别的 AI 经 /api/ask 问这个工具时，新会话用的模型、思考深度与快速模式；留空沿用默认。",
       askModel: "模型",
       askEffort: "思考深度",
+      askFast: "快速模式",
+      askFastOn: "开",
+      askFastOff: "关",
       askDefault: "沿用默认",
       askEffortNone:
         "这个模型没报告可选的思考深度（自定义 provider 的模型常见）。先在左边选一个具体模型；仍为空就点「重新探测」。",
