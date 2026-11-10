@@ -58,6 +58,10 @@ func TestAskFast(t *testing.T) {
 		{"空=沿用默认", model.Agent{Skeleton: supported}, nil},
 		{"快速模式被关掉", model.Agent{AskFast: "on", FastPolicy: "off", Skeleton: supported}, nil},
 		{"runtime 不支持", model.Agent{AskFast: "on"}, nil},
+		// codex：默认的自定义 provider 模型不报 fast-mode，gpt 系才有。
+		{"默认模型没有、协作模型有", model.Agent{AskFast: "on", AskModel: "gpt", Models: model.AgentModelSlice{{ID: "gpt", Fast: ptr(true)}}}, ptr(true)},
+		{"默认模型有、协作模型没有", model.Agent{AskFast: "on", AskModel: "glm", Skeleton: supported, Models: model.AgentModelSlice{{ID: "glm", Fast: ptr(false)}}}, nil},
+		{"旧探测记录退回骨架", model.Agent{AskFast: "on", AskModel: "gpt", Skeleton: supported, Models: model.AgentModelSlice{{ID: "gpt"}}}, ptr(true)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

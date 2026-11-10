@@ -67,6 +67,10 @@ type AgentModel struct {
 	// 深度清单随模型变（自定义 provider 的模型干脆没有），骨架里那份只是
 	// 默认模型的；空值表示探测没拿到，用的地方退回骨架。
 	Efforts []string `json:"efforts,omitempty"`
+	// Fast 是这个模型支持不支持快速模式（同样逐个拨过去读的）。codex 的
+	// fast-mode 也随模型变：自定义 provider 的默认模型不报，gpt 系才有。
+	// nil 表示探测没记（旧记录），用的地方退回骨架。
+	Fast *bool `json:"fast,omitempty"`
 }
 
 // AgentModelSlice 以 JSON 文本形式存进 sqlite 的模型清单。
