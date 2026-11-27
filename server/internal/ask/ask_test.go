@@ -1,7 +1,10 @@
 package ask
 
 import (
+	"errors"
 	"testing"
+
+	"acpp/server/internal/service"
 
 	"acpp/server/internal/model"
 )
@@ -65,7 +68,7 @@ func TestAskFast(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := askFast(&tc.agent)
+			got := askFast(&tc.agent, tc.agent.AskModel)
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Fatalf("askFast = %v, want %v", got, tc.want)
 			}
@@ -74,3 +77,40 @@ func TestAskFast(t *testing.T) {
 }
 
 func ptr(b bool) *bool { return &b }
+
+// 契约：这一问指定的模型优先于配置页默认；都没给就不拨（runtime 默认）。
+// 配置页定的思考深度跟着实际模型走——换到不支持那档深度的模型就不拨。
+func TestAskModelOverride(t *testing.T) {
+	agent := model.Agent{
+		Name:      "codex",
+		AskModel:  "big",
+		AskEffort: "xhigh",
+		Models: model.AgentModelSlice{
+			{ID: "big", Efforts: []string{"low", "xhigh"}},
+			{ID: "small", Efforts: []string{"low"}},
+		},
+	}
+	if got := askModel(&agent, Input{}); got != "big" {
+		t.Fatalf("不传 model 应取配置页默认，得到 %q", got)
+	}
+	if got := askModel(&agent, Input{Model: " small "}); got != "small" {
+		t.Fatalf("传了 model 应覆盖默认，得到 %q", got)
+	}
+	if got := askModel(&model.Agent{}, Input{}); got != "" {
+		t.Fatalf("都没给应为空（runtime 默认），得到 %q", got)
+	}
+
+	if e := askEffort(&agent, "big"); e == nil || string(*e) != "xhigh" {
+		t.Fatalf("模型支持配置页的深度时应下发，得到 %v", e)
+	}
+	if e := askEffort(&agent, "small"); e != nil {
+		t.Fatalf("模型不支持配置页的深度时不该下发，得到 %v", *e)
+	}
+
+	if err := checkModel(&agent, "small"); err != nil {
+		t.Fatalf("清单内的模型不该被拒：%v", err)
+	}
+	if err := checkModel(&agent, "nope"); !errors.Is(err, service.ErrInvalid) {
+		t.Fatalf("清单外的模型应报参数错，得到 %v", err)
+	}
+}

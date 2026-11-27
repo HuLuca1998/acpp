@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,11 @@ type Input struct {
 	// 新会话按配置页默认、续聊沿用会话现状。对方不支持快速模式或配置页
 	// 把它关掉了还显式传，直接报参数错，不静默忽略。
 	Fast *bool `json:"fast,omitempty"`
+	// Model 是这一问要用的模型 id，覆盖配置页的默认（Agent.AskModel）。省略时
+	// 新会话按配置页默认（没设就是 runtime 默认）、续聊沿用会话现状。必须在
+	// 对方的探测清单里，否则报参数错。配置页定的思考深度只在这个模型也支持
+	// 时才拨，不支持就留给 runtime 默认。
+	Model string `json:"model,omitempty"`
 }
 
 // Result 是一轮问答的结果。Text 是这一轮 agent 说的全部正文（工具调用
@@ -122,15 +128,18 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 		level := acp.AccessSafe
 		patch.Level = &level
 	}
-	// 新会话还要拨到配置页里给 AI 协作定的模型、思考深度与快速模式（空=沿用默认）。
+	// 新会话还要拨到模型、思考深度与快速模式：模型以这一问指定的为先，其余
+	// 取配置页里给 AI 协作定的（空=沿用默认）。
 	if created {
-		if m := strings.TrimSpace(agent.AskModel); m != "" {
+		m := askModel(agent, in)
+		if m != "" {
 			patch.Model = &m
 		}
-		if e := acp.Effort(strings.TrimSpace(agent.AskEffort)); e != "" {
-			patch.Effort = &e
-		}
-		patch.Fast = askFast(agent)
+		patch.Effort = askEffort(agent, m)
+		patch.Fast = askFast(agent, m)
+	} else if m := strings.TrimSpace(in.Model); m != "" {
+		// 续聊换模型：只动模型，深度与快速模式沿用会话现状。
+		patch.Model = &m
 	}
 	if in.Fast != nil {
 		patch.Fast = in.Fast
@@ -158,16 +167,54 @@ func (s *Service) Ask(ctx context.Context, scope service.Scope, in Input) (*Resu
 	return out, nil
 }
 
-// fastAvailable 报告协作会话的快速模式能不能拨：配置页没关，且协作用的
+// askModel 是这一问新会话实际要拨的模型：请求里指定的优先，否则配置页的
+// 默认；都空就是空（不拨，用 runtime 默认）。
+func askModel(agent *model.Agent, in Input) string {
+	if m := strings.TrimSpace(in.Model); m != "" {
+		return m
+	}
+	return strings.TrimSpace(agent.AskModel)
+}
+
+// checkModel 校验请求里指定的模型在对方的探测清单里。拨一个不存在的模型
+// 要到 runtime 那头才失败，报错也说不清；这里先拒，并把能选的 id 列出来——
+// 调用方是脚本，没有下拉可看。
+func checkModel(agent *model.Agent, modelID string) error {
+	if modelID == "" {
+		return nil
+	}
+	ids := make([]string, 0, len(agent.Models))
+	for _, m := range agent.Models {
+		if m.ID == modelID {
+			return nil
+		}
+		ids = append(ids, m.ID)
+	}
+	return fmt.Errorf("%w: model %q is not in agent %q's probed model list (available: %s)",
+		service.ErrInvalid, modelID, agent.Name, strings.Join(ids, ", "))
+}
+
+// askEffort 把配置页的思考深度翻成设置补丁。深度清单随模型变：这一问换了
+// 模型而新模型不支持配置页那档深度时返回 nil（不动），免得整问拨失败。
+func askEffort(agent *model.Agent, modelID string) *acp.Effort {
+	e := strings.TrimSpace(agent.AskEffort)
+	if e == "" || !slices.Contains(agent.EffortsFor(modelID), e) {
+		return nil
+	}
+	effort := acp.Effort(e)
+	return &effort
+}
+
+// fastAvailable 报告协作会话的快速模式能不能拨：配置页没关，且这一问用的
 // 模型支持（codex 的 fast-mode 随模型变，默认的自定义 provider 模型没有）。
-func fastAvailable(agent *model.Agent) bool {
-	return agent.FastPolicy != "off" && agent.FastFor(agent.AskModel)
+func fastAvailable(agent *model.Agent, modelID string) bool {
+	return agent.FastPolicy != "off" && agent.FastFor(modelID)
 }
 
 // askFast 把配置页的快速模式偏好翻成设置补丁；空、快速模式被关掉或
 // runtime 本就不支持时返回 nil（不动），免得拨一个不存在的开关让整问失败。
-func askFast(agent *model.Agent) *bool {
-	if !fastAvailable(agent) {
+func askFast(agent *model.Agent, modelID string) *bool {
+	if !fastAvailable(agent, modelID) {
 		return nil
 	}
 	var on bool
@@ -364,6 +411,11 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 		if err != nil {
 			return 0, nil, err
 		}
+		if m := strings.TrimSpace(in.Model); m != "" {
+			if err := s.checkThreadModel(ctx, scope, ref.ID, m); err != nil {
+				return 0, nil, err
+			}
+		}
 		return ref.ID, nil, nil
 	}
 
@@ -388,9 +440,12 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 	if agent == nil {
 		return 0, nil, fmt.Errorf("agent %q: %w", in.Agent, service.ErrNotFound)
 	}
-	// 显式要快速模式却拨不了：开会话之前就拒，免得留一条空会话。
-	if in.Fast != nil && !fastAvailable(agent) {
-		return 0, nil, fmt.Errorf("%w: agent %q has no fast mode for its ask model (unsupported by the model, or turned off in settings)", service.ErrInvalid, agent.Name)
+	// 指定的模型不认识、显式要快速模式却拨不了：开会话之前就拒，免得留一条空会话。
+	if err := checkModel(agent, strings.TrimSpace(in.Model)); err != nil {
+		return 0, nil, err
+	}
+	if in.Fast != nil && !fastAvailable(agent, askModel(agent, in)) {
+		return 0, nil, fmt.Errorf("%w: agent %q has no fast mode for the model in use (unsupported by the model, or turned off in settings)", service.ErrInvalid, agent.Name)
 	}
 
 	view, err := s.sessions.Create(ctx, scope, service.SessionInput{
@@ -403,6 +458,20 @@ func (s *Service) resolveSession(ctx context.Context, scope service.Scope, in In
 		return 0, nil, err
 	}
 	return view.ID, agent, nil
+}
+
+// checkThreadModel 给续聊时指定的模型做同样的清单校验：会话已经定了 agent，
+// 按它的探测清单认。
+func (s *Service) checkThreadModel(ctx context.Context, scope service.Scope, sessionID uint, modelID string) error {
+	view, err := s.sessions.Get(ctx, scope, sessionID)
+	if err != nil {
+		return err
+	}
+	agent, err := s.agents.Get(ctx, view.AgentID)
+	if err != nil {
+		return err
+	}
+	return checkModel(agent, modelID)
 }
 
 // discard 收掉一条没跑成的新会话：先回收子进程再删记录，顺序与
